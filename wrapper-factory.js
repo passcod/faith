@@ -179,6 +179,41 @@ function createWrapper(native) {
       const bytes = await this.bytes();
       return bytes.buffer;
     }
+
+    /**
+     * Convert to a Web API Response object
+     * @returns {Response} Web API Response object
+     * @throws {Error} If response body has been disturbed or Response constructor is not available
+     */
+    webResponse() {
+      // Check if body has been disturbed
+      if (this.#bodyUsed) {
+        throw new Error("Response already disturbed");
+      }
+
+      // Check if Web API Response constructor is available
+      if (typeof globalThis.Response !== "function") {
+        throw new Error(
+          "Web API Response constructor not available in this environment",
+        );
+      }
+
+      // Get the body stream
+      const bodyStream = this.body;
+      if (bodyStream === null) {
+        throw new Error("Response body no longer available");
+      }
+
+      // Mark that we've accessed the body through webResponse()
+      this.#bodyAccessed = true;
+
+      // Create and return a Web API Response object
+      return new globalThis.Response(bodyStream, {
+        status: this.status,
+        statusText: this.statusText,
+        headers: this.headers,
+      });
+    }
   }
 
   /**

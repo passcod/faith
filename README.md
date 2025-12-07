@@ -246,3 +246,18 @@ Not yet implemented.
 *The `text()` method of the `Response` interface takes a `Response` stream and reads it to
 completion. It returns a promise that resolves with a `String`. The response is always decoded
 using UTF-8.*
+
+### `Response.webResponse()`
+
+This is entirely custom to Fáith. It returns a Web API `Response` instead of Fáith's custom
+`Response` class. However, it's not possible to construct a Web API `Response` that has all the
+properties of a Fáith Response (or of another Web Response, for that matter). So this method only
+returns a Response from:
+
+- the `body` stream
+- the `status`, `statusCode`, and `headers` properties
+
+Note that it's not possible to successfully call `webResponse()` after calling `text()` or `json()`
+or the other body-consuming methods. However, using the `body` property is possible, as that points
+to the same underlying stream as provided to `webResponse()`. Reading `body` from two different
+`Response` objects is not allowed (by Node.js, this is not a Fáith limitation).

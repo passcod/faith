@@ -6,7 +6,7 @@
  * to provide:
  * - `Response` class (not `FetchResponse`)
  * - `body` as a property/getter (not a method)
- * - Additional methods: `arrayBuffer()`, `json()`, `clone()`
+ * - Additional methods: `arrayBuffer()`, `webResponse()`
  * - Proper body type conversion
  */
 

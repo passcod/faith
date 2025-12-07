@@ -44,6 +44,13 @@ export class Response {
    * @returns Promise that resolves with the response body as ArrayBuffer
    */
   arrayBuffer(): Promise<ArrayBuffer>;
+
+  /**
+   * Convert to a Web API Response object
+   * @returns Web API Response object
+   * @throws If response body has been disturbed
+   */
+  webResponse(): Response;
 }
 
 /**
