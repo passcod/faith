@@ -126,6 +126,16 @@ async function main() {
       jsonData.url,
     );
 
+    // json() method
+    const response5e = await fetch("https://httpbin.org/get");
+    const jsonFromMethod = await response5e.json();
+    console.log(
+      "json() method returns:",
+      typeof jsonFromMethod,
+      "with URL:",
+      jsonFromMethod.url,
+    );
+
     // Example 6: Error handling
     console.log("\n--- Example 6: Error handling ---");
     try {

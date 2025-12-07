@@ -46,6 +46,12 @@ export class Response {
   arrayBuffer(): Promise<ArrayBuffer>;
 
   /**
+   * Parse response body as JSON
+   * @returns Promise that resolves with the parsed JSON data
+   */
+  json(): Promise<any>;
+
+  /**
    * Convert to a Web API Response object
    * @returns Web API Response object
    * @throws If response body has been disturbed
