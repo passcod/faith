@@ -2,7 +2,7 @@ use napi::bindgen_prelude::*;
 use napi_derive::napi;
 use reqwest::{Client, Method, Response};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use thiserror::Error;
@@ -27,7 +27,7 @@ impl From<FetchError> for napi::Error {
 #[napi(object)]
 pub struct FetchOptions {
     pub method: Option<String>,
-    pub headers: Option<HashMap<String, String>>,
+    pub headers: Option<Vec<(String, String)>>,
     pub body: Option<Vec<u8>>,
     pub timeout: Option<f64>,
 }
@@ -41,7 +41,7 @@ struct FetchResponseInner {
 pub struct FetchResponse {
     status: u16,
     status_text: String,
-    headers: HashMap<String, String>,
+    headers: Vec<(String, String)>,
     ok: bool,
     url: String,
     redirected: bool,
@@ -63,7 +63,7 @@ impl FetchResponse {
     }
 
     #[napi(getter)]
-    pub fn headers(&self) -> HashMap<String, String> {
+    pub fn headers(&self) -> Vec<(String, String)> {
         self.headers.clone()
     }
 
@@ -290,7 +290,7 @@ pub async fn fetch(url: String, options: Option<FetchOptions>) -> Result<FetchRe
     let url = response.url().to_string();
     let redirected = response.status().is_redirection();
 
-    let headers_map: HashMap<String, String> = response
+    let headers_vec: Vec<(String, String)> = response
         .headers()
         .iter()
         .filter_map(|(name, value)| {
@@ -308,7 +308,7 @@ pub async fn fetch(url: String, options: Option<FetchOptions>) -> Result<FetchRe
     Ok(FetchResponse {
         status,
         status_text,
-        headers: headers_map,
+        headers: headers_vec,
         ok,
         url,
         redirected,
@@ -324,8 +324,7 @@ mod tests {
 
     #[test]
     fn test_fetch_options_serialization() {
-        let mut headers = HashMap::new();
-        headers.insert("Content-Type".to_string(), "application/json".to_string());
+        let headers = vec![("Content-Type".to_string(), "application/json".to_string())];
 
         let options = FetchOptions {
             method: Some("POST".to_string()),

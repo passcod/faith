@@ -3,7 +3,7 @@
 export declare class FetchResponse {
   get status(): number
   get statusText(): string
-  get headers(): Record<string, string>
+  get headers(): Array<[string, string]>
   get ok(): boolean
   get url(): string
   get redirected(): boolean
@@ -22,7 +22,7 @@ export declare function fetch(url: string, options?: FetchOptions | undefined | 
 
 export interface FetchOptions {
   method?: string
-  headers?: Record<string, string>
+  headers?: Array<[string, string]>
   body?: Array<number>
   timeout?: number
 }

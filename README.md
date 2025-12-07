@@ -10,7 +10,7 @@ Most `fetch` implementations for Node.js are based on the Node.js TCP stack (via
 easily work around its limitations. The native fetch implementation, `undici`, explicitly targets
 HTTP/1.1, and doesn't support HTTP/2+, among many other complaints.
 
-Fáith tries to bring a Node.js fetch closer that is to the browser's fetch, notably by having
+Fáith tries to bring a Node.js fetch that is closer to the browser's fetch, notably by having
 transparent support for HTTP/2 and HTTP/3, IPv6 and IPv4 using the "Happy Eyeballs" algorithm, an
 HTTP cache and a cookie jar, a DNS cache, and actual support for `half` and `full` duplex modes.
 
@@ -157,10 +157,11 @@ This getter is "fused": once it returns `true`, it will always return `true`.
 
 ### `Response.headers`
 
-Not yet implemented correctly.
-
 *The `headers` read-only property of the `Response` interface contains the `Headers` object
 associated with the response.*
+
+Note that Fáith does not provide a custom `Headers` class; instead the Web API `Headers` structure
+is used directly and constructed by Fáith when needed.
 
 ### `Response.ok`
 

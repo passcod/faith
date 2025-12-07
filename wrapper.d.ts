@@ -6,7 +6,7 @@
 
 export interface FetchOptions {
   method?: string;
-  headers?: Record<string, string>;
+  headers?: Record<string, string> | Headers;
   body?: Array<number> | string | ArrayBuffer | Uint8Array;
   timeout?: number;
 }
@@ -14,7 +14,7 @@ export interface FetchOptions {
 export class Response {
   readonly status: number;
   readonly statusText: string;
-  readonly headers: Record<string, string>;
+  readonly headers: Headers;
   readonly ok: boolean;
   readonly url: string;
   readonly redirected: boolean;

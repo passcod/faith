@@ -39,7 +39,17 @@ function createWrapper(native) {
           configurable: true,
         },
         headers: {
-          get: () => this.#nativeResponse.headers,
+          get: () => {
+            // Create a Headers object from the array of header pairs
+            const headers = new Headers();
+            const headerPairs = this.#nativeResponse.headers;
+            if (Array.isArray(headerPairs)) {
+              for (const [name, value] of headerPairs) {
+                headers.append(name, value);
+              }
+            }
+            return headers;
+          },
           enumerable: true,
           configurable: true,
         },
@@ -176,7 +186,7 @@ function createWrapper(native) {
    * @param {string} url - The URL to fetch
    * @param {Object} [options] - Fetch options
    * @param {string} [options.method] - HTTP method
-   * @param {Object} [options.headers] - HTTP headers
+   * @param {Object|Headers} [options.headers] - HTTP headers (either Headers object or plain object)
    * @param {Array<number>|string|ArrayBuffer|Uint8Array} [options.body] - Request body
    * @param {number} [options.timeout] - Timeout in seconds
    * @returns {Promise<Response>}
@@ -184,6 +194,34 @@ function createWrapper(native) {
   async function fetch(url, options = {}) {
     // Convert options to match native API
     const nativeOptions = { ...options };
+
+    if (nativeOptions.headers !== undefined && nativeOptions.headers !== null) {
+      if (nativeOptions.headers instanceof Headers) {
+        // Convert Headers object to array of tuples
+        const headersArray = [];
+        nativeOptions.headers.forEach((value, name) => {
+          headersArray.push([name, value]);
+        });
+        nativeOptions.headers = headersArray;
+      } else if (
+        typeof nativeOptions.headers === "object" &&
+        !Array.isArray(nativeOptions.headers)
+      ) {
+        // Convert plain object to array of tuples
+        const headersArray = [];
+        for (const [name, value] of Object.entries(nativeOptions.headers)) {
+          headersArray.push([name, value]);
+        }
+        nativeOptions.headers = headersArray;
+      } else {
+        throw new TypeError(
+          "headers must be a Headers object or a plain object",
+        );
+      }
+    } else if (nativeOptions.headers === null) {
+      // Convert null to undefined so Rust treats it as None
+      delete nativeOptions.headers;
+    }
 
     // Convert body to Array<number> if needed
     if (nativeOptions.body !== undefined) {

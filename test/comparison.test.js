@@ -53,11 +53,15 @@ async function compareResponses(t, url, options = {}) {
     const lowerKey = key.toLowerCase();
     if (!ignoreHeaders.includes(lowerKey)) {
       t.ok(
-        faithHeaders[lowerKey] !== undefined,
+        faithHeaders.get(lowerKey) !== null,
         `Faith should have header ${key}`,
       );
-      if (faithHeaders[lowerKey] !== undefined) {
-        t.equal(faithHeaders[lowerKey], value, `Header ${key} should match`);
+      if (faithHeaders.get(lowerKey) !== null) {
+        t.equal(
+          faithHeaders.get(lowerKey),
+          value,
+          `Header ${key} should match`,
+        );
       }
     }
   }
