@@ -1,6 +1,6 @@
 [package]
 name = "faith"
-version = "0.1.0"
+version = "0.0.0"
 edition = "2024"
 description = "fáith: a Rust-powered JS fetch"
 
@@ -8,21 +8,18 @@ description = "fáith: a Rust-powered JS fetch"
 crate-type = ["cdylib"]
 
 [dependencies]
-napi = { version = "2", features = ["napi4", "tokio_rt"] }
-napi-derive = "2"
-reqwest = { version = "0.12", features = ["trust-dns", "json", "stream"] }
-tokio = { version = "1", features = ["full"] }
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-jiff = "0.1"
-bytes = "1"
-thiserror = "1"
+napi = { version = "3.6.1", features = ["napi4", "tokio_rt"] }
+napi-derive = "3.4.0"
+reqwest = { version = "0.12.24", features = ["trust-dns", "json", "stream"] }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.145"
+thiserror = "2.0.17"
+tokio = { version = "1.48.0", features = ["full"] }
 
 [build-dependencies]
-napi-build = "2"
+napi-build = "2.3.1"
 
 [dev-dependencies]
-napi = { version = "2", features = ["napi4", "tokio_rt"] }
-reqwest = { version = "0.12", features = ["trust-dns", "json", "stream"] }
-tokio = { version = "1", features = ["full"] }
-serde_json = "1"
+reqwest = { version = "0.12.24", features = ["trust-dns", "json", "stream"] }
+serde_json = "1.0.145"
+tokio = { version = "1.48.0", features = ["full"] }
