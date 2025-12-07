@@ -1,5 +1,5 @@
 const test = require("tape");
-const { fetch: faithFetch } = require("../index.js");
+const { fetch: faithFetch } = require("../wrapper.js");
 
 // Skip tests if native fetch is not available
 const hasNativeFetch = typeof globalThis.fetch === "function";
@@ -216,7 +216,7 @@ test("Test response.text() method", async (t) => {
 
 // Test response properties
 test("Test response properties", async (t) => {
-  t.plan(7);
+  t.plan(8);
 
   const response = await faithFetch("https://httpbin.org/get");
 
@@ -234,7 +234,12 @@ test("Test response properties", async (t) => {
     "redirected should be a boolean",
   );
   t.equal(typeof response.timestamp, "number", "timestamp should be a number");
-  t.equal(typeof response.body, "function", "body should be a function");
+  t.equal(typeof response.bodyUsed, "boolean", "bodyUsed should be a boolean");
+  t.equal(
+    typeof response.body,
+    "object",
+    "body should be an object (property)",
+  );
 });
 
 // Test with timeout

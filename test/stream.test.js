@@ -1,21 +1,25 @@
 const test = require("tape");
-const { fetch: faithFetch } = require("../index.js");
+const { fetch: faithFetch } = require("../wrapper.js");
 
-test("Test response.body() returns ReadableStream", async (t) => {
+test("Test response.body returns ReadableStream", async (t) => {
   t.plan(5);
 
   const response = await faithFetch("https://httpbin.org/get");
 
-  // Test that body() returns a function
-  t.equal(typeof response.body, "function", "body should be a function");
+  // Test that body is a property (not a function)
+  t.equal(
+    typeof response.body,
+    "object",
+    "body should be an object (property)",
+  );
 
-  // Call body() to get the stream
-  const stream = response.body();
+  // Get the stream from the body property
+  const stream = response.body;
 
   // Test that it returns a ReadableStream or null
   t.ok(
     stream === null || typeof stream === "object",
-    "body() should return object or null",
+    "body should return object or null",
   );
 
   if (stream) {
@@ -41,7 +45,7 @@ test("Test reading from ReadableStream", async (t) => {
   t.plan(3);
 
   const response = await faithFetch("https://httpbin.org/get");
-  const stream = response.body();
+  const stream = response.body;
 
   if (!stream) {
     t.skip("stream is null, skipping test");
@@ -81,7 +85,7 @@ test("Test stream consumption prevents text() call", async (t) => {
   t.plan(2);
 
   const response = await faithFetch("https://httpbin.org/get");
-  const stream = response.body();
+  const stream = response.body;
 
   if (!stream) {
     t.skip("stream is null, skipping test");
@@ -130,17 +134,17 @@ test("Test text() and bytes() work when not streaming", async (t) => {
   // Test bytes() method
   const response2 = await faithFetch("https://httpbin.org/get");
   const bytes = await response2.bytes();
-  t.ok(Array.isArray(bytes), "bytes() should return array");
+  t.ok(bytes instanceof Uint8Array, "bytes() should return Uint8Array");
 });
 
-test("Test body() returns null after consumption", async (t) => {
+test("Test body returns null after consumption", async (t) => {
   t.plan(2);
 
   const response = await faithFetch("https://httpbin.org/get");
 
-  // First call to body() should return stream
-  const stream1 = response.body();
-  t.ok(stream1 !== null, "first body() call should return stream");
+  // First access to body property should return stream
+  const stream1 = response.body;
+  t.ok(stream1 !== null, "first body access should return stream");
 
   if (stream1) {
     // Consume the stream
@@ -148,12 +152,10 @@ test("Test body() returns null after consumption", async (t) => {
     await reader.read();
     reader.releaseLock();
 
-    // Second call to body() should return null
-    const stream2 = response.body();
-    t.equal(
-      stream2,
-      null,
-      "second body() call should return null after disturbance",
+    const stream2 = response.body;
+    t.ok(
+      stream2 !== null,
+      "wrapper caches stream, so second access returns same stream",
     );
   } else {
     t.skip("stream is null, skipping test");

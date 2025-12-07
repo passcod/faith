@@ -138,8 +138,12 @@ Fáith does not allow its `Response` object to be constructed. If you need to, y
 
 ### `Response.body`
 
-Fáith, due to technical restrictions, does not yet have `body` as a getter, but instead as a
-method: `Response.body()`.
+*The `body` read-only property of the `Response` interface is a `ReadableStream` of the body
+contents,* or `null` for any actual HTTP response that has no body, such as `HEAD` requests and
+`204 No Content` responses.
+
+Note that browsers currently do not return `null` for those responses, but the spec requires it.
+Fáith chooses to respect the spec rather than the browsers in this case.
 
 ### `Response.bodyUsed`
 
@@ -152,6 +156,8 @@ In Fáith, this indicates whether the body stream has ever been read from or can
 This getter is "fused": once it returns `true`, it will always return `true`.
 
 ### `Response.headers`
+
+Not yet implemented correctly.
 
 *The `headers` read-only property of the `Response` interface contains the `Headers` object
 associated with the response.*
@@ -210,20 +216,12 @@ value of the `url` property will be the final URL obtained after any redirects.*
 
 ### `Response.arrayBuffer()`
 
-Not yet implemented.
+*The `arrayBuffer()` method of the `Response` interface takes a `Response` stream and reads it to
+completion. It returns a promise that resolves with an `ArrayBuffer`.*
 
 ### `Response.blob()`
 
 Not yet implemented.
-
-### `Response.body()`
-
-*The `body`* method *of the `Response` interface is a `ReadableStream` of the body
-contents,* or `null` for any actual HTTP response that has no body, such as `HEAD` requests and
-`204 No Content` responses.
-
-Note that browsers currently do not return `null` for those responses, but the spec requires it.
-Fáith chooses to respect the spec rather than the browsers in this case.
 
 ### `Response.bytes()`
 

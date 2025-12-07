@@ -1,6 +1,6 @@
-// Example demonstrating the new FetchResponse API with ReadableStream support
+// Example demonstrating the faith fetch API with ReadableStream support
 
-const { fetch } = require("../index.js");
+const { fetch } = require("../wrapper.js");
 
 async function main() {
   console.log("=== Testing faith fetch with ReadableStream ===\n");
@@ -16,9 +16,9 @@ async function main() {
     console.log("Response timestamp:", response.timestamp);
     console.log("Response bodyUsed:", response.bodyUsed);
 
-    // Test 1: Get body as ReadableStream
-    console.log("\n--- Test 1: Reading body as ReadableStream ---");
-    const stream = response.body();
+    // Test 1: Get body as ReadableStream (property, not method)
+    console.log("\n--- Test 1: Reading body as ReadableStream (property) ---");
+    const stream = response.body;
 
     if (stream) {
       const reader = stream.getReader();
@@ -54,16 +54,12 @@ async function main() {
 
     // Test 2: Try to consume response again (should fail)
     console.log("\n--- Test 2: Trying to consume response again ---");
-    try {
-      const stream2 = response.body();
-      console.log("Second body() call returned:", stream2 ? "stream" : "null");
+    const stream2 = response.body;
+    console.log("Second body access returned:", stream2 ? "stream" : "null");
 
-      if (!stream2) {
-        console.log("Good! body() returns null after first consumption");
-        console.log("bodyUsed is now:", response.bodyUsed);
-      }
-    } catch (err) {
-      console.log("Error on second body() call:", err.message);
+    if (!stream2) {
+      console.log("Good! body returns null after first consumption");
+      console.log("bodyUsed is now:", response.bodyUsed);
     }
 
     // Test 3: Make another request and use text() method
@@ -80,19 +76,19 @@ async function main() {
     console.log("bytes() returned array of length:", bytes.length);
     console.log("First 10 bytes:", bytes.slice(0, 10));
 
-    // Test 5: Demonstrate that body(), text(), and bytes() are mutually exclusive
+    // Test 5: Demonstrate that body, text(), and bytes() are mutually exclusive
     console.log("\n--- Test 5: Mutual exclusivity test ---");
     const response4 = await fetch("https://httpbin.org/get");
 
     // Get the stream first
-    const stream4 = response4.body();
+    const stream4 = response4.body;
     if (stream4) {
-      console.log("Got stream from body()");
+      console.log("Got stream from body property");
 
       // Now try to use text() - should fail
       try {
         await response4.text();
-        console.log("ERROR: text() should have thrown after body() was called");
+        console.log("ERROR: text() should have thrown after body was called");
       } catch (err) {
         console.log("Good! text() threw error:", err.message);
         console.log("bodyUsed is now:", response4.bodyUsed);
@@ -102,7 +98,7 @@ async function main() {
       try {
         await response4.bytes();
         console.log(
-          "ERROR: bytes() should have thrown after body() was called",
+          "ERROR: bytes() should have thrown after body property was accessed",
         );
       } catch (err) {
         console.log("Good! bytes() threw error:", err.message);
@@ -121,9 +117,12 @@ async function main() {
     const response6 = await fetch("https://httpbin.org/get");
     console.log("Initial bodyUsed:", response6.bodyUsed);
 
-    const stream6 = response6.body();
+    const stream6 = response6.body;
     if (stream6) {
-      console.log("After body(), bodyUsed:", response6.bodyUsed);
+      console.log(
+        "After accessing body property, bodyUsed:",
+        response6.bodyUsed,
+      );
     }
 
     console.log("\n=== All tests completed successfully ===");

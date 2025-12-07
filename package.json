@@ -2,13 +2,17 @@
   "name": "faith",
   "version": "0.1.0",
   "description": "fáith: a Rust-powered fetch",
-  "main": "index.js",
-  "browser": "browser.js",
-  "types": "index.d.ts",
+  "main": "wrapper.js",
+  "browser": "browser-wrapper.mjs",
+  "types": "wrapper.d.ts",
   "files": [
     "index.js",
     "index.d.ts",
-    "browser.js"
+    "browser.js",
+    "browser-wrapper.mjs",
+    "wrapper.js",
+    "wrapper.d.ts",
+    "wrapper-factory.js"
   ],
   "napi": {
     "binaryName": "faith",
