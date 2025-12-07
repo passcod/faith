@@ -1,7 +1,6 @@
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
 use reqwest::{Client, Method, Response};
-use serde::{Deserialize, Serialize};
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -23,12 +22,11 @@ impl From<FetchError> for napi::Error {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
 #[napi(object)]
 pub struct FetchOptions {
     pub method: Option<String>,
     pub headers: Option<Vec<(String, String)>>,
-    pub body: Option<Vec<u8>>,
+    pub body: Option<Buffer>,
     pub timeout: Option<f64>,
 }
 
@@ -266,7 +264,7 @@ pub async fn fetch(url: String, options: Option<FetchOptions>) -> Result<FetchRe
         }
 
         if let Some(body) = &opts.body {
-            request = request.body(body.clone());
+            request = request.body(body.as_ref().to_vec());
         }
 
         if let Some(timeout) = opts.timeout {
@@ -323,20 +321,18 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_fetch_options_serialization() {
+    fn test_fetch_options() {
         let headers = vec![("Content-Type".to_string(), "application/json".to_string())];
 
         let options = FetchOptions {
             method: Some("POST".to_string()),
             headers: Some(headers),
-            body: Some(b"test body".to_vec()),
+            body: Some(Buffer::from(b"test body".to_vec())),
             timeout: Some(30.0),
         };
 
-        let serialized = serde_json::to_string(&options).unwrap();
-        let deserialized: FetchOptions = serde_json::from_str(&serialized).unwrap();
-
-        assert_eq!(deserialized.method.unwrap(), "POST");
-        assert_eq!(deserialized.timeout.unwrap(), 30.0);
+        assert_eq!(options.method.unwrap(), "POST");
+        assert_eq!(options.timeout.unwrap(), 30.0);
+        assert_eq!(options.body.unwrap().as_ref(), b"test body");
     }
 }

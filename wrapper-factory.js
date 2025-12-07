@@ -187,7 +187,7 @@ function createWrapper(native) {
    * @param {Object} [options] - Fetch options
    * @param {string} [options.method] - HTTP method
    * @param {Object|Headers} [options.headers] - HTTP headers (either Headers object or plain object)
-   * @param {Array<number>|string|ArrayBuffer|Uint8Array} [options.body] - Request body
+   * @param {Buffer|Array<number>|string|ArrayBuffer|Uint8Array} [options.body] - Request body
    * @param {number} [options.timeout] - Timeout in seconds
    * @returns {Promise<Response>}
    */
@@ -223,20 +223,22 @@ function createWrapper(native) {
       delete nativeOptions.headers;
     }
 
-    // Convert body to Array<number> if needed
+    // Convert body to Buffer if needed
     if (nativeOptions.body !== undefined) {
       if (typeof nativeOptions.body === "string") {
-        // Convert string to bytes
-        const encoder = new TextEncoder();
-        nativeOptions.body = Array.from(encoder.encode(nativeOptions.body));
+        // Convert string to Buffer
+        nativeOptions.body = Buffer.from(nativeOptions.body);
       } else if (nativeOptions.body instanceof ArrayBuffer) {
-        // Convert ArrayBuffer to bytes
-        nativeOptions.body = Array.from(new Uint8Array(nativeOptions.body));
+        // Convert ArrayBuffer to Buffer
+        nativeOptions.body = Buffer.from(nativeOptions.body);
       } else if (nativeOptions.body instanceof Uint8Array) {
-        // Convert Uint8Array to bytes
-        nativeOptions.body = Array.from(nativeOptions.body);
+        // Convert Uint8Array to Buffer
+        nativeOptions.body = Buffer.from(nativeOptions.body);
+      } else if (Array.isArray(nativeOptions.body)) {
+        // Convert Array<number> to Buffer
+        nativeOptions.body = Buffer.from(nativeOptions.body);
       }
-      // If it's already Array<number>, keep as is
+      // If it's already a Buffer, keep as is
     }
 
     const nativeResponse = await nativeFetch(url, nativeOptions);

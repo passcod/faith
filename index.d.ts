@@ -23,6 +23,6 @@ export declare function fetch(url: string, options?: FetchOptions | undefined | 
 export interface FetchOptions {
   method?: string
   headers?: Array<[string, string]>
-  body?: Array<number>
+  body?: Buffer
   timeout?: number
 }
