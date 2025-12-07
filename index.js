@@ -572,4 +572,5 @@ if (!nativeBinding) {
 }
 
 module.exports = nativeBinding
+module.exports.FetchResponse = nativeBinding.FetchResponse
 module.exports.fetch = nativeBinding.fetch

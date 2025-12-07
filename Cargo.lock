@@ -144,6 +144,7 @@ dependencies = [
 name = "faith"
 version = "0.0.0"
 dependencies = [
+ "bytes",
  "napi",
  "napi-build",
  "napi-derive",
@@ -152,6 +153,8 @@ dependencies = [
  "serde_json",
  "thiserror",
  "tokio",
+ "tokio-stream",
+ "tokio-util",
 ]
 
 [[package]]
@@ -671,11 +674,13 @@ dependencies = [
  "bitflags",
  "ctor",
  "futures",
+ "futures-core",
  "napi-build",
  "napi-sys",
  "nohash-hasher",
  "rustc-hash",
  "tokio",
+ "tokio-stream",
 ]
 
 [[package]]
@@ -1291,6 +1296,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1729aa945f29d91ba541258c8df89027d5792d85a8841fb65e8bf0f4ede4ef61"
 dependencies = [
  "rustls",
+ "tokio",
+]
+
+[[package]]
+name = "tokio-stream"
+version = "0.1.17"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "eca58d7bba4a75707817a2c44174253f9236b2d5fbd055602e9d5c07c139a047"
+dependencies = [
+ "futures-core",
+ "pin-project-lite",
  "tokio",
 ]
 

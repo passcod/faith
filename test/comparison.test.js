@@ -62,8 +62,8 @@ async function compareResponses(t, url, options = {}) {
     }
   }
 
-  // Compare response text - convert faith body array to string
-  const faithText = Buffer.from(faithResponse.body).toString("utf-8");
+  // Compare response text - get faith body as text
+  const faithText = await faithResponse.text();
   const nativeText = await nativeResponse.text();
 
   // For JSON responses, parse and compare structure (not exact text due to formatting differences)
@@ -207,7 +207,7 @@ test("Test response.text() method", async (t) => {
   t.plan(3);
 
   const response = await faithFetch("https://httpbin.org/get");
-  const text = Buffer.from(response.body).toString("utf-8");
+  const text = await response.text();
 
   t.ok(typeof text === "string", "body should be convertible to string");
   t.ok(text.length > 0, "body should contain data");
@@ -234,7 +234,7 @@ test("Test response properties", async (t) => {
     "redirected should be a boolean",
   );
   t.equal(typeof response.timestamp, "number", "timestamp should be a number");
-  t.ok(Array.isArray(response.body), "body should be an array");
+  t.equal(typeof response.body, "function", "body should be a function");
 });
 
 // Test with timeout
