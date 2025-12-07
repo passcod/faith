@@ -3,20 +3,31 @@
   "version": "0.1.0",
   "description": "fáith: a Rust-powered fetch",
   "main": "index.js",
+  "browser": "browser.js",
   "types": "index.d.ts",
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "browser.js"
+  ],
   "napi": {
-    "name": "faith",
-    "triples": {
-      "defaults": true,
-      "additional": [
-        "x86_64-unknown-linux-gnu",
-        "aarch64-unknown-linux-gnu",
-        "x86_64-apple-darwin",
-        "aarch64-apple-darwin",
-        "x86_64-pc-windows-msvc",
-        "aarch64-pc-windows-msvc",
-        "i686-pc-windows-msvc"
-      ]
+    "binaryName": "faith",
+    "targets": [
+      "x86_64-unknown-linux-gnu",
+      "x86_64-unknown-linux-musl",
+      "aarch64-unknown-linux-gnu",
+      "aarch64-unknown-linux-musl",
+      "x86_64-apple-darwin",
+      "aarch64-apple-darwin",
+      "x86_64-pc-windows-msvc",
+      "aarch64-pc-windows-msvc",
+      "wasm32-wasi-preview1-threads"
+    ],
+    "wasm": {
+      "browser": {
+        "asyncInit": true,
+        "fs": false
+      }
     }
   },
   "scripts": {
@@ -38,8 +49,9 @@
   "author": "",
   "license": "MIT",
   "devDependencies": {
-    "@napi-rs/cli": "^2.18.4",
-    "@types/node": "^20.0.0",
+    "@napi-rs/cli": "^3.5.0",
+    "@napi-rs/wasm-runtime": "^1.0.3",
+    "@types/node": "^24.10.1",
     "tape": "^5.9.0"
   },
   "engines": {
