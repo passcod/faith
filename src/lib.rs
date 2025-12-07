@@ -42,6 +42,16 @@ pub struct FetchResponse {
 }
 
 #[napi]
+impl FetchResponse {
+    /// Convert response body to text (UTF-8)
+    #[napi]
+    pub fn text(&self) -> Result<String> {
+        String::from_utf8(self.body.clone())
+            .map_err(|e| napi::Error::new(napi::Status::GenericFailure, e.to_string()))
+    }
+}
+
+#[napi]
 pub async fn fetch(url: String, options: Option<FetchOptions>) -> Result<FetchResponse> {
     let client = Client::builder()
         .build()
