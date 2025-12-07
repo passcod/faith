@@ -11,8 +11,6 @@ enum FetchError {
     Request(#[from] reqwest::Error),
     #[error("Invalid header value: {0}")]
     InvalidHeader(String),
-    #[error("Body parsing error: {0}")]
-    BodyParsing(String),
 }
 
 impl From<FetchError> for napi::Error {

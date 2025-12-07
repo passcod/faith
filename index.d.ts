@@ -20,9 +20,3 @@ export interface FetchResponse {
   timestamp: number
 }
 export declare function fetch(url: string, options?: FetchOptions | undefined | null): Promise<FetchResponse>
-export declare class FetchModule {
-  constructor()
-  request(url: string, options?: FetchOptions | undefined | null): Promise<FetchResponse>
-  get(url: string, headers?: Record<string, string> | undefined | null): Promise<FetchResponse>
-  post(url: string, body?: Array<number> | undefined | null, headers?: Record<string, string> | undefined | null): Promise<FetchResponse>
-}
