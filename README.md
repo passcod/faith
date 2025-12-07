@@ -222,7 +222,10 @@ completion. It returns a promise that resolves with an `ArrayBuffer`.*
 
 ### `Response.blob()`
 
-Not yet implemented.
+*The `blob()` method of the `Response` interface takes a `Response` stream and reads it to
+completion. It returns a promise that resolves with a `Blob`.*
+
+*The `type` of the `Blob` is set to the value of the `Content-Type` response header.*
 
 ### `Response.bytes()`
 
@@ -235,7 +238,7 @@ Not yet implemented.
 
 ### `Response.formData()`
 
-Not yet implemented.
+Fáith deliberately does not implement this.
 
 ### `Response.json()`
 

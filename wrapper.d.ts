@@ -52,6 +52,12 @@ export class Response {
   json(): Promise<any>;
 
   /**
+   * Get response body as Blob
+   * @returns Promise that resolves with the response body as Blob
+   */
+  blob(): Promise<Blob>;
+
+  /**
    * Convert to a Web API Response object
    * @returns Web API Response object
    * @throws If response body has been disturbed

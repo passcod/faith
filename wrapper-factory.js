@@ -209,6 +209,39 @@ function createWrapper(native) {
     }
 
     /**
+     * Get response body as Blob
+     * @returns {Promise<Blob>}
+     */
+    async blob() {
+      if (this.#bodyUsed) {
+        throw new Error("Response already disturbed");
+      }
+
+      // If body was accessed (stream created), we can't use blob()
+      if (this.#bodyAccessed) {
+        throw new Error("Response already disturbed");
+      }
+
+      this.#bodyUsed = true;
+      this.#bodyStream = null; // Can't have both stream and consumed body
+
+      try {
+        const bytesArray = await this.#nativeResponse.bytes();
+        // Convert array to Uint8Array for Blob constructor
+        const uint8Array = new Uint8Array(bytesArray);
+        // Get content-type from response headers
+        const contentType = this.headers.get("content-type") || "";
+        return new Blob([uint8Array], { type: contentType });
+      } catch (error) {
+        // If native throws "Response already disturbed", it means body() was called
+        if (error.message.includes("disturbed")) {
+          throw new Error("Response already disturbed");
+        }
+        throw error;
+      }
+    }
+
+    /**
      * Convert to a Web API Response object
      * @returns {Response} Web API Response object
      * @throws {Error} If response body has been disturbed or Response constructor is not available
