@@ -1,0 +1,48 @@
+{
+  "name": "faith",
+  "version": "0.1.0",
+  "description": "fáith: a Rust-powered fetch",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "napi": {
+    "name": "faith",
+    "triples": {
+      "defaults": true,
+      "additional": [
+        "x86_64-unknown-linux-gnu",
+        "aarch64-unknown-linux-gnu",
+        "x86_64-apple-darwin",
+        "aarch64-apple-darwin",
+        "x86_64-pc-windows-msvc",
+        "aarch64-pc-windows-msvc",
+        "i686-pc-windows-msvc"
+      ]
+    }
+  },
+  "scripts": {
+    "build": "napi build --platform --release",
+    "build:debug": "napi build --platform",
+    "test": "cargo test && node test/test.js",
+    "test:compare": "node test/compare.js",
+    "postinstall": "command cargo 2>&1 >/dev/null && npm run build",
+    "prepublishOnly": "napi build --platform --release"
+  },
+  "keywords": [
+    "fetch",
+    "rust",
+    "napi",
+    "reqwest",
+    "http",
+    "https",
+    "h2"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@napi-rs/cli": "^2.18.4",
+    "@types/node": "^20.0.0"
+  },
+  "engines": {
+    "node": ">= 14"
+  }
+}
