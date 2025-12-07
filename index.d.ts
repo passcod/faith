@@ -16,6 +16,8 @@ export declare class FetchResponse {
   text(): Promise<string>
   /** Get response body as bytes */
   bytes(): Promise<Array<number>>
+  /** Parse response body as JSON */
+  json(): Promise<any>
 }
 
 export declare function fetch(url: string, options?: FetchOptions | undefined | null): Promise<FetchResponse>

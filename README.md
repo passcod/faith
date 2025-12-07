@@ -239,7 +239,16 @@ Not yet implemented.
 
 ### `Response.json()`
 
-Not yet implemented.
+*The `json()` method of the `Response` interface takes a `Response` stream and reads it to
+completion. It returns a promise which resolves with the result of parsing the body text as
+`JSON`.*
+
+*Note that despite the method being named `json()`, the result is not JSON but is instead the
+result of taking JSON as input and parsing it to produce a JavaScript object.*
+
+Further note that, at least in Fáith, this method first reads the entire response body as bytes,
+and then parses that as JSON. This can use up to double the amount of memory. If you need more
+efficient access, consider handling the response body as a stream.
 
 ### `Response.text()`
 

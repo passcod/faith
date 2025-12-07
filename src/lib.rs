@@ -1,6 +1,7 @@
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
 use reqwest::{Client, Method, Response};
+use serde_json;
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -224,6 +225,49 @@ impl FetchResponse {
                     .await
                     .map_err(|e| napi::Error::new(napi::Status::GenericFailure, e.to_string()))?;
                 Ok(bytes.to_vec())
+            } else {
+                Err(napi::Error::new(
+                    napi::Status::GenericFailure,
+                    "Response already consumed".to_string(),
+                ))
+            }
+        } else {
+            Err(napi::Error::new(
+                napi::Status::GenericFailure,
+                "Response already used".to_string(),
+            ))
+        }
+    }
+
+    /// Parse response body as JSON
+    #[napi]
+    pub async fn json(&self) -> Result<serde_json::Value> {
+        // Check if already disturbed
+        if self.disturbed.load(Ordering::SeqCst) {
+            return Err(napi::Error::new(
+                napi::Status::GenericFailure,
+                "Response already disturbed".to_string(),
+            ));
+        }
+
+        // Get the inner
+        if let Some(inner) = &self.inner {
+            // Mark as disturbed
+            self.disturbed.store(true, Ordering::SeqCst);
+
+            let mut inner_guard = inner.lock().await;
+            if let Some(response) = inner_guard.response.take() {
+                // Read all bytes from response
+                let bytes = response
+                    .bytes()
+                    .await
+                    .map_err(|e| napi::Error::new(napi::Status::GenericFailure, e.to_string()))?;
+
+                // Parse JSON from bytes
+                let json_value: serde_json::Value = serde_json::from_slice(&bytes)
+                    .map_err(|e| napi::Error::new(napi::Status::GenericFailure, e.to_string()))?;
+
+                Ok(json_value)
             } else {
                 Err(napi::Error::new(
                     napi::Status::GenericFailure,

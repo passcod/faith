@@ -181,6 +181,34 @@ function createWrapper(native) {
     }
 
     /**
+     * Parse response body as JSON
+     * @returns {Promise<any>}
+     */
+    async json() {
+      if (this.#bodyUsed) {
+        throw new Error("Response already disturbed");
+      }
+
+      // If body was accessed (stream created), we can't use json()
+      if (this.#bodyAccessed) {
+        throw new Error("Response already disturbed");
+      }
+
+      this.#bodyUsed = true;
+      this.#bodyStream = null; // Can't have both stream and consumed body
+
+      try {
+        return await this.#nativeResponse.json();
+      } catch (error) {
+        // If native throws "Response already disturbed", it means body() was called
+        if (error.message.includes("disturbed")) {
+          throw new Error("Response already disturbed");
+        }
+        throw error;
+      }
+    }
+
+    /**
      * Convert to a Web API Response object
      * @returns {Response} Web API Response object
      * @throws {Error} If response body has been disturbed or Response constructor is not available
