@@ -22,8 +22,7 @@
   "scripts": {
     "build": "napi build --platform --release",
     "build:debug": "napi build --platform",
-    "test": "cargo test && node test/test.js",
-    "test:compare": "node test/compare.js",
+    "test": "cargo test && tape test/*.test.js",
     "postinstall": "command cargo 2>&1 >/dev/null && npm run build",
     "prepublishOnly": "napi build --platform --release"
   },
@@ -40,7 +39,8 @@
   "license": "MIT",
   "devDependencies": {
     "@napi-rs/cli": "^2.18.4",
-    "@types/node": "^20.0.0"
+    "@types/node": "^20.0.0",
+    "tape": "^5.9.0"
   },
   "engines": {
     "node": ">= 14"
