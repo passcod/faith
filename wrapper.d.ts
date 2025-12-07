@@ -56,11 +56,3 @@ export declare function fetch(
   url: string,
   options?: FetchOptions,
 ): Promise<Response>;
-
-/**
- * Native bindings for advanced use
- */
-export declare const native: {
-  FetchResponse: any;
-  fetch: any;
-};

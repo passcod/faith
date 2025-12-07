@@ -208,8 +208,6 @@ function createWrapper(native) {
   return {
     Response,
     fetch,
-    // Also expose native bindings for advanced use
-    native,
   };
 }
 

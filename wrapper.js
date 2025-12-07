@@ -11,12 +11,10 @@ const native = require("./index.js");
 const { createWrapper } = require("./wrapper-factory.js");
 
 // Create the wrapper using the factory
-const { Response, fetch, native: nativeBindings } = createWrapper(native);
+const { Response, fetch } = createWrapper(native);
 
 // Export the wrapper
 module.exports = {
   Response,
   fetch,
-  // Also expose native bindings for advanced use
-  native: nativeBindings,
 };
