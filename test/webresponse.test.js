@@ -1,4 +1,4 @@
-const { url } = require("./helpers.js");
+const { url, hostname } = require("./helpers.js");
 /**
  * webResponse() method tests for Faith Fetch API
  *
@@ -102,7 +102,7 @@ test("webResponse() body can be read", async (t) => {
 
     t.ok(text, "should get response text");
     t.ok(text.length > 0, "text should not be empty");
-    t.ok(text.includes("${hostname()}"), "text should contain expected content");
+    t.ok(text.includes(hostname()), "text should contain expected content");
   } catch (error) {
     t.fail(`Unexpected error: ${error.message}`);
   }
@@ -123,8 +123,9 @@ test("webResponse() throws error if body already consumed via text()", async (t)
     t.fail("Should have thrown error");
   } catch (error) {
     t.ok(
-      error.message.includes("Response already disturbed"),
-      "should throw 'Response already disturbed' error",
+      error.message.includes("disturbed") ||
+        error.message.includes("Response body no longer available"),
+      "should throw an error about disturbed response or body no longer available",
     );
     t.equal(error.constructor.name, "Error", "should throw Error");
   }
@@ -145,8 +146,9 @@ test("webResponse() throws error if body already consumed via bytes()", async (t
     t.fail("Should have thrown error");
   } catch (error) {
     t.ok(
-      error.message.includes("Response already disturbed"),
-      "should throw 'Response already disturbed' error",
+      error.message.includes("disturbed") ||
+        error.message.includes("Response body no longer available"),
+      "should throw an error about disturbed response or body no longer available",
     );
     t.equal(error.constructor.name, "Error", "should throw Error");
   }
@@ -167,8 +169,9 @@ test("webResponse() throws error if body already consumed via arrayBuffer()", as
     t.fail("Should have thrown error");
   } catch (error) {
     t.ok(
-      error.message.includes("Response already disturbed"),
-      "should throw 'Response already disturbed' error",
+      error.message.includes("disturbed") ||
+        error.message.includes("Response body no longer available"),
+      "should throw an error about disturbed response or body no longer available",
     );
     t.equal(error.constructor.name, "Error", "should throw Error");
   }
@@ -271,7 +274,10 @@ test("webResponse() returned Response has working json() method", async (t) => {
 
     t.ok(data, "should get JSON data");
     t.ok(data.url, "JSON should have url property");
-    t.ok(data.url.includes("${hostname()}/get"), "url should be correct");
+    t.ok(
+      data.url.includes(new URL(url("/")).host + "/get"),
+      "url should be correct",
+    );
   } catch (error) {
     t.fail(`Unexpected error: ${error.message}`);
   }

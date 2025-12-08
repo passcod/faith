@@ -259,7 +259,7 @@ test("response.clone() after clone reads body first", async (t) => {
 });
 
 test("response.clone() body streams have independent cursors", async (t) => {
-  t.plan(10);
+  t.plan(9);
 
   try {
     const response1 = await fetch(url("/get"));

@@ -19,7 +19,7 @@ test("response.json() method returns parsed JSON", async (t) => {
     t.equal(typeof data, "object", "should return object");
     t.ok(data.url, "JSON should have url property");
     t.ok(
-      data.url.includes(new URL(url("/")).hostname + "/get"),
+      data.url.includes(new URL(url("/")).host + "/get"),
       "url should be correct",
     );
   } catch (error) {
