@@ -9,29 +9,12 @@ use std::{
 
 use bytes::Bytes;
 use clone_stream::CloneStream;
-use futures::{Stream, StreamExt};
+use futures::{Stream, StreamExt, TryStreamExt};
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
 use reqwest::{Client, Method, StatusCode};
 use serde_json;
 use thiserror::Error;
-use tokio::runtime::{Handle, Runtime};
-
-fn spawn_task<F>(future: F)
-where
-    F: Future + Send + 'static,
-    F::Output: Send + 'static,
-{
-    match Handle::try_current() {
-        Ok(handle) => {
-            handle.spawn(future);
-        }
-        Err(err) if err.is_missing_context() => {
-            Runtime::new().unwrap().spawn(future);
-        }
-        Err(err) => panic!("{err}"),
-    }
-}
 
 #[derive(Error, Debug)]
 enum FetchError {
@@ -57,6 +40,7 @@ pub struct FaithOptions {
 
 type DynStream = dyn Stream<Item = std::result::Result<Bytes, String>> + Send + Sync;
 
+#[derive(Clone)]
 enum Body {
     None,
     Stream(CloneStream<Pin<Box<DynStream>>>),
@@ -158,51 +142,17 @@ impl FaithResponse {
             return Ok(None);
         }
 
-        // If the body is locked, that means something is reading from it, in which case
-        // disturbed should already be true and we shouldn't be reaching here. The only
-        // moment this isn't true is if cached_clone is reading. We consider that an API
-        // violation (you shouldn't both clone() and stream the body at the same time)
-        // and throw. Thus, in normal usage, this try_lock() will always succeed.
-        let mut inner_guard = self.inner_body.try_lock().map_err(|_| {
-            napi::Error::new(
-                napi::Status::GenericFailure,
-                "cannot stream the response at the same time as a clone()",
-            )
-        })?;
-
-        let (tx, rx) = tokio::sync::mpsc::channel(100);
-        match &mut *inner_guard {
+        match &self.inner_body {
             Body::None => return Ok(None), // the body is legitimately null
-            inner @ Body::Stream(_) => {
-                let Body::Stream(response) = std::mem::replace(inner, Body::None) else {
-                    unreachable!()
-                };
-
-                spawn_task(async move {
-                    let mut response = response;
-                    while let Some(chunk) = response.next().await {
-                        if tx
-                            .send(
-                                chunk
-                                    .map_err(|e| napi::Error::new(napi::Status::GenericFailure, e)),
-                            )
-                            .await
-                            .is_err()
-                        {
-                            // if the readablestream is gone, stop reading
-                            break;
-                        }
-                    }
-                });
+            Body::Stream(stream) => {
+                let stream = stream.clone();
+                let stream = napi::bindgen_prelude::ReadableStream::create_with_stream_bytes(
+                    &env,
+                    stream.map_err(|err| napi::Error::new(napi::Status::GenericFailure, err)),
+                )?;
+                Ok(Some(stream))
             }
         }
-
-        let readable_stream = napi::bindgen_prelude::ReadableStream::create_with_stream_bytes(
-            &env,
-            ReceiverStream::new(rx),
-        )?;
-
-        Ok(Some(readable_stream))
     }
 
     fn check_stream_disturbed(&self) -> Result<()> {
