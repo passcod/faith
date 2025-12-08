@@ -68,11 +68,6 @@ test("response.blob() marks body as used", async (t) => {
       t.fail("Should have thrown error when body already used");
     } catch (error) {
       t.equal(
-        error.message,
-        native.errResponseAlreadyDisturbed(),
-        "should throw 'Response already disturbed' error",
-      );
-      t.equal(
         error.code,
         native.errorCodes().response_already_disturbed,
         "should set canonical error code 'response_already_disturbed'",
@@ -98,11 +93,6 @@ test("response.blob() and other methods are mutually exclusive", async (t) => {
       t.fail("Should have thrown error when body already used by blob()");
     } catch (error) {
       t.equal(
-        error.message,
-        native.errResponseAlreadyDisturbed(),
-        "should throw 'Response already disturbed' error",
-      );
-      t.equal(
         error.code,
         native.errorCodes().response_already_disturbed,
         "should set canonical error code 'response_already_disturbed'",
@@ -114,11 +104,6 @@ test("response.blob() and other methods are mutually exclusive", async (t) => {
       await response.json();
       t.fail("Should have thrown error when body already used by blob()");
     } catch (error) {
-      t.equal(
-        error.message,
-        native.errResponseAlreadyDisturbed(),
-        "should throw 'Response already disturbed' error",
-      );
       t.equal(
         error.code,
         native.errorCodes().response_already_disturbed,
@@ -145,11 +130,6 @@ test("response.blob() and body property are mutually exclusive", async (t) => {
       await response.blob();
       t.fail("Should have thrown error when body property was accessed");
     } catch (error) {
-      t.equal(
-        error.message,
-        native.errResponseAlreadyDisturbed(),
-        "should throw 'Response already disturbed' error",
-      );
       t.equal(
         error.code,
         native.errorCodes().response_already_disturbed,

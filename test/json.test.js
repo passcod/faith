@@ -38,14 +38,6 @@ test("response.json() throws error for non-JSON response", async (t) => {
     t.fail("Should have thrown error for non-JSON response");
   } catch (error) {
     t.ok(error, "should throw error for non-JSON response");
-    t.ok(
-      error.message.includes(native.errJsonParseError()) ||
-        error.message.includes("JSON") ||
-        error.message.includes("parse") ||
-        error.message.includes("invalid") ||
-        error.message.includes("expected"),
-      "error should mention JSON parsing or invalid/expected",
-    );
     t.equal(
       error.code,
       native.errorCodes().json_parse_error,
@@ -99,11 +91,6 @@ test("response.json() marks body as used", async (t) => {
       t.fail("Should have thrown error when body already used");
     } catch (error) {
       t.equal(
-        error.message,
-        native.errResponseAlreadyDisturbed(),
-        "should throw 'Response already disturbed' error",
-      );
-      t.equal(
         error.code,
         native.errorCodes().response_already_disturbed,
         "should set canonical error code 'response_already_disturbed'",
@@ -129,11 +116,6 @@ test("response.json() and text() are mutually exclusive", async (t) => {
       t.fail("Should have thrown error when body already used by json()");
     } catch (error) {
       t.equal(
-        error.message,
-        native.errResponseAlreadyDisturbed(),
-        "should throw 'Response already disturbed' error",
-      );
-      t.equal(
         error.code,
         native.errorCodes().response_already_disturbed,
         "should set canonical error code 'response_already_disturbed'",
@@ -145,11 +127,6 @@ test("response.json() and text() are mutually exclusive", async (t) => {
       await response.bytes();
       t.fail("Should have thrown error when body already used by json()");
     } catch (error) {
-      t.equal(
-        error.message,
-        native.errResponseAlreadyDisturbed(),
-        "should throw 'Response already disturbed' error",
-      );
       t.equal(
         error.code,
         native.errorCodes().response_already_disturbed,
@@ -176,11 +153,6 @@ test("response.json() and body property are mutually exclusive", async (t) => {
       await response.json();
       t.fail("Should have thrown error when body property was accessed");
     } catch (error) {
-      t.equal(
-        error.message,
-        native.errResponseAlreadyDisturbed(),
-        "should throw 'Response already disturbed' error",
-      );
       t.equal(
         error.code,
         native.errorCodes().response_already_disturbed,

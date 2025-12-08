@@ -30,11 +30,6 @@ test("body property access behavior", async (t) => {
       t.fail("Should have thrown error when cloning after body access");
     } catch (error) {
       t.equal(
-        error.message,
-        native.errResponseAlreadyDisturbed(),
-        "should throw 'Response already disturbed' error when cloning after body access",
-      );
-      t.equal(
         error.code,
         native.errorCodes().response_already_disturbed,
         "should set canonical error code 'response_already_disturbed'",
@@ -46,11 +41,6 @@ test("body property access behavior", async (t) => {
       await response1.text();
       t.fail("Should have thrown error when reading after body access");
     } catch (error) {
-      t.equal(
-        error.message,
-        native.errResponseAlreadyDisturbed(),
-        "should throw 'Response already disturbed' error when reading after body access",
-      );
       t.equal(
         error.code,
         native.errorCodes().response_already_disturbed,

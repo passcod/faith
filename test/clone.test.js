@@ -86,9 +86,9 @@ test("response.clone() throws error if body already read", async (t) => {
   } catch (error) {
     t.ok(error, "should throw error");
     t.equal(
-      error.message,
-      native.errResponseAlreadyDisturbed(),
-      "should throw 'Response already disturbed'",
+      error.code,
+      native.errorCodes().response_already_disturbed,
+      "should set canonical error code 'response_already_disturbed'",
     );
     t.equal(
       error.code,
@@ -229,9 +229,9 @@ test("response.clone() with body property access", async (t) => {
     } catch (error) {
       // If we get here, it means the implementation doesn't allow reading after body access
       t.equal(
-        error.message,
-        native.errResponseAlreadyDisturbed(),
-        "original cannot read after body property accessed",
+        error.code,
+        native.errorCodes().response_already_disturbed,
+        "should set canonical error code 'response_already_disturbed'",
       );
       t.equal(
         error.code,

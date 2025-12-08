@@ -37,9 +37,6 @@ const ERR_CODE_URL_INCLUDES_CREDENTIALS: &str = "invalid_credentials";
 const ERR_INVALID_OPTIONS: &str = "Invalid request options";
 const ERR_CODE_INVALID_OPTIONS: &str = "invalid_options";
 
-const ERR_NETWORK_ERROR: &str = "Network error";
-const ERR_CODE_NETWORK_ERROR: &str = "network_error";
-
 const ERR_PERMISSION_POLICY: &str = "Request blocked by permissions policy";
 const ERR_CODE_PERMISSION_POLICY: &str = "permission_policy";
 
@@ -66,12 +63,12 @@ pub enum FaithErrorKind {
     InvalidUrl,
     InvalidCredentials,
     InvalidOptions,
+    BlockedByPolicy,
     ResponseAlreadyDisturbed,
     ResponseBodyNotAvailable,
     BodyStream,
     JsonParse,
     Timeout,
-    NetworkError,
     PermissionPolicy,
     RequestError,
     Generic,
@@ -104,12 +101,9 @@ impl FaithError {
 
 impl From<reqwest::Error> for FaithError {
     fn from(err: reqwest::Error) -> Self {
-        // Classify reqwest errors: treat timeouts/connect failures as network errors,
-        // mapping them to the `NetworkError` kind. Other request-related errors are
-        // treated as `RequestError`. This allows mapping network-related failures
-        // to an InvalidArg status (TypeError semantics in JS) when appropriate.
-        if err.is_timeout() || err.is_connect() {
-            FaithError::new(FaithErrorKind::NetworkError, err.to_string())
+        // Map reqwest timeout to Timeout; other reqwest errors map to RequestError.
+        if err.is_timeout() {
+            FaithError::new(FaithErrorKind::Timeout, err.to_string())
         } else {
             FaithError::new(FaithErrorKind::RequestError, err.to_string())
         }
@@ -150,51 +144,6 @@ impl From<FaithError> for napi::Error {
     }
 }
 
-#[napi]
-pub fn err_response_already_disturbed() -> String {
-    ERR_RESPONSE_ALREADY_DISTURBED.to_string()
-}
-
-#[napi]
-pub fn err_response_body_not_available() -> String {
-    ERR_RESPONSE_BODY_NOT_AVAILABLE.to_string()
-}
-
-#[napi]
-pub fn err_invalid_method() -> String {
-    ERR_INVALID_METHOD.to_string()
-}
-
-#[napi]
-pub fn err_invalid_header() -> String {
-    ERR_INVALID_HEADER.to_string()
-}
-
-#[napi]
-pub fn err_timeout() -> String {
-    ERR_TIMEOUT.to_string()
-}
-
-#[napi]
-pub fn err_json_parse_error() -> String {
-    ERR_JSON_PARSE.to_string()
-}
-
-#[napi]
-pub fn err_body_stream_error() -> String {
-    ERR_BODY_STREAM.to_string()
-}
-
-#[napi]
-pub fn err_request_error() -> String {
-    ERR_REQUEST_ERROR.to_string()
-}
-
-#[napi]
-pub fn err_generic_failure() -> String {
-    ERR_GENERIC_FAILURE.to_string()
-}
-
 #[napi(object)]
 pub struct ErrorCodes {
     pub response_already_disturbed: String,
@@ -204,7 +153,6 @@ pub struct ErrorCodes {
     pub invalid_url: String,
     pub invalid_credentials: String,
     pub invalid_options: String,
-    pub network_error: String,
     pub permission_policy: String,
     pub timeout: String,
     pub json_parse_error: String,
@@ -223,7 +171,6 @@ pub fn error_codes() -> ErrorCodes {
         invalid_url: ERR_CODE_INVALID_URL.to_string(),
         invalid_credentials: ERR_CODE_URL_INCLUDES_CREDENTIALS.to_string(),
         invalid_options: ERR_CODE_INVALID_OPTIONS.to_string(),
-        network_error: ERR_CODE_NETWORK_ERROR.to_string(),
         permission_policy: ERR_CODE_PERMISSION_POLICY.to_string(),
         timeout: ERR_CODE_TIMEOUT.to_string(),
         json_parse_error: ERR_CODE_JSON_PARSE.to_string(),

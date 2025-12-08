@@ -29,9 +29,9 @@ test(
       t.fail("Should have thrown error when using invalid HTTP method");
     } catch (error) {
       t.equal(
-        error.message,
-        native.errInvalidMethod(),
-        "should throw 'Invalid HTTP method' message",
+        error.code,
+        native.errorCodes().invalid_method,
+        "should set canonical error code 'invalid_method'",
       );
     }
   },

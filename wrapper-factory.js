@@ -35,7 +35,6 @@ function createWrapper(native) {
     BodyStream: ERROR_CODES.body_stream_error,
     JsonParse: ERROR_CODES.json_parse_error,
     Timeout: ERROR_CODES.timeout,
-    NetworkError: ERROR_CODES.network_error,
     RequestError: ERROR_CODES.request_error,
     Generic: ERROR_CODES.generic_failure,
   };
