@@ -279,3 +279,29 @@ Note that it's not possible to successfully call `webResponse()` after calling `
 or the other body-consuming methods. However, using the `body` property is possible, as that points
 to the same underlying stream as provided to `webResponse()`. Reading `body` from two different
 `Response` objects is not allowed (by Node.js, this is not a Fáith limitation).
+
+## Error mapping
+
+Fáith produces fine-grained errors, but maps them to a few javascript error types for fetch
+compatibility. The `.code` property on errors thrown from Fáith is set to a stable name for each
+error kind, documented both in the API documentation above and in this comprehensive mapping:
+
+- JS `TypeError`:
+  - `InvalidHeader` — invalid header name or value
+  - `InvalidMethod` — invalid HTTP method
+  - `InvalidUrl` — invalid URL string
+  - `InvalidCredentials` — URL contains credentials (disallowed)
+  - `InvalidOptions` — invalid options passed to call
+  - `PermissionPolicy` / `BlockedByPolicy` — request blocked by policy
+  - `ResponseAlreadyDisturbed` — body already read (mutually exclusive operations)
+  - `ResponseBodyNotAvailable` — body is null or not available
+- JS `SyntaxError`:
+  - `JsonParse` — JSON parse error for `response.json()`
+  - UTF8 decoding error (for `response.text()`)
+- JS `AbortError`:
+  - `Timeout` — request timed out
+- JS `NetworkError`:
+  - `RequestError` — general network error or reqwest error
+- JS generic `Error`:
+  - `BodyStream` — internal stream handling error
+  - `Generic` — internal runtime failures
