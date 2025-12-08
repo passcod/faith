@@ -171,13 +171,11 @@ impl FaithResponse {
     /// Unlike bytes() and co, this grabs all the chunks of the response but doesn't
     /// copy them. Further processing is needed to obtain a Vec<u8> or whatever needed.
     async fn gather(&self) -> Result<Arc<[Bytes]>> {
-        println!("gather: before clone: {:?}", self.inner_body);
         // Clone the stream before reading so we don't need &mut self
         let mut response = match &self.inner_body {
             Body::None => return Ok(Default::default()),
             Body::Stream(body) => body.clone(),
         };
-        println!("gather: after clone: {:?}", response.stats());
 
         let mut chunks = Vec::new();
         while let Some(chunk) = response
@@ -195,7 +193,6 @@ impl FaithResponse {
     /// gather() and then copy into one contiguous buffer
     async fn gather_contiguous(&self) -> Result<Buffer> {
         let body = self.gather().await?;
-        println!("gather_contiguous: {body:#?}");
         let length = body.iter().map(|chunk| chunk.len()).sum();
         let mut bytes = Vec::with_capacity(length);
         for chunk in body.into_iter() {
