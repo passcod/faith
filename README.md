@@ -234,7 +234,13 @@ completion. It returns a promise that resolves with a `Uint8Array`.*
 
 ### `Response.clone()`
 
-Not yet implemented.
+*The `clone()` method of the `Response` interface creates a clone of a response object, identical
+in every way, but stored in a different variable.*
+
+In Fáith, this is implemented by first reading the response body to completion. It's expected that
+the only use for `clone()` is to be able to read a response as both `json()` or `text()` and access
+the underlying `bytes()`, which already read the response to completion. If you need to partially
+read streams from cloned `Response`s, do it directly at the `ReadableStream` level instead.
 
 ### `Response.formData()`
 

@@ -1,10 +1,19 @@
+use std::{
+    fmt::Debug,
+    pin::Pin,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
+};
+
+use bytes::Bytes;
+use clone_stream::CloneStream;
+use futures::{Stream, StreamExt};
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
-use reqwest::{Client, Method, Response};
+use reqwest::{Client, Method, StatusCode};
 use serde_json;
-
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
 use thiserror::Error;
 use tokio::sync::Mutex;
 use tokio_stream::wrappers::ReceiverStream;
@@ -24,20 +33,39 @@ impl From<FetchError> for napi::Error {
 }
 
 #[napi(object)]
-pub struct FetchOptions {
+pub struct FaithOptions {
     pub method: Option<String>,
     pub headers: Option<Vec<(String, String)>>,
     pub body: Option<Buffer>,
     pub timeout: Option<f64>,
 }
 
-#[derive(Debug)]
-struct FetchResponseInner {
-    response: Option<Response>,
+type DynStream = dyn Stream<Item = std::result::Result<Bytes, String>> + Send + Sync;
+
+enum Body {
+    None,
+    Stream(CloneStream<Pin<Box<DynStream>>>),
+}
+
+impl Debug for Body {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::None => write!(f, "None"),
+            // Self::Stream(resp) => f.debug_tuple("Stream").field(resp).finish(),
+            Self::Stream(fork) => {
+                let field = f
+                    .debug_struct("CloneStream")
+                    .field("id", &fork.id)
+                    .finish_non_exhaustive();
+                f.debug_tuple("Stream").field(&field).finish()
+            }
+        }
+    }
 }
 
 #[napi]
-pub struct FetchResponse {
+#[derive(Debug)]
+pub struct FaithResponse {
     status: u16,
     status_text: String,
     headers: Vec<(String, String)>,
@@ -45,12 +73,13 @@ pub struct FetchResponse {
     url: String,
     redirected: bool,
     timestamp: f64,
-    inner: Option<Arc<Mutex<FetchResponseInner>>>,
+    empty: bool,
     disturbed: AtomicBool,
+    inner_body: Arc<Mutex<Body>>,
 }
 
 #[napi]
-impl FetchResponse {
+impl FaithResponse {
     #[napi(getter)]
     pub fn status(&self) -> u16 {
         self.status
@@ -92,157 +121,157 @@ impl FetchResponse {
         self.disturbed.load(Ordering::SeqCst)
     }
 
+    /// Check if the response body is empty (e.g. 204 No Content, or HEAD requests)
+    #[napi(getter)]
+    pub fn body_empty(&self) -> bool {
+        self.empty
+    }
+
     /// Get the response body as a ReadableStream
     #[napi]
     pub fn body(
         &self,
         env: Env,
     ) -> Result<Option<napi::bindgen_prelude::ReadableStream<'_, BufferSlice<'_>>>> {
-        // Check if already disturbed
-        if self.disturbed.load(Ordering::SeqCst) {
+        if self.disturbed.swap(true, Ordering::SeqCst) {
+            // In the wrapper code, the body accessor is cached, and then a reference
+            // returned if further accessed. We can't do that at this interface. We
+            // thus overload Ok(None) (= the method returning `null`) to mean either:
+            // - the stream has already been used (cache should be used if present)
+            // - the stream is not available (cache should be used if present)
+            // - the body is null (the body accessor should return null)
+            //   that last case should be checked with body_empty() before calling body()
             return Ok(None);
         }
 
-        // Get the inner
-        if let Some(inner) = &self.inner {
-            // Mark as disturbed
-            self.disturbed.store(true, Ordering::SeqCst);
+        // If the body is locked, that means something is reading from it, in which case
+        // disturbed should already be true and we shouldn't be reaching here. The only
+        // moment this isn't true is if cached_clone is reading. We consider that an API
+        // violation (you shouldn't both clone() and stream the body at the same time)
+        // and throw. Thus, in normal usage, this try_lock() will always succeed.
+        let mut inner_guard = self.inner_body.try_lock().map_err(|_| {
+            napi::Error::new(
+                napi::Status::GenericFailure,
+                "cannot stream the response at the same time as a clone()",
+            )
+        })?;
 
-            let inner_clone = Arc::clone(inner);
+        let (tx, rx) = tokio::sync::mpsc::channel(100);
+        match &mut *inner_guard {
+            Body::None => return Ok(None), // the body is legitimately null
+            inner @ Body::Stream(_) => {
+                let Body::Stream(response) = std::mem::replace(inner, Body::None) else {
+                    unreachable!()
+                };
 
-            // Create a channel for streaming data
-            let (tx, rx) = tokio::sync::mpsc::channel(100);
-
-            // Spawn a thread to read bytes synchronously
-            std::thread::spawn(move || {
-                // Create a Tokio runtime for this thread
-                let rt = tokio::runtime::Runtime::new().unwrap();
-
-                let result = rt.block_on(async {
-                    let mut inner_guard = inner_clone.lock().await;
-                    if let Some(response) = inner_guard.response.take() {
-                        match response.bytes().await {
-                            Ok(bytes) => Ok(bytes),
-                            Err(e) => {
-                                // Convert reqwest error to napi error for channel
-                                Err(napi::Error::new(
-                                    napi::Status::GenericFailure,
-                                    e.to_string(),
-                                ))
-                            }
+                tokio::task::spawn(async move {
+                    let mut response = response;
+                    while let Some(chunk) = response.next().await {
+                        if tx
+                            .send(
+                                chunk
+                                    .map_err(|e| napi::Error::new(napi::Status::GenericFailure, e)),
+                            )
+                            .await
+                            .is_err()
+                        {
+                            // if the readablestream is gone, stop reading
+                            break;
                         }
-                    } else {
-                        // Return an error that will be sent through the channel
-                        Err(napi::Error::new(
-                            napi::Status::GenericFailure,
-                            "Response already used".to_string(),
-                        ))
                     }
                 });
-
-                match result {
-                    Ok(bytes) => {
-                        let _ = tx.blocking_send(Ok::<Vec<u8>, napi::Error>(bytes.to_vec()));
-                    }
-                    Err(e) => {
-                        // e is already napi::Error
-                        let _ = tx.blocking_send(Err::<Vec<u8>, napi::Error>(e));
-                    }
-                }
-            });
-
-            // Create a ReadableStream from the receiver
-            let readable_stream = napi::bindgen_prelude::ReadableStream::create_with_stream_bytes(
-                &env,
-                ReceiverStream::new(rx),
-            )?;
-
-            Ok(Some(readable_stream))
-        } else {
-            Ok(None)
+            }
         }
+
+        let readable_stream = napi::bindgen_prelude::ReadableStream::create_with_stream_bytes(
+            &env,
+            ReceiverStream::new(rx),
+        )?;
+
+        Ok(Some(readable_stream))
+    }
+
+    fn check_stream_disturbed(&self) -> Result<()> {
+        if self.disturbed.swap(true, Ordering::SeqCst) {
+            Err(napi::Error::new(
+                napi::Status::GenericFailure,
+                "Response already disturbed".to_string(),
+            ))
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Underlying efficient response body fetcher.
+    ///
+    /// Unlike bytes() and co, this grabs all the chunks of the response but doesn't
+    /// copy them. Further processing is needed to obtain a Vec<u8> or whatever needed.
+    async fn gather_body(&self) -> Result<Arc<[Bytes]>> {
+        let mut inner_guard = self.inner_body.lock().await;
+        let response = match &mut *inner_guard {
+            Body::None => return Ok(Default::default()),
+            Body::Stream(body) => body,
+        };
+
+        let mut chunks = Vec::new();
+        while let Some(chunk) = response
+            .next()
+            .await
+            .transpose()
+            .map_err(|e| napi::Error::new(napi::Status::GenericFailure, e.to_string()))?
+        {
+            chunks.push(chunk);
+        }
+
+        Ok(Arc::from(chunks.into_boxed_slice()))
+    }
+
+    /// Get response body as bytes
+    ///
+    /// This may use up to 2x the amount of memory that the response body takes
+    /// when the Response is cloned() and will create a full copy of the data.
+    #[napi]
+    pub async fn bytes(&self) -> Result<Buffer> {
+        self.check_stream_disturbed()?;
+        let body = self.gather_body().await?;
+        let length = body.iter().map(|chunk| chunk.len()).sum();
+        let mut bytes = Vec::with_capacity(length);
+        for chunk in body.into_iter() {
+            bytes.extend_from_slice(chunk);
+        }
+        Ok(bytes.into())
     }
 
     /// Convert response body to text (UTF-8)
     #[napi]
     pub async fn text(&self) -> Result<String> {
-        // Check if already disturbed
-        if self.disturbed.load(Ordering::SeqCst) {
-            return Err(napi::Error::new(
-                napi::Status::GenericFailure,
-                "Response already disturbed".to_string(),
-            ));
-        }
-
-        // Get the inner
-        if let Some(inner) = &self.inner {
-            // Mark as disturbed
-            self.disturbed.store(true, Ordering::SeqCst);
-
-            let mut inner_guard = inner.lock().await;
-            if let Some(response) = inner_guard.response.take() {
-                let bytes = response
-                    .bytes()
-                    .await
-                    .map_err(|e| napi::Error::new(napi::Status::GenericFailure, e.to_string()))?;
-                let text = String::from_utf8(bytes.to_vec())
-                    .map_err(|e| napi::Error::new(napi::Status::GenericFailure, e.to_string()))?;
-                Ok(text)
-            } else {
-                Err(napi::Error::new(
-                    napi::Status::GenericFailure,
-                    "Response already consumed".to_string(),
-                ))
-            }
-        } else {
-            Err(napi::Error::new(
-                napi::Status::GenericFailure,
-                "Response already used".to_string(),
-            ))
-        }
-    }
-
-    /// Get response body as bytes
-    #[napi]
-    pub async fn bytes(&self) -> Result<Vec<u8>> {
-        // Check if already disturbed
-        if self.disturbed.load(Ordering::SeqCst) {
-            return Err(napi::Error::new(
-                napi::Status::GenericFailure,
-                "Response already disturbed".to_string(),
-            ));
-        }
-
-        // Get the inner
-        if let Some(inner) = &self.inner {
-            // Mark as disturbed
-            self.disturbed.store(true, Ordering::SeqCst);
-
-            let mut inner_guard = inner.lock().await;
-            if let Some(response) = inner_guard.response.take() {
-                let bytes = response
-                    .bytes()
-                    .await
-                    .map_err(|e| napi::Error::new(napi::Status::GenericFailure, e.to_string()))?;
-                Ok(bytes.to_vec())
-            } else {
-                Err(napi::Error::new(
-                    napi::Status::GenericFailure,
-                    "Response already consumed".to_string(),
-                ))
-            }
-        } else {
-            Err(napi::Error::new(
-                napi::Status::GenericFailure,
-                "Response already used".to_string(),
-            ))
-        }
+        self.check_stream_disturbed()?;
+        let bytes = self.bytes().await?;
+        String::from_utf8(bytes.to_vec())
+            .map_err(|e| napi::Error::new(napi::Status::GenericFailure, e.to_string()))
     }
 
     /// Parse response body as JSON
     #[napi]
     pub async fn json(&self) -> Result<serde_json::Value> {
-        // Check if already disturbed
+        self.check_stream_disturbed()?;
+        let bytes = self.bytes().await?;
+        serde_json::from_slice(&bytes)
+            .map_err(|e| napi::Error::new(napi::Status::GenericFailure, e.to_string()))
+    }
+
+    /// Create a clone of the response
+    ///
+    /// Specially, this doesn't set the disturbed flag, so that `body()` or other such
+    /// methods can work afterwards. However, it will throw if the body has already
+    /// been read from.
+    ///
+    /// Clones will cache in memory the section of the response body that is read
+    /// from one clone and not yet consumed by all others. In the worst case, you can
+    /// end up with a copy of the entire response body if you end up not consuming one
+    /// of the clones.
+    #[napi]
+    pub fn clone(&self) -> Result<Self> {
         if self.disturbed.load(Ordering::SeqCst) {
             return Err(napi::Error::new(
                 napi::Status::GenericFailure,
@@ -250,41 +279,23 @@ impl FetchResponse {
             ));
         }
 
-        // Get the inner
-        if let Some(inner) = &self.inner {
-            // Mark as disturbed
-            self.disturbed.store(true, Ordering::SeqCst);
-
-            let mut inner_guard = inner.lock().await;
-            if let Some(response) = inner_guard.response.take() {
-                // Read all bytes from response
-                let bytes = response
-                    .bytes()
-                    .await
-                    .map_err(|e| napi::Error::new(napi::Status::GenericFailure, e.to_string()))?;
-
-                // Parse JSON from bytes
-                let json_value: serde_json::Value = serde_json::from_slice(&bytes)
-                    .map_err(|e| napi::Error::new(napi::Status::GenericFailure, e.to_string()))?;
-
-                Ok(json_value)
-            } else {
-                Err(napi::Error::new(
-                    napi::Status::GenericFailure,
-                    "Response already consumed".to_string(),
-                ))
-            }
-        } else {
-            Err(napi::Error::new(
-                napi::Status::GenericFailure,
-                "Response already used".to_string(),
-            ))
-        }
+        Ok(Self {
+            status: self.status,
+            status_text: self.status_text.clone(),
+            headers: self.headers.clone(),
+            ok: self.ok,
+            url: self.url.clone(),
+            redirected: self.redirected,
+            timestamp: self.timestamp,
+            empty: self.empty,
+            disturbed: AtomicBool::new(false),
+            inner_body: self.inner_body.clone(),
+        })
     }
 }
 
 #[napi]
-pub async fn fetch(url: String, options: Option<FetchOptions>) -> Result<FetchResponse> {
+pub async fn faith_fetch(url: String, options: Option<FaithOptions>) -> Result<FaithResponse> {
     let client = Client::builder()
         .build()
         .map_err(|e| FetchError::Request(e))?;
@@ -297,6 +308,7 @@ pub async fn fetch(url: String, options: Option<FetchOptions>) -> Result<FetchRe
 
     let method = Method::from_bytes(method.as_bytes())
         .map_err(|_| FetchError::InvalidHeader("Invalid HTTP method".to_string()))?;
+    let is_head = method == Method::HEAD;
 
     let mut request = client.request(method, &url);
 
@@ -343,11 +355,18 @@ pub async fn fetch(url: String, options: Option<FetchOptions>) -> Result<FetchRe
         })
         .collect();
 
-    let inner = FetchResponseInner {
-        response: Some(response),
-    };
+    let empty = status == StatusCode::NO_CONTENT || is_head;
 
-    Ok(FetchResponse {
+    Ok(FaithResponse {
+        inner_body: Arc::new(Mutex::new(if empty {
+            Body::None
+        } else {
+            Body::Stream(CloneStream::from(Box::pin(
+                response
+                    .bytes_stream()
+                    .map(|chunk| chunk.map_err(|err| err.to_string())),
+            ) as Pin<Box<DynStream>>))
+        })),
         status,
         status_text,
         headers: headers_vec,
@@ -355,7 +374,7 @@ pub async fn fetch(url: String, options: Option<FetchOptions>) -> Result<FetchRe
         url,
         redirected,
         timestamp,
-        inner: Some(Arc::new(Mutex::new(inner))),
+        empty,
         disturbed: AtomicBool::new(false),
     })
 }
@@ -368,7 +387,7 @@ mod tests {
     fn test_fetch_options() {
         let headers = vec![("Content-Type".to_string(), "application/json".to_string())];
 
-        let options = FetchOptions {
+        let options = FaithOptions {
             method: Some("POST".to_string()),
             headers: Some(headers),
             body: Some(Buffer::from(b"test body".to_vec())),

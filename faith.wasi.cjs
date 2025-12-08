@@ -108,5 +108,5 @@ const { instance: __napiInstance, module: __wasiModule, napiModule: __napiModule
   },
 })
 module.exports = __napiModule.exports
-module.exports.FetchResponse = __napiModule.exports.FetchResponse
-module.exports.fetch = __napiModule.exports.fetch
+module.exports.FaithResponse = __napiModule.exports.FaithResponse
+module.exports.faithFetch = __napiModule.exports.faithFetch

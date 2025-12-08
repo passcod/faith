@@ -56,5 +56,5 @@ const {
   },
 })
 export default __napiModule.exports
-export const FetchResponse = __napiModule.exports.FetchResponse
-export const fetch = __napiModule.exports.fetch
+export const FaithResponse = __napiModule.exports.FaithResponse
+export const faithFetch = __napiModule.exports.faithFetch

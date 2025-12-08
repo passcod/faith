@@ -58,6 +58,13 @@ export class Response {
   blob(): Promise<Blob>;
 
   /**
+   * Create a clone of the Response object
+   * @returns A new Response object with the same properties
+   * @throws If response body has already been read
+   */
+  clone(): Response;
+
+  /**
    * Convert to a Web API Response object
    * @returns Web API Response object
    * @throws If response body has been disturbed

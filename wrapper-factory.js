@@ -8,23 +8,32 @@
 
 /**
  * Creates a Response class wrapper around native FetchResponse
- * @param {Object} native - Native bindings object with FetchResponse and fetch
+ * @param {import('./index')} native - Native bindings object with FetchResponse and fetch
  * @returns {Object} Object containing Response class and fetch function
  */
 function createWrapper(native) {
-  const { FetchResponse: NativeFetchResponse, fetch: nativeFetch } = native;
+  const { faithFetch } = native;
 
   /**
    * Response class that provides spec-compliant Fetch API
    */
   class Response {
+    /** @type {import('./index').FaithResponse} */
     #nativeResponse;
+    /** @type {ReadableStream<Buffer>?} */
     #bodyStream = null;
-    #bodyUsed = false;
-    #bodyAccessed = false;
 
     constructor(nativeResponse) {
       this.#nativeResponse = nativeResponse;
+
+      // Create a Headers object from the array of header pairs
+      const headers = new Headers();
+      const headerPairs = this.#nativeResponse.headers;
+      if (Array.isArray(headerPairs)) {
+        for (const [name, value] of headerPairs) {
+          headers.append(name, value);
+        }
+      }
 
       // Copy getters from native response
       Object.defineProperties(this, {
@@ -39,17 +48,7 @@ function createWrapper(native) {
           configurable: true,
         },
         headers: {
-          get: () => {
-            // Create a Headers object from the array of header pairs
-            const headers = new Headers();
-            const headerPairs = this.#nativeResponse.headers;
-            if (Array.isArray(headerPairs)) {
-              for (const [name, value] of headerPairs) {
-                headers.append(name, value);
-              }
-            }
-            return headers;
-          },
+          get: () => headers,
           enumerable: true,
           configurable: true,
         },
@@ -74,10 +73,7 @@ function createWrapper(native) {
           configurable: true,
         },
         bodyUsed: {
-          get: () =>
-            this.#bodyUsed ||
-            this.#bodyAccessed ||
-            this.#nativeResponse.bodyUsed,
+          get: () => this.#nativeResponse.bodyUsed,
           enumerable: true,
           configurable: true,
         },
@@ -89,29 +85,15 @@ function createWrapper(native) {
      * This is a getter to match the Fetch API spec
      */
     get body() {
-      // If body is already used (disturbed), return null
-      if (this.#bodyUsed) {
+      if (this.#nativeResponse.bodyEmpty) {
         return null;
       }
 
-      // If we already have a stream, return it
       if (this.#bodyStream !== null) {
         return this.#bodyStream;
       }
 
-      // Mark that body has been accessed
-      this.#bodyAccessed = true;
-
-      // Get the stream from the native response
-      const stream = this.#nativeResponse.body();
-      if (stream) {
-        this.#bodyStream = stream;
-      } else {
-        // If native returns null, body has been disturbed
-        this.#bodyUsed = true;
-      }
-
-      return stream;
+      return (this.#bodyStream = this.#nativeResponse.body());
     }
 
     /**
@@ -119,27 +101,7 @@ function createWrapper(native) {
      * @returns {Promise<string>}
      */
     async text() {
-      if (this.#bodyUsed) {
-        throw new Error("Response already disturbed");
-      }
-
-      // If body was accessed (stream created), we can't use text()
-      if (this.#bodyAccessed) {
-        throw new Error("Response already disturbed");
-      }
-
-      this.#bodyUsed = true;
-      this.#bodyStream = null; // Can't have both stream and consumed body
-
-      try {
-        return await this.#nativeResponse.text();
-      } catch (error) {
-        // If native throws "Response already disturbed", it means body() was called
-        if (error.message.includes("disturbed")) {
-          throw new Error("Response already disturbed");
-        }
-        throw error;
-      }
+      return await this.#nativeResponse.text();
     }
 
     /**
@@ -147,28 +109,7 @@ function createWrapper(native) {
      * @returns {Promise<Uint8Array>}
      */
     async bytes() {
-      if (this.#bodyUsed) {
-        throw new Error("Response already disturbed");
-      }
-
-      // If body was accessed (stream created), we can't use bytes()
-      if (this.#bodyAccessed) {
-        throw new Error("Response already disturbed");
-      }
-
-      this.#bodyUsed = true;
-      this.#bodyStream = null; // Can't have both stream and consumed body
-
-      try {
-        const bytesArray = await this.#nativeResponse.bytes();
-        return new Uint8Array(bytesArray);
-      } catch (error) {
-        // If native throws "Response already disturbed", it means body() was called
-        if (error.message.includes("disturbed")) {
-          throw new Error("Response already disturbed");
-        }
-        throw error;
-      }
+      return await this.#nativeResponse.bytes();
     }
 
     /**
@@ -176,8 +117,7 @@ function createWrapper(native) {
      * @returns {Promise<ArrayBuffer>}
      */
     async arrayBuffer() {
-      const bytes = await this.bytes();
-      return bytes.buffer;
+      return (await this.bytes()).buffer;
     }
 
     /**
@@ -185,27 +125,7 @@ function createWrapper(native) {
      * @returns {Promise<any>}
      */
     async json() {
-      if (this.#bodyUsed) {
-        throw new Error("Response already disturbed");
-      }
-
-      // If body was accessed (stream created), we can't use json()
-      if (this.#bodyAccessed) {
-        throw new Error("Response already disturbed");
-      }
-
-      this.#bodyUsed = true;
-      this.#bodyStream = null; // Can't have both stream and consumed body
-
-      try {
-        return await this.#nativeResponse.json();
-      } catch (error) {
-        // If native throws "Response already disturbed", it means body() was called
-        if (error.message.includes("disturbed")) {
-          throw new Error("Response already disturbed");
-        }
-        throw error;
-      }
+      return await this.#nativeResponse.json();
     }
 
     /**
@@ -213,32 +133,18 @@ function createWrapper(native) {
      * @returns {Promise<Blob>}
      */
     async blob() {
-      if (this.#bodyUsed) {
-        throw new Error("Response already disturbed");
-      }
+      const bytes = await this.#nativeResponse.bytes();
+      const contentType = this.headers.get("content-type") || "";
+      return new Blob([bytes], { type: contentType });
+    }
 
-      // If body was accessed (stream created), we can't use blob()
-      if (this.#bodyAccessed) {
-        throw new Error("Response already disturbed");
-      }
-
-      this.#bodyUsed = true;
-      this.#bodyStream = null; // Can't have both stream and consumed body
-
-      try {
-        const bytesArray = await this.#nativeResponse.bytes();
-        // Convert array to Uint8Array for Blob constructor
-        const uint8Array = new Uint8Array(bytesArray);
-        // Get content-type from response headers
-        const contentType = this.headers.get("content-type") || "";
-        return new Blob([uint8Array], { type: contentType });
-      } catch (error) {
-        // If native throws "Response already disturbed", it means body() was called
-        if (error.message.includes("disturbed")) {
-          throw new Error("Response already disturbed");
-        }
-        throw error;
-      }
+    /**
+     * Create a clone of the Response object
+     * @returns {Response} A new Response object with the same properties
+     * @throws {Error} If response body has already been read
+     */
+    clone() {
+      return new Response(this.#nativeResponse.clone());
     }
 
     /**
@@ -247,11 +153,6 @@ function createWrapper(native) {
      * @throws {Error} If response body has been disturbed or Response constructor is not available
      */
     webResponse() {
-      // Check if body has been disturbed
-      if (this.#bodyUsed) {
-        throw new Error("Response already disturbed");
-      }
-
       // Check if Web API Response constructor is available
       if (typeof globalThis.Response !== "function") {
         throw new Error(
@@ -264,9 +165,6 @@ function createWrapper(native) {
       if (bodyStream === null) {
         throw new Error("Response body no longer available");
       }
-
-      // Mark that we've accessed the body through webResponse()
-      this.#bodyAccessed = true;
 
       // Create and return a Web API Response object
       return new globalThis.Response(bodyStream, {
@@ -337,7 +235,7 @@ function createWrapper(native) {
       // If it's already a Buffer, keep as is
     }
 
-    const nativeResponse = await nativeFetch(url, nativeOptions);
+    const nativeResponse = await faithFetch(url, nativeOptions);
     return new Response(nativeResponse);
   }
 
