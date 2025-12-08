@@ -16,6 +16,9 @@ use serde_json;
 use stream_shared::SharedStream;
 use thiserror::Error;
 
+const ERR_RESPONSE_ALREADY_DISTURBED: &str = "Response already disturbed";
+const ERR_RESPONSE_BODY_NOT_AVAILABLE: &str = "Response body no longer available";
+
 #[derive(Error, Debug)]
 enum FetchError {
     #[error("Request error: {0}")]
@@ -28,6 +31,16 @@ impl From<FetchError> for napi::Error {
     fn from(err: FetchError) -> Self {
         napi::Error::new(napi::Status::GenericFailure, err.to_string())
     }
+}
+
+#[napi]
+pub fn err_response_already_disturbed() -> String {
+    ERR_RESPONSE_ALREADY_DISTURBED.to_string()
+}
+
+#[napi]
+pub fn err_response_body_not_available() -> String {
+    ERR_RESPONSE_BODY_NOT_AVAILABLE.to_string()
 }
 
 #[napi(object)]
@@ -159,7 +172,7 @@ impl FaithResponse {
         if self.disturbed.swap(true, Ordering::SeqCst) {
             Err(napi::Error::new(
                 napi::Status::GenericFailure,
-                "Response already disturbed".to_string(),
+                ERR_RESPONSE_ALREADY_DISTURBED.to_string(),
             ))
         } else {
             Ok(())
@@ -244,7 +257,7 @@ impl FaithResponse {
         if self.disturbed.load(Ordering::SeqCst) {
             return Err(napi::Error::new(
                 napi::Status::GenericFailure,
-                "Response already disturbed".to_string(),
+                ERR_RESPONSE_ALREADY_DISTURBED.to_string(),
             ));
         }
 

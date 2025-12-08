@@ -91,10 +91,10 @@ test("response.json() marks body as used", async (t) => {
       await response.json();
       t.fail("Should have thrown error when body already used");
     } catch (error) {
-      t.ok(
-        error.message.includes("disturbed") ||
-          error.message.includes("already"),
-        "should throw error about disturbed body",
+      t.equal(
+        error.message,
+        "Response already disturbed",
+        "should throw 'Response already disturbed' error",
       );
     }
   } catch (error) {
@@ -116,10 +116,10 @@ test("response.json() and text() are mutually exclusive", async (t) => {
       await response.text();
       t.fail("Should have thrown error when body already used by json()");
     } catch (error) {
-      t.ok(
-        error.message.includes("disturbed") ||
-          error.message.includes("already"),
-        "should throw error about disturbed body",
+      t.equal(
+        error.message,
+        "Response already disturbed",
+        "should throw 'Response already disturbed' error",
       );
     }
 
@@ -128,10 +128,10 @@ test("response.json() and text() are mutually exclusive", async (t) => {
       await response.bytes();
       t.fail("Should have thrown error when body already used by json()");
     } catch (error) {
-      t.ok(
-        error.message.includes("disturbed") ||
-          error.message.includes("already"),
-        "should throw error about disturbed body",
+      t.equal(
+        error.message,
+        "Response already disturbed",
+        "should throw 'Response already disturbed' error",
       );
     }
   } catch (error) {
@@ -154,10 +154,10 @@ test("response.json() and body property are mutually exclusive", async (t) => {
       await response.json();
       t.fail("Should have thrown error when body property was accessed");
     } catch (error) {
-      t.ok(
-        error.message.includes("disturbed") ||
-          error.message.includes("already"),
-        "should throw error about disturbed body",
+      t.equal(
+        error.message,
+        "Response already disturbed",
+        "should throw 'Response already disturbed' error",
       );
     }
   } catch (error) {

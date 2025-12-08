@@ -84,9 +84,10 @@ test("response.clone() throws error if body already read", async (t) => {
     t.fail("Should have thrown error when body already read");
   } catch (error) {
     t.ok(error, "should throw error");
-    t.ok(
-      error.message.includes("disturbed") || error.message.includes("already"),
-      "error should mention disturbed or already",
+    t.equal(
+      error.message,
+      "Response already disturbed",
+      "should throw 'Response already disturbed'",
     );
   }
 });

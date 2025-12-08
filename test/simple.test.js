@@ -76,10 +76,10 @@ test("simple: bodyUsed flag", async (t) => {
       await response.text();
       t.fail("should have thrown error when reading disturbed body");
     } catch (error) {
-      t.ok(
-        error.message.includes("disturbed") ||
-          error.message.includes("already"),
-        "error should mention disturbed or already",
+      t.equal(
+        error.message,
+        "Response already disturbed",
+        "should throw 'Response already disturbed' error",
       );
     }
 
@@ -88,10 +88,10 @@ test("simple: bodyUsed flag", async (t) => {
       response.clone();
       t.fail("should have thrown error when cloning disturbed body");
     } catch (error) {
-      t.ok(
-        error.message.includes("disturbed") ||
-          error.message.includes("already"),
-        "error should mention disturbed or already",
+      t.equal(
+        error.message,
+        "Response already disturbed",
+        "should throw 'Response already disturbed' error",
       );
     }
   } catch (error) {

@@ -28,10 +28,10 @@ test("body property access behavior", async (t) => {
       response1.clone();
       t.fail("Should have thrown error when cloning after body access");
     } catch (error) {
-      t.ok(
-        error.message.includes("disturbed") ||
-          error.message.includes("already"),
-        "error should mention disturbed or already when cloning after body access",
+      t.equal(
+        error.message,
+        "Response already disturbed",
+        "should throw 'Response already disturbed' error when cloning after body access",
       );
     }
 
@@ -40,10 +40,10 @@ test("body property access behavior", async (t) => {
       await response1.text();
       t.fail("Should have thrown error when reading after body access");
     } catch (error) {
-      t.ok(
-        error.message.includes("disturbed") ||
-          error.message.includes("already"),
-        "error should mention disturbed or already when reading after body access",
+      t.equal(
+        error.message,
+        "Response already disturbed",
+        "should throw 'Response already disturbed' error when reading after body access",
       );
     }
 

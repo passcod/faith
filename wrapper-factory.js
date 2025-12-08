@@ -13,6 +13,12 @@
  */
 function createWrapper(native) {
   const { faithFetch } = native;
+  // Canonical error messages from native module
+  // These functions are exported by the native module (Rust) as helpers.
+  const ERR_RESPONSE_ALREADY_DISTURBED =
+    native.err_response_already_disturbed();
+  const ERR_RESPONSE_BODY_NOT_AVAILABLE =
+    native.err_response_body_not_available();
 
   /**
    * Response class that provides spec-compliant Fetch API
@@ -163,7 +169,7 @@ function createWrapper(native) {
       // Get the body stream
       const bodyStream = this.body;
       if (bodyStream === null) {
-        throw new Error("Response body no longer available");
+        throw new Error(ERR_RESPONSE_BODY_NOT_AVAILABLE);
       }
 
       // Create and return a Web API Response object
