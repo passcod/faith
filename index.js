@@ -573,4 +573,6 @@ if (!nativeBinding) {
 
 module.exports = nativeBinding
 module.exports.FaithResponse = nativeBinding.FaithResponse
+module.exports.errResponseAlreadyDisturbed = nativeBinding.errResponseAlreadyDisturbed
+module.exports.errResponseBodyNotAvailable = nativeBinding.errResponseBodyNotAvailable
 module.exports.faithFetch = nativeBinding.faithFetch

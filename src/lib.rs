@@ -23,13 +23,43 @@ const ERR_RESPONSE_BODY_NOT_AVAILABLE: &str = "Response body no longer available
 enum FetchError {
     #[error("Request error: {0}")]
     Request(#[from] reqwest::Error),
+
     #[error("Invalid header value: {0}")]
     InvalidHeader(String),
+
+    #[error("Response already disturbed")]
+    ResponseAlreadyDisturbed,
+
+    #[error("Response body no longer available")]
+    ResponseBodyNotAvailable,
+
+    #[error("Body stream error: {0}")]
+    BodyStreamError(String),
+
+    #[error("JSON parse error: {0}")]
+    JsonParseError(String),
+
+    #[error("Generic failure: {0}")]
+    Generic(String),
 }
 
 impl From<FetchError> for napi::Error {
     fn from(err: FetchError) -> Self {
-        napi::Error::new(napi::Status::GenericFailure, err.to_string())
+        match err {
+            FetchError::Request(e) => napi::Error::new(napi::Status::GenericFailure, e.to_string()),
+            FetchError::InvalidHeader(s) => napi::Error::new(napi::Status::InvalidArg, s),
+            FetchError::ResponseAlreadyDisturbed => napi::Error::new(
+                napi::Status::GenericFailure,
+                ERR_RESPONSE_ALREADY_DISTURBED.to_string(),
+            ),
+            FetchError::ResponseBodyNotAvailable => napi::Error::new(
+                napi::Status::GenericFailure,
+                ERR_RESPONSE_BODY_NOT_AVAILABLE.to_string(),
+            ),
+            FetchError::BodyStreamError(s) => napi::Error::new(napi::Status::GenericFailure, s),
+            FetchError::JsonParseError(s) => napi::Error::new(napi::Status::GenericFailure, s),
+            FetchError::Generic(s) => napi::Error::new(napi::Status::GenericFailure, s),
+        }
     }
 }
 
@@ -161,7 +191,7 @@ impl FaithResponse {
                 let stream = stream.clone();
                 let stream = napi::bindgen_prelude::ReadableStream::create_with_stream_bytes(
                     &env,
-                    stream.map_err(|err| napi::Error::new(napi::Status::GenericFailure, err)),
+                    stream.map_err(|err| FetchError::BodyStreamError(err).into()),
                 )?;
                 Ok(Some(stream))
             }
@@ -170,10 +200,7 @@ impl FaithResponse {
 
     fn check_stream_disturbed(&self) -> Result<()> {
         if self.disturbed.swap(true, Ordering::SeqCst) {
-            Err(napi::Error::new(
-                napi::Status::GenericFailure,
-                ERR_RESPONSE_ALREADY_DISTURBED.to_string(),
-            ))
+            Err(FetchError::ResponseAlreadyDisturbed.into())
         } else {
             Ok(())
         }
@@ -195,7 +222,7 @@ impl FaithResponse {
             .next()
             .await
             .transpose()
-            .map_err(|e| napi::Error::new(napi::Status::GenericFailure, e.to_string()))?
+            .map_err(|e| FetchError::BodyStreamError(e.to_string()))?
         {
             chunks.push(chunk);
         }
@@ -238,8 +265,9 @@ impl FaithResponse {
     pub async fn json(&self) -> Result<serde_json::Value> {
         self.check_stream_disturbed()?;
         let bytes = self.gather_contiguous().await?;
-        serde_json::from_slice(&bytes)
-            .map_err(|e| napi::Error::new(napi::Status::GenericFailure, e.to_string()))
+        let value = serde_json::from_slice(&bytes)
+            .map_err(|e| FetchError::JsonParseError(e.to_string()))?;
+        Ok(value)
     }
 
     /// Create a clone of the response
@@ -255,10 +283,7 @@ impl FaithResponse {
     #[napi]
     pub fn clone(&self) -> Result<Self> {
         if self.disturbed.load(Ordering::SeqCst) {
-            return Err(napi::Error::new(
-                napi::Status::GenericFailure,
-                ERR_RESPONSE_ALREADY_DISTURBED.to_string(),
-            ));
+            return Err(FetchError::ResponseAlreadyDisturbed.into());
         }
 
         Ok(Self {

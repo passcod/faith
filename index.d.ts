@@ -40,6 +40,10 @@ export declare class FaithResponse {
   clone(): FaithResponse
 }
 
+export declare function errResponseAlreadyDisturbed(): string
+
+export declare function errResponseBodyNotAvailable(): string
+
 export declare function faithFetch(url: string, options?: FaithOptions | undefined | null): Promise<FaithResponse>
 
 export interface FaithOptions {

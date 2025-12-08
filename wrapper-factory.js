@@ -15,10 +15,8 @@ function createWrapper(native) {
   const { faithFetch } = native;
   // Canonical error messages from native module
   // These functions are exported by the native module (Rust) as helpers.
-  const ERR_RESPONSE_ALREADY_DISTURBED =
-    native.err_response_already_disturbed();
-  const ERR_RESPONSE_BODY_NOT_AVAILABLE =
-    native.err_response_body_not_available();
+  const ERR_RESPONSE_ALREADY_DISTURBED = native.errResponseAlreadyDisturbed();
+  const ERR_RESPONSE_BODY_NOT_AVAILABLE = native.errResponseBodyNotAvailable();
 
   /**
    * Response class that provides spec-compliant Fetch API
