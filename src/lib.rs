@@ -15,11 +15,7 @@ use napi_derive::napi;
 use reqwest::{Client, Method, StatusCode};
 use serde_json;
 use thiserror::Error;
-use tokio::{
-    runtime::{Handle, Runtime},
-    sync::Mutex,
-};
-use tokio_stream::wrappers::ReceiverStream;
+use tokio::runtime::{Handle, Runtime};
 
 fn spawn_task<F>(future: F)
 where
@@ -70,11 +66,10 @@ impl Debug for Body {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::None => write!(f, "None"),
-            // Self::Stream(resp) => f.debug_tuple("Stream").field(resp).finish(),
-            Self::Stream(fork) => {
+            Self::Stream(stream) => {
                 let field = f
                     .debug_struct("CloneStream")
-                    .field("id", &fork.id)
+                    .field("id", &stream.id)
                     .finish_non_exhaustive();
                 f.debug_tuple("Stream").field(&field).finish()
             }
@@ -94,7 +89,7 @@ pub struct FaithResponse {
     timestamp: f64,
     empty: bool,
     disturbed: AtomicBool,
-    inner_body: Arc<Mutex<Body>>,
+    inner_body: Body,
 }
 
 #[napi]
@@ -226,10 +221,10 @@ impl FaithResponse {
     /// Unlike bytes() and co, this grabs all the chunks of the response but doesn't
     /// copy them. Further processing is needed to obtain a Vec<u8> or whatever needed.
     async fn gather_body(&self) -> Result<Arc<[Bytes]>> {
-        let mut inner_guard = self.inner_body.lock().await;
-        let response = match &mut *inner_guard {
+        // Clone the stream before reading so we don't need &mut self
+        let mut response = match &self.inner_body {
             Body::None => return Ok(Default::default()),
-            Body::Stream(body) => body,
+            Body::Stream(body) => body.clone(),
         };
 
         let mut chunks = Vec::new();
@@ -252,6 +247,12 @@ impl FaithResponse {
     #[napi]
     pub async fn bytes(&self) -> Result<Buffer> {
         self.check_stream_disturbed()?;
+        self.get_bytes().await
+    }
+
+    /// Internal method to get bytes without checking disturbed flag
+    /// (for use by text() and json() which already check)
+    async fn get_bytes(&self) -> Result<Buffer> {
         let body = self.gather_body().await?;
         let length = body.iter().map(|chunk| chunk.len()).sum();
         let mut bytes = Vec::with_capacity(length);
@@ -265,7 +266,7 @@ impl FaithResponse {
     #[napi]
     pub async fn text(&self) -> Result<String> {
         self.check_stream_disturbed()?;
-        let bytes = self.bytes().await?;
+        let bytes = self.get_bytes().await?;
         String::from_utf8(bytes.to_vec())
             .map_err(|e| napi::Error::new(napi::Status::GenericFailure, e.to_string()))
     }
@@ -274,7 +275,7 @@ impl FaithResponse {
     #[napi]
     pub async fn json(&self) -> Result<serde_json::Value> {
         self.check_stream_disturbed()?;
-        let bytes = self.bytes().await?;
+        let bytes = self.get_bytes().await?;
         serde_json::from_slice(&bytes)
             .map_err(|e| napi::Error::new(napi::Status::GenericFailure, e.to_string()))
     }
@@ -377,7 +378,7 @@ pub async fn faith_fetch(url: String, options: Option<FaithOptions>) -> Result<F
     let empty = status == StatusCode::NO_CONTENT || is_head;
 
     Ok(FaithResponse {
-        inner_body: Arc::new(Mutex::new(if empty {
+        inner_body: if empty {
             Body::None
         } else {
             Body::Stream(CloneStream::from(Box::pin(
@@ -385,7 +386,7 @@ pub async fn faith_fetch(url: String, options: Option<FaithOptions>) -> Result<F
                     .bytes_stream()
                     .map(|chunk| chunk.map_err(|err| err.to_string())),
             ) as Pin<Box<DynStream>>))
-        })),
+        },
         status,
         status_text,
         headers: headers_vec,
