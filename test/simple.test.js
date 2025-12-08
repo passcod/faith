@@ -63,7 +63,7 @@ test("simple: response.clone() works", async (t) => {
 });
 
 test("simple: bodyUsed flag", async (t) => {
-  t.plan(6);
+  t.plan(4);
 
   try {
     const response = await fetch(url("/get"));
@@ -78,14 +78,9 @@ test("simple: bodyUsed flag", async (t) => {
       t.fail("should have thrown error when reading disturbed body");
     } catch (error) {
       t.equal(
-        error.message,
-        native.errResponseAlreadyDisturbed(),
-        "should throw 'Response already disturbed' error",
-      );
-      t.equal(
         error.code,
-        native.errorCodes().response_already_disturbed,
-        "should set canonical error code 'response_already_disturbed'",
+        native.errorCodes().responseAlreadyDisturbed,
+        "should set canonical error code 'ResponseAlreadyDisturbed'",
       );
     }
 
@@ -95,14 +90,9 @@ test("simple: bodyUsed flag", async (t) => {
       t.fail("should have thrown error when cloning disturbed body");
     } catch (error) {
       t.equal(
-        error.message,
-        native.errResponseAlreadyDisturbed(),
-        "should throw 'Response already disturbed' error",
-      );
-      t.equal(
         error.code,
-        native.errorCodes().response_already_disturbed,
-        "should set canonical error code 'response_already_disturbed'",
+        native.errorCodes().responseAlreadyDisturbed,
+        "should set canonical error code 'ResponseAlreadyDisturbed'",
       );
     }
   } catch (error) {
@@ -125,8 +115,8 @@ test("fetch() rejects invalid URL", async (t) => {
     );
     t.equal(
       error.code,
-      native.errorCodes().invalid_url,
-      "should set canonical error code 'invalid_url'",
+      native.errorCodes().invalidUrl,
+      "should set canonical error code 'InvalidUrl'",
     );
   }
 });
@@ -146,8 +136,8 @@ test("fetch() rejects URL with credentials", async (t) => {
     );
     t.equal(
       error.code,
-      native.errorCodes().invalid_credentials,
-      "should set canonical error code 'invalid_credentials'",
+      native.errorCodes().invalidCredentials,
+      "should set canonical error code 'InvalidCredentials'",
     );
   }
 });

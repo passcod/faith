@@ -124,14 +124,9 @@ test("webResponse() throws error if body already consumed via text()", async (t)
     t.fail("Should have thrown error");
   } catch (error) {
     t.equal(
-      error.message,
-      native.errResponseBodyNotAvailable(),
-      "should throw 'Response body no longer available' error",
-    );
-    t.equal(
       error.code,
-      native.errorCodes().response_body_not_available,
-      "should set canonical error code 'response_body_not_available'",
+      native.errorCodes().responseBodyNotAvailable,
+      "should set canonical error code 'ResponseBodyNotAvailable'",
     );
     t.equal(error.constructor.name, "Error", "should throw Error");
   }
@@ -152,14 +147,9 @@ test("webResponse() throws error if body already consumed via bytes()", async (t
     t.fail("Should have thrown error");
   } catch (error) {
     t.equal(
-      error.message,
-      native.errResponseBodyNotAvailable(),
-      "should throw 'Response body no longer available' error",
-    );
-    t.equal(
       error.code,
-      native.errorCodes().response_body_not_available,
-      "should set canonical error code 'response_body_not_available'",
+      native.errorCodes().responseBodyNotAvailable,
+      "should set canonical error code 'ResponseBodyNotAvailable'",
     );
     t.equal(error.constructor.name, "Error", "should throw Error");
   }
@@ -180,14 +170,9 @@ test("webResponse() throws error if body already consumed via arrayBuffer()", as
     t.fail("Should have thrown error");
   } catch (error) {
     t.equal(
-      error.message,
-      native.errResponseBodyNotAvailable(),
-      "should throw 'Response body no longer available' error",
-    );
-    t.equal(
       error.code,
-      native.errorCodes().response_body_not_available,
-      "should set canonical error code 'response_body_not_available'",
+      native.errorCodes().responseBodyNotAvailable,
+      "should set canonical error code 'ResponseBodyNotAvailable'",
     );
     t.equal(error.constructor.name, "Error", "should throw Error");
   }
@@ -233,14 +218,9 @@ test("webResponse() marks body as accessed", async (t) => {
     t.fail("Should have thrown error after webResponse()");
   } catch (error) {
     t.equal(
-      error.message,
-      native.errResponseAlreadyDisturbed(),
-      "should throw 'Response already disturbed' error",
-    );
-    t.equal(
       error.code,
-      native.errorCodes().response_already_disturbed,
-      "should set canonical error code 'response_already_disturbed'",
+      native.errorCodes().responseAlreadyDisturbed,
+      "should set canonical error code 'ResponseAlreadyDisturbed'",
     );
     t.equal(error.constructor.name, "Error", "should throw Error");
   }

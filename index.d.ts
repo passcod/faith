@@ -40,16 +40,6 @@ export declare class FaithResponse {
   clone(): FaithResponse
 }
 
-export declare function errBodyStreamError(): string
-
-export declare function errGenericFailure(): string
-
-export declare function errInvalidHeader(): string
-
-export declare function errInvalidMethod(): string
-
-export declare function errJsonParseError(): string
-
 export declare function errorCodes(): ErrorCodes
 
 export interface ErrorCodes {
@@ -57,6 +47,10 @@ export interface ErrorCodes {
   responseBodyNotAvailable: string
   invalidMethod: string
   invalidHeader: string
+  invalidUrl: string
+  invalidCredentials: string
+  invalidOptions: string
+  permissionPolicy: string
   timeout: string
   jsonParseError: string
   bodyStreamError: string
@@ -64,13 +58,22 @@ export interface ErrorCodes {
   genericFailure: string
 }
 
-export declare function errRequestError(): string
-
-export declare function errResponseAlreadyDisturbed(): string
-
-export declare function errResponseBodyNotAvailable(): string
-
-export declare function errTimeout(): string
+export declare const enum FaithErrorKind {
+  InvalidHeader = 'InvalidHeader',
+  InvalidMethod = 'InvalidMethod',
+  InvalidUrl = 'InvalidUrl',
+  InvalidCredentials = 'InvalidCredentials',
+  InvalidOptions = 'InvalidOptions',
+  BlockedByPolicy = 'BlockedByPolicy',
+  ResponseAlreadyDisturbed = 'ResponseAlreadyDisturbed',
+  ResponseBodyNotAvailable = 'ResponseBodyNotAvailable',
+  BodyStream = 'BodyStream',
+  JsonParse = 'JsonParse',
+  Timeout = 'Timeout',
+  PermissionPolicy = 'PermissionPolicy',
+  RequestError = 'RequestError',
+  Generic = 'Generic'
+}
 
 export declare function faithFetch(url: string, options?: FaithOptions | undefined | null): Promise<FaithResponse>
 

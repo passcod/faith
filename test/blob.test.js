@@ -69,8 +69,8 @@ test("response.blob() marks body as used", async (t) => {
     } catch (error) {
       t.equal(
         error.code,
-        native.errorCodes().response_already_disturbed,
-        "should set canonical error code 'response_already_disturbed'",
+        native.errorCodes().responseAlreadyDisturbed,
+        "should set canonical error code 'ResponseAlreadyDisturbed'",
       );
     }
   } catch (error) {
@@ -94,8 +94,8 @@ test("response.blob() and other methods are mutually exclusive", async (t) => {
     } catch (error) {
       t.equal(
         error.code,
-        native.errorCodes().response_already_disturbed,
-        "should set canonical error code 'response_already_disturbed'",
+        native.errorCodes().responseAlreadyDisturbed,
+        "should set canonical error code 'ResponseAlreadyDisturbed'",
       );
     }
 
@@ -106,8 +106,8 @@ test("response.blob() and other methods are mutually exclusive", async (t) => {
     } catch (error) {
       t.equal(
         error.code,
-        native.errorCodes().response_already_disturbed,
-        "should set canonical error code 'response_already_disturbed'",
+        native.errorCodes().responseAlreadyDisturbed,
+        "should set canonical error code 'ResponseAlreadyDisturbed'",
       );
     }
   } catch (error) {
@@ -132,8 +132,8 @@ test("response.blob() and body property are mutually exclusive", async (t) => {
     } catch (error) {
       t.equal(
         error.code,
-        native.errorCodes().response_already_disturbed,
-        "should set canonical error code 'response_already_disturbed'",
+        native.errorCodes().responseAlreadyDisturbed,
+        "should set canonical error code 'ResponseAlreadyDisturbed'",
       );
     }
   } catch (error) {

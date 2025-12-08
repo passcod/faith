@@ -4,7 +4,7 @@ const native = require("../index.js");
 const { url, hostname } = require("./helpers.js");
 
 test("body property access behavior", async (t) => {
-  t.plan(10);
+  t.plan(8);
 
   try {
     // Test 1: Accessing body property should return a stream
@@ -31,8 +31,8 @@ test("body property access behavior", async (t) => {
     } catch (error) {
       t.equal(
         error.code,
-        native.errorCodes().response_already_disturbed,
-        "should set canonical error code 'response_already_disturbed'",
+        native.errorCodes().responseAlreadyDisturbed,
+        "should set canonical error code 'ResponseAlreadyDisturbed'",
       );
     }
 
@@ -43,8 +43,8 @@ test("body property access behavior", async (t) => {
     } catch (error) {
       t.equal(
         error.code,
-        native.errorCodes().response_already_disturbed,
-        "should set canonical error code 'response_already_disturbed'",
+        native.errorCodes().responseAlreadyDisturbed,
+        "should set canonical error code 'ResponseAlreadyDisturbed'",
       );
     }
 

@@ -30,8 +30,8 @@ test(
     } catch (error) {
       t.equal(
         error.code,
-        native.errorCodes().invalid_method,
-        "should set canonical error code 'invalid_method'",
+        native.errorCodes().invalidMethod,
+        "should set canonical error code 'InvalidMethod'",
       );
     }
   },

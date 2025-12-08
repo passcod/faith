@@ -40,8 +40,8 @@ test("response.json() throws error for non-JSON response", async (t) => {
     t.ok(error, "should throw error for non-JSON response");
     t.equal(
       error.code,
-      native.errorCodes().json_parse_error,
-      "should set canonical error code 'json_parse_error'",
+      native.errorCodes().jsonParseError,
+      "should set canonical error code 'JsonParse'",
     );
   }
 });
@@ -92,8 +92,8 @@ test("response.json() marks body as used", async (t) => {
     } catch (error) {
       t.equal(
         error.code,
-        native.errorCodes().response_already_disturbed,
-        "should set canonical error code 'response_already_disturbed'",
+        native.errorCodes().responseAlreadyDisturbed,
+        "should set canonical error code 'ResponseAlreadyDisturbed'",
       );
     }
   } catch (error) {
@@ -117,8 +117,8 @@ test("response.json() and text() are mutually exclusive", async (t) => {
     } catch (error) {
       t.equal(
         error.code,
-        native.errorCodes().response_already_disturbed,
-        "should set canonical error code 'response_already_disturbed'",
+        native.errorCodes().responseAlreadyDisturbed,
+        "should set canonical error code 'ResponseAlreadyDisturbed'",
       );
     }
 
@@ -129,8 +129,8 @@ test("response.json() and text() are mutually exclusive", async (t) => {
     } catch (error) {
       t.equal(
         error.code,
-        native.errorCodes().response_already_disturbed,
-        "should set canonical error code 'response_already_disturbed'",
+        native.errorCodes().responseAlreadyDisturbed,
+        "should set canonical error code 'ResponseAlreadyDisturbed'",
       );
     }
   } catch (error) {
@@ -155,8 +155,8 @@ test("response.json() and body property are mutually exclusive", async (t) => {
     } catch (error) {
       t.equal(
         error.code,
-        native.errorCodes().response_already_disturbed,
-        "should set canonical error code 'response_already_disturbed'",
+        native.errorCodes().responseAlreadyDisturbed,
+        "should set canonical error code 'ResponseAlreadyDisturbed'",
       );
     }
   } catch (error) {

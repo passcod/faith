@@ -16,45 +16,6 @@ use reqwest::{Client, Method, StatusCode};
 use serde_json;
 use stream_shared::SharedStream;
 
-const ERR_RESPONSE_ALREADY_DISTURBED: &str = "Response already disturbed";
-const ERR_RESPONSE_BODY_NOT_AVAILABLE: &str = "Response body no longer available";
-
-const ERR_CODE_RESPONSE_ALREADY_DISTURBED: &str = "response_already_disturbed";
-const ERR_CODE_RESPONSE_BODY_NOT_AVAILABLE: &str = "response_body_not_available";
-
-const ERR_INVALID_METHOD: &str = "Invalid HTTP method";
-const ERR_CODE_INVALID_METHOD: &str = "invalid_method";
-
-const ERR_INVALID_HEADER: &str = "Invalid header";
-const ERR_CODE_INVALID_HEADER: &str = "invalid_header";
-
-const ERR_INVALID_URL: &str = "Invalid URL";
-const ERR_CODE_INVALID_URL: &str = "invalid_url";
-
-const ERR_URL_INCLUDES_CREDENTIALS: &str = "URL includes credentials";
-const ERR_CODE_URL_INCLUDES_CREDENTIALS: &str = "invalid_credentials";
-
-const ERR_INVALID_OPTIONS: &str = "Invalid request options";
-const ERR_CODE_INVALID_OPTIONS: &str = "invalid_options";
-
-const ERR_PERMISSION_POLICY: &str = "Request blocked by permissions policy";
-const ERR_CODE_PERMISSION_POLICY: &str = "permission_policy";
-
-const ERR_TIMEOUT: &str = "Request timed out";
-const ERR_CODE_TIMEOUT: &str = "timeout";
-
-const ERR_JSON_PARSE: &str = "JSON parse error";
-const ERR_CODE_JSON_PARSE: &str = "json_parse_error";
-
-const ERR_BODY_STREAM: &str = "Body stream error";
-const ERR_CODE_BODY_STREAM: &str = "body_stream_error";
-
-const ERR_REQUEST_ERROR: &str = "Request error";
-const ERR_CODE_REQUEST_ERROR: &str = "request_error";
-
-const ERR_GENERIC_FAILURE: &str = "Generic failure";
-const ERR_CODE_GENERIC: &str = "generic_failure";
-
 #[napi(string_enum)]
 #[derive(Debug, Clone, Copy)]
 pub enum FaithErrorKind {
@@ -118,7 +79,6 @@ impl From<FaithError> for napi::Error {
             | FaithErrorKind::InvalidUrl
             | FaithErrorKind::InvalidCredentials
             | FaithErrorKind::InvalidOptions
-            | FaithErrorKind::NetworkError
             | FaithErrorKind::PermissionPolicy => napi::Status::InvalidArg,
             _ => napi::Status::GenericFailure,
         };
@@ -164,19 +124,22 @@ pub struct ErrorCodes {
 #[napi]
 pub fn error_codes() -> ErrorCodes {
     ErrorCodes {
-        response_already_disturbed: ERR_CODE_RESPONSE_ALREADY_DISTURBED.to_string(),
-        response_body_not_available: ERR_CODE_RESPONSE_BODY_NOT_AVAILABLE.to_string(),
-        invalid_method: ERR_CODE_INVALID_METHOD.to_string(),
-        invalid_header: ERR_CODE_INVALID_HEADER.to_string(),
-        invalid_url: ERR_CODE_INVALID_URL.to_string(),
-        invalid_credentials: ERR_CODE_URL_INCLUDES_CREDENTIALS.to_string(),
-        invalid_options: ERR_CODE_INVALID_OPTIONS.to_string(),
-        permission_policy: ERR_CODE_PERMISSION_POLICY.to_string(),
-        timeout: ERR_CODE_TIMEOUT.to_string(),
-        json_parse_error: ERR_CODE_JSON_PARSE.to_string(),
-        body_stream_error: ERR_CODE_BODY_STREAM.to_string(),
-        request_error: ERR_CODE_REQUEST_ERROR.to_string(),
-        generic_failure: ERR_CODE_GENERIC.to_string(),
+        // Use the Auth::Debug-style string for the code to avoid needing
+        // separate canonical short codes. This ensures `error.code` is the same
+        // as the FaithErrorKind debug string (e.g. `InvalidHeader`, `Timeout`, etc.).
+        response_already_disturbed: format!("{:?}", FaithErrorKind::ResponseAlreadyDisturbed),
+        response_body_not_available: format!("{:?}", FaithErrorKind::ResponseBodyNotAvailable),
+        invalid_method: format!("{:?}", FaithErrorKind::InvalidMethod),
+        invalid_header: format!("{:?}", FaithErrorKind::InvalidHeader),
+        invalid_url: format!("{:?}", FaithErrorKind::InvalidUrl),
+        invalid_credentials: format!("{:?}", FaithErrorKind::InvalidCredentials),
+        invalid_options: format!("{:?}", FaithErrorKind::InvalidOptions),
+        permission_policy: format!("{:?}", FaithErrorKind::PermissionPolicy),
+        timeout: format!("{:?}", FaithErrorKind::Timeout),
+        json_parse_error: format!("{:?}", FaithErrorKind::JsonParse),
+        body_stream_error: format!("{:?}", FaithErrorKind::BodyStream),
+        request_error: format!("{:?}", FaithErrorKind::RequestError),
+        generic_failure: format!("{:?}", FaithErrorKind::Generic),
     }
 }
 
@@ -309,7 +272,7 @@ impl FaithResponse {
         if self.disturbed.swap(true, Ordering::SeqCst) {
             Err(FaithError::new(
                 FaithErrorKind::ResponseAlreadyDisturbed,
-                ERR_RESPONSE_ALREADY_DISTURBED.to_string(),
+                "Response already disturbed".to_string(),
             )
             .into())
         } else {
@@ -396,7 +359,7 @@ impl FaithResponse {
         if self.disturbed.load(Ordering::SeqCst) {
             return Err(FaithError::new(
                 FaithErrorKind::ResponseAlreadyDisturbed,
-                ERR_RESPONSE_ALREADY_DISTURBED.to_string(),
+                "Response already disturbed".to_string(),
             )
             .into());
         }
@@ -429,7 +392,7 @@ pub async fn faith_fetch(url: String, options: Option<FaithOptions>) -> Result<F
     let method = Method::from_bytes(method.as_bytes()).map_err(|_| {
         FaithError::new(
             FaithErrorKind::InvalidMethod,
-            ERR_INVALID_METHOD.to_string(),
+            "Invalid HTTP method".to_string(),
         )
     })?;
     let is_head = method == Method::HEAD;
@@ -437,13 +400,13 @@ pub async fn faith_fetch(url: String, options: Option<FaithOptions>) -> Result<F
     // Validate the URL first and ensure no credentials are included in it.
     // Invalid URLs are disallowed in the fetch() spec and should map to a TypeError-like result.
     let parsed_url = reqwest::Url::parse(&url)
-        .map_err(|_| FaithError::new(FaithErrorKind::InvalidUrl, ERR_INVALID_URL.to_string()))?;
+        .map_err(|_| FaithError::new(FaithErrorKind::InvalidUrl, "Invalid URL".to_string()))?;
 
     // Disallow credentials in the URL per the spec (e.g. `https://user:pass@host/`).
     if !parsed_url.username().is_empty() || parsed_url.password().is_some() {
         return Err(FaithError::new(
             FaithErrorKind::InvalidCredentials,
-            ERR_INVALID_CREDENTIALS.to_string(),
+            "URL includes credentials".to_string(),
         )
         .into());
     }
@@ -487,9 +450,11 @@ pub async fn faith_fetch(url: String, options: Option<FaithOptions>) -> Result<F
         Ok(resp) => resp,
         Err(e) => {
             if e.is_timeout() {
-                return Err(
-                    FaithError::new(FaithErrorKind::Timeout, ERR_TIMEOUT.to_string()).into(),
-                );
+                return Err(FaithError::new(
+                    FaithErrorKind::Timeout,
+                    "Request timed out".to_string(),
+                )
+                .into());
             } else {
                 return Err(FaithError::from(e).into());
             }
