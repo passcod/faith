@@ -573,6 +573,14 @@ if (!nativeBinding) {
 
 module.exports = nativeBinding
 module.exports.FaithResponse = nativeBinding.FaithResponse
+module.exports.errBodyStreamError = nativeBinding.errBodyStreamError
+module.exports.errGenericFailure = nativeBinding.errGenericFailure
+module.exports.errInvalidHeader = nativeBinding.errInvalidHeader
+module.exports.errInvalidMethod = nativeBinding.errInvalidMethod
+module.exports.errJsonParseError = nativeBinding.errJsonParseError
+module.exports.errorCodes = nativeBinding.errorCodes
+module.exports.errRequestError = nativeBinding.errRequestError
 module.exports.errResponseAlreadyDisturbed = nativeBinding.errResponseAlreadyDisturbed
 module.exports.errResponseBodyNotAvailable = nativeBinding.errResponseBodyNotAvailable
+module.exports.errTimeout = nativeBinding.errTimeout
 module.exports.faithFetch = nativeBinding.faithFetch

@@ -1,5 +1,7 @@
 const test = require("tape");
-const { compareResponses, hasNativeFetch } = require("./helpers.js");
+const { compareResponses, hasNativeFetch, url } = require("./helpers.js");
+const { fetch } = require("../wrapper.js");
+const native = require("../index.js");
 
 test("Compare different HTTP methods", { skip: !hasNativeFetch }, async (t) => {
   const methods = ["GET", "POST", "PUT", "DELETE", "PATCH"];
@@ -15,3 +17,22 @@ test("Compare different HTTP methods", { skip: !hasNativeFetch }, async (t) => {
     await compareResponses(t, path, options);
   }
 });
+
+test(
+  "fetch rejects invalid HTTP method",
+  { skip: !hasNativeFetch },
+  async (t) => {
+    t.plan(1);
+
+    try {
+      await fetch(url("/get"), { method: "INV@LID-METHOD!" });
+      t.fail("Should have thrown error when using invalid HTTP method");
+    } catch (error) {
+      t.equal(
+        error.message,
+        native.errInvalidMethod(),
+        "should throw 'Invalid HTTP method' message",
+      );
+    }
+  },
+);

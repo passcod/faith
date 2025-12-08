@@ -5,6 +5,7 @@ const { url, hostname } = require("./helpers.js");
 
 const test = require("tape");
 const { fetch } = require("../wrapper.js");
+const native = require("../index.js");
 
 test("response.json() method returns parsed JSON", async (t) => {
   t.plan(4);
@@ -38,7 +39,8 @@ test("response.json() throws error for non-JSON response", async (t) => {
   } catch (error) {
     t.ok(error, "should throw error for non-JSON response");
     t.ok(
-      error.message.includes("JSON") ||
+      error.message.includes(native.errJsonParseError()) ||
+        error.message.includes("JSON") ||
         error.message.includes("parse") ||
         error.message.includes("invalid") ||
         error.message.includes("expected"),
@@ -93,7 +95,7 @@ test("response.json() marks body as used", async (t) => {
     } catch (error) {
       t.equal(
         error.message,
-        "Response already disturbed",
+        native.errResponseAlreadyDisturbed(),
         "should throw 'Response already disturbed' error",
       );
     }
@@ -118,7 +120,7 @@ test("response.json() and text() are mutually exclusive", async (t) => {
     } catch (error) {
       t.equal(
         error.message,
-        "Response already disturbed",
+        native.errResponseAlreadyDisturbed(),
         "should throw 'Response already disturbed' error",
       );
     }
@@ -130,7 +132,7 @@ test("response.json() and text() are mutually exclusive", async (t) => {
     } catch (error) {
       t.equal(
         error.message,
-        "Response already disturbed",
+        native.errResponseAlreadyDisturbed(),
         "should throw 'Response already disturbed' error",
       );
     }
@@ -156,7 +158,7 @@ test("response.json() and body property are mutually exclusive", async (t) => {
     } catch (error) {
       t.equal(
         error.message,
-        "Response already disturbed",
+        native.errResponseAlreadyDisturbed(),
         "should throw 'Response already disturbed' error",
       );
     }

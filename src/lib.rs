@@ -11,6 +11,7 @@ use bytes::Bytes;
 use futures::{Stream, StreamExt, TryStreamExt};
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
+use reqwest::header::{HeaderName, HeaderValue};
 use reqwest::{Client, Method, StatusCode};
 use serde_json;
 use stream_shared::SharedStream;
@@ -19,13 +20,40 @@ use thiserror::Error;
 const ERR_RESPONSE_ALREADY_DISTURBED: &str = "Response already disturbed";
 const ERR_RESPONSE_BODY_NOT_AVAILABLE: &str = "Response body no longer available";
 
+const ERR_CODE_RESPONSE_ALREADY_DISTURBED: &str = "response_already_disturbed";
+const ERR_CODE_RESPONSE_BODY_NOT_AVAILABLE: &str = "response_body_not_available";
+
+const ERR_INVALID_METHOD: &str = "Invalid HTTP method";
+const ERR_CODE_INVALID_METHOD: &str = "invalid_method";
+
+const ERR_INVALID_HEADER: &str = "Invalid header";
+const ERR_CODE_INVALID_HEADER: &str = "invalid_header";
+
+const ERR_TIMEOUT: &str = "Request timed out";
+const ERR_CODE_TIMEOUT: &str = "timeout";
+
+const ERR_JSON_PARSE: &str = "JSON parse error";
+const ERR_CODE_JSON_PARSE: &str = "json_parse_error";
+
+const ERR_BODY_STREAM: &str = "Body stream error";
+const ERR_CODE_BODY_STREAM: &str = "body_stream_error";
+
+const ERR_REQUEST_ERROR: &str = "Request error";
+const ERR_CODE_REQUEST_ERROR: &str = "request_error";
+
+const ERR_GENERIC_FAILURE: &str = "Generic failure";
+const ERR_CODE_GENERIC: &str = "generic_failure";
+
 #[derive(Error, Debug)]
 enum FetchError {
     #[error("Request error: {0}")]
     Request(#[from] reqwest::Error),
 
-    #[error("Invalid header value: {0}")]
+    #[error("Invalid header: {0}")]
     InvalidHeader(String),
+
+    #[error("Invalid HTTP method: {0}")]
+    InvalidMethod(String),
 
     #[error("Response already disturbed")]
     ResponseAlreadyDisturbed,
@@ -39,6 +67,9 @@ enum FetchError {
     #[error("JSON parse error: {0}")]
     JsonParseError(String),
 
+    #[error("Timeout: {0}")]
+    Timeout(String),
+
     #[error("Generic failure: {0}")]
     Generic(String),
 }
@@ -46,8 +77,12 @@ enum FetchError {
 impl From<FetchError> for napi::Error {
     fn from(err: FetchError) -> Self {
         match err {
-            FetchError::Request(e) => napi::Error::new(napi::Status::GenericFailure, e.to_string()),
+            FetchError::Request(e) => napi::Error::new(
+                napi::Status::GenericFailure,
+                format!("{}: {}", ERR_REQUEST_ERROR, e.to_string()),
+            ),
             FetchError::InvalidHeader(s) => napi::Error::new(napi::Status::InvalidArg, s),
+            FetchError::InvalidMethod(s) => napi::Error::new(napi::Status::InvalidArg, s),
             FetchError::ResponseAlreadyDisturbed => napi::Error::new(
                 napi::Status::GenericFailure,
                 ERR_RESPONSE_ALREADY_DISTURBED.to_string(),
@@ -57,7 +92,11 @@ impl From<FetchError> for napi::Error {
                 ERR_RESPONSE_BODY_NOT_AVAILABLE.to_string(),
             ),
             FetchError::BodyStreamError(s) => napi::Error::new(napi::Status::GenericFailure, s),
-            FetchError::JsonParseError(s) => napi::Error::new(napi::Status::GenericFailure, s),
+            FetchError::JsonParseError(s) => napi::Error::new(
+                napi::Status::GenericFailure,
+                format!("{}: {}", ERR_JSON_PARSE, s),
+            ),
+            FetchError::Timeout(s) => napi::Error::new(napi::Status::GenericFailure, s),
             FetchError::Generic(s) => napi::Error::new(napi::Status::GenericFailure, s),
         }
     }
@@ -71,6 +110,69 @@ pub fn err_response_already_disturbed() -> String {
 #[napi]
 pub fn err_response_body_not_available() -> String {
     ERR_RESPONSE_BODY_NOT_AVAILABLE.to_string()
+}
+
+#[napi]
+pub fn err_invalid_method() -> String {
+    ERR_INVALID_METHOD.to_string()
+}
+
+#[napi]
+pub fn err_invalid_header() -> String {
+    ERR_INVALID_HEADER.to_string()
+}
+
+#[napi]
+pub fn err_timeout() -> String {
+    ERR_TIMEOUT.to_string()
+}
+
+#[napi]
+pub fn err_json_parse_error() -> String {
+    ERR_JSON_PARSE.to_string()
+}
+
+#[napi]
+pub fn err_body_stream_error() -> String {
+    ERR_BODY_STREAM.to_string()
+}
+
+#[napi]
+pub fn err_request_error() -> String {
+    ERR_REQUEST_ERROR.to_string()
+}
+
+#[napi]
+pub fn err_generic_failure() -> String {
+    ERR_GENERIC_FAILURE.to_string()
+}
+
+#[napi(object)]
+pub struct ErrorCodes {
+    pub response_already_disturbed: String,
+    pub response_body_not_available: String,
+    pub invalid_method: String,
+    pub invalid_header: String,
+    pub timeout: String,
+    pub json_parse_error: String,
+    pub body_stream_error: String,
+    pub request_error: String,
+    pub generic_failure: String,
+}
+
+#[napi]
+pub fn error_codes() -> ErrorCodes {
+    ErrorCodes {
+        response_already_disturbed: ERR_CODE_RESPONSE_ALREADY_DISTURBED.to_string(),
+        response_body_not_available: ERR_CODE_RESPONSE_BODY_NOT_AVAILABLE.to_string(),
+        invalid_method: ERR_CODE_INVALID_METHOD.to_string(),
+        invalid_header: ERR_CODE_INVALID_HEADER.to_string(),
+        timeout: ERR_CODE_TIMEOUT.to_string(),
+        json_parse_error: ERR_CODE_JSON_PARSE.to_string(),
+        body_stream_error: ERR_CODE_BODY_STREAM.to_string(),
+        request_error: ERR_CODE_REQUEST_ERROR.to_string(),
+        generic_failure: ERR_CODE_GENERIC.to_string(),
+    }
 }
 
 #[napi(object)]
@@ -256,8 +358,7 @@ impl FaithResponse {
     pub async fn text(&self) -> Result<String> {
         self.check_stream_disturbed()?;
         let bytes = self.gather_contiguous().await?;
-        String::from_utf8(bytes.to_vec())
-            .map_err(|e| napi::Error::new(napi::Status::GenericFailure, e.to_string()))
+        String::from_utf8(bytes.to_vec()).map_err(|e| FetchError::Generic(e.to_string()).into())
     }
 
     /// Parse response body as JSON
@@ -314,7 +415,7 @@ pub async fn faith_fetch(url: String, options: Option<FaithOptions>) -> Result<F
         .unwrap_or_else(|| "GET".to_string());
 
     let method = Method::from_bytes(method.as_bytes())
-        .map_err(|_| FetchError::InvalidHeader("Invalid HTTP method".to_string()))?;
+        .map_err(|_| FetchError::InvalidMethod(ERR_INVALID_METHOD.to_string()))?;
     let is_head = method == Method::HEAD;
 
     let mut request = client.request(method, &url);
@@ -322,7 +423,14 @@ pub async fn faith_fetch(url: String, options: Option<FaithOptions>) -> Result<F
     if let Some(opts) = options.as_ref() {
         if let Some(headers) = &opts.headers {
             for (key, value) in headers {
-                request = request.header(key, value);
+                // Validate header name and value before adding to request
+                let header_name = HeaderName::from_bytes(key.as_bytes()).map_err(|_| {
+                    FetchError::InvalidHeader(format!("Invalid header name: {}", key))
+                })?;
+                let header_value = HeaderValue::from_str(value).map_err(|_| {
+                    FetchError::InvalidHeader(format!("Invalid header value: {}", value))
+                })?;
+                request = request.header(header_name, header_value);
             }
         }
 
@@ -339,7 +447,16 @@ pub async fn faith_fetch(url: String, options: Option<FaithOptions>) -> Result<F
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs_f64();
-    let response = request.send().await.map_err(FetchError::Request)?;
+    let response = match request.send().await {
+        Ok(resp) => resp,
+        Err(e) => {
+            if e.is_timeout() {
+                return Err(FetchError::Timeout(ERR_TIMEOUT.to_string()).into());
+            } else {
+                return Err(FetchError::Request(e).into());
+            }
+        }
+    };
 
     let status = response.status().as_u16();
     let status_text = response

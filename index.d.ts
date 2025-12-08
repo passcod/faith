@@ -40,9 +40,37 @@ export declare class FaithResponse {
   clone(): FaithResponse
 }
 
+export declare function errBodyStreamError(): string
+
+export declare function errGenericFailure(): string
+
+export declare function errInvalidHeader(): string
+
+export declare function errInvalidMethod(): string
+
+export declare function errJsonParseError(): string
+
+export declare function errorCodes(): ErrorCodes
+
+export interface ErrorCodes {
+  responseAlreadyDisturbed: string
+  responseBodyNotAvailable: string
+  invalidMethod: string
+  invalidHeader: string
+  timeout: string
+  jsonParseError: string
+  bodyStreamError: string
+  requestError: string
+  genericFailure: string
+}
+
+export declare function errRequestError(): string
+
 export declare function errResponseAlreadyDisturbed(): string
 
 export declare function errResponseBodyNotAvailable(): string
+
+export declare function errTimeout(): string
 
 export declare function faithFetch(url: string, options?: FaithOptions | undefined | null): Promise<FaithResponse>
 

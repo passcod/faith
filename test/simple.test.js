@@ -1,5 +1,6 @@
 const test = require("tape");
 const { fetch } = require("../wrapper.js");
+const native = require("../index.js");
 const { url, hostname } = require("./helpers.js");
 
 test("simple: basic fetch works", async (t) => {
@@ -78,7 +79,7 @@ test("simple: bodyUsed flag", async (t) => {
     } catch (error) {
       t.equal(
         error.message,
-        "Response already disturbed",
+        native.errResponseAlreadyDisturbed(),
         "should throw 'Response already disturbed' error",
       );
     }
@@ -90,7 +91,7 @@ test("simple: bodyUsed flag", async (t) => {
     } catch (error) {
       t.equal(
         error.message,
-        "Response already disturbed",
+        native.errResponseAlreadyDisturbed(),
         "should throw 'Response already disturbed' error",
       );
     }

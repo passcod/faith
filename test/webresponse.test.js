@@ -11,6 +11,7 @@ const { url, hostname } = require("./helpers.js");
 
 const test = require("tape");
 const { fetch } = require("../wrapper.js");
+const native = require("../index.js");
 
 test("webResponse() returns Web API Response object", async (t) => {
   t.plan(8);
@@ -124,7 +125,7 @@ test("webResponse() throws error if body already consumed via text()", async (t)
   } catch (error) {
     t.equal(
       error.message,
-      "Response body no longer available",
+      native.errResponseBodyNotAvailable(),
       "should throw 'Response body no longer available' error",
     );
     t.equal(error.constructor.name, "Error", "should throw Error");
@@ -147,7 +148,7 @@ test("webResponse() throws error if body already consumed via bytes()", async (t
   } catch (error) {
     t.equal(
       error.message,
-      "Response body no longer available",
+      native.errResponseBodyNotAvailable(),
       "should throw 'Response body no longer available' error",
     );
     t.equal(error.constructor.name, "Error", "should throw Error");
@@ -170,7 +171,7 @@ test("webResponse() throws error if body already consumed via arrayBuffer()", as
   } catch (error) {
     t.equal(
       error.message,
-      "Response body no longer available",
+      native.errResponseBodyNotAvailable(),
       "should throw 'Response body no longer available' error",
     );
     t.equal(error.constructor.name, "Error", "should throw Error");
@@ -218,7 +219,7 @@ test("webResponse() marks body as accessed", async (t) => {
   } catch (error) {
     t.equal(
       error.message,
-      "Response already disturbed",
+      native.errResponseAlreadyDisturbed(),
       "should throw 'Response already disturbed' error",
     );
     t.equal(error.constructor.name, "Error", "should throw Error");

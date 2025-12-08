@@ -1,5 +1,6 @@
 const test = require("tape");
 const { fetch } = require("../wrapper.js");
+const native = require("../index.js");
 const { url, hostname } = require("./helpers.js");
 
 test("response.clone() creates a new Response object", async (t) => {
@@ -86,7 +87,7 @@ test("response.clone() throws error if body already read", async (t) => {
     t.ok(error, "should throw error");
     t.equal(
       error.message,
-      "Response already disturbed",
+      native.errResponseAlreadyDisturbed(),
       "should throw 'Response already disturbed'",
     );
   }
@@ -222,8 +223,9 @@ test("response.clone() with body property access", async (t) => {
       t.pass("original can read text after body property accessed");
     } catch (error) {
       // If we get here, it means the implementation doesn't allow reading after body access
-      t.ok(
-        error.message.includes("disturbed"),
+      t.equal(
+        error.message,
+        native.errResponseAlreadyDisturbed(),
         "original cannot read after body property accessed",
       );
     }

@@ -1,5 +1,6 @@
 const test = require("tape");
 const { fetch } = require("../wrapper.js");
+const native = require("../index.js");
 const { url, hostname } = require("./helpers.js");
 
 test("response.blob() method returns Blob", async (t) => {
@@ -68,7 +69,7 @@ test("response.blob() marks body as used", async (t) => {
     } catch (error) {
       t.equal(
         error.message,
-        "Response already disturbed",
+        native.errResponseAlreadyDisturbed(),
         "should throw 'Response already disturbed' error",
       );
     }
@@ -93,7 +94,7 @@ test("response.blob() and other methods are mutually exclusive", async (t) => {
     } catch (error) {
       t.equal(
         error.message,
-        "Response already disturbed",
+        native.errResponseAlreadyDisturbed(),
         "should throw 'Response already disturbed' error",
       );
     }
@@ -105,7 +106,7 @@ test("response.blob() and other methods are mutually exclusive", async (t) => {
     } catch (error) {
       t.equal(
         error.message,
-        "Response already disturbed",
+        native.errResponseAlreadyDisturbed(),
         "should throw 'Response already disturbed' error",
       );
     }
@@ -131,7 +132,7 @@ test("response.blob() and body property are mutually exclusive", async (t) => {
     } catch (error) {
       t.equal(
         error.message,
-        "Response already disturbed",
+        native.errResponseAlreadyDisturbed(),
         "should throw 'Response already disturbed' error",
       );
     }

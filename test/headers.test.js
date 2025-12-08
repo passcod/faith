@@ -10,6 +10,7 @@ const { url } = require("./helpers.js");
 
 const test = require("tape");
 const { fetch } = require("../wrapper.js");
+const native = require("../index.js");
 
 test("Response.headers always returns Headers object", async (t) => {
   t.plan(6);
@@ -112,6 +113,27 @@ test("fetch() accepts Headers object", async (t) => {
     );
   } catch (error) {
     t.fail(`Unexpected error: ${error.message}`);
+  }
+});
+
+test("fetch() rejects invalid header value", async (t) => {
+  t.plan(2);
+
+  try {
+    await fetch(url("/get"), {
+      headers: {
+        "X-Test-Header": "invalid\nvalue",
+      },
+    });
+
+    t.fail("Should have thrown error for invalid header value");
+  } catch (error) {
+    t.ok(
+      error.message.includes(native.errInvalidHeader()) ||
+        error.message.includes("Invalid header value"),
+      "should have correct error message",
+    );
+    t.equal(error.constructor.name, "Error", "should throw Error");
   }
 });
 
