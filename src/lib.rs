@@ -15,8 +15,27 @@ use napi_derive::napi;
 use reqwest::{Client, Method, StatusCode};
 use serde_json;
 use thiserror::Error;
-use tokio::sync::Mutex;
+use tokio::{
+    runtime::{Handle, Runtime},
+    sync::Mutex,
+};
 use tokio_stream::wrappers::ReceiverStream;
+
+fn spawn_task<F>(future: F)
+where
+    F: Future + Send + 'static,
+    F::Output: Send + 'static,
+{
+    match Handle::try_current() {
+        Ok(handle) => {
+            handle.spawn(future);
+        }
+        Err(err) if err.is_missing_context() => {
+            Runtime::new().unwrap().spawn(future);
+        }
+        Err(err) => panic!("{err}"),
+    }
+}
 
 #[derive(Error, Debug)]
 enum FetchError {
@@ -164,7 +183,7 @@ impl FaithResponse {
                     unreachable!()
                 };
 
-                tokio::task::spawn(async move {
+                spawn_task(async move {
                     let mut response = response;
                     while let Some(chunk) = response.next().await {
                         if tx
