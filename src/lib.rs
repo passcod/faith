@@ -8,12 +8,12 @@ use std::{
 };
 
 use bytes::Bytes;
-use clone_stream::CloneStream;
 use futures::{Stream, StreamExt, TryStreamExt};
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
 use reqwest::{Client, Method, StatusCode};
 use serde_json;
+use stream_shared::SharedStream;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -43,7 +43,7 @@ type DynStream = dyn Stream<Item = std::result::Result<Bytes, String>> + Send + 
 #[derive(Clone)]
 enum Body {
     None,
-    Stream(CloneStream<Pin<Box<DynStream>>>),
+    Stream(SharedStream<Pin<Box<DynStream>>>),
 }
 
 impl Debug for Body {
@@ -52,8 +52,8 @@ impl Debug for Body {
             Self::None => write!(f, "None"),
             Self::Stream(stream) => {
                 let field = f
-                    .debug_struct("CloneStream")
-                    .field("id", &stream.id)
+                    .debug_struct("SharedStream")
+                    .field("stats", &stream.stats())
                     .finish_non_exhaustive();
                 f.debug_tuple("Stream").field(&field).finish()
             }
@@ -170,12 +170,14 @@ impl FaithResponse {
     ///
     /// Unlike bytes() and co, this grabs all the chunks of the response but doesn't
     /// copy them. Further processing is needed to obtain a Vec<u8> or whatever needed.
-    async fn gather_body(&self) -> Result<Arc<[Bytes]>> {
+    async fn gather(&self) -> Result<Arc<[Bytes]>> {
+        println!("gather: before clone: {:?}", self.inner_body);
         // Clone the stream before reading so we don't need &mut self
         let mut response = match &self.inner_body {
             Body::None => return Ok(Default::default()),
             Body::Stream(body) => body.clone(),
         };
+        println!("gather: after clone: {:?}", response.stats());
 
         let mut chunks = Vec::new();
         while let Some(chunk) = response
@@ -190,20 +192,10 @@ impl FaithResponse {
         Ok(Arc::from(chunks.into_boxed_slice()))
     }
 
-    /// Get response body as bytes
-    ///
-    /// This may use up to 2x the amount of memory that the response body takes
-    /// when the Response is cloned() and will create a full copy of the data.
-    #[napi]
-    pub async fn bytes(&self) -> Result<Buffer> {
-        self.check_stream_disturbed()?;
-        self.get_bytes().await
-    }
-
-    /// Internal method to get bytes without checking disturbed flag
-    /// (for use by text() and json() which already check)
-    async fn get_bytes(&self) -> Result<Buffer> {
-        let body = self.gather_body().await?;
+    /// gather() and then copy into one contiguous buffer
+    async fn gather_contiguous(&self) -> Result<Buffer> {
+        let body = self.gather().await?;
+        println!("gather_contiguous: {body:#?}");
         let length = body.iter().map(|chunk| chunk.len()).sum();
         let mut bytes = Vec::with_capacity(length);
         for chunk in body.into_iter() {
@@ -212,11 +204,21 @@ impl FaithResponse {
         Ok(bytes.into())
     }
 
+    /// Get response body as bytes
+    ///
+    /// This may use up to 2x the amount of memory that the response body takes
+    /// when the Response is cloned() and will create a full copy of the data.
+    #[napi]
+    pub async fn bytes(&self) -> Result<Buffer> {
+        self.check_stream_disturbed()?;
+        self.gather_contiguous().await
+    }
+
     /// Convert response body to text (UTF-8)
     #[napi]
     pub async fn text(&self) -> Result<String> {
         self.check_stream_disturbed()?;
-        let bytes = self.get_bytes().await?;
+        let bytes = self.gather_contiguous().await?;
         String::from_utf8(bytes.to_vec())
             .map_err(|e| napi::Error::new(napi::Status::GenericFailure, e.to_string()))
     }
@@ -225,7 +227,7 @@ impl FaithResponse {
     #[napi]
     pub async fn json(&self) -> Result<serde_json::Value> {
         self.check_stream_disturbed()?;
-        let bytes = self.get_bytes().await?;
+        let bytes = self.gather_contiguous().await?;
         serde_json::from_slice(&bytes)
             .map_err(|e| napi::Error::new(napi::Status::GenericFailure, e.to_string()))
     }
@@ -331,7 +333,7 @@ pub async fn faith_fetch(url: String, options: Option<FaithOptions>) -> Result<F
         inner_body: if empty {
             Body::None
         } else {
-            Body::Stream(CloneStream::from(Box::pin(
+            Body::Stream(SharedStream::new(Box::pin(
                 response
                     .bytes_stream()
                     .map(|chunk| chunk.map_err(|err| err.to_string())),
