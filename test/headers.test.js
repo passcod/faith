@@ -117,23 +117,32 @@ test("fetch() accepts Headers object", async (t) => {
 });
 
 test("fetch() rejects invalid header value", async (t) => {
-  t.plan(2);
+  t.plan(3);
 
   try {
     await fetch(url("/get"), {
-      headers: {
-        "X-Test-Header": "invalid\nvalue",
-      },
+      headers: { "X-Test-Header": "invalid\u0000value" },
     });
 
     t.fail("Should have thrown error for invalid header value");
   } catch (error) {
     t.ok(
-      error.message.includes(native.errInvalidHeader()) ||
-        error.message.includes("Invalid header value"),
-      "should have correct error message",
+      error &&
+        error.message &&
+        (error.message.includes(native.errInvalidHeader()) ||
+          error.message.includes("Invalid header value") ||
+          error.message.includes("Invalid header name") ||
+          error.message.includes("InvalidArg") ||
+          error.message.includes("InvalidHeader")),
+      "should have invalid header error message",
     );
     t.equal(error.constructor.name, "Error", "should throw Error");
+    // Assert 'code' is present and matches the canonical code
+    t.equal(
+      error.code,
+      native.errorCodes().invalid_header,
+      "should include canonical error code for invalid header",
+    );
   }
 });
 

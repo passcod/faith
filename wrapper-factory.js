@@ -18,6 +18,28 @@ function createWrapper(native) {
   const ERR_RESPONSE_ALREADY_DISTURBED = native.errResponseAlreadyDisturbed();
   const ERR_RESPONSE_BODY_NOT_AVAILABLE = native.errResponseBodyNotAvailable();
 
+  // Short error codes mapping exported from native for easier checks in JS and tests.
+  // e.g. { invalid_header: "invalid_header", invalid_method: "invalid_method", ... }
+  const ERROR_CODES = native.errorCodes();
+
+  // helper map to attach .code based on FaithErrorKind being included in the native error message.
+  const KIND_TO_CODE = {
+    InvalidHeader: ERROR_CODES.invalid_header,
+    InvalidMethod: ERROR_CODES.invalid_method,
+    InvalidUrl: ERROR_CODES.invalid_url,
+    InvalidCredentials: ERROR_CODES.invalid_credentials,
+    InvalidOptions: ERROR_CODES.invalid_options,
+    PermissionPolicy: ERROR_CODES.permission_policy,
+    ResponseAlreadyDisturbed: ERROR_CODES.response_already_disturbed,
+    ResponseBodyNotAvailable: ERROR_CODES.response_body_not_available,
+    BodyStream: ERROR_CODES.body_stream_error,
+    JsonParse: ERROR_CODES.json_parse_error,
+    Timeout: ERROR_CODES.timeout,
+    NetworkError: ERROR_CODES.network_error,
+    RequestError: ERROR_CODES.request_error,
+    Generic: ERROR_CODES.generic_failure,
+  };
+
   /**
    * Response class that provides spec-compliant Fetch API
    */
@@ -105,7 +127,12 @@ function createWrapper(native) {
      * @returns {Promise<string>}
      */
     async text() {
-      return await this.#nativeResponse.text();
+      try {
+        return await this.#nativeResponse.text();
+      } catch (error) {
+        attachErrorCode(error);
+        throw error;
+      }
     }
 
     /**
@@ -113,7 +140,12 @@ function createWrapper(native) {
      * @returns {Promise<Uint8Array>}
      */
     async bytes() {
-      return await this.#nativeResponse.bytes();
+      try {
+        return await this.#nativeResponse.bytes();
+      } catch (error) {
+        attachErrorCode(error);
+        throw error;
+      }
     }
 
     /**
@@ -121,7 +153,12 @@ function createWrapper(native) {
      * @returns {Promise<ArrayBuffer>}
      */
     async arrayBuffer() {
-      return (await this.bytes()).buffer;
+      try {
+        return (await this.bytes()).buffer;
+      } catch (error) {
+        // `bytes()` already attached a .code where applicable, so just rethrow.
+        throw error;
+      }
     }
 
     /**
@@ -129,7 +166,12 @@ function createWrapper(native) {
      * @returns {Promise<any>}
      */
     async json() {
-      return await this.#nativeResponse.json();
+      try {
+        return await this.#nativeResponse.json();
+      } catch (error) {
+        attachErrorCode(error);
+        throw error;
+      }
     }
 
     /**
@@ -137,9 +179,14 @@ function createWrapper(native) {
      * @returns {Promise<Blob>}
      */
     async blob() {
-      const bytes = await this.#nativeResponse.bytes();
-      const contentType = this.headers.get("content-type") || "";
-      return new Blob([bytes], { type: contentType });
+      try {
+        const bytes = await this.#nativeResponse.bytes();
+        const contentType = this.headers.get("content-type") || "";
+        return new Blob([bytes], { type: contentType });
+      } catch (error) {
+        attachErrorCode(error);
+        throw error;
+      }
     }
 
     /**
@@ -148,7 +195,12 @@ function createWrapper(native) {
      * @throws {Error} If response body has already been read
      */
     clone() {
-      return new Response(this.#nativeResponse.clone());
+      try {
+        return new Response(this.#nativeResponse.clone());
+      } catch (error) {
+        attachErrorCode(error);
+        throw error;
+      }
     }
 
     /**
@@ -167,7 +219,22 @@ function createWrapper(native) {
       // Get the body stream
       const bodyStream = this.body;
       if (bodyStream === null) {
-        throw new Error(ERR_RESPONSE_BODY_NOT_AVAILABLE);
+        const err = new Error(ERR_RESPONSE_BODY_NOT_AVAILABLE);
+        // Attach the canonical code to the thrown error using a safe property definition
+        try {
+          Object.defineProperty(err, "code", {
+            value: ERROR_CODES.response_body_not_available,
+            enumerable: true,
+            configurable: true,
+            writable: true,
+          });
+        } catch (e) {
+          // fallback: attempt direct assignment
+          try {
+            err.code = ERROR_CODES.response_body_not_available;
+          } catch (e) {}
+        }
+        throw err;
       }
 
       // Create and return a Web API Response object
@@ -239,8 +306,15 @@ function createWrapper(native) {
       // If it's already a Buffer, keep as is
     }
 
-    const nativeResponse = await faithFetch(url, nativeOptions);
-    return new Response(nativeResponse);
+    try {
+      const nativeResponse = await faithFetch(url, nativeOptions);
+      return new Response(nativeResponse);
+    } catch (error) {
+      // If the native error contains a FaithErrorKind prefix (e.g. "InvalidHeader: ..."),
+      // attach a consistent `.code` property to make tests and user code easier to deal with.
+      attachErrorCode(error);
+      throw error;
+    }
   }
 
   return {

@@ -15,7 +15,6 @@ use reqwest::header::{HeaderName, HeaderValue};
 use reqwest::{Client, Method, StatusCode};
 use serde_json;
 use stream_shared::SharedStream;
-use thiserror::Error;
 
 const ERR_RESPONSE_ALREADY_DISTURBED: &str = "Response already disturbed";
 const ERR_RESPONSE_BODY_NOT_AVAILABLE: &str = "Response body no longer available";
@@ -28,6 +27,21 @@ const ERR_CODE_INVALID_METHOD: &str = "invalid_method";
 
 const ERR_INVALID_HEADER: &str = "Invalid header";
 const ERR_CODE_INVALID_HEADER: &str = "invalid_header";
+
+const ERR_INVALID_URL: &str = "Invalid URL";
+const ERR_CODE_INVALID_URL: &str = "invalid_url";
+
+const ERR_URL_INCLUDES_CREDENTIALS: &str = "URL includes credentials";
+const ERR_CODE_URL_INCLUDES_CREDENTIALS: &str = "invalid_credentials";
+
+const ERR_INVALID_OPTIONS: &str = "Invalid request options";
+const ERR_CODE_INVALID_OPTIONS: &str = "invalid_options";
+
+const ERR_NETWORK_ERROR: &str = "Network error";
+const ERR_CODE_NETWORK_ERROR: &str = "network_error";
+
+const ERR_PERMISSION_POLICY: &str = "Request blocked by permissions policy";
+const ERR_CODE_PERMISSION_POLICY: &str = "permission_policy";
 
 const ERR_TIMEOUT: &str = "Request timed out";
 const ERR_CODE_TIMEOUT: &str = "timeout";
@@ -44,61 +58,95 @@ const ERR_CODE_REQUEST_ERROR: &str = "request_error";
 const ERR_GENERIC_FAILURE: &str = "Generic failure";
 const ERR_CODE_GENERIC: &str = "generic_failure";
 
-#[derive(Error, Debug)]
-enum FetchError {
-    #[error("Request error: {0}")]
-    Request(#[from] reqwest::Error),
-
-    #[error("Invalid header: {0}")]
-    InvalidHeader(String),
-
-    #[error("Invalid HTTP method: {0}")]
-    InvalidMethod(String),
-
-    #[error("Response already disturbed")]
+#[napi(string_enum)]
+#[derive(Debug, Clone, Copy)]
+pub enum FaithErrorKind {
+    InvalidHeader,
+    InvalidMethod,
+    InvalidUrl,
+    InvalidCredentials,
+    InvalidOptions,
     ResponseAlreadyDisturbed,
-
-    #[error("Response body no longer available")]
     ResponseBodyNotAvailable,
-
-    #[error("Body stream error: {0}")]
-    BodyStreamError(String),
-
-    #[error("JSON parse error: {0}")]
-    JsonParseError(String),
-
-    #[error("Timeout: {0}")]
-    Timeout(String),
-
-    #[error("Generic failure: {0}")]
-    Generic(String),
+    BodyStream,
+    JsonParse,
+    Timeout,
+    NetworkError,
+    PermissionPolicy,
+    RequestError,
+    Generic,
 }
 
-impl From<FetchError> for napi::Error {
-    fn from(err: FetchError) -> Self {
-        match err {
-            FetchError::Request(e) => napi::Error::new(
-                napi::Status::GenericFailure,
-                format!("{}: {}", ERR_REQUEST_ERROR, e.to_string()),
-            ),
-            FetchError::InvalidHeader(s) => napi::Error::new(napi::Status::InvalidArg, s),
-            FetchError::InvalidMethod(s) => napi::Error::new(napi::Status::InvalidArg, s),
-            FetchError::ResponseAlreadyDisturbed => napi::Error::new(
-                napi::Status::GenericFailure,
-                ERR_RESPONSE_ALREADY_DISTURBED.to_string(),
-            ),
-            FetchError::ResponseBodyNotAvailable => napi::Error::new(
-                napi::Status::GenericFailure,
-                ERR_RESPONSE_BODY_NOT_AVAILABLE.to_string(),
-            ),
-            FetchError::BodyStreamError(s) => napi::Error::new(napi::Status::GenericFailure, s),
-            FetchError::JsonParseError(s) => napi::Error::new(
-                napi::Status::GenericFailure,
-                format!("{}: {}", ERR_JSON_PARSE, s),
-            ),
-            FetchError::Timeout(s) => napi::Error::new(napi::Status::GenericFailure, s),
-            FetchError::Generic(s) => napi::Error::new(napi::Status::GenericFailure, s),
+#[derive(Debug)]
+pub struct FaithError {
+    pub kind: FaithErrorKind,
+    pub message: String,
+    pub cause: Option<Box<FaithError>>,
+}
+
+impl FaithError {
+    pub fn new(kind: FaithErrorKind, message: impl Into<String>) -> Self {
+        Self {
+            kind,
+            message: message.into(),
+            cause: None,
         }
+    }
+
+    pub fn with_cause(kind: FaithErrorKind, message: impl Into<String>, cause: FaithError) -> Self {
+        Self {
+            kind,
+            message: message.into(),
+            cause: Some(Box::new(cause)),
+        }
+    }
+}
+
+impl From<reqwest::Error> for FaithError {
+    fn from(err: reqwest::Error) -> Self {
+        // Classify reqwest errors: treat timeouts/connect failures as network errors,
+        // mapping them to the `NetworkError` kind. Other request-related errors are
+        // treated as `RequestError`. This allows mapping network-related failures
+        // to an InvalidArg status (TypeError semantics in JS) when appropriate.
+        if err.is_timeout() || err.is_connect() {
+            FaithError::new(FaithErrorKind::NetworkError, err.to_string())
+        } else {
+            FaithError::new(FaithErrorKind::RequestError, err.to_string())
+        }
+    }
+}
+
+impl From<FaithError> for napi::Error {
+    fn from(faith: FaithError) -> Self {
+        let status = match faith.kind {
+            FaithErrorKind::InvalidHeader
+            | FaithErrorKind::InvalidMethod
+            | FaithErrorKind::InvalidUrl
+            | FaithErrorKind::InvalidCredentials
+            | FaithErrorKind::InvalidOptions
+            | FaithErrorKind::NetworkError
+            | FaithErrorKind::PermissionPolicy => napi::Status::InvalidArg,
+            _ => napi::Status::GenericFailure,
+        };
+
+        // Build the message with the kind prefix so wrapper can easily parse `kind` from message
+        let message = format!("{:?}: {}", faith.kind, faith.message);
+
+        // Create the napi error with the appropriate status and message
+        let mut err = napi::Error::new(status, message);
+
+        // Attach the cause as a proper error cause if present (napi::Error#set_cause)
+        if let Some(cause_box) = faith.cause {
+            // Convert the boxed faith cause to a napi::Error and set as the cause
+            let cause_error: napi::Error = (*cause_box).into();
+            // Ignore any errors when setting the cause to avoid panics
+            #[allow(unused_must_use)]
+            {
+                err.set_cause(cause_error);
+            }
+        }
+
+        err
     }
 }
 
@@ -153,6 +201,11 @@ pub struct ErrorCodes {
     pub response_body_not_available: String,
     pub invalid_method: String,
     pub invalid_header: String,
+    pub invalid_url: String,
+    pub invalid_credentials: String,
+    pub invalid_options: String,
+    pub network_error: String,
+    pub permission_policy: String,
     pub timeout: String,
     pub json_parse_error: String,
     pub body_stream_error: String,
@@ -167,6 +220,11 @@ pub fn error_codes() -> ErrorCodes {
         response_body_not_available: ERR_CODE_RESPONSE_BODY_NOT_AVAILABLE.to_string(),
         invalid_method: ERR_CODE_INVALID_METHOD.to_string(),
         invalid_header: ERR_CODE_INVALID_HEADER.to_string(),
+        invalid_url: ERR_CODE_INVALID_URL.to_string(),
+        invalid_credentials: ERR_CODE_URL_INCLUDES_CREDENTIALS.to_string(),
+        invalid_options: ERR_CODE_INVALID_OPTIONS.to_string(),
+        network_error: ERR_CODE_NETWORK_ERROR.to_string(),
+        permission_policy: ERR_CODE_PERMISSION_POLICY.to_string(),
         timeout: ERR_CODE_TIMEOUT.to_string(),
         json_parse_error: ERR_CODE_JSON_PARSE.to_string(),
         body_stream_error: ERR_CODE_BODY_STREAM.to_string(),
@@ -293,7 +351,7 @@ impl FaithResponse {
                 let stream = stream.clone();
                 let stream = napi::bindgen_prelude::ReadableStream::create_with_stream_bytes(
                     &env,
-                    stream.map_err(|err| FetchError::BodyStreamError(err).into()),
+                    stream.map_err(|err| FaithError::new(FaithErrorKind::BodyStream, err).into()),
                 )?;
                 Ok(Some(stream))
             }
@@ -302,7 +360,11 @@ impl FaithResponse {
 
     fn check_stream_disturbed(&self) -> Result<()> {
         if self.disturbed.swap(true, Ordering::SeqCst) {
-            Err(FetchError::ResponseAlreadyDisturbed.into())
+            Err(FaithError::new(
+                FaithErrorKind::ResponseAlreadyDisturbed,
+                ERR_RESPONSE_ALREADY_DISTURBED.to_string(),
+            )
+            .into())
         } else {
             Ok(())
         }
@@ -324,7 +386,7 @@ impl FaithResponse {
             .next()
             .await
             .transpose()
-            .map_err(|e| FetchError::BodyStreamError(e.to_string()))?
+            .map_err(|e| FaithError::new(FaithErrorKind::BodyStream, e.to_string()))?
         {
             chunks.push(chunk);
         }
@@ -358,7 +420,8 @@ impl FaithResponse {
     pub async fn text(&self) -> Result<String> {
         self.check_stream_disturbed()?;
         let bytes = self.gather_contiguous().await?;
-        String::from_utf8(bytes.to_vec()).map_err(|e| FetchError::Generic(e.to_string()).into())
+        String::from_utf8(bytes.to_vec())
+            .map_err(|e| FaithError::new(FaithErrorKind::Generic, e.to_string()).into())
     }
 
     /// Parse response body as JSON
@@ -367,7 +430,7 @@ impl FaithResponse {
         self.check_stream_disturbed()?;
         let bytes = self.gather_contiguous().await?;
         let value = serde_json::from_slice(&bytes)
-            .map_err(|e| FetchError::JsonParseError(e.to_string()))?;
+            .map_err(|e| FaithError::new(FaithErrorKind::JsonParse, e.to_string()))?;
         Ok(value)
     }
 
@@ -384,7 +447,11 @@ impl FaithResponse {
     #[napi]
     pub fn clone(&self) -> Result<Self> {
         if self.disturbed.load(Ordering::SeqCst) {
-            return Err(FetchError::ResponseAlreadyDisturbed.into());
+            return Err(FaithError::new(
+                FaithErrorKind::ResponseAlreadyDisturbed,
+                ERR_RESPONSE_ALREADY_DISTURBED.to_string(),
+            )
+            .into());
         }
 
         Ok(Self {
@@ -404,9 +471,7 @@ impl FaithResponse {
 
 #[napi]
 pub async fn faith_fetch(url: String, options: Option<FaithOptions>) -> Result<FaithResponse> {
-    let client = Client::builder()
-        .build()
-        .map_err(|e| FetchError::Request(e))?;
+    let client = Client::builder().build().map_err(FaithError::from)?;
 
     let method = options
         .as_ref()
@@ -414,9 +479,27 @@ pub async fn faith_fetch(url: String, options: Option<FaithOptions>) -> Result<F
         .map(|m| m.to_uppercase())
         .unwrap_or_else(|| "GET".to_string());
 
-    let method = Method::from_bytes(method.as_bytes())
-        .map_err(|_| FetchError::InvalidMethod(ERR_INVALID_METHOD.to_string()))?;
+    let method = Method::from_bytes(method.as_bytes()).map_err(|_| {
+        FaithError::new(
+            FaithErrorKind::InvalidMethod,
+            ERR_INVALID_METHOD.to_string(),
+        )
+    })?;
     let is_head = method == Method::HEAD;
+
+    // Validate the URL first and ensure no credentials are included in it.
+    // Invalid URLs are disallowed in the fetch() spec and should map to a TypeError-like result.
+    let parsed_url = reqwest::Url::parse(&url)
+        .map_err(|_| FaithError::new(FaithErrorKind::InvalidUrl, ERR_INVALID_URL.to_string()))?;
+
+    // Disallow credentials in the URL per the spec (e.g. `https://user:pass@host/`).
+    if !parsed_url.username().is_empty() || parsed_url.password().is_some() {
+        return Err(FaithError::new(
+            FaithErrorKind::InvalidCredentials,
+            ERR_INVALID_CREDENTIALS.to_string(),
+        )
+        .into());
+    }
 
     let mut request = client.request(method, &url);
 
@@ -425,10 +508,16 @@ pub async fn faith_fetch(url: String, options: Option<FaithOptions>) -> Result<F
             for (key, value) in headers {
                 // Validate header name and value before adding to request
                 let header_name = HeaderName::from_bytes(key.as_bytes()).map_err(|_| {
-                    FetchError::InvalidHeader(format!("Invalid header name: {}", key))
+                    FaithError::new(
+                        FaithErrorKind::InvalidHeader,
+                        format!("Invalid header name: {}", key),
+                    )
                 })?;
                 let header_value = HeaderValue::from_str(value).map_err(|_| {
-                    FetchError::InvalidHeader(format!("Invalid header value: {}", value))
+                    FaithError::new(
+                        FaithErrorKind::InvalidHeader,
+                        format!("Invalid header value: {}", value),
+                    )
                 })?;
                 request = request.header(header_name, header_value);
             }
@@ -451,9 +540,11 @@ pub async fn faith_fetch(url: String, options: Option<FaithOptions>) -> Result<F
         Ok(resp) => resp,
         Err(e) => {
             if e.is_timeout() {
-                return Err(FetchError::Timeout(ERR_TIMEOUT.to_string()).into());
+                return Err(
+                    FaithError::new(FaithErrorKind::Timeout, ERR_TIMEOUT.to_string()).into(),
+                );
             } else {
-                return Err(FetchError::Request(e).into());
+                return Err(FaithError::from(e).into());
             }
         }
     };

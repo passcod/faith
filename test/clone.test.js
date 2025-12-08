@@ -72,7 +72,7 @@ test("response.clone() allows different body reading methods on different clones
 });
 
 test("response.clone() throws error if body already read", async (t) => {
-  t.plan(2);
+  t.plan(3);
 
   try {
     const response = await fetch(url("/get"));
@@ -89,6 +89,11 @@ test("response.clone() throws error if body already read", async (t) => {
       error.message,
       native.errResponseAlreadyDisturbed(),
       "should throw 'Response already disturbed'",
+    );
+    t.equal(
+      error.code,
+      native.errorCodes().response_already_disturbed,
+      "should set canonical error code 'response_already_disturbed'",
     );
   }
 });
@@ -197,7 +202,7 @@ test("response.clone() works with POST requests", async (t) => {
 });
 
 test("response.clone() with body property access", async (t) => {
-  t.plan(3);
+  t.plan(4);
 
   try {
     const response1 = await fetch(url("/get"));
@@ -227,6 +232,11 @@ test("response.clone() with body property access", async (t) => {
         error.message,
         native.errResponseAlreadyDisturbed(),
         "original cannot read after body property accessed",
+      );
+      t.equal(
+        error.code,
+        native.errorCodes().response_already_disturbed,
+        "should set canonical error code 'response_already_disturbed'",
       );
     }
   } catch (error) {

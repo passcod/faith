@@ -63,7 +63,7 @@ test("simple: response.clone() works", async (t) => {
 });
 
 test("simple: bodyUsed flag", async (t) => {
-  t.plan(4);
+  t.plan(6);
 
   try {
     const response = await fetch(url("/get"));
@@ -82,6 +82,11 @@ test("simple: bodyUsed flag", async (t) => {
         native.errResponseAlreadyDisturbed(),
         "should throw 'Response already disturbed' error",
       );
+      t.equal(
+        error.code,
+        native.errorCodes().response_already_disturbed,
+        "should set canonical error code 'response_already_disturbed'",
+      );
     }
 
     // Try to clone after reading - should fail
@@ -94,8 +99,55 @@ test("simple: bodyUsed flag", async (t) => {
         native.errResponseAlreadyDisturbed(),
         "should throw 'Response already disturbed' error",
       );
+      t.equal(
+        error.code,
+        native.errorCodes().response_already_disturbed,
+        "should set canonical error code 'response_already_disturbed'",
+      );
     }
   } catch (error) {
     t.fail(`Unexpected error: ${error.message}`);
+  }
+});
+
+test("fetch() rejects invalid URL", async (t) => {
+  t.plan(2);
+
+  try {
+    // Invalid URL (spaces) - should be rejected by native URL parsing
+    await fetch("http://example .com");
+    t.fail("Should have thrown TypeError for invalid URL");
+  } catch (error) {
+    t.equal(
+      error.constructor.name,
+      "TypeError",
+      "should throw TypeError for invalid URL",
+    );
+    t.equal(
+      error.code,
+      native.errorCodes().invalid_url,
+      "should set canonical error code 'invalid_url'",
+    );
+  }
+});
+
+test("fetch() rejects URL with credentials", async (t) => {
+  t.plan(2);
+
+  try {
+    // URL with credentials should be rejected by the native implementation
+    await fetch("https://user:pass@httpbin.org/get");
+    t.fail("Should have thrown TypeError for credentials in URL");
+  } catch (error) {
+    t.equal(
+      error.constructor.name,
+      "TypeError",
+      "should throw TypeError for credentials in URL",
+    );
+    t.equal(
+      error.code,
+      native.errorCodes().invalid_credentials,
+      "should set canonical error code 'invalid_credentials'",
+    );
   }
 });

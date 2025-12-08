@@ -4,7 +4,7 @@ const native = require("../index.js");
 const { url, hostname } = require("./helpers.js");
 
 test("body property access behavior", async (t) => {
-  t.plan(8);
+  t.plan(10);
 
   try {
     // Test 1: Accessing body property should return a stream
@@ -34,6 +34,11 @@ test("body property access behavior", async (t) => {
         native.errResponseAlreadyDisturbed(),
         "should throw 'Response already disturbed' error when cloning after body access",
       );
+      t.equal(
+        error.code,
+        native.errorCodes().response_already_disturbed,
+        "should set canonical error code 'response_already_disturbed'",
+      );
     }
 
     // Test 4: Should not be able to read body again after accessing body property
@@ -45,6 +50,11 @@ test("body property access behavior", async (t) => {
         error.message,
         native.errResponseAlreadyDisturbed(),
         "should throw 'Response already disturbed' error when reading after body access",
+      );
+      t.equal(
+        error.code,
+        native.errorCodes().response_already_disturbed,
+        "should set canonical error code 'response_already_disturbed'",
       );
     }
 

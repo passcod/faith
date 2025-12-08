@@ -128,6 +128,11 @@ test("webResponse() throws error if body already consumed via text()", async (t)
       native.errResponseBodyNotAvailable(),
       "should throw 'Response body no longer available' error",
     );
+    t.equal(
+      error.code,
+      native.errorCodes().response_body_not_available,
+      "should set canonical error code 'response_body_not_available'",
+    );
     t.equal(error.constructor.name, "Error", "should throw Error");
   }
 });
@@ -151,6 +156,11 @@ test("webResponse() throws error if body already consumed via bytes()", async (t
       native.errResponseBodyNotAvailable(),
       "should throw 'Response body no longer available' error",
     );
+    t.equal(
+      error.code,
+      native.errorCodes().response_body_not_available,
+      "should set canonical error code 'response_body_not_available'",
+    );
     t.equal(error.constructor.name, "Error", "should throw Error");
   }
 });
@@ -173,6 +183,11 @@ test("webResponse() throws error if body already consumed via arrayBuffer()", as
       error.message,
       native.errResponseBodyNotAvailable(),
       "should throw 'Response body no longer available' error",
+    );
+    t.equal(
+      error.code,
+      native.errorCodes().response_body_not_available,
+      "should set canonical error code 'response_body_not_available'",
     );
     t.equal(error.constructor.name, "Error", "should throw Error");
   }
@@ -221,6 +236,11 @@ test("webResponse() marks body as accessed", async (t) => {
       error.message,
       native.errResponseAlreadyDisturbed(),
       "should throw 'Response already disturbed' error",
+    );
+    t.equal(
+      error.code,
+      native.errorCodes().response_already_disturbed,
+      "should set canonical error code 'response_already_disturbed'",
     );
     t.equal(error.constructor.name, "Error", "should throw Error");
   }
