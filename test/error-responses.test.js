@@ -1,3 +1,4 @@
+const { url } = require("./helpers.js");
 const test = require("tape");
 const { fetch: faithFetch } = require("../wrapper.js");
 const { hasNativeFetch } = require("./helpers.js");

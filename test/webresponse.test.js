@@ -1,3 +1,4 @@
+const { url } = require("./helpers.js");
 /**
  * webResponse() method tests for Faith Fetch API
  *
@@ -15,7 +16,7 @@ test("webResponse() returns Web API Response object", async (t) => {
   t.plan(8);
 
   try {
-    const faithResponse = await fetch("https://httpbin.org/get");
+    const faithResponse = await fetch(url("/get"));
 
     // Get Web API Response
     const webResponse = faithResponse.webResponse();
@@ -58,7 +59,7 @@ test("webResponse() preserves headers correctly", async (t) => {
   t.plan(3);
 
   try {
-    const faithResponse = await fetch("https://httpbin.org/get");
+    const faithResponse = await fetch(url("/get"));
     const webResponse = faithResponse.webResponse();
 
     // Get a specific header from both responses
@@ -93,7 +94,7 @@ test("webResponse() body can be read", async (t) => {
   t.plan(3);
 
   try {
-    const faithResponse = await fetch("https://httpbin.org/get");
+    const faithResponse = await fetch(url("/get"));
     const webResponse = faithResponse.webResponse();
 
     // Read body from Web API Response
@@ -101,7 +102,7 @@ test("webResponse() body can be read", async (t) => {
 
     t.ok(text, "should get response text");
     t.ok(text.length > 0, "text should not be empty");
-    t.ok(text.includes("httpbin.org"), "text should contain expected content");
+    t.ok(text.includes("${hostname()}"), "text should contain expected content");
   } catch (error) {
     t.fail(`Unexpected error: ${error.message}`);
   }
@@ -111,7 +112,7 @@ test("webResponse() throws error if body already consumed via text()", async (t)
   t.plan(2);
 
   try {
-    const faithResponse = await fetch("https://httpbin.org/get");
+    const faithResponse = await fetch(url("/get"));
 
     // Consume body via text()
     await faithResponse.text();
@@ -133,7 +134,7 @@ test("webResponse() throws error if body already consumed via bytes()", async (t
   t.plan(2);
 
   try {
-    const faithResponse = await fetch("https://httpbin.org/get");
+    const faithResponse = await fetch(url("/get"));
 
     // Consume body via bytes()
     await faithResponse.bytes();
@@ -155,7 +156,7 @@ test("webResponse() throws error if body already consumed via arrayBuffer()", as
   t.plan(2);
 
   try {
-    const faithResponse = await fetch("https://httpbin.org/get");
+    const faithResponse = await fetch(url("/get"));
 
     // Consume body via arrayBuffer()
     await faithResponse.arrayBuffer();
@@ -177,7 +178,7 @@ test("webResponse() works after accessing body property", async (t) => {
   t.plan(3);
 
   try {
-    const faithResponse = await fetch("https://httpbin.org/get");
+    const faithResponse = await fetch(url("/get"));
 
     // Access body property (creates stream but doesn't consume it)
     const bodyStream = faithResponse.body;
@@ -202,7 +203,7 @@ test("webResponse() marks body as accessed", async (t) => {
   t.plan(2);
 
   try {
-    const faithResponse = await fetch("https://httpbin.org/get");
+    const faithResponse = await fetch(url("/get"));
 
     // Get webResponse() first
     faithResponse.webResponse();
@@ -224,7 +225,7 @@ test("webResponse() can be called multiple times", async (t) => {
   t.plan(4);
 
   try {
-    const faithResponse = await fetch("https://httpbin.org/get");
+    const faithResponse = await fetch(url("/get"));
 
     // First call should work
     const webResponse1 = faithResponse.webResponse();
@@ -262,7 +263,7 @@ test("webResponse() returned Response has working json() method", async (t) => {
   t.plan(3);
 
   try {
-    const faithResponse = await fetch("https://httpbin.org/get");
+    const faithResponse = await fetch(url("/get"));
     const webResponse = faithResponse.webResponse();
 
     // Use json() method on Web API Response
@@ -270,7 +271,7 @@ test("webResponse() returned Response has working json() method", async (t) => {
 
     t.ok(data, "should get JSON data");
     t.ok(data.url, "JSON should have url property");
-    t.ok(data.url.includes("httpbin.org/get"), "url should be correct");
+    t.ok(data.url.includes("${hostname()}/get"), "url should be correct");
   } catch (error) {
     t.fail(`Unexpected error: ${error.message}`);
   }
@@ -281,7 +282,7 @@ test("webResponse() with error response", async (t) => {
 
   try {
     // Get a 404 response
-    const faithResponse = await fetch("https://httpbin.org/status/404");
+    const faithResponse = await fetch(url("/status/404"));
     const webResponse = faithResponse.webResponse();
 
     t.equal(webResponse.status, 404, "status should be 404");
@@ -300,7 +301,7 @@ test("webResponse() body stream is shared", async (t) => {
   t.plan(5);
 
   try {
-    const faithResponse = await fetch("https://httpbin.org/get");
+    const faithResponse = await fetch(url("/get"));
 
     // Get webResponse()
     const webResponse = faithResponse.webResponse();

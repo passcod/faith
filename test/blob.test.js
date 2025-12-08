@@ -1,11 +1,12 @@
 const test = require("tape");
 const { fetch } = require("../wrapper.js");
+const { url } = require("./helpers.js");
 
 test("response.blob() method returns Blob", async (t) => {
   t.plan(5);
 
   try {
-    const response = await fetch("https://httpbin.org/get");
+    const response = await fetch(url("/get"));
 
     // Test blob() method
     const blob = await response.blob();
@@ -21,8 +22,8 @@ test("response.blob() method returns Blob", async (t) => {
     // Read the blob as text to verify content
     const text = await blob.text();
     t.ok(
-      text.includes("httpbin.org"),
-      "blob content should contain httpbin.org",
+      text.includes(new URL(url("/")).hostname),
+      "blob content should contain ${hostname()}",
     );
   } catch (error) {
     t.fail(`Unexpected error: ${error.message}`);
@@ -34,13 +35,13 @@ test("response.blob() with content-type header", async (t) => {
 
   try {
     // Get a response that has content-type
-    const response = await fetch("https://httpbin.org/json");
+    const response = await fetch(url("/json"));
 
     const blob = await response.blob();
 
     t.ok(blob, "should get Blob");
     t.ok(blob.size > 0, "should have non-zero size");
-    // httpbin.org/json returns application/json content-type
+    // ${hostname()}/json returns application/json content-type
     t.equal(blob.type, "application/json", "should have correct content-type");
   } catch (error) {
     t.fail(`Unexpected error: ${error.message}`);
@@ -51,7 +52,7 @@ test("response.blob() marks body as used", async (t) => {
   t.plan(3);
 
   try {
-    const response = await fetch("https://httpbin.org/get");
+    const response = await fetch(url("/get"));
 
     t.equal(response.bodyUsed, false, "body should not be used initially");
 
@@ -83,7 +84,7 @@ test("response.blob() and other methods are mutually exclusive", async (t) => {
   t.plan(2);
 
   try {
-    const response = await fetch("https://httpbin.org/get");
+    const response = await fetch(url("/get"));
 
     // Use blob() first
     await response.blob();
@@ -120,7 +121,7 @@ test("response.blob() and body property are mutually exclusive", async (t) => {
   t.plan(2);
 
   try {
-    const response = await fetch("https://httpbin.org/get");
+    const response = await fetch(url("/get"));
 
     // Access body property first
     const stream = response.body;
@@ -146,8 +147,8 @@ test("response.blob() works with binary data", async (t) => {
   t.plan(4);
 
   try {
-    // Get bytes response (httpbin.org/bytes returns random bytes)
-    const response = await fetch("https://httpbin.org/bytes/100"); // 100 random bytes
+    // Get bytes response (${hostname()}/bytes returns random bytes)
+    const response = await fetch(url("/bytes/100")); // 100 random bytes
 
     const blob = await response.blob();
 
@@ -174,13 +175,13 @@ test("response.blob() preserves content-type from response headers", async (t) =
   t.plan(2);
 
   try {
-    // Test with image (httpbin.org/image returns an image with correct content-type)
-    const response = await fetch("https://httpbin.org/image/jpeg");
+    // Test with image (${hostname()}/image returns an image with correct content-type)
+    const response = await fetch(url("/image/jpeg"));
 
     const blob = await response.blob();
 
     t.ok(blob, "should get Blob");
-    // httpbin.org/image/jpeg returns image/jpeg content-type
+    // ${hostname()}/image/jpeg returns image/jpeg content-type
     t.ok(
       blob.type === "image/jpeg" || blob.type === "",
       "should preserve image/jpeg content-type if available",
@@ -195,7 +196,7 @@ test("response.blob() with empty response", async (t) => {
 
   try {
     // HEAD request has no body
-    const response = await fetch("https://httpbin.org/get", {
+    const response = await fetch(url("/get"), {
       method: "HEAD",
     });
 

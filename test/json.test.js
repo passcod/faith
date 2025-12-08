@@ -1,3 +1,4 @@
+const { url } = require("./helpers.js");
 /**
  * Test for Response.json() method
  */
@@ -9,7 +10,7 @@ test("response.json() method returns parsed JSON", async (t) => {
   t.plan(4);
 
   try {
-    const response = await fetch("https://httpbin.org/get");
+    const response = await fetch(url("/get"));
 
     // Test json() method
     const data = await response.json();
@@ -17,7 +18,10 @@ test("response.json() method returns parsed JSON", async (t) => {
     t.ok(data, "should get JSON data");
     t.equal(typeof data, "object", "should return object");
     t.ok(data.url, "JSON should have url property");
-    t.ok(data.url.includes("httpbin.org/get"), "url should be correct");
+    t.ok(
+      data.url.includes(new URL(url("/")).hostname + "/get"),
+      "url should be correct",
+    );
   } catch (error) {
     t.fail(`Unexpected error: ${error.message}`);
   }
@@ -28,7 +32,7 @@ test("response.json() throws error for non-JSON response", async (t) => {
 
   try {
     // Get a plain text response (not JSON)
-    const response = await fetch("https://httpbin.org/html");
+    const response = await fetch(url("/html"));
 
     // This should fail because the response is HTML, not JSON
     await response.json();
@@ -51,7 +55,7 @@ test("response.json() works with POST request returning JSON", async (t) => {
 
   try {
     const postData = { message: "Hello from faith", number: 42 };
-    const response = await fetch("https://httpbin.org/post", {
+    const response = await fetch(url("/post"), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -73,7 +77,7 @@ test("response.json() marks body as used", async (t) => {
   t.plan(3);
 
   try {
-    const response = await fetch("https://httpbin.org/get");
+    const response = await fetch(url("/get"));
 
     t.equal(response.bodyUsed, false, "body should not be used initially");
 
@@ -105,7 +109,7 @@ test("response.json() and text() are mutually exclusive", async (t) => {
   t.plan(2);
 
   try {
-    const response = await fetch("https://httpbin.org/get");
+    const response = await fetch(url("/get"));
 
     // Use json() first
     await response.json();
@@ -142,7 +146,7 @@ test("response.json() and body property are mutually exclusive", async (t) => {
   t.plan(2);
 
   try {
-    const response = await fetch("https://httpbin.org/get");
+    const response = await fetch(url("/get"));
 
     // Access body property first
     const stream = response.body;
@@ -169,7 +173,7 @@ test("response.json() handles empty JSON object", async (t) => {
 
   try {
     // We'll use a POST request with empty JSON body
-    const response = await fetch("https://httpbin.org/post", {
+    const response = await fetch(url("/post"), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -204,7 +208,7 @@ test("response.json() handles nested JSON structures", async (t) => {
       timestamp: Date.now(),
     };
 
-    const response = await fetch("https://httpbin.org/post", {
+    const response = await fetch(url("/post"), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

@@ -1,11 +1,12 @@
 const test = require("tape");
 const { fetch } = require("../wrapper.js");
+const { url } = require("./helpers.js");
 
 test("response.clone() creates a new Response object", async (t) => {
   t.plan(7);
 
   try {
-    const response1 = await fetch("https://httpbin.org/get");
+    const response1 = await fetch(url("/get"));
     const response2 = response1.clone();
 
     t.ok(response2, "should create a clone");
@@ -32,13 +33,16 @@ test("response.clone() allows both clones to read body", async (t) => {
   t.plan(4);
 
   try {
-    const response1 = await fetch("https://httpbin.org/get");
+    const response1 = await fetch(url("/get"));
     const response2 = response1.clone();
 
     // Read from first clone
     const text1 = await response1.text();
     t.ok(text1, "first clone should read text");
-    t.ok(text1.includes("httpbin.org"), "text should contain httpbin.org");
+    t.ok(
+      text1.includes(new URL(url("/")).hostname),
+      "text should contain ${hostname()}",
+    );
 
     // Read from second clone (should work even though first clone read body)
     const text2 = await response2.text();
@@ -53,7 +57,7 @@ test("response.clone() allows different body reading methods on different clones
   t.plan(3);
 
   try {
-    const response1 = await fetch("https://httpbin.org/get");
+    const response1 = await fetch(url("/get"));
     const response2 = response1.clone();
 
     // Read JSON from first clone
@@ -63,7 +67,10 @@ test("response.clone() allows different body reading methods on different clones
 
     // Read text from second clone
     const text2 = await response2.text();
-    t.ok(text2.includes("httpbin.org"), "second clone should read text");
+    t.ok(
+      text2.includes(new URL(url("/")).hostname),
+      "second clone should read text",
+    );
   } catch (error) {
     t.fail(`Unexpected error: ${error.message}`);
   }
@@ -73,7 +80,7 @@ test("response.clone() throws error if body already read", async (t) => {
   t.plan(2);
 
   try {
-    const response = await fetch("https://httpbin.org/get");
+    const response = await fetch(url("/get"));
 
     // Read body first
     await response.text();
@@ -94,7 +101,7 @@ test("response.clone() preserves headers", async (t) => {
   t.plan(3);
 
   try {
-    const response1 = await fetch("https://httpbin.org/get");
+    const response1 = await fetch(url("/get"));
     const response2 = response1.clone();
 
     const headers1 = response1.headers;
@@ -116,7 +123,7 @@ test("response.clone() bodyUsed is independent", async (t) => {
   t.plan(4);
 
   try {
-    const response1 = await fetch("https://httpbin.org/get");
+    const response1 = await fetch(url("/get"));
     const response2 = response1.clone();
 
     t.equal(
@@ -147,7 +154,7 @@ test("response.clone() can be called multiple times", async (t) => {
   t.plan(3);
 
   try {
-    const response1 = await fetch("https://httpbin.org/get");
+    const response1 = await fetch(url("/get"));
     const response2 = response1.clone();
     const response3 = response1.clone();
 
@@ -172,7 +179,7 @@ test("response.clone() works with POST requests", async (t) => {
 
   try {
     const postData = { message: "test" };
-    const response1 = await fetch("https://httpbin.org/post", {
+    const response1 = await fetch(url("/post"), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -197,7 +204,7 @@ test("response.clone() with body property access", async (t) => {
   t.plan(3);
 
   try {
-    const response1 = await fetch("https://httpbin.org/get");
+    const response1 = await fetch(url("/get"));
     const response2 = response1.clone();
 
     // Access body property on original
@@ -234,7 +241,7 @@ test("response.clone() after clone reads body first", async (t) => {
   t.plan(3);
 
   try {
-    const response1 = await fetch("https://httpbin.org/get");
+    const response1 = await fetch(url("/get"));
     const response2 = response1.clone();
 
     // Clone reads body first
@@ -255,7 +262,7 @@ test("response.clone() body streams have independent cursors", async (t) => {
   t.plan(10);
 
   try {
-    const response1 = await fetch("https://httpbin.org/get");
+    const response1 = await fetch(url("/get"));
     const response2 = response1.clone();
 
     // Get body streams from both clones

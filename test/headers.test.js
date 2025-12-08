@@ -1,3 +1,4 @@
+const { url } = require("./helpers.js");
 /**
  * Header format tests for Faith Fetch API
  *
@@ -14,7 +15,7 @@ test("Response.headers always returns Headers object", async (t) => {
   t.plan(6);
 
   try {
-    const response = await fetch("https://httpbin.org/get");
+    const response = await fetch(url("/get"));
 
     // Check that headers is a Headers object
     t.ok(
@@ -57,7 +58,7 @@ test("fetch() accepts plain object headers", async (t) => {
   t.plan(3);
 
   try {
-    const response = await fetch("https://httpbin.org/headers", {
+    const response = await fetch(url("/headers"), {
       headers: {
         "X-Test-Header": "test-value",
         Accept: "application/json",
@@ -91,7 +92,7 @@ test("fetch() accepts Headers object", async (t) => {
     headers.append("X-Test-Header", "test-value");
     headers.append("Accept", "application/json");
 
-    const response = await fetch("https://httpbin.org/headers", {
+    const response = await fetch(url("/headers"), {
       headers: headers,
     });
 
@@ -118,7 +119,7 @@ test("fetch() rejects array of tuples for headers", async (t) => {
   t.plan(2);
 
   try {
-    await fetch("https://httpbin.org/get", {
+    await fetch(url("/get"), {
       headers: [
         ["X-Test", "value1"],
         ["Accept", "application/json"],
@@ -141,7 +142,7 @@ test("fetch() rejects nested array for headers", async (t) => {
   t.plan(2);
 
   try {
-    await fetch("https://httpbin.org/get", {
+    await fetch(url("/get"), {
       headers: [["X-Test", "value1"]], // Single element array
     });
 
@@ -161,7 +162,7 @@ test("fetch() rejects string for headers", async (t) => {
   t.plan(2);
 
   try {
-    await fetch("https://httpbin.org/get", {
+    await fetch(url("/get"), {
       headers: "invalid",
     });
 
@@ -181,7 +182,7 @@ test("fetch() rejects number for headers", async (t) => {
   t.plan(2);
 
   try {
-    await fetch("https://httpbin.org/get", {
+    await fetch(url("/get"), {
       headers: 123,
     });
 
@@ -201,7 +202,7 @@ test("fetch() accepts null headers (treated as undefined)", async (t) => {
   t.plan(2);
 
   try {
-    const response = await fetch("https://httpbin.org/get", {
+    const response = await fetch(url("/get"), {
       headers: null,
     });
 
@@ -219,7 +220,7 @@ test("fetch() accepts undefined headers", async (t) => {
   t.plan(2);
 
   try {
-    const response = await fetch("https://httpbin.org/get", {
+    const response = await fetch(url("/get"), {
       headers: undefined,
     });
 
@@ -283,7 +284,7 @@ test("Response Headers object can be used with standard methods", async (t) => {
   t.plan(5);
 
   try {
-    const response = await fetch("https://httpbin.org/get");
+    const response = await fetch(url("/get"));
 
     // Test various Headers methods
     t.ok(

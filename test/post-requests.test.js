@@ -7,7 +7,7 @@ test(
   async (t) => {
     const testData = { message: "Hello from faith", number: 42 };
 
-    await compareResponses(t, "https://httpbin.org/post", {
+    await compareResponses(t, "/post", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

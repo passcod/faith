@@ -1,10 +1,11 @@
+const { url } = require("./helpers.js");
 const test = require("tape");
 const { fetch: faithFetch } = require("../wrapper.js");
 
 test("Test response.body returns ReadableStream", async (t) => {
   t.plan(5);
 
-  const response = await faithFetch("https://httpbin.org/get");
+  const response = await faithFetch(url("/get"));
 
   // Test that body is a property (not a function)
   t.equal(
@@ -44,7 +45,7 @@ test("Test response.body returns ReadableStream", async (t) => {
 test("Test reading from ReadableStream", async (t) => {
   t.plan(3);
 
-  const response = await faithFetch("https://httpbin.org/get");
+  const response = await faithFetch(url("/get"));
   const stream = response.body;
 
   if (!stream) {
@@ -84,7 +85,7 @@ test("Test reading from ReadableStream", async (t) => {
 test("Test stream consumption prevents text() call", async (t) => {
   t.plan(2);
 
-  const response = await faithFetch("https://httpbin.org/get");
+  const response = await faithFetch(url("/get"));
   const stream = response.body;
 
   if (!stream) {
@@ -123,7 +124,7 @@ test("Test stream consumption prevents text() call", async (t) => {
 test("Test text() and bytes() work when not streaming", async (t) => {
   t.plan(4);
 
-  const response = await faithFetch("https://httpbin.org/get");
+  const response = await faithFetch(url("/get"));
 
   // Test text() method
   const text = await response.text();
@@ -132,7 +133,7 @@ test("Test text() and bytes() work when not streaming", async (t) => {
   t.doesNotThrow(() => JSON.parse(text), "text() should return valid JSON");
 
   // Test bytes() method
-  const response2 = await faithFetch("https://httpbin.org/get");
+  const response2 = await faithFetch(url("/get"));
   const bytes = await response2.bytes();
   t.ok(bytes instanceof Uint8Array, "bytes() should return Uint8Array");
 });
@@ -140,7 +141,7 @@ test("Test text() and bytes() work when not streaming", async (t) => {
 test("Test body returns null after consumption", async (t) => {
   t.plan(2);
 
-  const response = await faithFetch("https://httpbin.org/get");
+  const response = await faithFetch(url("/get"));
 
   // First access to body property should return stream
   const stream1 = response.body;

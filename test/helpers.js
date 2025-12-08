@@ -2,14 +2,25 @@
  * Test helpers for Faith fetch tests
  */
 
+// Base URL for tests - can be overridden with HTTPBIN_URL environment variable
+const HTTPBIN_BASE_URL = process.env.HTTPBIN_URL || "https://httpbin.org";
+
+function url(path) {
+  return `${HTTPBIN_BASE_URL}${path}`;
+}
+
+function hostname() {
+  return new URL(HTTPBIN_BASE_URL).hostname;
+}
+
 // Skip tests if native fetch is not available
 const hasNativeFetch = typeof globalThis.fetch === "function";
 
 // Helper to compare responses
-async function compareResponses(t, url, options = {}) {
+async function compareResponses(t, path, options = {}) {
   const { fetch: faithFetch } = require("../wrapper.js");
-  const faithResponse = await faithFetch(url, options);
-  const nativeResponse = await globalThis.fetch(url, options);
+  const faithResponse = await faithFetch(url(path), options);
+  const nativeResponse = await globalThis.fetch(url(path), options);
 
   // Compare basic properties
   t.equal(
@@ -26,12 +37,12 @@ async function compareResponses(t, url, options = {}) {
 
   // Compare URL (may differ slightly due to redirects)
   t.ok(
-    faithResponse.url.includes("httpbin.org"),
-    `Faith URL should contain httpbin.org: ${faithResponse.url}`,
+    faithResponse.url.includes(new URL(HTTPBIN_BASE_URL).hostname),
+    `Faith URL should contain ${new URL(HTTPBIN_BASE_URL).hostname}: ${faithResponse.url}`,
   );
   t.ok(
-    nativeResponse.url.includes("httpbin.org"),
-    `Native URL should contain httpbin.org: ${nativeResponse.url}`,
+    nativeResponse.url.includes(new URL(HTTPBIN_BASE_URL).hostname),
+    `Native URL should contain ${new URL(HTTPBIN_BASE_URL).hostname}: ${nativeResponse.url}`,
   );
 
   // Compare headers - check that faith has all the headers native has (except some that may differ)
@@ -135,4 +146,6 @@ async function compareResponses(t, url, options = {}) {
 module.exports = {
   hasNativeFetch,
   compareResponses,
+  url,
+  hostname,
 };
