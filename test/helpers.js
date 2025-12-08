@@ -10,7 +10,7 @@ function url(path) {
 }
 
 function hostname() {
-  return new URL(HTTPBIN_BASE_URL).hostname;
+  return new URL(HTTPBIN_BASE_URL).host;
 }
 
 // Skip tests if native fetch is not available
@@ -37,12 +37,12 @@ async function compareResponses(t, path, options = {}) {
 
   // Compare URL (may differ slightly due to redirects)
   t.ok(
-    faithResponse.url.includes(new URL(HTTPBIN_BASE_URL).hostname),
-    `Faith URL should contain ${new URL(HTTPBIN_BASE_URL).hostname}: ${faithResponse.url}`,
+    faithResponse.url.includes(new URL(HTTPBIN_BASE_URL).host),
+    `Faith URL should contain ${new URL(HTTPBIN_BASE_URL).host}: ${faithResponse.url}`,
   );
   t.ok(
-    nativeResponse.url.includes(new URL(HTTPBIN_BASE_URL).hostname),
-    `Native URL should contain ${new URL(HTTPBIN_BASE_URL).hostname}: ${nativeResponse.url}`,
+    nativeResponse.url.includes(new URL(HTTPBIN_BASE_URL).host),
+    `Native URL should contain ${new URL(HTTPBIN_BASE_URL).host}: ${nativeResponse.url}`,
   );
 
   // Compare headers - check that faith has all the headers native has (except some that may differ)

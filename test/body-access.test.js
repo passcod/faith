@@ -1,6 +1,6 @@
 const test = require("tape");
 const { fetch } = require("../wrapper.js");
-const { url } = require("./helpers.js");
+const { url, hostname } = require("./helpers.js");
 
 test("body property access behavior", async (t) => {
   t.plan(8);
@@ -58,10 +58,7 @@ test("body property access behavior", async (t) => {
     // Clone should still be able to read
     const text3 = await response3.text();
     t.ok(text3, "clone should read text even if original body accessed");
-    t.ok(
-      text3.includes(new URL(url("/")).hostname),
-      "text should contain expected content",
-    );
+    t.ok(text3.includes(hostname()), "text should contain expected content");
   } catch (error) {
     t.fail(`Unexpected error: ${error.message}`);
   }

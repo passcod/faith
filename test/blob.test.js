@@ -1,6 +1,6 @@
 const test = require("tape");
 const { fetch } = require("../wrapper.js");
-const { url } = require("./helpers.js");
+const { url, hostname } = require("./helpers.js");
 
 test("response.blob() method returns Blob", async (t) => {
   t.plan(5);
@@ -21,10 +21,7 @@ test("response.blob() method returns Blob", async (t) => {
 
     // Read the blob as text to verify content
     const text = await blob.text();
-    t.ok(
-      text.includes(new URL(url("/")).hostname),
-      "blob content should contain ${hostname()}",
-    );
+    t.ok(text.includes(hostname()), "blob content should contain hostname");
   } catch (error) {
     t.fail(`Unexpected error: ${error.message}`);
   }

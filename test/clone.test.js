@@ -1,6 +1,6 @@
 const test = require("tape");
 const { fetch } = require("../wrapper.js");
-const { url } = require("./helpers.js");
+const { url, hostname } = require("./helpers.js");
 
 test("response.clone() creates a new Response object", async (t) => {
   t.plan(7);
@@ -39,10 +39,7 @@ test("response.clone() allows both clones to read body", async (t) => {
     // Read from first clone
     const text1 = await response1.text();
     t.ok(text1, "first clone should read text");
-    t.ok(
-      text1.includes(new URL(url("/")).hostname),
-      "text should contain ${hostname()}",
-    );
+    t.ok(text1.includes(hostname()), "text should contain expected content");
 
     // Read from second clone (should work even though first clone read body)
     const text2 = await response2.text();
@@ -67,10 +64,7 @@ test("response.clone() allows different body reading methods on different clones
 
     // Read text from second clone
     const text2 = await response2.text();
-    t.ok(
-      text2.includes(new URL(url("/")).hostname),
-      "second clone should read text",
-    );
+    t.ok(text2.includes(hostname()), "second clone should read text");
   } catch (error) {
     t.fail(`Unexpected error: ${error.message}`);
   }

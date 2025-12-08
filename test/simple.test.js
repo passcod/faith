@@ -1,6 +1,6 @@
 const test = require("tape");
 const { fetch } = require("../wrapper.js");
-const { url } = require("./helpers.js");
+const { url, hostname } = require("./helpers.js");
 
 test("simple: basic fetch works", async (t) => {
   t.plan(3);
@@ -9,10 +9,7 @@ test("simple: basic fetch works", async (t) => {
     const response = await fetch(url("/get"));
     t.equal(response.status, 200, "should return status 200");
     t.ok(response.ok, "ok should be true for 200 status");
-    t.ok(
-      response.url.includes(new URL(url("/")).hostname),
-      "url should contain ${hostname()}",
-    );
+    t.ok(response.url.includes(hostname()), "url should contain hostname");
   } catch (error) {
     t.fail(`Unexpected error: ${error.message}`);
   }
@@ -25,10 +22,7 @@ test("simple: response.text() works", async (t) => {
     const response = await fetch(url("/get"));
     const text = await response.text();
     t.ok(text, "should get text response");
-    t.ok(
-      text.includes(new URL(url("/")).hostname),
-      "text should contain ${hostname()}",
-    );
+    t.ok(text.includes(hostname()), "text should contain hostname");
   } catch (error) {
     t.fail(`Unexpected error: ${error.message}`);
   }

@@ -1,4 +1,4 @@
-const { url } = require("./helpers.js");
+const { url, hostname } = require("./helpers.js");
 /**
  * Test for Response.json() method
  */
@@ -18,10 +18,7 @@ test("response.json() method returns parsed JSON", async (t) => {
     t.ok(data, "should get JSON data");
     t.equal(typeof data, "object", "should return object");
     t.ok(data.url, "JSON should have url property");
-    t.ok(
-      data.url.includes(new URL(url("/")).host + "/get"),
-      "url should be correct",
-    );
+    t.ok(data.url.includes(hostname() + "/get"), "url should be correct");
   } catch (error) {
     t.fail(`Unexpected error: ${error.message}`);
   }
