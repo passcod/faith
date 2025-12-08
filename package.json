@@ -3,13 +3,10 @@
   "version": "0.1.0",
   "description": "fáith: a Rust-powered fetch",
   "main": "wrapper.js",
-  "browser": "browser-wrapper.mjs",
   "types": "wrapper.d.ts",
   "files": [
     "index.js",
     "index.d.ts",
-    "browser.js",
-    "browser-wrapper.mjs",
     "wrapper.js",
     "wrapper.d.ts",
     "wrapper-factory.js"
@@ -24,15 +21,8 @@
       "x86_64-apple-darwin",
       "aarch64-apple-darwin",
       "x86_64-pc-windows-msvc",
-      "aarch64-pc-windows-msvc",
-      "wasm32-wasi-preview1-threads"
-    ],
-    "wasm": {
-      "browser": {
-        "asyncInit": true,
-        "fs": false
-      }
-    }
+      "aarch64-pc-windows-msvc"
+    ]
   },
   "scripts": {
     "build": "napi build --platform --release",
@@ -54,7 +44,6 @@
   "license": "MIT",
   "devDependencies": {
     "@napi-rs/cli": "^3.5.0",
-    "@napi-rs/wasm-runtime": "^1.0.3",
     "@types/node": "^24.10.1",
     "tape": "^5.9.0"
   },
