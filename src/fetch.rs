@@ -17,6 +17,13 @@ use crate::{
     response::FaithResponse,
 };
 
+const FAITH_VERSION: &str = env!("CARGO_PKG_VERSION");
+const REQWEST_VERSION: &str = env!("REQWEST_VERSION");
+
+fn user_agent() -> String {
+    format!("Faith/{} reqwest/{}", FAITH_VERSION, REQWEST_VERSION)
+}
+
 #[napi]
 pub fn faith_fetch(url: String, options: Option<FaithOptionsAndBody>) -> Async<FaithResponse> {
     let (options, body) = FaithOptions::extract(options);
@@ -25,7 +32,10 @@ pub fn faith_fetch(url: String, options: Option<FaithOptionsAndBody>) -> Async<F
         let options = options.clone();
         let body = body.clone();
         async move {
-            let client = Client::builder().build().map_err(FaithError::from)?;
+            let client = Client::builder()
+                .user_agent(user_agent())
+                .build()
+                .map_err(FaithError::from)?;
 
             let method = options
                 .method
