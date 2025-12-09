@@ -302,3 +302,9 @@ error kind, documented both in the API documentation above and in this comprehen
 
 Due to technical limitations, we can't create `AbortError` or `NetworkError`, which would match
 the fetch() implementation closer for the `Timeout` or `Network` cases.
+
+The library exports an `ERROR_CODES` object which has every error code the library throws, and
+every error thrown also has a `code` property that is set to one of those codes. So you can
+accurately respond to the exact error kind by checking its code and matching against the right
+constant from `ERROR_CODES`, instead of doing string matching on the error message, or coarse
+`instance of` matching.
