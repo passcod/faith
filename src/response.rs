@@ -181,7 +181,7 @@ impl FaithResponse {
                 this.check_stream_disturbed()?;
                 let bytes = this.gather_contiguous().await?;
                 String::from_utf8(bytes.to_vec()).map_err(|e| {
-                    FaithError::new(FaithErrorKind::Generic, Some(e.to_string())).into()
+                    FaithError::new(FaithErrorKind::Utf8Parse, Some(e.to_string())).into()
                 })
             }
         })
