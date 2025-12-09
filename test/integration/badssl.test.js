@@ -12,55 +12,67 @@ test("badssl.com - valid certificate should succeed", async (t) => {
 test("badssl.com - expired certificate should fail", async (t) => {
   t.plan(1);
 
-  await t.rejects(
-    faithFetch("https://expired.badssl.com/"),
-    "Should throw error for expired certificate",
-  );
+  try {
+    await faithFetch("https://expired.badssl.com/");
+    t.fail("Should throw for expired certificate");
+  } catch (err) {
+    t.pass("Should throw error for expired certificate");
+  }
 });
 
 test("badssl.com - wrong host certificate should fail", async (t) => {
   t.plan(1);
 
-  await t.rejects(
-    faithFetch("https://wrong.host.badssl.com/"),
-    "Should throw error for wrong host certificate",
-  );
+  try {
+    await faithFetch("https://wrong.host.badssl.com/");
+    t.fail("Should throw for wrong host certificate");
+  } catch (err) {
+    t.pass("Should throw error for wrong host certificate");
+  }
 });
 
 test("badssl.com - self-signed certificate should fail", async (t) => {
   t.plan(1);
 
-  await t.rejects(
-    faithFetch("https://self-signed.badssl.com/"),
-    "Should throw error for self-signed certificate",
-  );
+  try {
+    await faithFetch("https://self-signed.badssl.com/");
+    t.fail("Should throw for self-signed certificate");
+  } catch (err) {
+    t.pass("Should throw error for self-signed certificate");
+  }
 });
 
 test("badssl.com - untrusted root certificate should fail", async (t) => {
   t.plan(1);
 
-  await t.rejects(
-    faithFetch("https://untrusted-root.badssl.com/"),
-    "Should throw error for untrusted root certificate",
-  );
+  try {
+    await faithFetch("https://untrusted-root.badssl.com/");
+    t.fail("Should throw for untrusted root certificate");
+  } catch (err) {
+    t.pass("Should throw error for untrusted root certificate");
+  }
 });
 
 test("badssl.com - revoked certificate should fail", async (t) => {
   t.plan(1);
 
-  await t.rejects(
-    faithFetch("https://revoked.badssl.com/"),
-    "Should throw error for revoked certificate",
-  );
+  try {
+    await faithFetch("https://revoked.badssl.com/");
+    t.fail("Should throw for revoked certificate");
+  } catch (err) {
+    t.pass("Should throw error for revoked certificate");
+  }
 });
 
 test("badssl.com - incomplete chain should fail", async (t) => {
   t.plan(1);
 
-  await t.rejects(
-    faithFetch("https://incomplete-chain.badssl.com/"),
-    "Should throw error for incomplete certificate chain",
-  );
+  try {
+    await faithFetch("https://incomplete-chain.badssl.com/");
+    t.fail("Should throw for incomplete certificate chain");
+  } catch (err) {
+    t.pass("Should throw error for incomplete certificate chain");
+  }
 });
 
 test("badssl.com - SHA-256 certificate should succeed", async (t) => {
