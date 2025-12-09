@@ -127,11 +127,25 @@ impl FaithError {
 
     // whenever possible, we should prefer to use this so that the error types are correct
     pub fn into_js_error<'env>(self, env: &'env Env) -> Unknown<'env> {
-        match self.kind.js_type() {
+        let code = format!("{:?}", self.kind);
+        let unk = match self.kind.js_type() {
             JsErrorType::TypeError => JsTypeError::from(self.into_napi()).into_unknown(*env),
             JsErrorType::SyntaxError => JsSyntaxError::from(self.into_napi()).into_unknown(*env),
             JsErrorType::GenericError => JsError::from(self.into_napi()).into_unknown(*env),
+        };
+
+        // we do this manually instead of using the TryFrom so we can return the untouched Unknown if we fail
+        let Ok(typ) = unk.get_type() else { return unk };
+        if typ != ValueType::Object {
+            return unk;
         }
+        // SAFETY: we have verified that this value is an Object
+        let Ok(mut obj) = (unsafe { unk.cast::<Object>() }) else {
+            return unk;
+        };
+
+        let _ = obj.set("code", code);
+        obj.into_unknown(env).unwrap_or(unk)
     }
 }
 
@@ -342,7 +356,8 @@ where
     }
 
     fn reject(&mut self, _env: &'env Env, err: Error) -> Result<Self::JsValue, napi::Error> {
-        debug_assert!(false, "FaithAsyncResult::reject should be unreachable");
+        // TODO: we could probably add .code to the error here, by converting the napi::Error
+        // back into a FaithError, then to_js_error(), then From<Unknown> for napi::Error
         Err(err)
     }
 
