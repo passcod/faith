@@ -4,6 +4,10 @@
  * This provides TypeScript definitions for the spec-compliant Fetch API wrapper.
  */
 
+export const FAITH_VERSION: string;
+export const REQWEST_VERSION: string;
+export const USER_AGENT: string;
+
 /**
  * Error codes const enum
  *
@@ -24,21 +28,27 @@ export const ERROR_CODES: {
   readonly RuntimeThread: "RuntimeThread";
 };
 
+export declare class Agent {
+  constructor();
+}
+
 export interface FetchOptions {
   method?: string;
   headers?: Record<string, string> | Headers;
   body?: string | Buffer | Uint8Array | Array<number> | ArrayBuffer;
   timeout?: number;
+  agent?: Agent;
 }
 
 export class Response {
-  readonly status: number;
-  readonly statusText: string;
+  readonly bodyUsed: boolean;
   readonly headers: Headers;
   readonly ok: boolean;
-  readonly url: string;
   readonly redirected: boolean;
-  readonly bodyUsed: boolean;
+  readonly status: number;
+  readonly statusText: string;
+  readonly url: string;
+  readonly version: string;
 
   /**
    * Get the response body as a ReadableStream
@@ -88,7 +98,7 @@ export class Response {
    * @returns Web API Response object
    * @throws If response body has been disturbed
    */
-  webResponse(): Response;
+  webResponse(): globalThis.Response;
 }
 
 /**

@@ -6,10 +6,11 @@ use std::{
 use futures::StreamExt;
 use napi_derive::napi;
 use reqwest::header::{HeaderName, HeaderValue};
-use reqwest::{Client, Method, StatusCode};
+use reqwest::{Method, StatusCode};
 use stream_shared::SharedStream;
 
 use crate::{
+    agent::FaithAgent,
     async_task::{Async, FaithAsyncResult},
     body::{Body, DynStream},
     error::{FaithError, FaithErrorKind},
@@ -17,25 +18,20 @@ use crate::{
     response::FaithResponse,
 };
 
-const FAITH_VERSION: &str = env!("CARGO_PKG_VERSION");
-const REQWEST_VERSION: &str = env!("REQWEST_VERSION");
-
-fn user_agent() -> String {
-    format!("Faith/{} reqwest/{}", FAITH_VERSION, REQWEST_VERSION)
-}
-
 #[napi]
 pub fn faith_fetch(url: String, options: Option<FaithOptionsAndBody>) -> Async<FaithResponse> {
-    let (options, body) = FaithOptions::extract(options);
+    let (options, agent, body) = FaithOptions::extract(options);
     FaithAsyncResult::run(move || {
         let url = url.clone();
         let options = options.clone();
         let body = body.clone();
+        let agent = agent.clone();
         async move {
-            let client = Client::builder()
-                .user_agent(user_agent())
-                .build()
-                .map_err(FaithError::from)?;
+            let agent = if let Some(agent) = agent {
+                agent
+            } else {
+                FaithAgent::new()?
+            };
 
             let method = options
                 .method
@@ -48,7 +44,7 @@ pub fn faith_fetch(url: String, options: Option<FaithOptionsAndBody>) -> Async<F
 
             let parsed_url = reqwest::Url::parse(&url).map_err(|_| FaithErrorKind::InvalidUrl)?;
 
-            let mut request = client.request(method, parsed_url);
+            let mut request = agent.client.request(method, parsed_url);
 
             if let Some(headers) = &options.headers {
                 for (key, value) in headers {

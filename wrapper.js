@@ -263,7 +263,11 @@ async function fetch(url, options = {}) {
 }
 
 module.exports = {
-  Response,
-  fetch,
+  Agent: native.FaithAgent,
   ERROR_CODES,
+  FAITH_VERSION: native.FAITH_VERSION,
+  fetch,
+  REQWEST_VERSION: native.REQWEST_VERSION,
+  Response,
+  USER_AGENT: native.USER_AGENT,
 };

@@ -572,7 +572,11 @@ if (!nativeBinding) {
 }
 
 module.exports = nativeBinding
+module.exports.FaithAgent = nativeBinding.FaithAgent
 module.exports.FaithResponse = nativeBinding.FaithResponse
 module.exports.errorCodes = nativeBinding.errorCodes
+module.exports.FAITH_VERSION = nativeBinding.FAITH_VERSION
 module.exports.FaithErrorKind = nativeBinding.FaithErrorKind
 module.exports.faithFetch = nativeBinding.faithFetch
+module.exports.REQWEST_VERSION = nativeBinding.REQWEST_VERSION
+module.exports.USER_AGENT = nativeBinding.USER_AGENT
