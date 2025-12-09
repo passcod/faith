@@ -157,7 +157,8 @@ test("badssl.com - RSA 8192 certificate should succeed", async (t) => {
   t.equal(response.status, 200, "Status should be 200");
 });
 
-test("badssl.com - extended validation certificate should succeed", async (t) => {
+// SKIP: this certificate expired in 2022 — it's not EV failing, it's good old expiry
+test.skip("badssl.com - extended validation certificate should succeed", async (t) => {
   t.plan(2);
 
   const response = await faithFetch("https://extended-validation.badssl.com/");
