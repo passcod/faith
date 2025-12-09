@@ -4,7 +4,7 @@ const { url, hostname } = require("./helpers.js");
  */
 
 const test = require("tape");
-const { fetch } = require("../wrapper.js");
+const { fetch, ERROR_CODES } = require("../wrapper.js");
 const native = require("../index.js");
 
 test("response.json() method returns parsed JSON", async (t) => {
@@ -40,7 +40,7 @@ test("response.json() throws error for non-JSON response", async (t) => {
     t.ok(error, "should throw error for non-JSON response");
     t.equal(
       error.code,
-      native.errorCodes().jsonParseError,
+      ERROR_CODES.JsonParse,
       "should set canonical error code 'JsonParse'",
     );
   }
@@ -92,7 +92,7 @@ test("response.json() marks body as used", async (t) => {
     } catch (error) {
       t.equal(
         error.code,
-        native.errorCodes().responseAlreadyDisturbed,
+        ERROR_CODES.ResponseAlreadyDisturbed,
         "should set canonical error code 'ResponseAlreadyDisturbed'",
       );
     }
@@ -117,7 +117,7 @@ test("response.json() and text() are mutually exclusive", async (t) => {
     } catch (error) {
       t.equal(
         error.code,
-        native.errorCodes().responseAlreadyDisturbed,
+        ERROR_CODES.ResponseAlreadyDisturbed,
         "should set canonical error code 'ResponseAlreadyDisturbed'",
       );
     }
@@ -129,7 +129,7 @@ test("response.json() and text() are mutually exclusive", async (t) => {
     } catch (error) {
       t.equal(
         error.code,
-        native.errorCodes().responseAlreadyDisturbed,
+        ERROR_CODES.ResponseAlreadyDisturbed,
         "should set canonical error code 'ResponseAlreadyDisturbed'",
       );
     }
@@ -155,7 +155,7 @@ test("response.json() and body property are mutually exclusive", async (t) => {
     } catch (error) {
       t.equal(
         error.code,
-        native.errorCodes().responseAlreadyDisturbed,
+        ERROR_CODES.ResponseAlreadyDisturbed,
         "should set canonical error code 'ResponseAlreadyDisturbed'",
       );
     }

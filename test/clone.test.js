@@ -1,5 +1,5 @@
 const test = require("tape");
-const { fetch } = require("../wrapper.js");
+const { fetch, ERROR_CODES } = require("../wrapper.js");
 const native = require("../index.js");
 const { url, hostname } = require("./helpers.js");
 
@@ -87,12 +87,12 @@ test("response.clone() throws error if body already read", async (t) => {
     t.ok(error, "should throw error");
     t.equal(
       error.code,
-      native.errorCodes().responseAlreadyDisturbed,
+      ERROR_CODES.ResponseAlreadyDisturbed,
       "should set canonical error code 'ResponseAlreadyDisturbed'",
     );
     t.equal(
       error.code,
-      native.errorCodes().responseAlreadyDisturbed,
+      ERROR_CODES.ResponseAlreadyDisturbed,
       "should set canonical error code 'ResponseAlreadyDisturbed'",
     );
   }
@@ -230,12 +230,12 @@ test("response.clone() with body property access", async (t) => {
       // If we get here, it means the implementation doesn't allow reading after body access
       t.equal(
         error.code,
-        native.errorCodes().responseAlreadyDisturbed,
+        ERROR_CODES.ResponseAlreadyDisturbed,
         "should set canonical error code 'ResponseAlreadyDisturbed'",
       );
       t.equal(
         error.code,
-        native.errorCodes().responseAlreadyDisturbed,
+        ERROR_CODES.ResponseAlreadyDisturbed,
         "should set canonical error code 'ResponseAlreadyDisturbed'",
       );
     }

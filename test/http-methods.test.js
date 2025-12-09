@@ -1,6 +1,6 @@
 const test = require("tape");
 const { compareResponses, hasNativeFetch, url } = require("./helpers.js");
-const { fetch } = require("../wrapper.js");
+const { fetch, ERROR_CODES } = require("../wrapper.js");
 const native = require("../index.js");
 
 test("Compare different HTTP methods", { skip: !hasNativeFetch }, async (t) => {
@@ -30,7 +30,7 @@ test(
     } catch (error) {
       t.equal(
         error.code,
-        native.errorCodes().invalidMethod,
+        ERROR_CODES.InvalidMethod,
         "should set canonical error code 'InvalidMethod'",
       );
     }

@@ -10,7 +10,7 @@ const { url, hostname } = require("./helpers.js");
  */
 
 const test = require("tape");
-const { fetch } = require("../wrapper.js");
+const { fetch, ERROR_CODES } = require("../wrapper.js");
 const native = require("../index.js");
 
 test("webResponse() returns Web API Response object", async (t) => {
@@ -125,7 +125,7 @@ test("webResponse() throws error if body already consumed via text()", async (t)
   } catch (error) {
     t.equal(
       error.code,
-      native.errorCodes().responseBodyNotAvailable,
+      ERROR_CODES.ResponseBodyNotAvailable,
       "should set canonical error code 'ResponseBodyNotAvailable'",
     );
     t.equal(error.constructor.name, "Error", "should throw Error");
@@ -148,7 +148,7 @@ test("webResponse() throws error if body already consumed via bytes()", async (t
   } catch (error) {
     t.equal(
       error.code,
-      native.errorCodes().responseBodyNotAvailable,
+      ERROR_CODES.ResponseBodyNotAvailable,
       "should set canonical error code 'ResponseBodyNotAvailable'",
     );
     t.equal(error.constructor.name, "Error", "should throw Error");
@@ -171,7 +171,7 @@ test("webResponse() throws error if body already consumed via arrayBuffer()", as
   } catch (error) {
     t.equal(
       error.code,
-      native.errorCodes().responseBodyNotAvailable,
+      ERROR_CODES.ResponseBodyNotAvailable,
       "should set canonical error code 'ResponseBodyNotAvailable'",
     );
     t.equal(error.constructor.name, "Error", "should throw Error");
@@ -219,7 +219,7 @@ test("webResponse() marks body as accessed", async (t) => {
   } catch (error) {
     t.equal(
       error.code,
-      native.errorCodes().responseAlreadyDisturbed,
+      ERROR_CODES.ResponseAlreadyDisturbed,
       "should set canonical error code 'ResponseAlreadyDisturbed'",
     );
     t.equal(error.constructor.name, "TypeError", "should throw TypeError");

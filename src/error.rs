@@ -2,9 +2,10 @@ use std::fmt::Debug;
 
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
+use strum::{EnumIter, IntoEnumIterator};
 
 #[napi(string_enum)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, EnumIter)]
 pub enum FaithErrorKind {
     InvalidHeader,
     InvalidMethod,
@@ -139,41 +140,9 @@ impl From<reqwest::Error> for FaithError {
     }
 }
 
-#[napi(object)]
-pub struct ErrorCodes {
-    pub response_already_disturbed: String,
-    pub response_body_not_available: String,
-    pub invalid_method: String,
-    pub invalid_header: String,
-    pub invalid_url: String,
-    pub invalid_credentials: String,
-    pub invalid_options: String,
-    pub permission_policy: String,
-    pub timeout: String,
-    pub json_parse_error: String,
-    pub body_stream_error: String,
-    pub request_error: String,
-    pub generic_failure: String,
-}
-
 #[napi]
-pub fn error_codes() -> ErrorCodes {
-    ErrorCodes {
-        // Use the Auth::Debug-style string for the code to avoid needing
-        // separate canonical short codes. This ensures `error.code` is the same
-        // as the FaithErrorKind debug string (e.g. `InvalidHeader`, `Timeout`, etc.).
-        response_already_disturbed: format!("{:?}", FaithErrorKind::ResponseAlreadyDisturbed),
-        response_body_not_available: format!("{:?}", FaithErrorKind::ResponseBodyNotAvailable),
-        invalid_method: format!("{:?}", FaithErrorKind::InvalidMethod),
-        invalid_header: format!("{:?}", FaithErrorKind::InvalidHeader),
-        invalid_url: format!("{:?}", FaithErrorKind::InvalidUrl),
-        invalid_credentials: format!("{:?}", FaithErrorKind::InvalidCredentials),
-        invalid_options: format!("{:?}", FaithErrorKind::InvalidOptions),
-        permission_policy: format!("{:?}", FaithErrorKind::PermissionPolicy),
-        timeout: format!("{:?}", FaithErrorKind::Timeout),
-        json_parse_error: format!("{:?}", FaithErrorKind::JsonParse),
-        body_stream_error: format!("{:?}", FaithErrorKind::BodyStream),
-        request_error: format!("{:?}", FaithErrorKind::Network),
-        generic_failure: format!("{:?}", FaithErrorKind::Generic),
-    }
+pub fn error_codes() -> Vec<String> {
+    FaithErrorKind::iter()
+        .map(|kind| format!("{:?}", kind))
+        .collect()
 }

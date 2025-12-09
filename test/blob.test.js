@@ -1,5 +1,5 @@
 const test = require("tape");
-const { fetch } = require("../wrapper.js");
+const { fetch, ERROR_CODES } = require("../wrapper.js");
 const native = require("../index.js");
 const { url, hostname } = require("./helpers.js");
 
@@ -69,7 +69,7 @@ test("response.blob() marks body as used", async (t) => {
     } catch (error) {
       t.equal(
         error.code,
-        native.errorCodes().responseAlreadyDisturbed,
+        ERROR_CODES.ResponseAlreadyDisturbed,
         "should set canonical error code 'ResponseAlreadyDisturbed'",
       );
     }
@@ -94,7 +94,7 @@ test("response.blob() and other methods are mutually exclusive", async (t) => {
     } catch (error) {
       t.equal(
         error.code,
-        native.errorCodes().responseAlreadyDisturbed,
+        ERROR_CODES.ResponseAlreadyDisturbed,
         "should set canonical error code 'ResponseAlreadyDisturbed'",
       );
     }
@@ -106,7 +106,7 @@ test("response.blob() and other methods are mutually exclusive", async (t) => {
     } catch (error) {
       t.equal(
         error.code,
-        native.errorCodes().responseAlreadyDisturbed,
+        ERROR_CODES.ResponseAlreadyDisturbed,
         "should set canonical error code 'ResponseAlreadyDisturbed'",
       );
     }
@@ -132,7 +132,7 @@ test("response.blob() and body property are mutually exclusive", async (t) => {
     } catch (error) {
       t.equal(
         error.code,
-        native.errorCodes().responseAlreadyDisturbed,
+        ERROR_CODES.ResponseAlreadyDisturbed,
         "should set canonical error code 'ResponseAlreadyDisturbed'",
       );
     }

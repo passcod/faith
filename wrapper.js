@@ -10,9 +10,12 @@
 const native = require("./index.js");
 const { faithFetch } = native;
 
-// Short error codes mapping exported from native for easier checks in JS and tests.
-// e.g. { invalid_header: "invalid_header", invalid_method: "invalid_method", ... }
-const ERROR_CODES = native.errorCodes();
+// Generate ERROR_CODES const enum from native error codes
+// e.g. { InvalidHeader: "InvalidHeader", InvalidMethod: "InvalidMethod", ... }
+const ERROR_CODES = native.errorCodes().reduce((acc, code) => {
+  acc[code] = code;
+  return acc;
+}, {});
 
 /**
  * Response class that provides spec-compliant Fetch API
@@ -158,14 +161,14 @@ class Response {
       const err = new Error("Response body no longer available");
       try {
         Object.defineProperty(err, "code", {
-          value: ERROR_CODES.responseBodyNotAvailable,
+          value: ERROR_CODES.ResponseBodyNotAvailable,
           enumerable: true,
           configurable: true,
           writable: true,
         });
       } catch (e) {
         try {
-          err.code = ERROR_CODES.responseBodyNotAvailable;
+          err.code = ERROR_CODES.ResponseBodyNotAvailable;
         } catch (e) {}
       }
       throw err;
@@ -177,14 +180,14 @@ class Response {
       const err = new Error("Response body no longer available");
       try {
         Object.defineProperty(err, "code", {
-          value: ERROR_CODES.responseBodyNotAvailable,
+          value: ERROR_CODES.ResponseBodyNotAvailable,
           enumerable: true,
           configurable: true,
           writable: true,
         });
       } catch (e) {
         try {
-          err.code = ERROR_CODES.responseBodyNotAvailable;
+          err.code = ERROR_CODES.ResponseBodyNotAvailable;
         } catch (e) {}
       }
       throw err;
@@ -257,4 +260,5 @@ async function fetch(url, options = {}) {
 module.exports = {
   Response,
   fetch,
+  ERROR_CODES,
 };

@@ -1,5 +1,5 @@
 const test = require("tape");
-const { fetch } = require("../wrapper.js");
+const { fetch, ERROR_CODES } = require("../wrapper.js");
 const native = require("../index.js");
 const { url, hostname } = require("./helpers.js");
 
@@ -79,7 +79,7 @@ test("simple: bodyUsed flag", async (t) => {
     } catch (error) {
       t.equal(
         error.code,
-        native.errorCodes().responseAlreadyDisturbed,
+        ERROR_CODES.ResponseAlreadyDisturbed,
         "should set canonical error code 'ResponseAlreadyDisturbed'",
       );
     }
@@ -91,7 +91,7 @@ test("simple: bodyUsed flag", async (t) => {
     } catch (error) {
       t.equal(
         error.code,
-        native.errorCodes().responseAlreadyDisturbed,
+        ERROR_CODES.ResponseAlreadyDisturbed,
         "should set canonical error code 'ResponseAlreadyDisturbed'",
       );
     }
@@ -115,7 +115,7 @@ test("fetch() rejects invalid URL", async (t) => {
     );
     t.equal(
       error.code,
-      native.errorCodes().invalidUrl,
+      ERROR_CODES.InvalidUrl,
       "should set canonical error code 'InvalidUrl'",
     );
   }

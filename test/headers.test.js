@@ -9,7 +9,7 @@ const { url } = require("./helpers.js");
  */
 
 const test = require("tape");
-const { fetch } = require("../wrapper.js");
+const { fetch, ERROR_CODES } = require("../wrapper.js");
 const native = require("../index.js");
 
 test("Response.headers always returns Headers object", async (t) => {
@@ -130,7 +130,7 @@ test("fetch() rejects invalid header value", async (t) => {
     // Assert 'code' is present and matches the canonical code
     t.equal(
       error.code,
-      native.errorCodes().invalidHeader,
+      ERROR_CODES.InvalidHeader,
       "should include canonical error code for invalid header",
     );
   }

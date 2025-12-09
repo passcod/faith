@@ -39,23 +39,7 @@ export declare class FaithResponse {
   clone(): FaithResponse
 }
 
-export declare function errorCodes(): ErrorCodes
-
-export interface ErrorCodes {
-  responseAlreadyDisturbed: string
-  responseBodyNotAvailable: string
-  invalidMethod: string
-  invalidHeader: string
-  invalidUrl: string
-  invalidCredentials: string
-  invalidOptions: string
-  permissionPolicy: string
-  timeout: string
-  jsonParseError: string
-  bodyStreamError: string
-  requestError: string
-  genericFailure: string
-}
+export declare function errorCodes(): Array<string>
 
 export declare const enum FaithErrorKind {
   InvalidHeader = 'InvalidHeader',
