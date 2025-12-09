@@ -6,6 +6,9 @@
 
 /**
  * Error codes const enum
+ *
+ * NOTE: This must be kept in sync with FaithErrorKind in src/error.rs
+ * Run `npm test` to validate sync (test/error-codes.test.js checks this)
  */
 export const ERROR_CODES: {
   readonly InvalidHeader: "InvalidHeader";
