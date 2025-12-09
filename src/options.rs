@@ -11,7 +11,7 @@ pub struct FaithOptionsAndBody {
     pub headers: Option<Vec<(String, String)>>,
     pub body: Option<Either3<String, Buffer, Uint8Array>>,
     pub timeout: Option<f64>,
-    pub agent: Option<Reference<FaithAgent>>,
+    pub agent: Reference<FaithAgent>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -22,24 +22,19 @@ pub(crate) struct FaithOptions {
 }
 
 impl FaithOptions {
-    pub(crate) fn extract(
-        opts: Option<FaithOptionsAndBody>,
-    ) -> (Self, Option<FaithAgent>, Option<Arc<Buffer>>) {
-        match opts {
-            None => (Self::default(), None, None),
-            Some(opts) => (
-                Self {
-                    method: opts.method,
-                    headers: opts.headers,
-                    timeout: opts.timeout,
-                },
-                opts.agent.map(|rf| FaithAgent::clone(&rf)),
-                opts.body.map(|either| match either {
-                    Either3::A(s) => Arc::new(Buffer::from(s.as_bytes())),
-                    Either3::B(b) => Arc::new(b),
-                    Either3::C(u) => Arc::new(Buffer::from(u.as_ref())),
-                }),
-            ),
-        }
+    pub(crate) fn extract(opts: FaithOptionsAndBody) -> (Self, FaithAgent, Option<Arc<Buffer>>) {
+        (
+            Self {
+                method: opts.method,
+                headers: opts.headers,
+                timeout: opts.timeout,
+            },
+            FaithAgent::clone(&opts.agent),
+            opts.body.map(|either| match either {
+                Either3::A(s) => Arc::new(Buffer::from(s.as_bytes())),
+                Either3::B(b) => Arc::new(b),
+                Either3::C(u) => Arc::new(Buffer::from(u.as_ref())),
+            }),
+        )
     }
 }

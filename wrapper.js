@@ -207,6 +207,8 @@ class Response {
   }
 }
 
+let defaultAgent;
+
 /**
  * Fetch function wrapper
  * @param {string} url - The URL to fetch
@@ -256,6 +258,14 @@ async function fetch(url, options = {}) {
     } else if (Array.isArray(nativeOptions.body)) {
       nativeOptions.body = Buffer.from(nativeOptions.body);
     }
+  }
+
+  // Attach to the default agent if none is provided
+  if (!nativeOptions.agent) {
+    if (!defaultAgent) {
+      defaultAgent = new native.FaithAgent();
+    }
+    nativeOptions.agent = defaultAgent;
   }
 
   const nativeResponse = await faithFetch(url, nativeOptions);

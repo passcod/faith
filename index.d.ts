@@ -62,14 +62,14 @@ export declare const enum FaithErrorKind {
   RuntimeThread = 'RuntimeThread'
 }
 
-export declare function faithFetch(url: string, options?: FaithOptionsAndBody | undefined | null): Async<FaithResponse>
+export declare function faithFetch(url: string, options: FaithOptionsAndBody): Async<FaithResponse>
 
 export interface FaithOptionsAndBody {
   method?: string
   headers?: Array<[string, string]>
   body?: string | Buffer | Uint8Array
   timeout?: number
-  agent?: FaithAgent
+  agent: FaithAgent
 }
 
 export const REQWEST_VERSION: string

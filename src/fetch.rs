@@ -10,7 +10,6 @@ use reqwest::{Method, StatusCode};
 use stream_shared::SharedStream;
 
 use crate::{
-    agent::FaithAgent,
     async_task::{Async, FaithAsyncResult},
     body::{Body, DynStream},
     error::{FaithError, FaithErrorKind},
@@ -19,7 +18,7 @@ use crate::{
 };
 
 #[napi]
-pub fn faith_fetch(url: String, options: Option<FaithOptionsAndBody>) -> Async<FaithResponse> {
+pub fn faith_fetch(url: String, options: FaithOptionsAndBody) -> Async<FaithResponse> {
     let (options, agent, body) = FaithOptions::extract(options);
     FaithAsyncResult::run(move || {
         let url = url.clone();
@@ -27,12 +26,6 @@ pub fn faith_fetch(url: String, options: Option<FaithOptionsAndBody>) -> Async<F
         let body = body.clone();
         let agent = agent.clone();
         async move {
-            let agent = if let Some(agent) = agent {
-                agent
-            } else {
-                FaithAgent::new()?
-            };
-
             let method = options
                 .method
                 .map(|m| m.to_uppercase())
