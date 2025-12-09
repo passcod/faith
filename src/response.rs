@@ -214,10 +214,11 @@ impl FaithResponse {
     /// end up with a copy of the entire response body if you end up not consuming one
     /// of the clones.
     #[napi]
-    pub fn clone(&self) -> Result<Self, napi::Error> {
+    pub fn clone(&self, env: Env) -> Result<Self, napi::Error> {
         if self.disturbed.load(Ordering::SeqCst) {
-            // FIXME: figure out how to return a TypeError here while maintaining non-async
-            return Err(FaithError::from(FaithErrorKind::ResponseAlreadyDisturbed).into_napi());
+            return Err(FaithError::from(FaithErrorKind::ResponseAlreadyDisturbed)
+                .into_js_error(&env)
+                .into());
         }
 
         Ok(Self {
