@@ -7,7 +7,6 @@ export declare class FaithResponse {
   get ok(): boolean
   get url(): string
   get redirected(): boolean
-  get timestamp(): number
   /** Check if the response body has been disturbed (read) */
   get bodyUsed(): boolean
   /** Check if the response body is empty (e.g. 204 No Content, or HEAD requests) */

@@ -261,7 +261,6 @@ pub struct FaithResponse {
     ok: bool,
     url: String,
     redirected: bool,
-    timestamp: f64,
     empty: bool,
     disturbed: AtomicBool,
     inner_body: Body,
@@ -276,7 +275,6 @@ impl Clone for FaithResponse {
             ok: self.ok,
             url: self.url.clone(),
             redirected: self.redirected,
-            timestamp: self.timestamp,
             empty: self.empty,
             disturbed: AtomicBool::new(false),
             inner_body: self.inner_body.clone(),
@@ -397,11 +395,6 @@ impl FaithResponse {
     #[napi(getter)]
     pub fn redirected(&self) -> bool {
         self.redirected
-    }
-
-    #[napi(getter)]
-    pub fn timestamp(&self) -> f64 {
-        self.timestamp
     }
 
     /// Check if the response body has been disturbed (read)
@@ -617,10 +610,6 @@ pub fn faith_fetch(url: String, options: Option<FaithOptionsAndBody>) -> Async<F
                     request.timeout(std::time::Duration::from_millis((timeout * 1000.0) as u64));
             }
 
-            let timestamp = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs_f64();
             let response = request.send().await?;
 
             let status = response.status().as_u16();
@@ -663,7 +652,6 @@ pub fn faith_fetch(url: String, options: Option<FaithOptionsAndBody>) -> Async<F
                 ok,
                 url,
                 redirected,
-                timestamp,
                 empty,
                 disturbed: AtomicBool::new(false),
             })
