@@ -81,10 +81,10 @@ where
         }
     }
 
-    fn reject(&mut self, _env: &'env Env, err: Error) -> Result<Self::JsValue, napi::Error> {
-        // TODO: we could probably add .code to the error here, by converting the napi::Error
-        // back into a FaithError, then to_js_error(), then From<Unknown> for napi::Error
-        Err(err)
+    fn reject(&mut self, env: &'env Env, err: Error) -> Result<Self::JsValue, napi::Error> {
+        // Wrap the napi::Error in a FaithError to add .code property
+        let faith_error = FaithError::new(FaithErrorKind::RuntimeThread, Some(err.to_string()));
+        Err(napi::Error::from(faith_error.into_js_error(env)))
     }
 
     fn finally(self, _: Env) -> Result<(), napi::Error> {
