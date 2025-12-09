@@ -155,6 +155,26 @@ function createWrapper(native) {
         );
       }
 
+      // Check if body was consumed by text()/bytes()/json()
+      // If bodyUsed is true but we have no cached stream, it means the body was consumed
+      if (this.bodyUsed && this.#bodyStream === undefined) {
+        const err = new Error("Response body no longer available");
+        try {
+          Object.defineProperty(err, "code", {
+            value: ERROR_CODES.responseBodyNotAvailable,
+            enumerable: true,
+            configurable: true,
+            writable: true,
+          });
+        } catch (e) {
+          try {
+            err.code = ERROR_CODES.responseBodyNotAvailable;
+          } catch (e) {}
+        }
+        throw err;
+      }
+
+      // Get the body stream (will mark as disturbed if not already)
       const bodyStream = this.body;
       if (bodyStream === null) {
         const err = new Error("Response body no longer available");
