@@ -14,17 +14,18 @@ export declare class FaithResponse {
   get bodyEmpty(): boolean
   /** Get the response body as a ReadableStream */
   body(): ReadableStream<Buffer> | null
+  testingUnk(test: string): Async<boolean>
   /**
    * Get response body as bytes
    *
    * This may use up to 2x the amount of memory that the response body takes
    * when the Response is cloned() and will create a full copy of the data.
    */
-  bytes(): Promise<Buffer>
+  bytes(): Async<Buffer>
   /** Convert response body to text (UTF-8) */
-  text(): Promise<string>
+  text(): Async<string>
   /** Parse response body as JSON */
-  json(): Promise<any>
+  json(): Async<any>
   /**
    * Create a clone of the response
    *
@@ -69,15 +70,17 @@ export declare const enum FaithErrorKind {
   ResponseBodyNotAvailable = 'ResponseBodyNotAvailable',
   BodyStream = 'BodyStream',
   JsonParse = 'JsonParse',
+  Utf8Parse = 'Utf8Parse',
   Timeout = 'Timeout',
   PermissionPolicy = 'PermissionPolicy',
-  RequestError = 'RequestError',
+  Network = 'Network',
+  RuntimeThread = 'RuntimeThread',
   Generic = 'Generic'
 }
 
-export declare function faithFetch(url: string, options?: FaithOptions | undefined | null): Promise<FaithResponse>
+export declare function faithFetch(url: string, options?: FaithOptionsAndBody | undefined | null): Async<FaithResponse>
 
-export interface FaithOptions {
+export interface FaithOptionsAndBody {
   method?: string
   headers?: Array<[string, string]>
   body?: Buffer

@@ -10,7 +10,7 @@ crate-type = ["cdylib"]
 [dependencies]
 bytes = "1.9.0"
 futures = "0.3.31"
-napi = { version = "3.6.1", features = ["napi4", "tokio_rt", "web_stream", "serde-json"] }
+napi = { version = "3.7.0", features = ["napi9", "tokio_rt", "web_stream", "serde-json"] }
 napi-derive = "3.4.0"
 reqwest = { version = "0.12.24", features = ["trust-dns", "json", "stream"] }
 serde = { version = "1.0.228", features = ["derive"] }

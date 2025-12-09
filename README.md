@@ -237,10 +237,9 @@ completion. It returns a promise that resolves with a `Uint8Array`.*
 *The `clone()` method of the `Response` interface creates a clone of a response object, identical
 in every way, but stored in a different variable.*
 
-In Fáith, this is implemented by first reading the response body to completion. It's expected that
-the only use for `clone()` is to be able to read a response as both `json()` or `text()` and access
-the underlying `bytes()`, which already read the response to completion. If you need to partially
-read streams from cloned `Response`s, do it directly at the `ReadableStream` level instead.
+*`clone()` throws* an `Error` *if the response body has already been used.*
+
+(In-spec, this should throw a `TypeError`, but for technical reasons this is not possible with Fáith.)
 
 ### `Response.formData()`
 
@@ -302,7 +301,9 @@ error kind, documented both in the API documentation above and in this comprehen
   - `Timeout` — request timed out
   - `Network` — network error
   - `BodyStream` — internal stream handling error
+  - `RuntimeThread` — failed to start or schedule threads on the internal tokio runtime
   - `Generic` — internal runtime failures
+  - `ResponseAlreadyDisturbed` — only for the `clone()` method
 
 Due to technical limitations, we can't create `AbortError` or `NetworkError`, which would match
 the fetch() implementation closer for the `Timeout` or `Network` cases.

@@ -11,13 +11,17 @@ use std::{
 
 use bytes::Bytes;
 use futures::{Stream, StreamExt, TryStreamExt};
-use napi::{ScopedTask, bindgen_prelude::*};
+use napi::{
+    ScopedTask,
+    bindgen_prelude::*,
+    sys::{napi_env, napi_value},
+};
 use napi_derive::napi;
 use reqwest::header::{HeaderName, HeaderValue};
 use reqwest::{Client, Method, StatusCode};
 use serde_json;
 use stream_shared::SharedStream;
-use tokio::runtime::Handle;
+use tokio::runtime::{Handle, Runtime};
 
 #[napi(string_enum)]
 #[derive(Debug, Clone, Copy)]
@@ -36,6 +40,7 @@ pub enum FaithErrorKind {
     Timeout,
     PermissionPolicy,
     Network,
+    RuntimeThread,
     Generic,
 }
 
@@ -47,6 +52,27 @@ enum JsErrorType {
 }
 
 impl FaithErrorKind {
+    fn default_message(self) -> &'static str {
+        match self {
+            Self::InvalidHeader => "invalid header name or value",
+            Self::InvalidMethod => "invalid HTTP method",
+            Self::InvalidUrl => "invalid URL",
+            Self::InvalidCredentials => "invalid credentials",
+            Self::InvalidOptions => "invalid fetch options",
+            Self::BlockedByPolicy => "blocked by network policy",
+            Self::ResponseAlreadyDisturbed => "response body already disturbed",
+            Self::ResponseBodyNotAvailable => "response body not available",
+            Self::BodyStream => "internal response body stream copy error",
+            Self::JsonParse => "invalid json in response body",
+            Self::Utf8Parse => "invalid utf-8 in response body",
+            Self::Timeout => "timed out",
+            Self::PermissionPolicy => "not permitted",
+            Self::Network => "network error",
+            Self::RuntimeThread => "internal tokio runtime thread error",
+            Self::Generic => "fetch error",
+        }
+    }
+
     fn js_type(self) -> JsErrorType {
         match self {
             Self::InvalidHeader
@@ -63,61 +89,59 @@ impl FaithErrorKind {
     }
 }
 
-#[derive(Debug)]
+impl From<FaithErrorKind> for FaithError {
+    fn from(kind: FaithErrorKind) -> Self {
+        Self {
+            kind,
+            message: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct FaithError {
     pub kind: FaithErrorKind,
-    pub message: String,
+    pub message: Option<String>,
 }
 
 impl FaithError {
-    pub fn new(kind: FaithErrorKind, message: impl Into<String>) -> Self {
+    pub fn new(kind: FaithErrorKind, message: Option<impl Into<String>>) -> Self {
         Self {
             kind,
-            message: message.into(),
+            message: message.map(|m| m.into()),
         }
     }
 
-    pub fn into_js_error<'env>(self, _env: &'env Env) -> Unknown<'env> {
+    // we make this explicit instead of adding a From<> so that we can't accidentally do it
+    pub fn into_napi(self) -> napi::Error {
+        napi::Error::new(
+            napi::Status::GenericFailure,
+            format!(
+                "{:?}: {}",
+                self.kind,
+                self.message
+                    .unwrap_or_else(|| self.kind.default_message().to_owned())
+            ),
+        )
+    }
+
+    // whenever possible, we should prefer to use this so that the error types are correct
+    pub fn into_js_error<'env>(self, env: &'env Env) -> Unknown<'env> {
         match self.kind.js_type() {
-            JsErrorType::TypeError => todo!(),
-            JsErrorType::SyntaxError => todo!(),
-            JsErrorType::GenericError => {
-                //
-            },
+            JsErrorType::TypeError => JsTypeError::from(self.into_napi()).into_unknown(*env),
+            JsErrorType::SyntaxError => JsSyntaxError::from(self.into_napi()).into_unknown(*env),
+            JsErrorType::GenericError => JsError::from(self.into_napi()).into_unknown(*env),
         }
     }
 }
 
 impl From<reqwest::Error> for FaithError {
     fn from(err: reqwest::Error) -> Self {
-        // Map reqwest timeout to Timeout; other reqwest errors map to RequestError.
         if err.is_timeout() {
-            FaithError::new(FaithErrorKind::Timeout, err.to_string())
+            FaithError::new(FaithErrorKind::Timeout, Some(err.to_string()))
         } else {
-            FaithError::new(FaithErrorKind::Network, err.to_string())
+            FaithError::new(FaithErrorKind::Network, Some(err.to_string()))
         }
-    }
-}
-
-impl From<FaithError> for napi::Error {
-    fn from(faith: FaithError) -> Self {
-        let status = match faith.kind {
-            FaithErrorKind::InvalidHeader
-            | FaithErrorKind::InvalidMethod
-            | FaithErrorKind::InvalidUrl
-            | FaithErrorKind::InvalidCredentials
-            | FaithErrorKind::InvalidOptions
-            | FaithErrorKind::PermissionPolicy => napi::Status::InvalidArg,
-            _ => napi::Status::GenericFailure,
-        };
-
-        // Build the message with the kind prefix so wrapper can easily parse `kind` from message
-        let message = format!("{:?}: {}", faith.kind, faith.message);
-
-        // Create the napi error with the appropriate status and message
-        let err = napi::Error::new(status, message);
-
-        err
     }
 }
 
@@ -161,11 +185,34 @@ pub fn error_codes() -> ErrorCodes {
 }
 
 #[napi(object)]
-pub struct FaithOptions {
+pub struct FaithOptionsAndBody {
     pub method: Option<String>,
     pub headers: Option<Vec<(String, String)>>,
     pub body: Option<Buffer>,
     pub timeout: Option<f64>,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct FaithOptions {
+    pub method: Option<String>,
+    pub headers: Option<Vec<(String, String)>>,
+    pub timeout: Option<f64>,
+}
+
+impl FaithOptions {
+    fn extract(opts: Option<FaithOptionsAndBody>) -> (Self, Option<Arc<Buffer>>) {
+        match opts {
+            None => (Self::default(), None),
+            Some(opts) => (
+                Self {
+                    method: opts.method,
+                    headers: opts.headers,
+                    timeout: opts.timeout,
+                },
+                opts.body.map(Arc::new),
+            ),
+        }
+    }
 }
 
 type DynStream = dyn Stream<Item = std::result::Result<Bytes, String>> + Send + Sync;
@@ -206,6 +253,42 @@ pub struct FaithResponse {
     inner_body: Body,
 }
 
+impl Clone for FaithResponse {
+    fn clone(&self) -> Self {
+        Self {
+            status: self.status,
+            status_text: self.status_text.clone(),
+            headers: self.headers.clone(),
+            ok: self.ok,
+            url: self.url.clone(),
+            redirected: self.redirected,
+            timestamp: self.timestamp,
+            empty: self.empty,
+            disturbed: AtomicBool::new(false),
+            inner_body: self.inner_body.clone(),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct Value(serde_json::Value);
+
+impl TypeName for Value {
+    fn type_name() -> &'static str {
+        "unknown"
+    }
+
+    fn value_type() -> ValueType {
+        ValueType::Unknown
+    }
+}
+
+impl ToNapiValue for Value {
+    unsafe fn to_napi_value(env: napi_env, val: Self) -> Result<napi_value, napi::Error> {
+        unsafe { serde_json::Value::to_napi_value(env, val.0) }
+    }
+}
+
 pub type Async<T> = AsyncTask<FaithAsyncResult<T>>;
 pub struct FaithAsyncResult<T>(Pin<Box<dyn Future<Output = Result<T, FaithError>> + Send>>)
 where
@@ -232,7 +315,19 @@ where
     type JsValue = T;
 
     fn compute(&mut self) -> Result<Self::Output, napi::Error> {
-        Ok(Handle::current().block_on(&mut self.0))
+        match Handle::try_current() {
+            Ok(handle) => Ok(handle.block_on(&mut self.0)),
+            Err(err) if err.is_missing_context() => {
+                let rt = Runtime::new().map_err(|err| {
+                    FaithError::new(FaithErrorKind::RuntimeThread, Some(err.to_string()))
+                        .into_napi()
+                })?;
+                Ok(rt.block_on(&mut self.0))
+            }
+            Err(err) => Err(
+                FaithError::new(FaithErrorKind::RuntimeThread, Some(err.to_string())).into_napi(),
+            ),
+        }
     }
 
     fn resolve(
@@ -313,24 +408,19 @@ impl FaithResponse {
         env: Env,
     ) -> Result<Option<napi::bindgen_prelude::ReadableStream<'_, BufferSlice<'_>>>, napi::Error>
     {
-        if self.disturbed.swap(true, Ordering::SeqCst) {
-            // In the wrapper code, the body accessor is cached, and then a reference
-            // returned if further accessed. We can't do that at this interface. We
-            // thus overload Ok(None) (= the method returning `null`) to mean either:
-            // - the stream has already been used (cache should be used if present)
-            // - the stream is not available (cache should be used if present)
-            // - the body is null (the body accessor should return null)
-            //   that last case should be checked with body_empty() before calling body()
-            return Ok(None);
-        }
+        // we mark the body as disturbed, but we still allow reading it through here
+        // as essentially, the body() can be accessed many times as the same stream
+        let _ = self.check_stream_disturbed();
 
         match &self.inner_body {
-            Body::None => return Ok(None), // the body is legitimately null
+            Body::None => Ok(None),
             Body::Stream(stream) => {
                 let stream = stream.clone();
                 let stream = napi::bindgen_prelude::ReadableStream::create_with_stream_bytes(
                     &env,
-                    stream.map_err(|err| FaithError::new(FaithErrorKind::BodyStream, err).into()),
+                    stream.map_err(|err| {
+                        FaithError::new(FaithErrorKind::BodyStream, Some(err)).into_napi()
+                    }),
                 )?;
                 Ok(Some(stream))
             }
@@ -339,11 +429,7 @@ impl FaithResponse {
 
     fn check_stream_disturbed(&self) -> Result<(), FaithError> {
         if self.disturbed.swap(true, Ordering::SeqCst) {
-            Err(FaithError::new(
-                FaithErrorKind::ResponseAlreadyDisturbed,
-                "Response already disturbed".to_string(),
-            )
-            .into())
+            Err(FaithErrorKind::ResponseAlreadyDisturbed.into())
         } else {
             Ok(())
         }
@@ -365,7 +451,7 @@ impl FaithResponse {
             .next()
             .await
             .transpose()
-            .map_err(|e| FaithError::new(FaithErrorKind::BodyStream, e.to_string()))?
+            .map_err(|err| FaithError::new(FaithErrorKind::BodyStream, Some(err)))?
         {
             chunks.push(chunk);
         }
@@ -400,29 +486,48 @@ impl FaithResponse {
     /// This may use up to 2x the amount of memory that the response body takes
     /// when the Response is cloned() and will create a full copy of the data.
     #[napi]
-    pub async fn bytes(&self) -> Result<Buffer, napi::Error> {
-        self.check_stream_disturbed()?;
-        let buf = self.gather_contiguous().await?;
-        Ok(buf)
+    pub fn bytes(&self) -> Async<Buffer> {
+        let this = Clone::clone(&*self);
+        FaithAsyncResult::run(move || {
+            let this = Clone::clone(&this);
+            async move {
+                this.check_stream_disturbed()?;
+                let buf = this.gather_contiguous().await?;
+                Ok(buf)
+            }
+        })
     }
 
     /// Convert response body to text (UTF-8)
     #[napi]
-    pub async fn text(&self) -> Result<String, napi::Error> {
-        self.check_stream_disturbed()?;
-        let bytes = self.gather_contiguous().await?;
-        String::from_utf8(bytes.to_vec())
-            .map_err(|e| FaithError::new(FaithErrorKind::Generic, e.to_string()).into())
+    pub fn text(&self) -> Async<String> {
+        let this = Clone::clone(&*self);
+        FaithAsyncResult::run(move || {
+            let this = Clone::clone(&this);
+            async move {
+                this.check_stream_disturbed()?;
+                let bytes = this.gather_contiguous().await?;
+                String::from_utf8(bytes.to_vec()).map_err(|e| {
+                    FaithError::new(FaithErrorKind::Generic, Some(e.to_string())).into()
+                })
+            }
+        })
     }
 
     /// Parse response body as JSON
     #[napi]
-    pub async fn json(&self) -> Result<serde_json::Value, napi::Error> {
-        self.check_stream_disturbed()?;
-        let bytes = self.gather_contiguous().await?;
-        let value = serde_json::from_slice(&bytes)
-            .map_err(|e| FaithError::new(FaithErrorKind::JsonParse, e.to_string()))?;
-        Ok(value)
+    pub fn json(&self) -> Async<Value> {
+        let this = Clone::clone(&*self);
+        FaithAsyncResult::run(move || {
+            let this = Clone::clone(&this);
+            async move {
+                this.check_stream_disturbed()?;
+                let bytes = this.gather_contiguous().await?;
+                let value = serde_json::from_slice(&bytes)
+                    .map_err(|e| FaithError::new(FaithErrorKind::JsonParse, Some(e.to_string())))?;
+                Ok(Value(value))
+            }
+        })
     }
 
     /// Create a clone of the response
@@ -438,175 +543,115 @@ impl FaithResponse {
     #[napi]
     pub fn clone(&self) -> Result<Self, napi::Error> {
         if self.disturbed.load(Ordering::SeqCst) {
-            return Err(FaithError::new(
-                FaithErrorKind::ResponseAlreadyDisturbed,
-                "Response already disturbed".to_string(),
-            )
-            .into());
+            // FIXME: figure out how to return a TypeError here while maintaining non-async
+            return Err(FaithError::from(FaithErrorKind::ResponseAlreadyDisturbed).into_napi());
         }
 
-        Ok(Self {
-            status: self.status,
-            status_text: self.status_text.clone(),
-            headers: self.headers.clone(),
-            ok: self.ok,
-            url: self.url.clone(),
-            redirected: self.redirected,
-            timestamp: self.timestamp,
-            empty: self.empty,
-            disturbed: AtomicBool::new(false),
-            inner_body: self.inner_body.clone(),
-        })
+        Ok(Clone::clone(self))
     }
 }
 
 #[napi]
-pub async fn faith_fetch(
-    url: String,
-    options: Option<FaithOptions>,
-) -> Result<FaithResponse, napi::Error> {
-    let client = Client::builder().build().map_err(FaithError::from)?;
+pub fn faith_fetch(url: String, options: Option<FaithOptionsAndBody>) -> Async<FaithResponse> {
+    let (options, body) = FaithOptions::extract(options);
+    FaithAsyncResult::run(move || {
+        let url = url.clone();
+        let options = options.clone();
+        let body = body.clone();
+        async move {
+            let client = Client::builder().build().map_err(FaithError::from)?;
 
-    let method = options
-        .as_ref()
-        .and_then(|opts| opts.method.as_ref())
-        .map(|m| m.to_uppercase())
-        .unwrap_or_else(|| "GET".to_string());
+            let method = options
+                .method
+                .map(|m| m.to_uppercase())
+                .unwrap_or_else(|| "GET".to_string());
 
-    let method = Method::from_bytes(method.as_bytes()).map_err(|_| {
-        FaithError::new(
-            FaithErrorKind::InvalidMethod,
-            "Invalid HTTP method".to_string(),
-        )
-    })?;
-    let is_head = method == Method::HEAD;
+            let method =
+                Method::from_bytes(method.as_bytes()).map_err(|_| FaithErrorKind::InvalidMethod)?;
+            let is_head = method == Method::HEAD;
 
-    // Validate the URL first and ensure no credentials are included in it.
-    // Invalid URLs are disallowed in the fetch() spec and should map to a TypeError-like result.
-    let parsed_url = reqwest::Url::parse(&url)
-        .map_err(|_| FaithError::new(FaithErrorKind::InvalidUrl, "Invalid URL".to_string()))?;
+            let parsed_url = reqwest::Url::parse(&url).map_err(|_| FaithErrorKind::InvalidUrl)?;
 
-    // Disallow credentials in the URL per the spec (e.g. `https://user:pass@host/`).
-    if !parsed_url.username().is_empty() || parsed_url.password().is_some() {
-        return Err(FaithError::new(
-            FaithErrorKind::InvalidCredentials,
-            "URL includes credentials".to_string(),
-        )
-        .into());
-    }
+            let mut request = client.request(method, parsed_url);
 
-    let mut request = client.request(method, &url);
-
-    if let Some(opts) = options.as_ref() {
-        if let Some(headers) = &opts.headers {
-            for (key, value) in headers {
-                // Validate header name and value before adding to request
-                let header_name = HeaderName::from_bytes(key.as_bytes()).map_err(|_| {
-                    FaithError::new(
-                        FaithErrorKind::InvalidHeader,
-                        format!("Invalid header name: {}", key),
-                    )
-                })?;
-                let header_value = HeaderValue::from_str(value).map_err(|_| {
-                    FaithError::new(
-                        FaithErrorKind::InvalidHeader,
-                        format!("Invalid header value: {}", value),
-                    )
-                })?;
-                request = request.header(header_name, header_value);
+            if let Some(headers) = &options.headers {
+                for (key, value) in headers {
+                    // Validate header name and value before adding to request
+                    let header_name = HeaderName::from_bytes(key.as_bytes()).map_err(|_| {
+                        FaithError::new(
+                            FaithErrorKind::InvalidHeader,
+                            Some(format!("invalid header name: {key}")),
+                        )
+                    })?;
+                    let header_value = HeaderValue::from_str(value).map_err(|_| {
+                        FaithError::new(
+                            FaithErrorKind::InvalidHeader,
+                            Some(format!("invalid header value: {value}")),
+                        )
+                    })?;
+                    request = request.header(header_name, header_value);
+                }
             }
-        }
 
-        if let Some(body) = &opts.body {
-            request = request.body(body.as_ref().to_vec());
-        }
-
-        if let Some(timeout) = opts.timeout {
-            request = request.timeout(std::time::Duration::from_millis((timeout * 1000.0) as u64));
-        }
-    }
-
-    let timestamp = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs_f64();
-    let response = match request.send().await {
-        Ok(resp) => resp,
-        Err(e) => {
-            if e.is_timeout() {
-                return Err(FaithError::new(
-                    FaithErrorKind::Timeout,
-                    "Request timed out".to_string(),
-                )
-                .into());
-            } else {
-                return Err(FaithError::from(e).into());
+            if let Some(body) = &body {
+                request = request.body(body.to_vec());
             }
+
+            if let Some(timeout) = options.timeout {
+                request =
+                    request.timeout(std::time::Duration::from_millis((timeout * 1000.0) as u64));
+            }
+
+            let timestamp = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs_f64();
+            let response = request.send().await?;
+
+            let status = response.status().as_u16();
+            let status_text = response
+                .status()
+                .canonical_reason()
+                .unwrap_or("Unknown")
+                .to_string();
+            let ok = response.status().is_success();
+            let url = response.url().to_string();
+            let redirected = response.status().is_redirection();
+
+            let headers_vec: Vec<(String, String)> = response
+                .headers()
+                .iter()
+                .filter_map(|(name, value)| {
+                    value
+                        .to_str()
+                        .ok()
+                        .map(|v| (name.to_string(), v.to_string()))
+                })
+                .collect();
+
+            let empty = status == StatusCode::NO_CONTENT || is_head;
+
+            Ok(FaithResponse {
+                inner_body: if empty {
+                    Body::None
+                } else {
+                    Body::Stream(SharedStream::new(Box::pin(
+                        response
+                            .bytes_stream()
+                            .map(|chunk| chunk.map_err(|err| err.to_string())),
+                    )
+                        as Pin<Box<DynStream>>))
+                },
+                status,
+                status_text,
+                headers: headers_vec,
+                ok,
+                url,
+                redirected,
+                timestamp,
+                empty,
+                disturbed: AtomicBool::new(false),
+            })
         }
-    };
-
-    let status = response.status().as_u16();
-    let status_text = response
-        .status()
-        .canonical_reason()
-        .unwrap_or("Unknown")
-        .to_string();
-    let ok = response.status().is_success();
-    let url = response.url().to_string();
-    let redirected = response.status().is_redirection();
-
-    let headers_vec: Vec<(String, String)> = response
-        .headers()
-        .iter()
-        .filter_map(|(name, value)| {
-            value
-                .to_str()
-                .ok()
-                .map(|v| (name.to_string(), v.to_string()))
-        })
-        .collect();
-
-    let empty = status == StatusCode::NO_CONTENT || is_head;
-
-    Ok(FaithResponse {
-        inner_body: if empty {
-            Body::None
-        } else {
-            Body::Stream(SharedStream::new(Box::pin(
-                response
-                    .bytes_stream()
-                    .map(|chunk| chunk.map_err(|err| err.to_string())),
-            ) as Pin<Box<DynStream>>))
-        },
-        status,
-        status_text,
-        headers: headers_vec,
-        ok,
-        url,
-        redirected,
-        timestamp,
-        empty,
-        disturbed: AtomicBool::new(false),
     })
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_fetch_options() {
-        let headers = vec![("Content-Type".to_string(), "application/json".to_string())];
-
-        let options = FaithOptions {
-            method: Some("POST".to_string()),
-            headers: Some(headers),
-            body: Some(Buffer::from(b"test body".to_vec())),
-            timeout: Some(30.0),
-        };
-
-        assert_eq!(options.method.unwrap(), "POST");
-        assert_eq!(options.timeout.unwrap(), 30.0);
-        assert_eq!(options.body.unwrap().as_ref(), b"test body");
-    }
 }
