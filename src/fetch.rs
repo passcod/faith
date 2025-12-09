@@ -1,4 +1,7 @@
-use std::{pin::Pin, sync::atomic::AtomicBool};
+use std::{
+    pin::Pin,
+    sync::{Arc, atomic::AtomicBool},
+};
 
 use futures::StreamExt;
 use napi_derive::napi;
@@ -107,7 +110,7 @@ pub fn faith_fetch(url: String, options: Option<FaithOptionsAndBody>) -> Async<F
                 ok,
                 url,
                 redirected,
-                disturbed: AtomicBool::new(false),
+                disturbed: Arc::new(AtomicBool::new(false)),
             })
         }
     })

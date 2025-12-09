@@ -28,7 +28,7 @@ pub struct FaithResponse {
     pub(crate) ok: bool,
     pub(crate) url: String,
     pub(crate) redirected: bool,
-    pub(crate) disturbed: AtomicBool,
+    pub(crate) disturbed: Arc<AtomicBool>,
     pub(crate) inner_body: Body,
 }
 
@@ -41,7 +41,7 @@ impl Clone for FaithResponse {
             ok: self.ok,
             url: self.url.clone(),
             redirected: self.redirected,
-            disturbed: AtomicBool::new(false),
+            disturbed: Arc::clone(&self.disturbed),
             inner_body: self.inner_body.clone(),
         }
     }

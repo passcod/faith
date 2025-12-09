@@ -11,7 +11,6 @@ export declare class FaithResponse {
   get bodyUsed(): boolean
   /** Get the response body as a ReadableStream */
   body(): ReadableStream<Buffer> | null
-  testingUnk(test: string): Async<boolean>
   /**
    * Get response body as bytes
    *
