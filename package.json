@@ -27,6 +27,7 @@
     "build": "napi build --platform --release",
     "build:debug": "napi build --platform",
     "test": "cargo test && tape test/*.test.js",
+    "test:integration": "tape test/integration/*.test.js",
     "postinstall": "command cargo 2>&1 >/dev/null && npm run build",
     "prepublishOnly": "napi build --platform --release"
   },
