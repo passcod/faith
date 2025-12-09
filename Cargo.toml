@@ -13,6 +13,7 @@ futures = "0.3.31"
 napi = { version = "3.7.0", features = ["napi9", "serde-json", "tokio_rt", "web_stream"] }
 napi-derive = "3.4.0"
 reqwest = { version = "0.12.25", features = [
+    "brotli",
     "deflate",
     "gzip",
     "hickory-dns",
