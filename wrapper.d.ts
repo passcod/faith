@@ -7,7 +7,7 @@
 export interface FetchOptions {
   method?: string;
   headers?: Record<string, string> | Headers;
-  body?: Buffer | Array<number> | string | ArrayBuffer | Uint8Array;
+  body?: string | Buffer | Uint8Array | Array<number> | ArrayBuffer;
   timeout?: number;
 }
 

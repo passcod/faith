@@ -8,8 +8,7 @@
     "index.js",
     "index.d.ts",
     "wrapper.js",
-    "wrapper.d.ts",
-    "wrapper-factory.js"
+    "wrapper.d.ts"
   ],
   "napi": {
     "binaryName": "faith",

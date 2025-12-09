@@ -22,6 +22,8 @@ export declare class FaithResponse {
   text(): Async<string>
   /** Parse response body as JSON */
   json(): Async<any>
+  /** Get response body as ArrayBuffer (returns Buffer, wrapper converts to ArrayBuffer) */
+  arrayBuffer(): Async<Buffer>
   /**
    * Create a clone of the response
    *
@@ -79,6 +81,6 @@ export declare function faithFetch(url: string, options?: FaithOptionsAndBody | 
 export interface FaithOptionsAndBody {
   method?: string
   headers?: Array<[string, string]>
-  body?: Buffer
+  body?: string | Buffer | Uint8Array
   timeout?: number
 }

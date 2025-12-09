@@ -7,7 +7,7 @@ use napi_derive::napi;
 pub struct FaithOptionsAndBody {
     pub method: Option<String>,
     pub headers: Option<Vec<(String, String)>>,
-    pub body: Option<Buffer>,
+    pub body: Option<Either3<String, Buffer, Uint8Array>>,
     pub timeout: Option<f64>,
 }
 
@@ -28,7 +28,11 @@ impl FaithOptions {
                     headers: opts.headers,
                     timeout: opts.timeout,
                 },
-                opts.body.map(Arc::new),
+                opts.body.map(|either| match either {
+                    Either3::A(s) => Arc::new(Buffer::from(s.as_bytes())),
+                    Either3::B(b) => Arc::new(b),
+                    Either3::C(u) => Arc::new(Buffer::from(u.as_ref())),
+                }),
             ),
         }
     }

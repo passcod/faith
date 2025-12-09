@@ -203,6 +203,12 @@ impl FaithResponse {
         })
     }
 
+    /// Get response body as ArrayBuffer (returns Buffer, wrapper converts to ArrayBuffer)
+    #[napi]
+    pub fn array_buffer(&self) -> Async<Buffer> {
+        self.bytes()
+    }
+
     /// Create a clone of the response
     ///
     /// Specially, this doesn't set the disturbed flag, so that `body()` or other such
