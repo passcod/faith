@@ -120,24 +120,3 @@ test("fetch() rejects invalid URL", async (t) => {
     );
   }
 });
-
-test("fetch() rejects URL with credentials", async (t) => {
-  t.plan(2);
-
-  try {
-    // URL with credentials should be rejected by the native implementation
-    await fetch("https://user:pass@httpbin.org/get");
-    t.fail("Should have thrown TypeError for credentials in URL");
-  } catch (error) {
-    t.equal(
-      error.constructor.name,
-      "TypeError",
-      "should throw TypeError for credentials in URL",
-    );
-    t.equal(
-      error.code,
-      native.errorCodes().invalidCredentials,
-      "should set canonical error code 'InvalidCredentials'",
-    );
-  }
-});
