@@ -220,6 +220,15 @@ impl FaithResponse {
             return Err(FaithError::from(FaithErrorKind::ResponseAlreadyDisturbed).into_napi());
         }
 
-        Ok(Clone::clone(self))
+        Ok(Self {
+            status: self.status,
+            status_text: self.status_text.clone(),
+            headers: self.headers.clone(),
+            ok: self.ok,
+            url: self.url.clone(),
+            redirected: self.redirected,
+            disturbed: Arc::new(AtomicBool::new(false)),
+            inner_body: self.inner_body.clone(),
+        })
     }
 }
