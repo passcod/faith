@@ -105,7 +105,13 @@ impl FaithResponse {
                     stream.map_err(|err| {
                         FaithError::new(FaithErrorKind::BodyStream, Some(err)).into_napi()
                     }),
-                )?;
+                )
+                .map_err(|e| {
+                    napi::Error::from(
+                        FaithError::new(FaithErrorKind::BodyStream, Some(e.to_string()))
+                            .into_js_error(&env),
+                    )
+                })?;
                 Ok(Some(stream))
             }
         }
