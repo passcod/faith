@@ -296,7 +296,7 @@ error kind, documented both in the API documentation above and in this comprehen
   - `ResponseBodyNotAvailable` — body is null or not available
 - JS `SyntaxError`:
   - `JsonParse` — JSON parse error for `response.json()`
-  - UTF8 decoding error (for `response.text()`)
+  - `Utf8Parse` — UTF8 decoding error for `response.text()`
 - JS generic `Error`:
   - `Timeout` — request timed out
   - `Network` — network error
