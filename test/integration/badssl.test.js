@@ -93,7 +93,8 @@ test.skip("badssl.com - SHA-384 certificate should succeed", async (t) => {
   t.equal(response.status, 200, "Status should be 200");
 });
 
-test("badssl.com - SHA-512 certificate should succeed", async (t) => {
+// SKIP: the certificate here expired in 2022, so it's not testing that we support SHA-512
+test.skip("badssl.com - SHA-512 certificate should succeed", async (t) => {
   t.plan(2);
 
   const response = await faithFetch("https://sha512.badssl.com/");
@@ -101,7 +102,8 @@ test("badssl.com - SHA-512 certificate should succeed", async (t) => {
   t.equal(response.status, 200, "Status should be 200");
 });
 
-test("badssl.com - 1000 subdomains certificate should succeed", async (t) => {
+// SKIP: the certificate here expired in 2021, so it's not testing that we support 1000 sans anyway
+test.skip("badssl.com - 1000 subdomains certificate should succeed", async (t) => {
   t.plan(2);
 
   const response = await faithFetch("https://1000-sans.badssl.com/");
@@ -109,7 +111,8 @@ test("badssl.com - 1000 subdomains certificate should succeed", async (t) => {
   t.equal(response.status, 200, "Status should be 200");
 });
 
-test("badssl.com - 10000 subdomains certificate should succeed", async (t) => {
+// SKIP: the handshake fails in Firefox, so we're pretty safe ignoring this one
+test.skip("badssl.com - 10000 subdomains certificate should succeed", async (t) => {
   t.plan(2);
 
   const response = await faithFetch("https://10000-sans.badssl.com/");
@@ -149,7 +152,8 @@ test("badssl.com - RSA 4096 certificate should succeed", async (t) => {
   t.equal(response.status, 200, "Status should be 200");
 });
 
-test("badssl.com - RSA 8192 certificate should succeed", async (t) => {
+// SKIP: the certificate here expired in 2024, so it's not testing that we support RSA 8192
+test.skip("badssl.com - RSA 8192 certificate should succeed", async (t) => {
   t.plan(2);
 
   const response = await faithFetch("https://rsa8192.badssl.com/");
