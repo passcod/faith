@@ -261,7 +261,6 @@ pub struct FaithResponse {
     ok: bool,
     url: String,
     redirected: bool,
-    empty: bool,
     disturbed: AtomicBool,
     inner_body: Body,
 }
@@ -275,7 +274,6 @@ impl Clone for FaithResponse {
             ok: self.ok,
             url: self.url.clone(),
             redirected: self.redirected,
-            empty: self.empty,
             disturbed: AtomicBool::new(false),
             inner_body: self.inner_body.clone(),
         }
@@ -401,12 +399,6 @@ impl FaithResponse {
     #[napi(getter)]
     pub fn body_used(&self) -> bool {
         self.disturbed.load(Ordering::SeqCst)
-    }
-
-    /// Check if the response body is empty (e.g. 204 No Content, or HEAD requests)
-    #[napi(getter)]
-    pub fn body_empty(&self) -> bool {
-        self.empty
     }
 
     /// Get the response body as a ReadableStream
@@ -652,7 +644,6 @@ pub fn faith_fetch(url: String, options: Option<FaithOptionsAndBody>) -> Async<F
                 ok,
                 url,
                 redirected,
-                empty,
                 disturbed: AtomicBool::new(false),
             })
         }

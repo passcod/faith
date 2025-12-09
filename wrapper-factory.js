@@ -25,7 +25,7 @@ function createWrapper(native) {
     /** @type {import('./index').FaithResponse} */
     #nativeResponse;
     /** @type {ReadableStream<Buffer>?} */
-    #bodyStream = null;
+    #bodyStream = undefined;
 
     constructor(nativeResponse) {
       this.#nativeResponse = nativeResponse;
@@ -84,11 +84,7 @@ function createWrapper(native) {
      * This is a getter to match the Fetch API spec
      */
     get body() {
-      if (this.#nativeResponse.bodyEmpty) {
-        return null;
-      }
-
-      if (this.#bodyStream !== null) {
+      if (this.#bodyStream !== undefined) {
         return this.#bodyStream;
       }
 

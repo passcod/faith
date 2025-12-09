@@ -9,8 +9,6 @@ export declare class FaithResponse {
   get redirected(): boolean
   /** Check if the response body has been disturbed (read) */
   get bodyUsed(): boolean
-  /** Check if the response body is empty (e.g. 204 No Content, or HEAD requests) */
-  get bodyEmpty(): boolean
   /** Get the response body as a ReadableStream */
   body(): ReadableStream<Buffer> | null
   testingUnk(test: string): Async<boolean>
