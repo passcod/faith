@@ -3,7 +3,7 @@ const { fetch: faithFetch } = require("../wrapper.js");
 const { url } = require("./helpers.js");
 
 test("Test response properties", async (t) => {
-  t.plan(8);
+  t.plan(7);
 
   const response = await faithFetch(url("/get"));
 
@@ -20,7 +20,6 @@ test("Test response properties", async (t) => {
     "boolean",
     "redirected should be a boolean",
   );
-  t.equal(typeof response.timestamp, "number", "timestamp should be a number");
   t.equal(typeof response.bodyUsed, "boolean", "bodyUsed should be a boolean");
   t.equal(
     typeof response.body,

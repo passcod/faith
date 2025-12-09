@@ -18,7 +18,6 @@ export class Response {
   readonly ok: boolean;
   readonly url: string;
   readonly redirected: boolean;
-  readonly timestamp: number;
   readonly bodyUsed: boolean;
 
   /**

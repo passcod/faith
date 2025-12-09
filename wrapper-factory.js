@@ -18,174 +18,6 @@ function createWrapper(native) {
   // e.g. { invalid_header: "invalid_header", invalid_method: "invalid_method", ... }
   const ERROR_CODES = native.errorCodes();
 
-  // No KIND_TO_CODE mapping required: `error.code` will be set to the FaithErrorKind debug string
-  // (e.g. "ResponseAlreadyDisturbed"), and native.errorCodes() is now aligned to return those names.
-
-  // Helper to attach a canonical `.code` to Error instances based on the FaithErrorKind
-  // The native layer constructs messages in the form: "<FaithErrorKind>: <detail message>".
-  // This function will attach (or replace) `error.code` with the canonical short code if one exists.
-  // If the original Error object's `code` property is non-configurable, this will fall back to
-  // creating a new Error object with the same message/stack/name/cause and attach the canonical code.
-  function attachErrorCode(err) {
-    try {
-      if (!err || typeof err !== "object") return err;
-
-      const message = typeof err.message === "string" ? err.message : "";
-      const match = message.match(/^([A-Za-z0-9_]+):/);
-      const kindName = match ? match[1] : null;
-      // Use the error kind itself as the canonical `Error.code` value (e.g. "InvalidMethod")
-      const code = kindName;
-
-      // Nothing to do if no canonical code found.
-      if (!code) return err;
-
-      // If this is an invalid-argument kind, we should always return a new TypeError
-      // whose constructor name is `TypeError`, rather than mutating an existing Error object.
-      const INVALID_ARG_KINDS = new Set([
-        "InvalidHeader",
-        "InvalidMethod",
-        "InvalidUrl",
-        "InvalidCredentials",
-        "InvalidOptions",
-        "PermissionPolicy",
-      ]);
-
-      if (INVALID_ARG_KINDS.has(kindName)) {
-        // Construct a new TypeError to preserve the constructor name.
-        let newErr;
-        try {
-          newErr = new TypeError(message);
-        } catch (_) {
-          newErr = new Error(message);
-        }
-
-        try {
-          Object.defineProperty(newErr, "code", {
-            value: code,
-            enumerable: true,
-            configurable: true,
-            writable: true,
-          });
-        } catch (_) {
-          try {
-            newErr.code = code;
-          } catch (_) {}
-        }
-
-        // Preserve stack/name/cause from original error when present.
-        try {
-          if (err && err.stack) newErr.stack = err.stack;
-        } catch (_) {}
-
-        try {
-          if (err && err.name) {
-            Object.defineProperty(newErr, "name", {
-              value: err.name,
-              enumerable: false,
-              configurable: true,
-              writable: true,
-            });
-          }
-        } catch (_) {}
-
-        try {
-          if (err && Object.prototype.hasOwnProperty.call(err, "cause")) {
-            newErr.cause = err.cause;
-          }
-        } catch (_) {}
-
-        return newErr;
-      }
-
-      // For non invalid-arg kinds, try to define `.code` on the original error (preferred).
-      let assigned = false;
-      try {
-        Object.defineProperty(err, "code", {
-          value: code,
-          enumerable: true,
-          configurable: true,
-          writable: true,
-        });
-        // Confirm it worked
-        assigned = err.code === code;
-      } catch (_) {
-        try {
-          err.code = code;
-          assigned = err.code === code;
-        } catch (_) {
-          assigned = false;
-        }
-      }
-
-      // If we successfully changed or set the `.code` on the existing error, return it.
-      if (assigned) return err;
-
-      // Otherwise fallback to creating a new Error object that definitely allows attaching `code`.
-      // Create a new Error object using the same constructor as the original (preserve TypeError, etc.),
-      // copy stack/name/cause if present, and set canonical code.
-      // If the original error's constructor cannot be used, fall back to a plain Error.
-
-      let newErr;
-      try {
-        if (INVALID_ARG_KINDS.has(kindName)) {
-          // Create a genuine TypeError so the constructor name is `TypeError`
-          newErr = new TypeError(message);
-        } else {
-          const Ctor =
-            err && err.constructor && typeof err.constructor === "function"
-              ? err.constructor
-              : Error;
-          newErr = new Ctor(message);
-        }
-      } catch (_) {
-        newErr = new Error(message);
-      }
-      try {
-        Object.defineProperty(newErr, "code", {
-          value: code,
-          enumerable: true,
-          configurable: true,
-          writable: true,
-        });
-      } catch (_) {
-        try {
-          newErr.code = code;
-        } catch (_) {
-          /* ignore */
-        }
-      }
-
-      // Preserve the original error's stack (if available)
-      try {
-        if (err && err.stack) newErr.stack = err.stack;
-      } catch (_) {}
-
-      // Preserve the original name if present
-      try {
-        if (err && err.name) {
-          Object.defineProperty(newErr, "name", {
-            value: err.name,
-            enumerable: false,
-            configurable: true,
-            writable: true,
-          });
-        }
-      } catch (_) {}
-
-      // Preserve cause property if present (some runtimes support Error.cause)
-      try {
-        if (err && Object.prototype.hasOwnProperty.call(err, "cause")) {
-          newErr.cause = err.cause;
-        }
-      } catch (_) {}
-
-      return newErr;
-    } catch (_) {
-      // Do not throw while attaching codes; return the original error unchanged
-      return err;
-    }
-  }
-
   /**
    * Response class that provides spec-compliant Fetch API
    */
@@ -239,11 +71,6 @@ function createWrapper(native) {
           enumerable: true,
           configurable: true,
         },
-        timestamp: {
-          get: () => this.#nativeResponse.timestamp,
-          enumerable: true,
-          configurable: true,
-        },
         bodyUsed: {
           get: () => this.#nativeResponse.bodyUsed,
           enumerable: true,
@@ -273,11 +100,7 @@ function createWrapper(native) {
      * @returns {Promise<string>}
      */
     async text() {
-      try {
-        return await this.#nativeResponse.text();
-      } catch (error) {
-        throw attachErrorCode(error);
-      }
+      return await this.#nativeResponse.text();
     }
 
     /**
@@ -285,11 +108,7 @@ function createWrapper(native) {
      * @returns {Promise<Uint8Array>}
      */
     async bytes() {
-      try {
-        return await this.#nativeResponse.bytes();
-      } catch (error) {
-        throw attachErrorCode(error);
-      }
+      return await this.#nativeResponse.bytes();
     }
 
     /**
@@ -297,12 +116,7 @@ function createWrapper(native) {
      * @returns {Promise<ArrayBuffer>}
      */
     async arrayBuffer() {
-      try {
-        return (await this.bytes()).buffer;
-      } catch (error) {
-        // `bytes()` already attached a .code where applicable, so just rethrow.
-        throw attachErrorCode(error);
-      }
+      return (await this.bytes()).buffer;
     }
 
     /**
@@ -310,11 +124,7 @@ function createWrapper(native) {
      * @returns {Promise<any>}
      */
     async json() {
-      try {
-        return await this.#nativeResponse.json();
-      } catch (error) {
-        throw attachErrorCode(error);
-      }
+      return await this.#nativeResponse.json();
     }
 
     /**
@@ -322,13 +132,9 @@ function createWrapper(native) {
      * @returns {Promise<Blob>}
      */
     async blob() {
-      try {
-        const bytes = await this.#nativeResponse.bytes();
-        const contentType = this.headers.get("content-type") || "";
-        return new Blob([bytes], { type: contentType });
-      } catch (error) {
-        throw attachErrorCode(error);
-      }
+      const bytes = await this.#nativeResponse.bytes();
+      const contentType = this.headers.get("content-type") || "";
+      return new Blob([bytes], { type: contentType });
     }
 
     /**
@@ -337,11 +143,7 @@ function createWrapper(native) {
      * @throws {Error} If response body has already been read
      */
     clone() {
-      try {
-        return new Response(this.#nativeResponse.clone());
-      } catch (error) {
-        throw attachErrorCode(error);
-      }
+      return new Response(this.#nativeResponse.clone());
     }
 
     /**
@@ -357,11 +159,9 @@ function createWrapper(native) {
         );
       }
 
-      // Get the body stream
       const bodyStream = this.body;
       if (bodyStream === null) {
         const err = new Error("Response body no longer available");
-        // Attach the canonical code to the thrown error using a safe property definition
         try {
           Object.defineProperty(err, "code", {
             value: ERROR_CODES.responseBodyNotAvailable,
@@ -370,7 +170,6 @@ function createWrapper(native) {
             writable: true,
           });
         } catch (e) {
-          // fallback: attempt direct assignment
           try {
             err.code = ERROR_CODES.responseBodyNotAvailable;
           } catch (e) {}
@@ -447,14 +246,8 @@ function createWrapper(native) {
       // If it's already a Buffer, keep as is
     }
 
-    try {
-      const nativeResponse = await faithFetch(url, nativeOptions);
-      return new Response(nativeResponse);
-    } catch (error) {
-      // If the native error contains a FaithErrorKind prefix (e.g. "InvalidHeader: ..."),
-      // attach a consistent `.code` property to make tests and user code easier to deal with.
-      throw attachErrorCode(error);
-    }
+    const nativeResponse = await faithFetch(url, nativeOptions);
+    return new Response(nativeResponse);
   }
 
   return {

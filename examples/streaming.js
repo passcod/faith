@@ -13,7 +13,6 @@ async function main() {
     console.log("Response OK:", response.ok);
     console.log("Response URL:", response.url);
     console.log("Response headers:", response.headers);
-    console.log("Response timestamp:", response.timestamp);
     console.log("Response bodyUsed:", response.bodyUsed);
 
     // Test 1: Get body as ReadableStream (property, not method)
