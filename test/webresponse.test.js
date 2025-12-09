@@ -222,7 +222,7 @@ test("webResponse() marks body as accessed", async (t) => {
       native.errorCodes().responseAlreadyDisturbed,
       "should set canonical error code 'ResponseAlreadyDisturbed'",
     );
-    t.equal(error.constructor.name, "Error", "should throw Error");
+    t.equal(error.constructor.name, "TypeError", "should throw TypeError");
   }
 });
 
