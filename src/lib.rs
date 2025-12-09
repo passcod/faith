@@ -1,20 +1,23 @@
 use std::{
     fmt::Debug,
     pin::Pin,
+    result::Result,
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
     },
+    time::Duration,
 };
 
 use bytes::Bytes;
 use futures::{Stream, StreamExt, TryStreamExt};
-use napi::bindgen_prelude::*;
+use napi::{ScopedTask, bindgen_prelude::*};
 use napi_derive::napi;
 use reqwest::header::{HeaderName, HeaderValue};
 use reqwest::{Client, Method, StatusCode};
 use serde_json;
 use stream_shared::SharedStream;
+use tokio::runtime::Handle;
 
 #[napi(string_enum)]
 #[derive(Debug, Clone, Copy)]
@@ -29,17 +32,41 @@ pub enum FaithErrorKind {
     ResponseBodyNotAvailable,
     BodyStream,
     JsonParse,
+    Utf8Parse,
     Timeout,
     PermissionPolicy,
-    RequestError,
+    Network,
     Generic,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum JsErrorType {
+    TypeError,
+    SyntaxError,
+    GenericError,
+}
+
+impl FaithErrorKind {
+    fn js_type(self) -> JsErrorType {
+        match self {
+            Self::InvalidHeader
+            | Self::InvalidMethod
+            | Self::InvalidUrl
+            | Self::InvalidCredentials
+            | Self::InvalidOptions
+            | Self::PermissionPolicy
+            | Self::ResponseAlreadyDisturbed
+            | Self::ResponseBodyNotAvailable => JsErrorType::TypeError,
+            Self::JsonParse | Self::Utf8Parse => JsErrorType::SyntaxError,
+            _ => JsErrorType::GenericError,
+        }
+    }
 }
 
 #[derive(Debug)]
 pub struct FaithError {
     pub kind: FaithErrorKind,
     pub message: String,
-    pub cause: Option<Box<FaithError>>,
 }
 
 impl FaithError {
@@ -47,15 +74,16 @@ impl FaithError {
         Self {
             kind,
             message: message.into(),
-            cause: None,
         }
     }
 
-    pub fn with_cause(kind: FaithErrorKind, message: impl Into<String>, cause: FaithError) -> Self {
-        Self {
-            kind,
-            message: message.into(),
-            cause: Some(Box::new(cause)),
+    pub fn into_js_error<'env>(self, _env: &'env Env) -> Unknown<'env> {
+        match self.kind.js_type() {
+            JsErrorType::TypeError => todo!(),
+            JsErrorType::SyntaxError => todo!(),
+            JsErrorType::GenericError => {
+                //
+            },
         }
     }
 }
@@ -66,7 +94,7 @@ impl From<reqwest::Error> for FaithError {
         if err.is_timeout() {
             FaithError::new(FaithErrorKind::Timeout, err.to_string())
         } else {
-            FaithError::new(FaithErrorKind::RequestError, err.to_string())
+            FaithError::new(FaithErrorKind::Network, err.to_string())
         }
     }
 }
@@ -87,18 +115,7 @@ impl From<FaithError> for napi::Error {
         let message = format!("{:?}: {}", faith.kind, faith.message);
 
         // Create the napi error with the appropriate status and message
-        let mut err = napi::Error::new(status, message);
-
-        // Attach the cause as a proper error cause if present (napi::Error#set_cause)
-        if let Some(cause_box) = faith.cause {
-            // Convert the boxed faith cause to a napi::Error and set as the cause
-            let cause_error: napi::Error = (*cause_box).into();
-            // Ignore any errors when setting the cause to avoid panics
-            #[allow(unused_must_use)]
-            {
-                err.set_cause(cause_error);
-            }
-        }
+        let err = napi::Error::new(status, message);
 
         err
     }
@@ -138,7 +155,7 @@ pub fn error_codes() -> ErrorCodes {
         timeout: format!("{:?}", FaithErrorKind::Timeout),
         json_parse_error: format!("{:?}", FaithErrorKind::JsonParse),
         body_stream_error: format!("{:?}", FaithErrorKind::BodyStream),
-        request_error: format!("{:?}", FaithErrorKind::RequestError),
+        request_error: format!("{:?}", FaithErrorKind::Network),
         generic_failure: format!("{:?}", FaithErrorKind::Generic),
     }
 }
@@ -187,6 +204,57 @@ pub struct FaithResponse {
     empty: bool,
     disturbed: AtomicBool,
     inner_body: Body,
+}
+
+pub type Async<T> = AsyncTask<FaithAsyncResult<T>>;
+pub struct FaithAsyncResult<T>(Pin<Box<dyn Future<Output = Result<T, FaithError>> + Send>>)
+where
+    T: Send + ToNapiValue + TypeName + 'static;
+
+impl<T> FaithAsyncResult<T>
+where
+    T: Send + ToNapiValue + TypeName + 'static,
+{
+    pub fn run<F, U>(f: F) -> AsyncTask<Self>
+    where
+        F: Fn() -> U + Send + 'static,
+        U: Future<Output = Result<T, FaithError>> + Send + 'static,
+    {
+        AsyncTask::new(Self(Box::pin(f())))
+    }
+}
+
+impl<'env, T> ScopedTask<'env> for FaithAsyncResult<T>
+where
+    T: Send + ToNapiValue + TypeName + 'static,
+{
+    type Output = Result<T, FaithError>;
+    type JsValue = T;
+
+    fn compute(&mut self) -> Result<Self::Output, napi::Error> {
+        Ok(Handle::current().block_on(&mut self.0))
+    }
+
+    fn resolve(
+        &mut self,
+        env: &'env Env,
+        output: Self::Output,
+    ) -> Result<Self::JsValue, napi::Error> {
+        match output {
+            Ok(t) => Ok(t),
+            Err(err) => Err(napi::Error::from(err.into_js_error(env))),
+        }
+    }
+
+    fn reject(&mut self, _env: &'env Env, err: Error) -> Result<Self::JsValue, napi::Error> {
+        debug_assert!(false, "FaithAsyncResult::reject should be unreachable");
+        Err(err)
+    }
+
+    fn finally(self, _: Env) -> Result<(), napi::Error> {
+        drop(self.0);
+        Ok(())
+    }
 }
 
 #[napi]
@@ -243,7 +311,8 @@ impl FaithResponse {
     pub fn body(
         &self,
         env: Env,
-    ) -> Result<Option<napi::bindgen_prelude::ReadableStream<'_, BufferSlice<'_>>>> {
+    ) -> Result<Option<napi::bindgen_prelude::ReadableStream<'_, BufferSlice<'_>>>, napi::Error>
+    {
         if self.disturbed.swap(true, Ordering::SeqCst) {
             // In the wrapper code, the body accessor is cached, and then a reference
             // returned if further accessed. We can't do that at this interface. We
@@ -268,7 +337,7 @@ impl FaithResponse {
         }
     }
 
-    fn check_stream_disturbed(&self) -> Result<()> {
+    fn check_stream_disturbed(&self) -> Result<(), FaithError> {
         if self.disturbed.swap(true, Ordering::SeqCst) {
             Err(FaithError::new(
                 FaithErrorKind::ResponseAlreadyDisturbed,
@@ -284,7 +353,7 @@ impl FaithResponse {
     ///
     /// Unlike bytes() and co, this grabs all the chunks of the response but doesn't
     /// copy them. Further processing is needed to obtain a Vec<u8> or whatever needed.
-    async fn gather(&self) -> Result<Arc<[Bytes]>> {
+    async fn gather(&self) -> Result<Arc<[Bytes]>, FaithError> {
         // Clone the stream before reading so we don't need &mut self
         let mut response = match &self.inner_body {
             Body::None => return Ok(Default::default()),
@@ -305,7 +374,7 @@ impl FaithResponse {
     }
 
     /// gather() and then copy into one contiguous buffer
-    async fn gather_contiguous(&self) -> Result<Buffer> {
+    async fn gather_contiguous(&self) -> Result<Buffer, FaithError> {
         let body = self.gather().await?;
         let length = body.iter().map(|chunk| chunk.len()).sum();
         let mut bytes = Vec::with_capacity(length);
@@ -315,19 +384,31 @@ impl FaithResponse {
         Ok(bytes.into())
     }
 
+    #[napi]
+    pub fn testing_unk(&self, test: String) -> Async<bool> {
+        FaithAsyncResult::run(move || {
+            let test = test.clone();
+            async move {
+                tokio::time::sleep(Duration::from_secs(1)).await;
+                Ok(test.is_empty())
+            }
+        })
+    }
+
     /// Get response body as bytes
     ///
     /// This may use up to 2x the amount of memory that the response body takes
     /// when the Response is cloned() and will create a full copy of the data.
     #[napi]
-    pub async fn bytes(&self) -> Result<Buffer> {
+    pub async fn bytes(&self) -> Result<Buffer, napi::Error> {
         self.check_stream_disturbed()?;
-        self.gather_contiguous().await
+        let buf = self.gather_contiguous().await?;
+        Ok(buf)
     }
 
     /// Convert response body to text (UTF-8)
     #[napi]
-    pub async fn text(&self) -> Result<String> {
+    pub async fn text(&self) -> Result<String, napi::Error> {
         self.check_stream_disturbed()?;
         let bytes = self.gather_contiguous().await?;
         String::from_utf8(bytes.to_vec())
@@ -336,7 +417,7 @@ impl FaithResponse {
 
     /// Parse response body as JSON
     #[napi]
-    pub async fn json(&self) -> Result<serde_json::Value> {
+    pub async fn json(&self) -> Result<serde_json::Value, napi::Error> {
         self.check_stream_disturbed()?;
         let bytes = self.gather_contiguous().await?;
         let value = serde_json::from_slice(&bytes)
@@ -355,7 +436,7 @@ impl FaithResponse {
     /// end up with a copy of the entire response body if you end up not consuming one
     /// of the clones.
     #[napi]
-    pub fn clone(&self) -> Result<Self> {
+    pub fn clone(&self) -> Result<Self, napi::Error> {
         if self.disturbed.load(Ordering::SeqCst) {
             return Err(FaithError::new(
                 FaithErrorKind::ResponseAlreadyDisturbed,
@@ -380,7 +461,10 @@ impl FaithResponse {
 }
 
 #[napi]
-pub async fn faith_fetch(url: String, options: Option<FaithOptions>) -> Result<FaithResponse> {
+pub async fn faith_fetch(
+    url: String,
+    options: Option<FaithOptions>,
+) -> Result<FaithResponse, napi::Error> {
     let client = Client::builder().build().map_err(FaithError::from)?;
 
     let method = options

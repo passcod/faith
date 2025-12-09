@@ -298,10 +298,11 @@ error kind, documented both in the API documentation above and in this comprehen
 - JS `SyntaxError`:
   - `JsonParse` — JSON parse error for `response.json()`
   - UTF8 decoding error (for `response.text()`)
-- JS `AbortError`:
-  - `Timeout` — request timed out
-- JS `NetworkError`:
-  - `RequestError` — general network error or reqwest error
 - JS generic `Error`:
+  - `Timeout` — request timed out
+  - `Network` — network error
   - `BodyStream` — internal stream handling error
   - `Generic` — internal runtime failures
+
+Due to technical limitations, we can't create `AbortError` or `NetworkError`, which would match
+the fetch() implementation closer for the `Timeout` or `Network` cases.
