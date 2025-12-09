@@ -10,19 +10,14 @@ pub enum FaithErrorKind {
     InvalidHeader,
     InvalidMethod,
     InvalidUrl,
-    InvalidCredentials,
-    InvalidOptions,
-    BlockedByPolicy,
     ResponseAlreadyDisturbed,
     ResponseBodyNotAvailable,
     BodyStream,
     JsonParse,
     Utf8Parse,
     Timeout,
-    PermissionPolicy,
     Network,
     RuntimeThread,
-    Generic,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -38,19 +33,14 @@ impl FaithErrorKind {
             Self::InvalidHeader => "invalid header name or value",
             Self::InvalidMethod => "invalid HTTP method",
             Self::InvalidUrl => "invalid URL",
-            Self::InvalidCredentials => "invalid credentials",
-            Self::InvalidOptions => "invalid fetch options",
-            Self::BlockedByPolicy => "blocked by network policy",
             Self::ResponseAlreadyDisturbed => "response body already disturbed",
             Self::ResponseBodyNotAvailable => "response body not available",
             Self::BodyStream => "internal response body stream copy error",
             Self::JsonParse => "invalid json in response body",
             Self::Utf8Parse => "invalid utf-8 in response body",
             Self::Timeout => "timed out",
-            Self::PermissionPolicy => "not permitted",
             Self::Network => "network error",
             Self::RuntimeThread => "internal tokio runtime thread error",
-            Self::Generic => "fetch error",
         }
     }
 
@@ -59,13 +49,12 @@ impl FaithErrorKind {
             Self::InvalidHeader
             | Self::InvalidMethod
             | Self::InvalidUrl
-            | Self::InvalidCredentials
-            | Self::InvalidOptions
-            | Self::PermissionPolicy
             | Self::ResponseAlreadyDisturbed
             | Self::ResponseBodyNotAvailable => JsErrorType::TypeError,
             Self::JsonParse | Self::Utf8Parse => JsErrorType::SyntaxError,
-            _ => JsErrorType::GenericError,
+            Self::BodyStream | Self::Timeout | Self::Network | Self::RuntimeThread => {
+                JsErrorType::GenericError
+            }
         }
     }
 }

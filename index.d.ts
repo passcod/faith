@@ -45,19 +45,14 @@ export declare const enum FaithErrorKind {
   InvalidHeader = 'InvalidHeader',
   InvalidMethod = 'InvalidMethod',
   InvalidUrl = 'InvalidUrl',
-  InvalidCredentials = 'InvalidCredentials',
-  InvalidOptions = 'InvalidOptions',
-  BlockedByPolicy = 'BlockedByPolicy',
   ResponseAlreadyDisturbed = 'ResponseAlreadyDisturbed',
   ResponseBodyNotAvailable = 'ResponseBodyNotAvailable',
   BodyStream = 'BodyStream',
   JsonParse = 'JsonParse',
   Utf8Parse = 'Utf8Parse',
   Timeout = 'Timeout',
-  PermissionPolicy = 'PermissionPolicy',
   Network = 'Network',
-  RuntimeThread = 'RuntimeThread',
-  Generic = 'Generic'
+  RuntimeThread = 'RuntimeThread'
 }
 
 export declare function faithFetch(url: string, options?: FaithOptionsAndBody | undefined | null): Async<FaithResponse>

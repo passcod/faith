@@ -14,19 +14,14 @@ export const ERROR_CODES: {
   readonly InvalidHeader: "InvalidHeader";
   readonly InvalidMethod: "InvalidMethod";
   readonly InvalidUrl: "InvalidUrl";
-  readonly InvalidCredentials: "InvalidCredentials";
-  readonly InvalidOptions: "InvalidOptions";
-  readonly BlockedByPolicy: "BlockedByPolicy";
   readonly ResponseAlreadyDisturbed: "ResponseAlreadyDisturbed";
   readonly ResponseBodyNotAvailable: "ResponseBodyNotAvailable";
   readonly BodyStream: "BodyStream";
   readonly JsonParse: "JsonParse";
   readonly Utf8Parse: "Utf8Parse";
   readonly Timeout: "Timeout";
-  readonly PermissionPolicy: "PermissionPolicy";
   readonly Network: "Network";
   readonly RuntimeThread: "RuntimeThread";
-  readonly Generic: "Generic";
 };
 
 export interface FetchOptions {

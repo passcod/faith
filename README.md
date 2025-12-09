@@ -289,9 +289,6 @@ error kind, documented both in the API documentation above and in this comprehen
   - `InvalidHeader` — invalid header name or value
   - `InvalidMethod` — invalid HTTP method
   - `InvalidUrl` — invalid URL string
-  - `InvalidCredentials` — URL contains credentials (disallowed)
-  - `InvalidOptions` — invalid options passed to call
-  - `PermissionPolicy` / `BlockedByPolicy` — request blocked by policy
   - `ResponseAlreadyDisturbed` — body already read (mutually exclusive operations)
   - `ResponseBodyNotAvailable` — body is null or not available
 - JS `SyntaxError`:
@@ -302,8 +299,6 @@ error kind, documented both in the API documentation above and in this comprehen
   - `Network` — network error
   - `BodyStream` — internal stream handling error
   - `RuntimeThread` — failed to start or schedule threads on the internal tokio runtime
-  - `Generic` — internal runtime failures
-  - `ResponseAlreadyDisturbed` — only for the `clone()` method
 
 Due to technical limitations, we can't create `AbortError` or `NetworkError`, which would match
 the fetch() implementation closer for the `Timeout` or `Network` cases.
