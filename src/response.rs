@@ -28,6 +28,7 @@ pub struct FaithResponse {
     pub(crate) ok: bool,
     pub(crate) url: String,
     pub(crate) redirected: bool,
+    pub(crate) version: String,
     pub(crate) disturbed: Arc<AtomicBool>,
     pub(crate) inner_body: Body,
 }
@@ -41,6 +42,7 @@ impl Clone for FaithResponse {
             ok: self.ok,
             url: self.url.clone(),
             redirected: self.redirected,
+            version: self.version.clone(),
             disturbed: Arc::clone(&self.disturbed),
             inner_body: self.inner_body.clone(),
         }
@@ -77,6 +79,11 @@ impl FaithResponse {
     #[napi(getter)]
     pub fn redirected(&self) -> bool {
         self.redirected
+    }
+
+    #[napi(getter)]
+    pub fn version(&self) -> String {
+        self.version.clone()
     }
 
     /// Check if the response body has been disturbed (read)
@@ -240,6 +247,7 @@ impl FaithResponse {
             ok: self.ok,
             url: self.url.clone(),
             redirected: self.redirected,
+            version: self.version.clone(),
             disturbed: Arc::new(AtomicBool::new(false)),
             inner_body: self.inner_body.clone(),
         })

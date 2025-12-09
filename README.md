@@ -215,6 +215,13 @@ type determines whether scripts are able to access the response body and headers
 *The `url` read-only property of the `Response` interface contains the URL of the response. The
 value of the `url` property will be the final URL obtained after any redirects.*
 
+### `Response.version`
+
+The `version` read-only property of the `Response` interface contains the HTTP version of the
+response. The value will be the final HTTP version after any redirects and protocol upgrades.
+
+This is custom to Fáith.
+
 ### `Response.arrayBuffer()`
 
 *The `arrayBuffer()` method of the `Response` interface takes a `Response` stream and reads it to

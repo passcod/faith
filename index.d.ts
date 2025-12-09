@@ -7,6 +7,7 @@ export declare class FaithResponse {
   get ok(): boolean
   get url(): string
   get redirected(): boolean
+  get version(): string
   /** Check if the response body has been disturbed (read) */
   get bodyUsed(): boolean
   /** Get the response body as a ReadableStream */

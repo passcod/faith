@@ -79,6 +79,7 @@ pub fn faith_fetch(url: String, options: Option<FaithOptionsAndBody>) -> Async<F
             let ok = response.status().is_success();
             let url = response.url().to_string();
             let redirected = response.status().is_redirection();
+            let version = format!("{:?}", response.version());
 
             let headers_vec: Vec<(String, String)> = response
                 .headers()
@@ -110,6 +111,7 @@ pub fn faith_fetch(url: String, options: Option<FaithOptionsAndBody>) -> Async<F
                 ok,
                 url,
                 redirected,
+                version,
                 disturbed: Arc::new(AtomicBool::new(false)),
             })
         }

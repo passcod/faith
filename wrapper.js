@@ -75,6 +75,11 @@ class Response {
         enumerable: true,
         configurable: true,
       },
+      version: {
+        get: () => this.#nativeResponse.version,
+        enumerable: true,
+        configurable: true,
+      },
     });
   }
 
