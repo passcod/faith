@@ -236,6 +236,18 @@ Fáith deliberately does not implement this.
 
 *The request method. Defaults to `GET`.*
 
+### `mode`
+
+Fáith deliberately does not implement this, as there is no CORS/origin.
+
+### `priority`
+
+Not implemented.
+
+### `redirect`
+
+TODO
+
 ## `Response`
 
 *The `Response` interface of the Fetch API represents the response to a request.*
