@@ -272,10 +272,9 @@ returns a Response from:
 - the `body` stream
 - the `status`, `statusCode`, and `headers` properties
 
-Note that it's not possible to successfully call `webResponse()` after calling `text()` or `json()`
-or the other body-consuming methods. However, using the `body` property is possible, as that points
-to the same underlying stream as provided to `webResponse()`. Reading `body` from two different
-`Response` objects is not allowed (by Node.js, this is not a Fáith limitation).
+Note that if `json()`, `bytes()`, etc has been called on the original response, the body stream
+of the new Web `Response` will be empty or inaccessible. If the body stream of the original
+response has been partially read, only the remaining bytes will be available in the new `Response`.
 
 ## Error mapping
 
