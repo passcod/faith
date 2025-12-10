@@ -297,8 +297,11 @@ async function fetch(input, options = {}) {
 
   // Check if signal is already aborted
   if (signal && signal.aborted) {
-    const error = new AbortError("The operation was aborted");
-    error.code = ERROR_CODES.Abort;
+    const error = new Error(
+      "Aborted: the request was aborted before it could start",
+    );
+    error.name = "AbortError";
+    error.code = ERROR_CODES.Aborted;
     throw error;
   }
 
