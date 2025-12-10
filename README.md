@@ -228,6 +228,8 @@ completion. It returns a promise that resolves with a `Blob`.*
 *The `bytes()` method of the `Response` interface takes a `Response` stream and reads it to
 completion. It returns a promise that resolves with a `Uint8Array`.*
 
+In Fáith, this returns a Node.js `Buffer`, which can be used as (and is a subclass of) a `Uint8Array`.
+
 ### `Response.clone()`
 
 *The `clone()` method of the `Response` interface creates a clone of a response object, identical
