@@ -92,7 +92,7 @@ class Response {
       return this.#bodyStream;
     }
 
-    return (this.#bodyStream = this.#nativeResponse.body());
+    return (this.#bodyStream = this.#nativeResponse.body);
   }
 
   /**

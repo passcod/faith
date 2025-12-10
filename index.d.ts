@@ -15,7 +15,7 @@ export declare class FaithResponse {
   /** Check if the response body has been disturbed (read) */
   get bodyUsed(): boolean
   /** Get the response body as a ReadableStream */
-  body(): ReadableStream<Buffer> | null
+  get body(): ReadableStream<Buffer> | null
   /**
    * Get response body as bytes
    *

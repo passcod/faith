@@ -93,7 +93,7 @@ impl FaithResponse {
     }
 
     /// Get the response body as a ReadableStream
-    #[napi]
+    #[napi(getter)]
     pub fn body(
         &self,
         env: Env,
