@@ -1,6 +1,9 @@
 use std::{
     pin::Pin,
-    sync::{Arc, atomic::AtomicBool},
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
 };
 
 use futures::StreamExt;
@@ -89,6 +92,8 @@ pub fn faith_fetch(
             request = request.timeout(dur);
         }
 
+        agent.stats.requests_sent.fetch_add(1, Ordering::Relaxed);
+
         // Race the request with the abort signal if signal was provided
         let response = if has_signal {
             tokio::select! {
@@ -100,6 +105,11 @@ pub fn faith_fetch(
         } else {
             request.send().await?
         };
+
+        agent
+            .stats
+            .responses_received
+            .fetch_add(1, Ordering::Relaxed);
 
         let status = response.status().as_u16();
         let status_text = response

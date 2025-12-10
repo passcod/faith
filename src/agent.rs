@@ -1,4 +1,10 @@
-use std::{str::FromStr as _, sync::Arc};
+use std::{
+    str::FromStr as _,
+    sync::{
+        Arc,
+        atomic::{AtomicU64, Ordering},
+    },
+};
 
 use napi::Env;
 use napi_derive::napi;
@@ -38,11 +44,25 @@ pub struct AgentOptions {
     pub user_agent: Option<String>,
 }
 
+#[derive(Debug, Default)]
+pub(crate) struct InnerAgentStats {
+    pub requests_sent: AtomicU64,
+    pub responses_received: AtomicU64,
+}
+
+#[napi]
+#[derive(Debug, Clone, Default)]
+pub struct AgentStats {
+    pub requests_sent: i64,
+    pub responses_received: i64,
+}
+
 #[napi]
 #[derive(Debug, Clone)]
 pub struct Agent {
     pub(crate) client: Client,
     pub(crate) cookie_jar: Option<Arc<Jar>>,
+    pub(crate) stats: Arc<InnerAgentStats>,
 }
 
 #[napi]
@@ -93,6 +113,7 @@ impl Agent {
         Ok(Self {
             client: client.build()?,
             cookie_jar,
+            stats: Default::default(),
         })
     }
 
@@ -131,5 +152,23 @@ impl Agent {
 
         jar.cookies(&url)
             .and_then(|val| val.to_str().ok().map(ToOwned::to_owned))
+    }
+
+    #[napi]
+    pub fn stats(&self) -> AgentStats {
+        AgentStats {
+            requests_sent: self
+                .stats
+                .requests_sent
+                .load(Ordering::Relaxed)
+                .try_into()
+                .unwrap_or(i64::MAX),
+            responses_received: self
+                .stats
+                .responses_received
+                .load(Ordering::Relaxed)
+                .try_into()
+                .unwrap_or(i64::MAX),
+        }
     }
 }

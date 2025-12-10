@@ -573,6 +573,7 @@ if (!nativeBinding) {
 
 module.exports = nativeBinding
 module.exports.Agent = nativeBinding.Agent
+module.exports.AgentStats = nativeBinding.AgentStats
 module.exports.FaithResponse = nativeBinding.FaithResponse
 module.exports.CredentialsOption = nativeBinding.CredentialsOption
 module.exports.DuplexOption = nativeBinding.DuplexOption

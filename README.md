@@ -506,7 +506,12 @@ Returns `null` if:
 - the url is malformed
 - the cookie cannot be represented as a string
 
-### `stats()`
+### `stats(): object`
+
+Returns statistics gathered by this agent:
+
+- `requestsSent`
+- `responsesReceived`
 
 ## Error mapping
 

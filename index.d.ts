@@ -4,6 +4,12 @@ export declare class Agent {
   constructor(options?: AgentOptions | undefined | null)
   addCookie(url: string, cookie: string): void
   getCookie(url: string): string | null
+  stats(): AgentStats
+}
+
+export declare class AgentStats {
+  requestsSent: number
+  responsesReceived: number
 }
 
 export declare class FaithResponse {
