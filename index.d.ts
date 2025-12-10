@@ -27,8 +27,6 @@ export declare class FaithResponse {
   text(): Async<string>
   /** Parse response body as JSON */
   json(): Async<any>
-  /** Get response body as ArrayBuffer (returns Buffer, wrapper converts to ArrayBuffer) */
-  arrayBuffer(): Async<Buffer>
   /**
    * Create a clone of the response
    *

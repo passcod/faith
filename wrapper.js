@@ -107,7 +107,7 @@ class Response {
    * @returns {Promise<ArrayBuffer>}
    */
   async arrayBuffer() {
-    const buffer = await this.#nativeResponse.arrayBuffer();
+    const buffer = await this.#nativeResponse.bytes();
     return buffer.buffer;
   }
 
