@@ -29,8 +29,12 @@ export const ERROR_CODES: {
   readonly Utf8Parse: "Utf8Parse";
 };
 
+export interface AgentOptions {
+  userAgent?: string;
+}
+
 export declare class Agent {
-  constructor();
+  constructor(options?: AgentOptions | undefined | null);
 }
 
 export interface FetchOptions {

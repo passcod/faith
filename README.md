@@ -25,7 +25,7 @@ npm install @passcod/faith
 ### Basic fetch
 
 ```javascript
-const { fetch } = require('@passcod/faith');
+import { fetch } from '@passcod/faith';
 
 async function example() {
   const response = await fetch('https://httpbin.org/get');
@@ -271,7 +271,7 @@ response receipt.
 *The `Response` interface of the Fetch API represents the response to a request.*
 
 Fáith does not allow its `Response` object to be constructed. If you need to, you may use the
-`intoWebResponse()` method to convert one into a Web API `Response` object; note the caveats.
+`webResponse()` method to convert one into a Web API `Response` object; note the caveats.
 
 ### `Response.body`
 
@@ -412,6 +412,66 @@ returns a Response from:
 Note that if `json()`, `bytes()`, etc has been called on the original response, the body stream
 of the new Web `Response` will be empty or inaccessible. If the body stream of the original
 response has been partially read, only the remaining bytes will be available in the new `Response`.
+
+## `Agent`
+
+The `Agent` interface of the Fáith API represents an instance of an HTTP client. Each `Agent` has
+its own options, connection pool, caches, etc. There are also conveniences such as `headers` for
+setting default headers on all requests done with the agent, and statistics collected by the agent.
+
+Re-using connections between requests is a significant performance improvement: not only because
+the TCP and TLS handshake is only performed once across many different requests, but also because
+the DNS lookup doesn't need to occur for subsequent requests on the same connection. Depending on
+DNS technology (DoH and DoT add a whole separate handshake to the process) and overall latency,
+this can not only speed up requests on average, but also reduce system load.
+
+For this reason, and also because in browsers this behaviour is standard, **all** requests with
+Fáith use an `Agent`. For `fetch()` calls that don't specify one explicitly, a global agent with
+default options is created on first use.
+
+### Syntax
+
+```javascript
+new Agent()
+new Agent(options)
+```
+
+### `cache`
+### `cookies`
+### `dns`
+### `headers`
+### `http3`
+#### `congestion`
+### `pool`
+#### `maxIdlePerHost`
+#### `idleTimeout`
+### `redirect`
+### `retry`
+### `timeout`
+#### `connect`
+#### `read`
+#### `total`
+### `tls`
+#### `earlyData`
+#### `identity`
+#### `required`
+
+### `userAgent`
+
+Custom user agent string.
+
+Default: `Faith/{version} reqwest/{version}`.
+
+You may use the `USER_AGENT` constant if you wish to prepend your own agent to the default, e.g.
+
+```javascript
+import { Agent, USER_AGENT } from '@passcod/faith';
+const agent = new Agent({
+  userAgent: `YourApp/1.2.3 ${USER_AGENT}`,
+});
+```
+
+### `stats()`
 
 ## Error mapping
 

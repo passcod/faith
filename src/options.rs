@@ -3,7 +3,7 @@ use std::{fmt::Debug, sync::Arc, time::Duration};
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
 
-use crate::agent::FaithAgent;
+use crate::agent::Agent;
 
 #[napi(string_enum)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -37,7 +37,7 @@ pub struct FaithOptionsAndBody {
     pub timeout: Option<u32>,
     pub credentials: Option<CredentialsOption>,
     pub duplex: Option<DuplexOption>,
-    pub agent: Reference<FaithAgent>,
+    pub agent: Reference<Agent>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -49,7 +49,7 @@ pub(crate) struct FaithOptions {
 }
 
 impl FaithOptions {
-    pub(crate) fn extract(opts: FaithOptionsAndBody) -> (Self, FaithAgent, Option<Arc<Buffer>>) {
+    pub(crate) fn extract(opts: FaithOptionsAndBody) -> (Self, Agent, Option<Arc<Buffer>>) {
         let credentials = opts.credentials.unwrap_or_default();
         // Transform same-origin to include
         let credentials = if credentials == CredentialsOption::SameOrigin {
@@ -65,7 +65,7 @@ impl FaithOptions {
                 timeout: opts.timeout.map(Into::into).map(Duration::from_millis),
                 credentials,
             },
-            FaithAgent::clone(&opts.agent),
+            Agent::clone(&opts.agent),
             opts.body.map(|either| match either {
                 Either3::A(s) => Arc::new(Buffer::from(s.as_bytes())),
                 Either3::B(b) => Arc::new(b),

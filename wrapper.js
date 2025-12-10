@@ -286,7 +286,7 @@ async function fetch(input, options = {}) {
   // Attach to the default agent if none is provided
   if (!nativeOptions.agent) {
     if (!defaultAgent) {
-      defaultAgent = new native.FaithAgent();
+      defaultAgent = new native.Agent();
     }
     nativeOptions.agent = defaultAgent;
   }
@@ -310,7 +310,7 @@ async function fetch(input, options = {}) {
 }
 
 module.exports = {
-  Agent: native.FaithAgent,
+  Agent: native.Agent,
   ERROR_CODES,
   FAITH_VERSION: native.FAITH_VERSION,
   fetch,
