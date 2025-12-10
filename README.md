@@ -215,7 +215,12 @@ when the above methods are called, as until then the body contents are not avail
 
 ### `keepalive`
 
-Fáith deliberately does not implement this.
+Not supported.
+
+Note that this is different from `Connection: keep-alive`; Fáith connections are pooled within each
+single `Agent`, so subsequent requests to the same endpoint are faster until the pooled connection
+times out. The `keepalive` option in browsers is instead a way to send a `fetch()` right before the
+page is unloaded, for tracking or analytics purposes. This concept does not exist in Node.js.
 
 ### `method`
 
