@@ -98,7 +98,7 @@ where
     type JsValue = T;
 
     fn compute(&mut self) -> Result<Self::Output, napi::Error> {
-        match Handle::try_current() {
+        within_runtime_if_available(|| match Handle::try_current() {
             Ok(handle) => Ok(handle.block_on(&mut self.run)),
             Err(err) if err.is_missing_context() => {
                 let rt = Runtime::new().map_err(|err| {
@@ -110,7 +110,7 @@ where
             Err(err) => Err(
                 FaithError::new(FaithErrorKind::RuntimeThread, Some(err.to_string())).into_napi(),
             ),
-        }
+        })
     }
 
     fn resolve(
