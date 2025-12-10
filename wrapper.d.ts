@@ -39,6 +39,7 @@ export interface FetchOptions {
   timeout?: number; // milliseconds
   credentials?: "omit" | "same-origin" | "include";
   duplex?: "half";
+  signal?: AbortSignal;
   agent?: Agent;
 }
 

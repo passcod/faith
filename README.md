@@ -254,11 +254,17 @@ Fáith deliberately does not implement this, as there is no origin.
 
 ### `signal`
 
-TODO
+*An `AbortSignal`. If this option is set, the request can be canceled by calling `abort()` on the
+corresponding `AbortController`.*
 
 ### `timeout`
 
 Custom to Fáith. Cancels the request after this many milliseconds.
+
+This will give a different error to using `signal` with a timeout, which might be preferable in
+some cases. It also has a slightly different internal behaviour: `signal` may abort the request
+only until the response headers have been received, while `timeout` will apply through the entire
+response receipt.
 
 ## `Response`
 
@@ -423,13 +429,14 @@ error kind, documented in this comprehensive mapping:
   - `JsonParse` — JSON parse error for `response.json()`
   - `Utf8Parse` — UTF8 decoding error for `response.text()`
 - JS generic `Error`:
-  - `Timeout` — request timed out
-  - `Network` — network error
+  - `Aborted` — request was aborted using `signal`
   - `BodyStream` — internal stream handling error
+  - `Network` — network error
   - `RuntimeThread` — failed to start or schedule threads on the internal tokio runtime
+  - `Timeout` — request timed out
 
-Due to technical limitations, we can't create `AbortError` or `NetworkError`, which would match
-the fetch() implementation closer for the `Timeout` or `Network` cases.
+Due to technical limitations, we can't yet create `AbortError` or `NetworkError`, which would match
+the fetch() implementation closer for the `Aborted`, `Timeout` or `Network` cases.
 
 The library exports an `ERROR_CODES` object which has every error code the library throws, and
 every error thrown also has a `code` property that is set to one of those codes. So you can

@@ -1,4 +1,4 @@
-use std::{fmt::Debug, sync::Arc};
+use std::{fmt::Debug, sync::Arc, time::Duration};
 
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
@@ -34,7 +34,7 @@ pub struct FaithOptionsAndBody {
     pub method: Option<String>,
     pub headers: Option<Vec<(String, String)>>,
     pub body: Option<Either3<String, Buffer, Uint8Array>>,
-    pub timeout: Option<f64>,
+    pub timeout: Option<u32>,
     pub credentials: Option<CredentialsOption>,
     pub duplex: Option<DuplexOption>,
     pub agent: Reference<FaithAgent>,
@@ -44,7 +44,7 @@ pub struct FaithOptionsAndBody {
 pub(crate) struct FaithOptions {
     pub(crate) method: Option<String>,
     pub(crate) headers: Option<Vec<(String, String)>>,
-    pub(crate) timeout: Option<f64>,
+    pub(crate) timeout: Option<Duration>,
     pub(crate) credentials: CredentialsOption,
 }
 
@@ -62,7 +62,7 @@ impl FaithOptions {
             Self {
                 method: opts.method,
                 headers: opts.headers,
-                timeout: opts.timeout,
+                timeout: opts.timeout.map(Into::into).map(Duration::from_millis),
                 credentials,
             },
             FaithAgent::clone(&opts.agent),

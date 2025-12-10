@@ -45,13 +45,27 @@ where
 {
     pub fn run<F, U>(run: F) -> AsyncTask<Self>
     where
-        F: Fn() -> U + Send + 'static,
+        F: FnOnce() -> U + Send + 'static,
         U: Future<Output = Result<T, FaithError>> + Send + 'static,
     {
         AsyncTask::new(Self {
             run: Box::pin(run()),
             finaliser: Box::new(|t, _| t),
         })
+    }
+
+    pub fn with_signal<F, U>(signal: Option<AbortSignal>, run: F) -> AsyncTask<Self>
+    where
+        F: FnOnce() -> U + Send + 'static,
+        U: Future<Output = Result<T, FaithError>> + Send + 'static,
+    {
+        AsyncTask::with_optional_signal(
+            Self {
+                run: Box::pin(run()),
+                finaliser: Box::new(|t, _| t),
+            },
+            signal,
+        )
     }
 }
 
@@ -65,7 +79,7 @@ where
         finaliser: impl (Fn(A, Env) -> T) + Send + 'static,
     ) -> AsyncTask<Self>
     where
-        F: Fn() -> U + Send + 'static,
+        F: FnOnce() -> U + Send + 'static,
         U: Future<Output = Result<A, FaithError>> + Send + 'static,
     {
         AsyncTask::new(Self {

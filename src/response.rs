@@ -179,13 +179,10 @@ impl FaithResponse {
     #[napi]
     pub fn bytes(&self) -> Async<Buffer> {
         let this = Clone::clone(&*self);
-        FaithAsyncResult::run(move || {
-            let this = Clone::clone(&this);
-            async move {
-                this.check_stream_disturbed()?;
-                let buf = this.gather_contiguous().await?;
-                Ok(buf)
-            }
+        FaithAsyncResult::run(async move || {
+            this.check_stream_disturbed()?;
+            let buf = this.gather_contiguous().await?;
+            Ok(buf)
         })
     }
 
@@ -193,15 +190,11 @@ impl FaithResponse {
     #[napi]
     pub fn text(&self) -> Async<String> {
         let this = Clone::clone(&*self);
-        FaithAsyncResult::run(move || {
-            let this = Clone::clone(&this);
-            async move {
-                this.check_stream_disturbed()?;
-                let bytes = this.gather_contiguous().await?;
-                String::from_utf8(bytes.to_vec()).map_err(|e| {
-                    FaithError::new(FaithErrorKind::Utf8Parse, Some(e.to_string())).into()
-                })
-            }
+        FaithAsyncResult::run(async move || {
+            this.check_stream_disturbed()?;
+            let bytes = this.gather_contiguous().await?;
+            String::from_utf8(bytes.to_vec())
+                .map_err(|e| FaithError::new(FaithErrorKind::Utf8Parse, Some(e.to_string())).into())
         })
     }
 
@@ -209,15 +202,12 @@ impl FaithResponse {
     #[napi]
     pub fn json(&self) -> Async<Value> {
         let this = Clone::clone(&*self);
-        FaithAsyncResult::run(move || {
-            let this = Clone::clone(&this);
-            async move {
-                this.check_stream_disturbed()?;
-                let bytes = this.gather_contiguous().await?;
-                let value = serde_json::from_slice(&bytes)
-                    .map_err(|e| FaithError::new(FaithErrorKind::JsonParse, Some(e.to_string())))?;
-                Ok(Value(value))
-            }
+        FaithAsyncResult::run(async move || {
+            this.check_stream_disturbed()?;
+            let bytes = this.gather_contiguous().await?;
+            let value = serde_json::from_slice(&bytes)
+                .map_err(|e| FaithError::new(FaithErrorKind::JsonParse, Some(e.to_string())))?;
+            Ok(Value(value))
         })
     }
 

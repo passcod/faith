@@ -71,7 +71,7 @@ export declare const enum FaithErrorKind {
   RuntimeThread = 'RuntimeThread'
 }
 
-export declare function faithFetch(url: string, options: FaithOptionsAndBody): Async<FaithResponse>
+export declare function faithFetch(url: string, options: FaithOptionsAndBody, signal?: AbortSignal | undefined | null): Async<FaithResponse>
 
 export interface FaithOptionsAndBody {
   method?: string

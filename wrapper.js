@@ -143,6 +143,7 @@ let defaultAgent;
  * @param {number} [options.timeout] - Timeout in milliseconds
  * @param {string} [options.credentials] - Credentials mode: "omit", "same-origin", or "include" (default)
  * @param {string} [options.duplex] - Duplex mode: "half" (required when body is a ReadableStream)
+ * @param {AbortSignal} [options.signal] - AbortSignal to cancel the request
  * @returns {Promise<Response>}
  *
  * When a Request object is provided, all its properties (method, headers, body, mode, credentials,
@@ -290,7 +291,18 @@ async function fetch(input, options = {}) {
     nativeOptions.agent = defaultAgent;
   }
 
-  const nativeResponse = await faithFetch(url, nativeOptions);
+  // Extract signal to pass as separate parameter
+  const signal = nativeOptions.signal;
+  delete nativeOptions.signal;
+
+  // Check if signal is already aborted
+  if (signal && signal.aborted) {
+    const error = new AbortError("The operation was aborted");
+    error.code = ERROR_CODES.Abort;
+    throw error;
+  }
+
+  const nativeResponse = await faithFetch(url, nativeOptions, signal);
   return new Response(nativeResponse);
 }
 
