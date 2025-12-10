@@ -134,17 +134,59 @@ let defaultAgent;
 
 /**
  * Fetch function wrapper
- * @param {string} url - The URL to fetch
- * @param {Object} [options] - Fetch options
+ * @param {string|Request} input - The URL to fetch or a Request object
+ * @param {Object} [options] - Fetch options (when input is a Request, options override Request properties)
  * @param {string} [options.method] - HTTP method
  * @param {Object|Headers} [options.headers] - HTTP headers (either Headers object or plain object)
  * @param {Buffer|Array<number>|string|ArrayBuffer|Uint8Array} [options.body] - Request body
  * @param {number} [options.timeout] - Timeout in seconds
  * @returns {Promise<Response>}
+ *
+ * When a Request object is provided, all its properties (method, headers, body, mode, credentials,
+ * cache, redirect, referrer, integrity, etc.) are extracted and passed to the native binding.
+ * The options parameter can override any Request property.
  */
-async function fetch(url, options = {}) {
-  // Convert options to match native API
-  const nativeOptions = { ...options };
+async function fetch(input, options = {}) {
+  let url;
+  let nativeOptions;
+
+  // Handle Request object as input
+  if (
+    typeof input === "object" &&
+    input !== null &&
+    typeof input.url === "string"
+  ) {
+    // Extract url separately
+    url = input.url;
+
+    // Copy all properties from Request object except url and bodyUsed
+    const requestOptions = {};
+    for (const key in input) {
+      if (key !== "url" && key !== "bodyUsed") {
+        const value = input[key];
+        if (value !== undefined && value !== null) {
+          requestOptions[key] = value;
+        }
+      }
+    }
+
+    // Handle body specially - Request.body is a ReadableStream that needs to be consumed
+    if (requestOptions.body !== undefined && requestOptions.body !== null) {
+      if (typeof input.arrayBuffer === "function") {
+        requestOptions.body = await input.arrayBuffer();
+      }
+    }
+
+    // Merge Request properties with options, options take precedence
+    nativeOptions = { ...requestOptions, ...options };
+  } else if (typeof input === "string") {
+    url = input;
+    nativeOptions = { ...options };
+  } else {
+    throw new TypeError(
+      "First argument must be a string URL or Request object",
+    );
+  }
 
   if (nativeOptions.headers !== undefined && nativeOptions.headers !== null) {
     if (nativeOptions.headers instanceof Headers) {

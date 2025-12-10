@@ -86,7 +86,7 @@ fetch(resource, options);
 - *A string or any other object with a stringifier — including a `URL` object — that provides the
   URL of the resource you want to fetch.* The URL must be absolute and include a scheme.
 
-- *A `Request` object.* This can be a native `Request` object, or a `faith.Request` object.
+- *A `Request` object.*
 
 #### `options` (Optional)
 
@@ -127,7 +127,8 @@ This is deliberately not implemented by Fáith.
 
 ## `Request`
 
-TBD
+Fáith does not implement its own `Request` object. Instead, you can pass a Web API `Request` object
+to `fetch()`, and it will internally be converted to the right options.
 
 ## `Response`
 

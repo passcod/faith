@@ -103,11 +103,11 @@ export class Response {
 
 /**
  * Fetch function
- * @param url - The URL to fetch
- * @param options - Fetch options
- * @returns Promise that resolves with a FetchResponse
+ * @param input - The URL to fetch or a Request object
+ * @param options - Fetch options (overrides Request properties when provided)
+ * @returns Promise that resolves with a Response
  */
 export declare function fetch(
-  url: string,
+  input: string | Request,
   options?: FetchOptions,
 ): Promise<Response>;
