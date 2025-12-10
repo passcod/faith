@@ -29,40 +29,69 @@ impl ToNapiValue for Value {
     }
 }
 
-pub type Async<T> = AsyncTask<FaithAsyncResult<T>>;
-pub struct FaithAsyncResult<T>(Pin<Box<dyn Future<Output = Result<T, FaithError>> + Send>>)
+pub type Async<A, T = A> = AsyncTask<FaithAsyncResult<T, A>>;
+pub struct FaithAsyncResult<T, A = T>
 where
-    T: Send + ToNapiValue + TypeName + 'static;
+    T: Send + ToNapiValue + TypeName + 'static,
+    A: Send + ToNapiValue + TypeName + 'static,
+{
+    run: Pin<Box<dyn Future<Output = Result<A, FaithError>> + Send>>,
+    finaliser: Box<dyn Fn(A, Env) -> T + Send>,
+}
 
-impl<T> FaithAsyncResult<T>
+impl<T> FaithAsyncResult<T, T>
 where
     T: Send + ToNapiValue + TypeName + 'static,
 {
-    pub fn run<F, U>(f: F) -> AsyncTask<Self>
+    pub fn run<F, U>(run: F) -> AsyncTask<Self>
     where
         F: Fn() -> U + Send + 'static,
         U: Future<Output = Result<T, FaithError>> + Send + 'static,
     {
-        AsyncTask::new(Self(Box::pin(f())))
+        AsyncTask::new(Self {
+            run: Box::pin(run()),
+            finaliser: Box::new(|t, _| t),
+        })
     }
 }
 
-impl<'env, T> ScopedTask<'env> for FaithAsyncResult<T>
+impl<T, A> FaithAsyncResult<T, A>
 where
     T: Send + ToNapiValue + TypeName + 'static,
+    A: Send + ToNapiValue + TypeName + 'static,
 {
-    type Output = Result<T, FaithError>;
+    pub fn with_finaliser<F, U>(
+        run: F,
+        finaliser: impl (Fn(A, Env) -> T) + Send + 'static,
+    ) -> AsyncTask<Self>
+    where
+        F: Fn() -> U + Send + 'static,
+        U: Future<Output = Result<A, FaithError>> + Send + 'static,
+    {
+        AsyncTask::new(Self {
+            run: Box::pin(run()),
+            finaliser: Box::new(finaliser),
+        })
+    }
+}
+
+impl<'env, T, A> ScopedTask<'env> for FaithAsyncResult<T, A>
+where
+    T: Send + ToNapiValue + TypeName + 'static,
+    A: Send + ToNapiValue + TypeName + 'static,
+{
+    type Output = Result<A, FaithError>;
     type JsValue = T;
 
     fn compute(&mut self) -> Result<Self::Output, napi::Error> {
         match Handle::try_current() {
-            Ok(handle) => Ok(handle.block_on(&mut self.0)),
+            Ok(handle) => Ok(handle.block_on(&mut self.run)),
             Err(err) if err.is_missing_context() => {
                 let rt = Runtime::new().map_err(|err| {
                     FaithError::new(FaithErrorKind::RuntimeThread, Some(err.to_string()))
                         .into_napi()
                 })?;
-                Ok(rt.block_on(&mut self.0))
+                Ok(rt.block_on(&mut self.run))
             }
             Err(err) => Err(
                 FaithError::new(FaithErrorKind::RuntimeThread, Some(err.to_string())).into_napi(),
@@ -76,7 +105,7 @@ where
         output: Self::Output,
     ) -> Result<Self::JsValue, napi::Error> {
         match output {
-            Ok(t) => Ok(t),
+            Ok(t) => Ok((self.finaliser)(t, *env)),
             Err(err) => Err(napi::Error::from(err.into_js_error(env))),
         }
     }
@@ -88,7 +117,8 @@ where
     }
 
     fn finally(self, _: Env) -> Result<(), napi::Error> {
-        drop(self.0);
+        drop(self.run);
+        drop(self.finaliser);
         Ok(())
     }
 }
