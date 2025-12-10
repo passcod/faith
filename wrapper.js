@@ -134,7 +134,7 @@ let defaultAgent;
 
 /**
  * Fetch function wrapper
- * @param {string|Request} input - The URL to fetch or a Request object
+ * @param {string|Request|URL|Object} input - The URL to fetch, a Request object, or an object with toString()
  * @param {Object} [options] - Fetch options (when input is a Request, options override Request properties)
  * @param {string} [options.method] - HTTP method
  * @param {Object|Headers} [options.headers] - HTTP headers (either Headers object or plain object)
@@ -145,6 +145,8 @@ let defaultAgent;
  * When a Request object is provided, all its properties (method, headers, body, mode, credentials,
  * cache, redirect, referrer, integrity, etc.) are extracted and passed to the native binding.
  * The options parameter can override any Request property.
+ *
+ * Objects with a toString() method (like URL objects) will have toString() called to get the URL string.
  */
 async function fetch(input, options = {}) {
   let url;
@@ -182,9 +184,13 @@ async function fetch(input, options = {}) {
   } else if (typeof input === "string") {
     url = input;
     nativeOptions = { ...options };
+  } else if (input && typeof input.toString === "function") {
+    // Handle objects with toString method (like URL objects)
+    url = input.toString();
+    nativeOptions = { ...options };
   } else {
     throw new TypeError(
-      "First argument must be a string URL or Request object",
+      "First argument must be a string URL, Request object, or an object with a toString method",
     );
   }
 
