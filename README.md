@@ -210,6 +210,32 @@ Fáith allows all request headers to be set (unlike browsers, which [forbid][1] 
 
 [1]: https://developer.mozilla.org/en-US/docs/Glossary/Forbidden_request_header
 
+### `integrity`
+
+Not implemented yet.
+
+*Contains the subresource integrity value of the request.*
+
+*The format of this option is `<hash-algo>-<hash-source>` where:*
+
+- *`<hash-algo>` is one of the following values: `sha256`, `sha384`, or `sha512`*
+- *`<hash-source>` is the Base64-encoding of the result of hashing the resource with the specified
+  hash algorithm.*
+
+Fáith only checks the integrity when using `bytes()`, `json()`, `text()`, `arrayBuffer()`, and
+`blob()`. Verification when reading through the `body` stream is not currently supported.
+
+Note that browsers will throw at the `fetch()` call when integrity fails, but Fáith will only throw
+when the above methods are called, as until then the body contents are not available.
+
+### `keepalive`
+
+Fáith deliberately does not implement this.
+
+### `method`
+
+*The request method. Defaults to `GET`.*
+
 ## `Response`
 
 *The `Response` interface of the Fetch API represents the response to a request.*
