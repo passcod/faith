@@ -73,7 +73,7 @@ pub fn faith_fetch(url: String, options: FaithOptionsAndBody) -> Async<FaithResp
             let status_text = response
                 .status()
                 .canonical_reason()
-                .unwrap_or("Unknown")
+                .unwrap_or_default()
                 .to_string();
             let ok = response.status().is_success();
             let url = response.url().to_string();
