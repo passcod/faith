@@ -155,7 +155,8 @@ Fáith deliberately does not implement this.
 
 ### `cache`
 
-TODO
+Fáith does not respect this option on the `RequestInit` dictionary. Instead, the option is present
+on `Agent` and applies to all requests made with that `Agent`.
 
 ### `credentials`
 
@@ -236,7 +237,8 @@ Not supported.
 
 ### `redirect`
 
-TODO
+Fáith does not respect this option on the `RequestInit` dictionary. Instead, the option is present
+on `Agent` and applies to all requests made with that `Agent`.
 
 ### `referrer`
 
