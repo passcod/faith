@@ -38,6 +38,7 @@ export interface FetchOptions {
   body?: string | Buffer | Uint8Array | Array<number> | ArrayBuffer;
   timeout?: number;
   credentials?: "omit" | "same-origin" | "include";
+  duplex?: "half";
   agent?: Agent;
 }
 

@@ -158,6 +158,8 @@ It is specified as an instance of any of the following types:*
 - *`URLSearchParams`* Not yet implemented.
 - *`ReadableStream`* Note that Fáith currently reads this into memory before sending the request.
 
+*If `body` is a `ReadableStream`, the `duplex` option must also be set.*
+
 ### `browsingTopics`
 
 Fáith deliberately does not implement this.
@@ -194,7 +196,10 @@ Defaults to `include` (browsers default to `same-origin`).
 
 ### `duplex`
 
-TODO
+*Controls duplex behavior of the request. If this is present it must have the value `half`, meaning
+that Fáith will send the entire request before processing the response.*
+
+*This option must be present when `body` is a `ReadableStream`.*
 
 ## `Response`
 

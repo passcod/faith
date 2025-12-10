@@ -222,13 +222,51 @@ async function fetch(input, options = {}) {
 
   // Convert body to Buffer if needed
   // Native binding handles: string, Buffer, Uint8Array
-  // We convert: ArrayBuffer, Array<number>
-  if (nativeOptions.body !== undefined) {
-    if (nativeOptions.body instanceof ArrayBuffer) {
+  // We convert: ArrayBuffer, Array<number>, ReadableStream
+  // Validate ReadableStream bodies require duplex option
+  if (nativeOptions.body !== undefined && nativeOptions.body !== null) {
+    // Check if body is a ReadableStream
+    if (
+      typeof nativeOptions.body === "object" &&
+      typeof nativeOptions.body.getReader === "function"
+    ) {
+      // ReadableStream body requires duplex option
+      if (!nativeOptions.duplex) {
+        throw new TypeError(
+          "RequestInit's body is a ReadableStream and duplex option is not set",
+        );
+      }
+
+      // Consume the ReadableStream into a Buffer
+      const reader = nativeOptions.body.getReader();
+      const chunks = [];
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          chunks.push(value);
+        }
+      } finally {
+        reader.releaseLock();
+      }
+
+      // Concatenate all chunks into a single Buffer
+      const totalLength = chunks.reduce((acc, chunk) => acc + chunk.length, 0);
+      const result = new Uint8Array(totalLength);
+      let offset = 0;
+      for (const chunk of chunks) {
+        result.set(chunk, offset);
+        offset += chunk.length;
+      }
+      nativeOptions.body = Buffer.from(result);
+    } else if (nativeOptions.body instanceof ArrayBuffer) {
       nativeOptions.body = Buffer.from(nativeOptions.body);
     } else if (Array.isArray(nativeOptions.body)) {
       nativeOptions.body = Buffer.from(nativeOptions.body);
     }
+  } else if (nativeOptions.body === null) {
+    // Remove null body
+    delete nativeOptions.body;
   }
 
   // Attach to the default agent if none is provided

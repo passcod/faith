@@ -22,6 +22,13 @@ impl Default for CredentialsOption {
     }
 }
 
+#[napi(string_enum)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DuplexOption {
+    #[napi(value = "half")]
+    Half,
+}
+
 #[napi(object)]
 pub struct FaithOptionsAndBody {
     pub method: Option<String>,
@@ -29,6 +36,7 @@ pub struct FaithOptionsAndBody {
     pub body: Option<Either3<String, Buffer, Uint8Array>>,
     pub timeout: Option<f64>,
     pub credentials: Option<CredentialsOption>,
+    pub duplex: Option<DuplexOption>,
     pub agent: Reference<FaithAgent>,
 }
 

@@ -49,6 +49,10 @@ export declare const enum CredentialsOption {
   Include = 'include'
 }
 
+export declare const enum DuplexOption {
+  Half = 'half'
+}
+
 export declare function errorCodes(): Array<string>
 
 export const FAITH_VERSION: string
@@ -75,6 +79,7 @@ export interface FaithOptionsAndBody {
   body?: string | Buffer | Uint8Array
   timeout?: number
   credentials?: CredentialsOption
+  duplex?: DuplexOption
   agent: FaithAgent
 }
 
