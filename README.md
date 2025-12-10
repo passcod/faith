@@ -92,7 +92,7 @@ fetch(resource, options);
 
 *A `RequestInit` object containing any custom settings that you want to apply to the request.* In
 practice the `RequestInit` class does not exist in browsers or Node.js, and so this is always a
-"plain object" or "dictionary".
+"plain object" or "dictionary". The fields supported by Fáith are documented below.
 
 ### Return value
 
@@ -109,6 +109,85 @@ take advantage of this behaviour with `full` duplex mode for decreased latency i
 
 Fáith does not implement its own `Request` object. Instead, you can pass a Web API `Request` object
 to `fetch()`, and it will internally be converted to the right options.
+
+## `RequestInit` object
+
+*The `RequestInit` dictionary of the Fetch API represents the set of options that can be used to
+configure a fetch request.*
+
+*You can pass a `RequestInit` object into the `Request()` constructor, or directly into the
+`fetch()` function call.* Note that Fáith has additional options available, and those will not
+survive a trip through `Request`. Prefer to supply `RequestInit` directly to `fetch()`.
+
+*You can also construct a `Request` with a `RequestInit`, and pass the `Request` to a `fetch()`
+call along with another `RequestInit`. If you do this, and the same option is set in both places,
+then the value passed directly into `fetch()` is used.*
+
+Note that you can include options that Fáith does not support; they will simply be ignored.
+
+### `agent`
+
+This is custom to Fáith.
+
+You can create an `Agent`, and pass it here to have the request executed by the `Agent`. See the
+documentation for the `Agent` options you can set with this, and the agent data you can access.
+Notably an agent has a DNS cache, and may be configured to handle cookies.
+
+When not provided, a global default `Agent` is created on first use.
+
+### `attributionReporting`
+
+Fáith deliberately does not implement this.
+
+### `authorization`
+
+TODO
+
+### `body`
+
+*The request body contains content to send to the server, for example in a `POST` or `PUT` request.
+It is specified as an instance of any of the following types:*
+
+- *a string*
+- *`ArrayBuffer`*
+- *`Blob`*
+- *`DataView`*
+- *`File`*
+- *`FormData`*
+- *`TypedArray`*
+- *`URLSearchParams`* Not yet implemented.
+- *`ReadableStream`* Note that Fáith currently reads this into memory before sending the request.
+
+### `browsingTopics`
+
+Fáith deliberately does not implement this.
+
+### `cache`
+
+TODO
+
+### `credentials`
+
+*Controls whether or not the browser sends credentials with the request, as well as whether any
+`Set-Cookie` response headers are respected. Credentials are cookies, TLS client certificates, or
+authentication headers containing a username and password. This option may be any one of the
+following values:*
+
+- *`omit`: Never send credentials in the request or include credentials in the response.*
+- ~~`same-origin`~~: Fáith does not implement this, as there is no concept of "origin" on the server.
+- *`include`: *Always include credentials,* ~~even for cross-origin requests.~~
+
+Fáith ignores the `Access-Control-Allow-Credentials` and `Access-Control-Allow-Origin` headers.
+
+See the custom `authorization` option which lets you set Authorization headers (username and
+password) separately from the URL, and determine acceptable authentication methods (e.g. Basic,
+Digest, HOBA, SCRAM, etc).
+
+Defaults to `include` (browsers default to `same-origin`).
+
+### `duplex`
+
+TODO
 
 ## `Response`
 
