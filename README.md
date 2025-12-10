@@ -17,15 +17,7 @@ HTTP cache and a cookie jar, a DNS cache, and actual support for `half` and `ful
 ## Installation
 
 ```bash
-npm install faith
-```
-
-Or build from source:
-
-```bash
-git clone <repository>
-cd faith
-npm install
+npm install @passcod/faith
 ```
 
 ## Usage
@@ -33,7 +25,7 @@ npm install
 ### Basic fetch
 
 ```javascript
-const { fetch } = require('faith');
+const { fetch } = require('@passcod/faith');
 
 async function example() {
   const response = await fetch('https://httpbin.org/get');
