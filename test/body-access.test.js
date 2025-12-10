@@ -79,26 +79,3 @@ test("body property returns null for empty responses", async (t) => {
     t.fail(`Unexpected error: ${error.message}`);
   }
 });
-
-test("body property can be accessed multiple times", async (t) => {
-  t.plan(3);
-
-  try {
-    const response = await fetch(url("/get"));
-
-    // First access
-    const stream1 = response.body;
-    t.ok(stream1, "first body access should return stream");
-
-    // Second access - should return same stream (cached)
-    const stream2 = response.body;
-    t.ok(stream2, "second body access should return stream");
-    t.equal(
-      stream1,
-      stream2,
-      "body property should return same stream on subsequent accesses",
-    );
-  } catch (error) {
-    t.fail(`Unexpected error: ${error.message}`);
-  }
-});

@@ -23,8 +23,6 @@ const ERROR_CODES = native.errorCodes().reduce((acc, code) => {
 class Response {
   /** @type {import('./index').FaithResponse} */
   #nativeResponse;
-  /** @type {ReadableStream<Buffer>?} */
-  #bodyStream = undefined;
 
   constructor(nativeResponse) {
     this.#nativeResponse = nativeResponse;
@@ -70,6 +68,11 @@ class Response {
         enumerable: true,
         configurable: true,
       },
+      body: {
+        get: () => this.#nativeResponse.body,
+        enumerable: true,
+        configurable: true,
+      },
       bodyUsed: {
         get: () => this.#nativeResponse.bodyUsed,
         enumerable: true,
@@ -81,18 +84,6 @@ class Response {
         configurable: true,
       },
     });
-  }
-
-  /**
-   * Get the response body as a ReadableStream
-   * This is a getter to match the Fetch API spec
-   */
-  get body() {
-    if (this.#bodyStream !== undefined) {
-      return this.#bodyStream;
-    }
-
-    return (this.#bodyStream = this.#nativeResponse.body);
   }
 
   /**
@@ -160,46 +151,8 @@ class Response {
       );
     }
 
-    // Check if body was consumed by text()/bytes()/json()
-    // If bodyUsed is true but we have no cached stream, it means the body was consumed
-    if (this.bodyUsed && this.#bodyStream === undefined) {
-      const err = new Error("Response body no longer available");
-      try {
-        Object.defineProperty(err, "code", {
-          value: ERROR_CODES.ResponseBodyNotAvailable,
-          enumerable: true,
-          configurable: true,
-          writable: true,
-        });
-      } catch (e) {
-        try {
-          err.code = ERROR_CODES.ResponseBodyNotAvailable;
-        } catch (e) {}
-      }
-      throw err;
-    }
-
-    // Get the body stream (will mark as disturbed if not already)
-    const bodyStream = this.body;
-    if (bodyStream === null) {
-      const err = new Error("Response body no longer available");
-      try {
-        Object.defineProperty(err, "code", {
-          value: ERROR_CODES.ResponseBodyNotAvailable,
-          enumerable: true,
-          configurable: true,
-          writable: true,
-        });
-      } catch (e) {
-        try {
-          err.code = ERROR_CODES.ResponseBodyNotAvailable;
-        } catch (e) {}
-      }
-      throw err;
-    }
-
     // Create and return a Web API Response object
-    return new globalThis.Response(bodyStream, {
+    return new globalThis.Response(this.body, {
       status: this.status,
       statusText: this.statusText,
       headers: this.headers,
