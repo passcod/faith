@@ -5,12 +5,12 @@ export declare class FaithAgent {
 }
 
 export declare class FaithResponse {
-  get status(): number
-  get statusText(): string
   get headers(): Array<[string, string]>
   get ok(): boolean
-  get url(): string
   get redirected(): boolean
+  get status(): number
+  get statusText(): string
+  get url(): string
   get version(): string
   /** Check if the response body has been disturbed (read) */
   get bodyUsed(): boolean

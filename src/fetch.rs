@@ -104,14 +104,14 @@ pub fn faith_fetch(url: String, options: FaithOptionsAndBody) -> Async<FaithResp
                     )
                         as Pin<Box<DynStream>>))
                 },
-                status,
-                status_text,
+                disturbed: Arc::new(AtomicBool::new(false)),
                 headers: headers_vec,
                 ok,
-                url,
                 redirected,
+                status,
+                status_text,
+                url,
                 version,
-                disturbed: Arc::new(AtomicBool::new(false)),
             })
         }
     })

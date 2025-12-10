@@ -22,28 +22,28 @@ use crate::{
 #[napi]
 #[derive(Debug)]
 pub struct FaithResponse {
-    pub(crate) status: u16,
-    pub(crate) status_text: String,
+    pub(crate) disturbed: Arc<AtomicBool>,
     pub(crate) headers: Vec<(String, String)>,
     pub(crate) ok: bool,
-    pub(crate) url: String,
     pub(crate) redirected: bool,
+    pub(crate) status: u16,
+    pub(crate) status_text: String,
+    pub(crate) url: String,
     pub(crate) version: String,
-    pub(crate) disturbed: Arc<AtomicBool>,
     pub(crate) inner_body: Body,
 }
 
 impl Clone for FaithResponse {
     fn clone(&self) -> Self {
         Self {
-            status: self.status,
-            status_text: self.status_text.clone(),
+            disturbed: Arc::clone(&self.disturbed),
             headers: self.headers.clone(),
             ok: self.ok,
-            url: self.url.clone(),
             redirected: self.redirected,
+            status: self.status,
+            status_text: self.status_text.clone(),
+            url: self.url.clone(),
             version: self.version.clone(),
-            disturbed: Arc::clone(&self.disturbed),
             inner_body: self.inner_body.clone(),
         }
     }
@@ -51,16 +51,6 @@ impl Clone for FaithResponse {
 
 #[napi]
 impl FaithResponse {
-    #[napi(getter)]
-    pub fn status(&self) -> u16 {
-        self.status
-    }
-
-    #[napi(getter)]
-    pub fn status_text(&self) -> String {
-        self.status_text.clone()
-    }
-
     #[napi(getter)]
     pub fn headers(&self) -> Vec<(String, String)> {
         self.headers.clone()
@@ -72,13 +62,23 @@ impl FaithResponse {
     }
 
     #[napi(getter)]
-    pub fn url(&self) -> String {
-        self.url.clone()
+    pub fn redirected(&self) -> bool {
+        self.redirected
     }
 
     #[napi(getter)]
-    pub fn redirected(&self) -> bool {
-        self.redirected
+    pub fn status(&self) -> u16 {
+        self.status
+    }
+
+    #[napi(getter)]
+    pub fn status_text(&self) -> String {
+        self.status_text.clone()
+    }
+
+    #[napi(getter)]
+    pub fn url(&self) -> String {
+        self.url.clone()
     }
 
     #[napi(getter)]
@@ -235,14 +235,14 @@ impl FaithResponse {
         }
 
         Ok(Self {
-            status: self.status,
-            status_text: self.status_text.clone(),
+            disturbed: Arc::new(AtomicBool::new(false)),
             headers: self.headers.clone(),
             ok: self.ok,
-            url: self.url.clone(),
             redirected: self.redirected,
+            status: self.status,
+            status_text: self.status_text.clone(),
+            url: self.url.clone(),
             version: self.version.clone(),
-            disturbed: Arc::new(AtomicBool::new(false)),
             inner_body: self.inner_body.clone(),
         })
     }
