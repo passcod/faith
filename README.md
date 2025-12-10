@@ -305,3 +305,6 @@ every error thrown also has a `code` property that is set to one of those codes.
 accurately respond to the exact error kind by checking its code and matching against the right
 constant from `ERROR_CODES`, instead of doing string matching on the error message, or coarse
 `instance of` matching.
+
+Due to technical limitations, when reading a body stream, reads might fail, but that error
+will not have a `.code` property.
