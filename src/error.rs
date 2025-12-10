@@ -23,9 +23,10 @@ pub enum FaithErrorKind {
 
 #[derive(Debug, Clone, Copy)]
 enum JsErrorType {
-    TypeError,
-    SyntaxError,
     GenericError,
+    NamedError(&'static str),
+    SyntaxError,
+    TypeError,
 }
 
 impl FaithErrorKind {
@@ -48,17 +49,15 @@ impl FaithErrorKind {
 
     fn js_type(self) -> JsErrorType {
         match self {
+            Self::BodyStream | Self::RuntimeThread => JsErrorType::GenericError,
+            Self::Aborted | Self::Timeout => JsErrorType::NamedError("AbortError"),
+            Self::Network => JsErrorType::NamedError("NetworkError"),
+            Self::JsonParse | Self::Utf8Parse => JsErrorType::SyntaxError,
             Self::InvalidHeader
             | Self::InvalidMethod
             | Self::InvalidUrl
             | Self::ResponseAlreadyDisturbed
             | Self::ResponseBodyNotAvailable => JsErrorType::TypeError,
-            Self::JsonParse | Self::Utf8Parse => JsErrorType::SyntaxError,
-            Self::Aborted
-            | Self::BodyStream
-            | Self::Network
-            | Self::RuntimeThread
-            | Self::Timeout => JsErrorType::GenericError,
         }
     }
 }
@@ -88,13 +87,17 @@ impl FaithError {
 
     // we make this explicit instead of adding a From<> so that we can't accidentally do it
     pub fn into_napi(self) -> napi::Error {
+        self.to_napi()
+    }
+    fn to_napi(&self) -> napi::Error {
         napi::Error::new(
             napi::Status::GenericFailure,
             format!(
                 "{:?}: {}",
                 self.kind,
                 self.message
-                    .unwrap_or_else(|| self.kind.default_message().to_owned())
+                    .as_deref()
+                    .unwrap_or_else(|| self.kind.default_message())
             ),
         )
     }
@@ -106,6 +109,14 @@ impl FaithError {
             JsErrorType::TypeError => JsTypeError::from(self.into_napi()).into_unknown(*env),
             JsErrorType::SyntaxError => JsSyntaxError::from(self.into_napi()).into_unknown(*env),
             JsErrorType::GenericError => JsError::from(self.into_napi()).into_unknown(*env),
+            JsErrorType::NamedError(name) => env
+                .create_error(self.to_napi())
+                .and_then(|mut err| {
+                    err.set_named_property("name", name)?;
+                    Ok(err)
+                })
+                .and_then(|err| err.into_unknown(env))
+                .unwrap_or_else(|_| JsError::from(self.into_napi()).into_unknown(*env)),
         };
 
         // we do this manually instead of using the TryFrom so we can return the untouched Unknown if we fail

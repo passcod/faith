@@ -419,24 +419,23 @@ Fáith produces fine-grained errors, but maps them to a few javascript error typ
 compatibility. The `.code` property on errors thrown from Fáith is set to a stable name for each
 error kind, documented in this comprehensive mapping:
 
+- JS `AbortError`:
+  - `Aborted` — request was aborted using `signal`
+  - `Timeout` — request timed out
+- JS `NetworkError`:
+  - `Network` — network error
+- JS `SyntaxError`:
+  - `JsonParse` — JSON parse error for `response.json()`
+  - `Utf8Parse` — UTF8 decoding error for `response.text()`
 - JS `TypeError`:
   - `InvalidHeader` — invalid header name or value
   - `InvalidMethod` — invalid HTTP method
   - `InvalidUrl` — invalid URL string
   - `ResponseAlreadyDisturbed` — body already read (mutually exclusive operations)
   - `ResponseBodyNotAvailable` — body is null or not available
-- JS `SyntaxError`:
-  - `JsonParse` — JSON parse error for `response.json()`
-  - `Utf8Parse` — UTF8 decoding error for `response.text()`
 - JS generic `Error`:
-  - `Aborted` — request was aborted using `signal`
   - `BodyStream` — internal stream handling error
-  - `Network` — network error
   - `RuntimeThread` — failed to start or schedule threads on the internal tokio runtime
-  - `Timeout` — request timed out
-
-Due to technical limitations, we can't yet create `AbortError` or `NetworkError`, which would match
-the fetch() implementation closer for the `Aborted`, `Timeout` or `Network` cases.
 
 The library exports an `ERROR_CODES` object which has every error code the library throws, and
 every error thrown also has a `code` property that is set to one of those codes. So you can
