@@ -124,7 +124,7 @@ This is custom to Fáith.
 
 You can create an `Agent`, and pass it here to have the request executed by the `Agent`. See the
 documentation for the `Agent` options you can set with this, and the agent data you can access.
-Notably an agent has a DNS cache, and may be configured to handle cookies.
+Notably an agent has a DNS cache, and may be configured to handle cookies and/or an HTTP cache.
 
 When not provided, a global default `Agent` is created on first use.
 
