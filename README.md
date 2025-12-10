@@ -169,8 +169,8 @@ TODO
 ### `credentials`
 
 *Controls whether or not the browser sends credentials with the request, as well as whether any
-`Set-Cookie` response headers are respected. Credentials are cookies, TLS client certificates, or
-authentication headers containing a username and password. This option may be any one of the
+`Set-Cookie` response headers are respected. Credentials are cookies, ~~TLS client certificates,~~
+or authentication headers containing a username and password. This option may be any one of the
 following values:*
 
 - *`omit`: Never send credentials in the request or include credentials in the response.*
@@ -179,7 +179,14 @@ following values:*
 
 Fáith ignores the `Access-Control-Allow-Credentials` and `Access-Control-Allow-Origin` headers.
 
-See the custom `authorization` option which lets you set Authorization headers (username and
+Fáith currently does not `omit` the TLS client certificate when the request's `Agent` has one
+configured. This is an upstream limitation.
+
+If the request's `Agent` has cookies enabled, new cookies from the response will be added to the
+cookie jar, even as Fáith strips them from the request and response headers returned to the user.
+This is an upstream limitation.
+
+See also the custom `authorization` option which lets you set Authorization headers (username and
 password) separately from the URL, and determine acceptable authentication methods (e.g. Basic,
 Digest, HOBA, SCRAM, etc).
 
