@@ -140,10 +140,6 @@ When not provided, a global default `Agent` is created on first use.
 
 Fáith deliberately does not implement this.
 
-### `authorization`
-
-TODO
-
 ### `body`
 
 *The request body contains content to send to the server, for example in a `POST` or `PUT` request.
