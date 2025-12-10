@@ -244,9 +244,13 @@ on `Agent` and applies to all requests made with that `Agent`.
 
 Fáith deliberately does not implement this, as there is no origin.
 
+However, Fáith does set the `Referer` header when redirecting automatically.
+
 ### `referrerPolicy`
 
 Fáith deliberately does not implement this, as there is no origin.
+
+However, Fáith does set the `Referer` header when redirecting automatically.
 
 ### `signal`
 
