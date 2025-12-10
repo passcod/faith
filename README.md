@@ -151,9 +151,8 @@ Fáith chooses to respect the spec rather than the browsers in this case.
 whether the body has been read yet.*
 
 In Fáith, this indicates whether the body stream has ever been read from or canceled, as defined
-[in the spec](https://streams.spec.whatwg.org/#is-readable-stream-disturbed).
-
-This getter is "fused": once it returns `true`, it will always return `true`.
+[in the spec](https://streams.spec.whatwg.org/#is-readable-stream-disturbed). Note that accessing
+the `.body` property counts as a read, even if you don't actually consume any bytes of content.
 
 ### `Response.headers`
 
