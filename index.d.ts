@@ -10,6 +10,7 @@ export declare class FaithResponse {
   get redirected(): boolean
   get status(): number
   get statusText(): string
+  get type(): string
   get url(): string
   get version(): string
   /** Check if the response body has been disturbed (read) */

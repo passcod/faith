@@ -194,20 +194,10 @@ from well-known status codes.
 
 ### `Response.type`
 
-Not yet implemented.
-
 *The `type` read-only property of the `Response` interface contains the type of the response. The
 type determines whether scripts are able to access the response body and headers.*
 
-*It's a string, which may be any of the following cases:*
-
-- *`basic`: the usual case.*
-- `cors`: does not occur in Fáith.
-- `error`: does not occur in Fáith.
-- `opaque`: does not occur in Fáith.
-- *`opaqueredirect`: A response to a request whose `redirect` option was set to `manual`, and which
-  was redirected by the server. The `status` property is set to `0`, `body` is `null`, headers are
-  empty and immutable.*
+In Fáith, this is always set to `basic`.
 
 ### `Response.url`
 

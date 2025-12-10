@@ -76,6 +76,11 @@ impl FaithResponse {
         self.status_text.clone()
     }
 
+    #[napi(getter, js_name = "type")]
+    pub fn typ(&self) -> &'static str {
+        "basic"
+    }
+
     #[napi(getter)]
     pub fn url(&self) -> String {
         self.url.clone()
