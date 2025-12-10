@@ -438,6 +438,15 @@ new Agent(options)
 
 ### `cache`
 ### `cookies`
+
+Enable a persistent cookie store for the agent. Cookies received in responses will be preserved and
+included in additional requests.
+
+Default: `false`.
+
+You may use `agent.getCookie(url: string)` and `agent.addCookie(url: string, value: string)` to add
+and retrieve cookies from the store.
+
 ### `dns`
 ### `headers`
 ### `http3`
@@ -470,6 +479,24 @@ const agent = new Agent({
   userAgent: `YourApp/1.2.3 ${USER_AGENT}`,
 });
 ```
+
+### `addCookie(url: string, cookie: string)`
+
+Add a cookie into the agent.
+
+Does nothing if:
+- the cookie store is disabled
+- the url is malformed
+
+### `getCookie(url: string): string | null`
+
+Retrieve a cookie from the store.
+
+Returns `null` if:
+- there's no cookie at this url
+- the cookie store is disabled
+- the url is malformed
+- the cookie cannot be represented as a string
 
 ### `stats()`
 

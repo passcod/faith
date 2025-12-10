@@ -2,6 +2,8 @@
 /* eslint-disable */
 export declare class Agent {
   constructor(options?: AgentOptions | undefined | null)
+  addCookie(url: string, cookie: string): void
+  getCookie(url: string): string | null
 }
 
 export declare class FaithResponse {
@@ -44,6 +46,7 @@ export declare class FaithResponse {
 }
 
 export interface AgentOptions {
+  cookies?: boolean
   userAgent?: string
 }
 

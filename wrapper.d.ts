@@ -4,9 +4,13 @@
  * This provides TypeScript definitions for the spec-compliant Fetch API wrapper.
  */
 
-export const FAITH_VERSION: string;
-export const REQWEST_VERSION: string;
-export const USER_AGENT: string;
+export {
+  Agent,
+  AgentOptions,
+  FAITH_VERSION,
+  REQWEST_VERSION,
+  USER_AGENT,
+} from "./index";
 
 /**
  * Error codes const enum
@@ -28,14 +32,6 @@ export const ERROR_CODES: {
   readonly Timeout: "Timeout";
   readonly Utf8Parse: "Utf8Parse";
 };
-
-export interface AgentOptions {
-  userAgent?: string;
-}
-
-export declare class Agent {
-  constructor(options?: AgentOptions | undefined | null);
-}
 
 export interface FetchOptions {
   method?: string;

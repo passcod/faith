@@ -14,12 +14,13 @@ napi = { version = "3.7.0", features = ["napi9", "serde-json", "tokio_rt", "web_
 napi-derive = "3.4.0"
 reqwest = { version = "0.12.25", features = [
     "brotli",
+    "cookies",
     "deflate",
     "gzip",
     "hickory-dns",
     "json",
-    "rustls-tls-webpki-roots",
     "rustls-tls-native-roots-no-provider",
+    "rustls-tls-webpki-roots",
     "stream",
     "zstd",
 ] }
