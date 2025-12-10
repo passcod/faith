@@ -105,26 +105,6 @@ body has not yet finished sending. Most HTTP servers will not send response head
 finished receiving the body so this distinction doesn't matter, but some do, and it is possible to
 take advantage of this behaviour with `full` duplex mode for decreased latency in specific cases.
 
-### Exceptions
-
-#### `AbortError` (DOMException)
-
-*The request was aborted due to a call to the `AbortController.abort()` method.*
-
-#### `NotAllowedError` (DOMException)
-
-This is deliberately not implemented by Fáith.
-
-#### `TypeError`
-
-*Can occur for the following reasons:*
-
-- *The requested URL is invalid.*
-- *The requested URL includes credentials (username and password).*
-- *The RequestInit object passed as the value of options included properties with invalid values.*
-- *The request is blocked by a permissions policy.*
-- *There is a network error (for example, because the device does not have connectivity).*
-
 ## `Request`
 
 Fáith does not implement its own `Request` object. Instead, you can pass a Web API `Request` object
@@ -281,7 +261,7 @@ response has been partially read, only the remaining bytes will be available in 
 
 Fáith produces fine-grained errors, but maps them to a few javascript error types for fetch
 compatibility. The `.code` property on errors thrown from Fáith is set to a stable name for each
-error kind, documented both in the API documentation above and in this comprehensive mapping:
+error kind, documented in this comprehensive mapping:
 
 - JS `TypeError`:
   - `InvalidHeader` — invalid header name or value
