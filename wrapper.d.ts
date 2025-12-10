@@ -7,6 +7,7 @@
 export {
   Agent,
   AgentOptions,
+  Header,
   FAITH_VERSION,
   REQWEST_VERSION,
   USER_AGENT,

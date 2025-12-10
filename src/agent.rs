@@ -5,6 +5,7 @@ use napi_derive::napi;
 use reqwest::{
     Client, Url,
     cookie::{CookieStore, Jar},
+    header::{HeaderMap, HeaderName, HeaderValue},
 };
 
 use crate::error::FaithError;
@@ -22,9 +23,18 @@ pub const USER_AGENT: &str = concat!(
 );
 
 #[napi(object)]
+#[derive(Debug, Clone)]
+pub struct Header {
+    pub name: String,
+    pub value: String,
+    pub sensitive: Option<bool>,
+}
+
+#[napi(object)]
 #[derive(Debug, Clone, Default)]
 pub struct AgentOptions {
     pub cookies: Option<bool>,
+    pub headers: Option<Vec<Header>>,
     pub user_agent: Option<String>,
 }
 
@@ -52,6 +62,33 @@ impl Agent {
         } else {
             None
         };
+
+        if let Some(headers) = options.headers
+            && !headers.is_empty()
+        {
+            let map = HeaderMap::from_iter(headers.into_iter().filter_map(
+                |Header {
+                     name,
+                     value,
+                     sensitive,
+                 }| {
+                    let Ok(name) = HeaderName::from_bytes(name.as_bytes()) else {
+                        return None;
+                    };
+
+                    let Ok(mut value) = HeaderValue::from_bytes(value.as_bytes()) else {
+                        return None;
+                    };
+
+                    if sensitive.unwrap_or(false) {
+                        value.set_sensitive(true);
+                    }
+
+                    Some((name, value))
+                },
+            ));
+            client = client.default_headers(map);
+        }
 
         Ok(Self {
             client: client.build()?,

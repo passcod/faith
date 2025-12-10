@@ -47,6 +47,7 @@ export declare class FaithResponse {
 
 export interface AgentOptions {
   cookies?: boolean
+  headers?: Array<Header>
   userAgent?: string
 }
 
@@ -89,6 +90,12 @@ export interface FaithOptionsAndBody {
   credentials?: CredentialsOption
   duplex?: DuplexOption
   agent: Agent
+}
+
+export interface Header {
+  name: string
+  value: string
+  sensitive?: boolean
 }
 
 export const REQWEST_VERSION: string

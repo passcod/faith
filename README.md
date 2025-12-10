@@ -437,7 +437,7 @@ new Agent(options)
 ```
 
 ### `cache`
-### `cookies`
+### `cookies: bool`
 
 Enable a persistent cookie store for the agent. Cookies received in responses will be preserved and
 included in additional requests.
@@ -448,7 +448,15 @@ You may use `agent.getCookie(url: string)` and `agent.addCookie(url: string, val
 and retrieve cookies from the store.
 
 ### `dns`
-### `headers`
+### `headers: Array<{ name: string, value: string, sensitive?: bool }>`
+
+Sets the default headers for every request.
+
+If header names or values are invalid, they are silently omitted.
+Sensitive headers (e.g. `Authorization`) should be marked.
+
+Default: none.
+
 ### `http3`
 #### `congestion`
 ### `pool`
