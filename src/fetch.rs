@@ -78,8 +78,7 @@ pub fn faith_fetch(url: String, options: FaithOptionsAndBody) -> Async<FaithResp
             }
 
             if let Some(timeout) = options.timeout {
-                request =
-                    request.timeout(std::time::Duration::from_millis((timeout * 1000.0) as u64));
+                request = request.timeout(std::time::Duration::from_millis(timeout as u64));
             }
 
             let response = request.send().await?;

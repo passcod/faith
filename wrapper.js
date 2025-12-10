@@ -140,7 +140,7 @@ let defaultAgent;
  * @param {Object|Headers} [options.headers] - HTTP headers (Headers object or plain object with {name: value} pairs).
  *                                              Converted to array of tuples for the native binding.
  * @param {Buffer|Array<number>|string|ArrayBuffer|Uint8Array|ReadableStream} [options.body] - Request body
- * @param {number} [options.timeout] - Timeout in seconds
+ * @param {number} [options.timeout] - Timeout in milliseconds
  * @param {string} [options.credentials] - Credentials mode: "omit", "same-origin", or "include" (default)
  * @param {string} [options.duplex] - Duplex mode: "half" (required when body is a ReadableStream)
  * @returns {Promise<Response>}

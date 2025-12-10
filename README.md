@@ -188,10 +188,6 @@ If the request's `Agent` has cookies enabled, new cookies from the response will
 cookie jar, even as Fáith strips them from the request and response headers returned to the user.
 This is an upstream limitation.
 
-See also the custom `authorization` option which lets you set Authorization headers (username and
-password) separately from the URL, and determine acceptable authentication methods (e.g. Basic,
-Digest, HOBA, SCRAM, etc).
-
 Defaults to `include` (browsers default to `same-origin`).
 
 ### `duplex`
@@ -247,6 +243,22 @@ Not implemented.
 ### `redirect`
 
 TODO
+
+### `referrer`
+
+Fáith deliberately does not implement this, as there is no origin.
+
+### `referrerPolicy`
+
+Fáith deliberately does not implement this, as there is no origin.
+
+### `signal`
+
+TODO
+
+### `timeout`
+
+Custom to Fáith. Cancels the request after this many milliseconds.
 
 ## `Response`
 
