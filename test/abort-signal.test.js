@@ -103,8 +103,8 @@ test("signal: multiple requests with same controller", async (t) => {
   const controller = new AbortController();
 
   try {
-    const req1 = fetch(url("/get"), { signal: controller.signal });
-    const req2 = fetch(url("/delay/1"), { signal: controller.signal });
+    const req1 = fetch(url("/delay/1"), { signal: controller.signal });
+    const req2 = fetch(url("/delay/2"), { signal: controller.signal });
 
     setTimeout(() => {
       controller.abort();
