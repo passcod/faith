@@ -36,54 +36,24 @@ class Response {
       }
     }
 
-    // Copy getters from native response
-    Object.defineProperties(this, {
-      status: {
-        get: () => this.#nativeResponse.status,
-        enumerable: true,
-        configurable: true,
-      },
-      statusText: {
-        get: () => this.#nativeResponse.statusText,
-        enumerable: true,
-        configurable: true,
-      },
-      headers: {
-        get: () => headers,
-        enumerable: true,
-        configurable: true,
-      },
-      ok: {
-        get: () => this.#nativeResponse.ok,
-        enumerable: true,
-        configurable: true,
-      },
-      url: {
-        get: () => this.#nativeResponse.url,
-        enumerable: true,
-        configurable: true,
-      },
-      redirected: {
-        get: () => this.#nativeResponse.redirected,
-        enumerable: true,
-        configurable: true,
-      },
-      body: {
-        get: () => this.#nativeResponse.body,
-        enumerable: true,
-        configurable: true,
-      },
-      bodyUsed: {
-        get: () => this.#nativeResponse.bodyUsed,
-        enumerable: true,
-        configurable: true,
-      },
-      version: {
-        get: () => this.#nativeResponse.version,
-        enumerable: true,
-        configurable: true,
-      },
+    Object.defineProperty(this, "headers", {
+      get: () => headers,
+      enumerable: true,
+      configurable: true,
     });
+
+    const nativeProto = Object.getPrototypeOf(this.#nativeResponse);
+    const descriptors = Object.getOwnPropertyDescriptors(nativeProto);
+
+    for (const [key, descriptor] of Object.entries(descriptors)) {
+      if (descriptor.get && key !== "headers") {
+        Object.defineProperty(this, key, {
+          get: () => this.#nativeResponse[key],
+          enumerable: true,
+          configurable: true,
+        });
+      }
+    }
   }
 
   /**
