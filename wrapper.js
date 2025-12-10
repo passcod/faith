@@ -137,9 +137,12 @@ let defaultAgent;
  * @param {string|Request|URL|Object} input - The URL to fetch, a Request object, or an object with toString()
  * @param {Object} [options] - Fetch options (when input is a Request, options override Request properties)
  * @param {string} [options.method] - HTTP method
- * @param {Object|Headers} [options.headers] - HTTP headers (either Headers object or plain object)
- * @param {Buffer|Array<number>|string|ArrayBuffer|Uint8Array} [options.body] - Request body
+ * @param {Object|Headers} [options.headers] - HTTP headers (Headers object or plain object with {name: value} pairs).
+ *                                              Converted to array of tuples for the native binding.
+ * @param {Buffer|Array<number>|string|ArrayBuffer|Uint8Array|ReadableStream} [options.body] - Request body
  * @param {number} [options.timeout] - Timeout in seconds
+ * @param {string} [options.credentials] - Credentials mode: "omit", "same-origin", or "include" (default)
+ * @param {string} [options.duplex] - Duplex mode: "half" (required when body is a ReadableStream)
  * @returns {Promise<Response>}
  *
  * When a Request object is provided, all its properties (method, headers, body, mode, credentials,
@@ -147,6 +150,12 @@ let defaultAgent;
  * The options parameter can override any Request property.
  *
  * Objects with a toString() method (like URL objects) will have toString() called to get the URL string.
+ *
+ * Headers handling:
+ * - Headers object: converted to array of [name, value] pairs
+ * - Plain object: entries converted to array of [name, value] pairs
+ * - null/undefined: treated as no headers
+ * - Invalid types: throws TypeError
  */
 async function fetch(input, options = {}) {
   let url;
@@ -194,6 +203,10 @@ async function fetch(input, options = {}) {
     );
   }
 
+  // Convert headers to native format
+  // This is the inverse of what Response does: Request headers go from
+  // Headers/Object -> Array<[string, string]>, while Response headers go from
+  // Array<[string, string]> -> Headers object
   if (nativeOptions.headers !== undefined && nativeOptions.headers !== null) {
     if (nativeOptions.headers instanceof Headers) {
       // Convert Headers object to array of tuples

@@ -201,6 +201,15 @@ that Fáith will send the entire request before processing the response.*
 
 *This option must be present when `body` is a `ReadableStream`.*
 
+### `headers`
+
+*Any headers you want to add to your request, contained within a `Headers` object or an object
+literal whose keys are the names of headers and whose values are the header values.*
+
+Fáith allows all request headers to be set (unlike browsers, which [forbid][1] a number of them).
+
+[1]: https://developer.mozilla.org/en-US/docs/Glossary/Forbidden_request_header
+
 ## `Response`
 
 *The `Response` interface of the Fetch API represents the response to a request.*
