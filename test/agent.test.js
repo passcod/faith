@@ -113,7 +113,7 @@ test("Agent works with timeout option", async (t) => {
   const agent = new Agent();
   const response = await faithFetch(url("/delay/1"), {
     agent,
-    timeout: 5,
+    timeout: 5000,
   });
 
   t.ok(response.ok, "Should successfully fetch with agent and timeout");
