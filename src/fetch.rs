@@ -94,10 +94,7 @@ pub fn faith_fetch(
             tokio::select! {
                 result = request.send() => result?,
                 _ = abort.recv() => {
-                    return Err(FaithError::new(
-                        FaithErrorKind::Network,
-                        Some("The operation was aborted".to_string()),
-                    ).into());
+                    return Err(FaithErrorKind::Aborted.into());
                 }
             }
         } else {
