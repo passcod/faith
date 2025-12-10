@@ -104,6 +104,7 @@ browsers), the promise resolves as soon as response headers have been received, 
 body has not yet finished sending. Most HTTP servers will not send response headers until they've
 finished receiving the body so this distinction doesn't matter, but some do, and it is possible to
 take advantage of this behaviour with `full` duplex mode for decreased latency in specific cases.
+You may even be able to vary the request body stream based on the response body stream.
 
 ## `Request`
 
