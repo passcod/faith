@@ -232,7 +232,7 @@ Fáith deliberately does not implement this, as there is no CORS/origin.
 
 ### `priority`
 
-Not implemented.
+Not supported.
 
 ### `redirect`
 
