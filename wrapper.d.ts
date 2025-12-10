@@ -15,17 +15,18 @@ export const USER_AGENT: string;
  * Run `npm test` to validate sync (test/error-codes.test.js checks this)
  */
 export const ERROR_CODES: {
+  readonly Aborted: "Aborted";
+  readonly BodyStream: "BodyStream";
   readonly InvalidHeader: "InvalidHeader";
   readonly InvalidMethod: "InvalidMethod";
   readonly InvalidUrl: "InvalidUrl";
+  readonly JsonParse: "JsonParse";
+  readonly Network: "Network";
   readonly ResponseAlreadyDisturbed: "ResponseAlreadyDisturbed";
   readonly ResponseBodyNotAvailable: "ResponseBodyNotAvailable";
-  readonly BodyStream: "BodyStream";
-  readonly JsonParse: "JsonParse";
-  readonly Utf8Parse: "Utf8Parse";
-  readonly Timeout: "Timeout";
-  readonly Network: "Network";
   readonly RuntimeThread: "RuntimeThread";
+  readonly Timeout: "Timeout";
+  readonly Utf8Parse: "Utf8Parse";
 };
 
 export declare class Agent {

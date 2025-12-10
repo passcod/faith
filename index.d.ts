@@ -58,17 +58,18 @@ export declare function errorCodes(): Array<string>
 export const FAITH_VERSION: string
 
 export declare const enum FaithErrorKind {
+  Aborted = 'Aborted',
+  BodyStream = 'BodyStream',
   InvalidHeader = 'InvalidHeader',
   InvalidMethod = 'InvalidMethod',
   InvalidUrl = 'InvalidUrl',
+  JsonParse = 'JsonParse',
+  Network = 'Network',
   ResponseAlreadyDisturbed = 'ResponseAlreadyDisturbed',
   ResponseBodyNotAvailable = 'ResponseBodyNotAvailable',
-  BodyStream = 'BodyStream',
-  JsonParse = 'JsonParse',
-  Utf8Parse = 'Utf8Parse',
+  RuntimeThread = 'RuntimeThread',
   Timeout = 'Timeout',
-  Network = 'Network',
-  RuntimeThread = 'RuntimeThread'
+  Utf8Parse = 'Utf8Parse'
 }
 
 export declare function faithFetch(url: string, options: FaithOptionsAndBody, signal?: AbortSignal | undefined | null): Async<FaithResponse>
