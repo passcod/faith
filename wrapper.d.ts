@@ -37,6 +37,7 @@ export interface FetchOptions {
   headers?: Record<string, string> | Headers;
   body?: string | Buffer | Uint8Array | Array<number> | ArrayBuffer;
   timeout?: number;
+  credentials?: "omit" | "same-origin" | "include";
   agent?: Agent;
 }
 

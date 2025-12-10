@@ -13,7 +13,7 @@ use crate::{
     async_task::{Async, FaithAsyncResult},
     body::{Body, DynStream},
     error::{FaithError, FaithErrorKind},
-    options::{FaithOptions, FaithOptionsAndBody},
+    options::{CredentialsOption, FaithOptions, FaithOptionsAndBody},
     response::FaithResponse,
 };
 
@@ -35,12 +35,27 @@ pub fn faith_fetch(url: String, options: FaithOptionsAndBody) -> Async<FaithResp
                 Method::from_bytes(method.as_bytes()).map_err(|_| FaithErrorKind::InvalidMethod)?;
             let is_head = method == Method::HEAD;
 
-            let parsed_url = reqwest::Url::parse(&url).map_err(|_| FaithErrorKind::InvalidUrl)?;
+            let mut parsed_url =
+                reqwest::Url::parse(&url).map_err(|_| FaithErrorKind::InvalidUrl)?;
+
+            // Handle credentials based on credentials option
+            if options.credentials == CredentialsOption::Omit {
+                // Remove credentials from URL if omit is specified
+                let _ = parsed_url.set_username("");
+                let _ = parsed_url.set_password(None);
+            }
 
             let mut request = agent.client.request(method, parsed_url);
 
             if let Some(headers) = &options.headers {
                 for (key, value) in headers {
+                    // Skip Cookie header if credentials is omit
+                    if options.credentials == CredentialsOption::Omit
+                        && key.eq_ignore_ascii_case("cookie")
+                    {
+                        continue;
+                    }
+
                     // Validate header name and value before adding to request
                     let header_name = HeaderName::from_bytes(key.as_bytes()).map_err(|_| {
                         FaithError::new(
@@ -84,6 +99,13 @@ pub fn faith_fetch(url: String, options: FaithOptionsAndBody) -> Async<FaithResp
                 .headers()
                 .iter()
                 .filter_map(|(name, value)| {
+                    // Skip Set-Cookie header if credentials is omit
+                    if options.credentials == CredentialsOption::Omit
+                        && name.as_str().eq_ignore_ascii_case("set-cookie")
+                    {
+                        return None;
+                    }
+
                     value
                         .to_str()
                         .ok()

@@ -574,6 +574,7 @@ if (!nativeBinding) {
 module.exports = nativeBinding
 module.exports.FaithAgent = nativeBinding.FaithAgent
 module.exports.FaithResponse = nativeBinding.FaithResponse
+module.exports.CredentialsOption = nativeBinding.CredentialsOption
 module.exports.errorCodes = nativeBinding.errorCodes
 module.exports.FAITH_VERSION = nativeBinding.FAITH_VERSION
 module.exports.FaithErrorKind = nativeBinding.FaithErrorKind

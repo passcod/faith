@@ -43,6 +43,12 @@ export declare class FaithResponse {
   clone(): FaithResponse
 }
 
+export declare const enum CredentialsOption {
+  Omit = 'omit',
+  SameOrigin = 'same-origin',
+  Include = 'include'
+}
+
 export declare function errorCodes(): Array<string>
 
 export const FAITH_VERSION: string
@@ -68,6 +74,7 @@ export interface FaithOptionsAndBody {
   headers?: Array<[string, string]>
   body?: string | Buffer | Uint8Array
   timeout?: number
+  credentials?: CredentialsOption
   agent: FaithAgent
 }
 
