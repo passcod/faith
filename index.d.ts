@@ -79,8 +79,6 @@ export declare class FaithResponse {
    */
 get peer(): { address?: string; certificate?: Buffer }
 /**
- * Not yet supported. Fáith will always return `false` here. This is an upstream limitation.
- *
  * The `redirected` read-only property of the `Response` interface indicates whether or not the
  * response is the result of a request you made which was redirected.
  *
@@ -545,20 +543,6 @@ export declare const enum FaithErrorKind {
   Utf8Parse = 'Utf8Parse'
 }
 
-/**
- * This defines the resource that you wish to fetch. This can either be:
- *
- * - A string or any other object with a stringifier — including a `URL` object — that provides the
- *   URL of the resource you want to fetch. The URL must be absolute and include a scheme.
- *
- * - A `Request` object.
- *
- * A `RequestInit` object containing any custom settings that you want to apply to the request. In
- * practice the `RequestInit` class does not exist in browsers or Node.js, and so this is always a
- * "plain object" or "dictionary". The fields supported by Fáith are documented below.
- *
- * A `Promise` that resolves to a `Response` object.
- */
 export declare function faithFetch(url: string, options: FaithOptionsAndBody, signal?: AbortSignal | undefined | null): Async<FaithResponse>
 
 export interface FaithOptionsAndBody {

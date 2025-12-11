@@ -31,6 +31,7 @@ pub struct FaithResponse {
 	pub(crate) headers: Vec<(String, String)>,
 	pub(crate) ok: bool,
 	pub(crate) peer: Arc<PeerInformation>,
+	pub(crate) redirected: bool,
 	pub(crate) status: u16,
 	pub(crate) status_text: String,
 	pub(crate) url: String,
@@ -45,6 +46,7 @@ impl Clone for FaithResponse {
 			headers: self.headers.clone(),
 			ok: self.ok,
 			peer: self.peer.clone(),
+			redirected: self.redirected,
 			status: self.status,
 			status_text: self.status_text.clone(),
 			url: self.url.clone(),
@@ -104,8 +106,6 @@ impl FaithResponse {
 		Ok(obj)
 	}
 
-	/// Not yet supported. Fáith will always return `false` here. This is an upstream limitation.
-	///
 	/// The `redirected` read-only property of the `Response` interface indicates whether or not the
 	/// response is the result of a request you made which was redirected.
 	///
@@ -113,8 +113,7 @@ impl FaithResponse {
 	/// cannot prevent it by aborting the fetch at this point.
 	#[napi(getter)]
 	pub fn redirected(&self) -> bool {
-		false // TODO: depends on upstream
-		// may also be possible by re-implementing the redirect handling :(
+		self.redirected
 	}
 
 	/// The `status` read-only property of the `Response` interface contains the HTTP status codes of the

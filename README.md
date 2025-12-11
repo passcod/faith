@@ -357,8 +357,6 @@ When connected over HTTPS, this is the DER-encoded leaf certificate of the peer.
 
 ### `Response.redirected: boolean`
 
-Not yet supported. Fáith will always return `false` here. This is an upstream limitation.
-
 *The `redirected` read-only property of the `Response` interface indicates whether or not the
 response is the result of a request you made which was redirected.*
 

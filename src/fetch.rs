@@ -26,18 +26,6 @@ use crate::{
 	response::{FaithResponse, PeerInformation},
 };
 
-/// This defines the resource that you wish to fetch. This can either be:
-///
-/// - A string or any other object with a stringifier — including a `URL` object — that provides the
-///   URL of the resource you want to fetch. The URL must be absolute and include a scheme.
-///
-/// - A `Request` object.
-///
-/// A `RequestInit` object containing any custom settings that you want to apply to the request. In
-/// practice the `RequestInit` class does not exist in browsers or Node.js, and so this is always a
-/// "plain object" or "dictionary". The fields supported by Fáith are documented below.
-///
-/// A `Promise` that resolves to a `Response` object.
 #[napi]
 pub fn faith_fetch(
 	url: String,
@@ -74,7 +62,7 @@ pub fn faith_fetch(
 
 		let mut request = agent
 			.client
-			.request(method, parsed_url)
+			.request(method, parsed_url.clone())
 			.with_extension(CacheMode::from(options.cache));
 
 		if let Some(headers) = &options.headers {
@@ -137,6 +125,7 @@ pub fn faith_fetch(
 			.unwrap_or_default()
 			.to_string();
 		let ok = response.status().is_success();
+		let redirected = &parsed_url != response.url();
 		let url = response.url().to_string();
 		let version = format!("{:?}", response.version());
 
@@ -183,6 +172,7 @@ pub fn faith_fetch(
 			headers: headers_vec,
 			ok,
 			peer: Arc::new(peer),
+			redirected,
 			status,
 			status_text,
 			url,

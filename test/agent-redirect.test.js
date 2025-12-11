@@ -3,7 +3,7 @@ const { fetch: faithFetch, Agent } = require("../wrapper.js");
 const { url } = require("./helpers.js");
 
 test("Agent with redirect: 'follow' (default)", async (t) => {
-	t.plan(2);
+	t.plan(3);
 
 	const agent = new Agent({
 		redirect: "follow",
@@ -12,20 +12,25 @@ test("Agent with redirect: 'follow' (default)", async (t) => {
 	const response = await faithFetch(url("/redirect/2"), { agent });
 	t.ok(response.ok, "Should successfully follow redirects");
 	t.equal(response.status, 200, "Status should be 200 after redirects");
+	t.ok(
+		response.redirected,
+		"redirected should be true after following redirects",
+	);
 });
 
 test("Agent without redirect option follows by default", async (t) => {
-	t.plan(2);
+	t.plan(3);
 
 	const agent = new Agent();
 
 	const response = await faithFetch(url("/redirect/3"), { agent });
 	t.ok(response.ok, "Should follow redirects by default");
 	t.equal(response.status, 200, "Status should be 200");
+	t.ok(response.redirected, "redirected should be true");
 });
 
 test("Agent with redirect: 'follow' handles multiple redirects", async (t) => {
-	t.plan(2);
+	t.plan(3);
 
 	const agent = new Agent({
 		redirect: "follow",
@@ -34,10 +39,14 @@ test("Agent with redirect: 'follow' handles multiple redirects", async (t) => {
 	const response = await faithFetch(url("/redirect/5"), { agent });
 	t.ok(response.ok, "Should follow multiple redirects");
 	t.equal(response.status, 200, "Status should be 200");
+	t.ok(
+		response.redirected,
+		"redirected should be true for multiple redirects",
+	);
 });
 
 test("Agent with redirect: 'stop' does not follow redirects", async (t) => {
-	t.plan(3);
+	t.plan(4);
 
 	const agent = new Agent({
 		redirect: "stop",
@@ -47,10 +56,14 @@ test("Agent with redirect: 'stop' does not follow redirects", async (t) => {
 	t.notOk(response.ok, "Response should not be ok for redirect status");
 	t.equal(response.status, 302, "Should return redirect status code");
 	t.ok(response.headers.get("Location"), "Should have Location header");
+	t.notOk(
+		response.redirected,
+		"redirected should be false when not following",
+	);
 });
 
 test("Agent with redirect: 'stop' returns first redirect", async (t) => {
-	t.plan(2);
+	t.plan(3);
 
 	const agent = new Agent({
 		redirect: "stop",
@@ -59,6 +72,7 @@ test("Agent with redirect: 'stop' returns first redirect", async (t) => {
 	const response = await faithFetch(url("/redirect/5"), { agent });
 	t.equal(response.status, 302, "Should return first redirect status");
 	t.ok(response.headers.get("Location"), "Should have Location header");
+	t.notOk(response.redirected, "redirected should be false");
 });
 
 test("Agent with redirect: 'error' throws on redirect", async (t) => {
@@ -77,7 +91,7 @@ test("Agent with redirect: 'error' throws on redirect", async (t) => {
 });
 
 test("Agent with redirect: 'error' allows non-redirect responses", async (t) => {
-	t.plan(2);
+	t.plan(3);
 
 	const agent = new Agent({
 		redirect: "error",
@@ -86,6 +100,7 @@ test("Agent with redirect: 'error' allows non-redirect responses", async (t) => 
 	const response = await faithFetch(url("/get"), { agent });
 	t.ok(response.ok, "Should successfully fetch non-redirect endpoint");
 	t.equal(response.status, 200, "Status should be 200");
+	t.notOk(response.redirected, "redirected should be false for non-redirect");
 });
 
 test("Agent redirect setting persists across requests", async (t) => {
@@ -129,7 +144,7 @@ test("Different agents can have different redirect settings", async (t) => {
 });
 
 test("Agent redirect: 'follow' with absolute redirect URL", async (t) => {
-	t.plan(2);
+	t.plan(3);
 
 	const agent = new Agent({
 		redirect: "follow",
@@ -138,10 +153,14 @@ test("Agent redirect: 'follow' with absolute redirect URL", async (t) => {
 	const response = await faithFetch(url("/absolute-redirect/1"), { agent });
 	t.ok(response.ok, "Should follow absolute redirect");
 	t.equal(response.status, 200, "Status should be 200");
+	t.ok(
+		response.redirected,
+		"redirected should be true for absolute redirect",
+	);
 });
 
 test("Agent redirect: 'stop' with absolute redirect URL", async (t) => {
-	t.plan(2);
+	t.plan(3);
 
 	const agent = new Agent({
 		redirect: "stop",
@@ -150,10 +169,11 @@ test("Agent redirect: 'stop' with absolute redirect URL", async (t) => {
 	const response = await faithFetch(url("/absolute-redirect/1"), { agent });
 	t.equal(response.status, 302, "Should return redirect status");
 	t.ok(response.headers.get("Location"), "Should have Location header");
+	t.notOk(response.redirected, "redirected should be false");
 });
 
 test("Agent redirect with POST request", async (t) => {
-	t.plan(2);
+	t.plan(3);
 
 	const agent = new Agent({
 		redirect: "follow",
@@ -168,6 +188,7 @@ test("Agent redirect with POST request", async (t) => {
 
 	t.ok(response.ok, "Should handle POST redirect");
 	t.equal(response.status, 200, "Should have 200 status after redirect");
+	t.ok(response.redirected, "redirected should be true for POST redirect");
 });
 
 test("Agent redirect: 'stop' with POST request", async (t) => {
@@ -216,7 +237,7 @@ test("Agent redirect with other agent options", async (t) => {
 });
 
 test("Agent redirect with timeout", async (t) => {
-	t.plan(2);
+	t.plan(3);
 
 	const agent = new Agent({
 		redirect: "follow",
@@ -226,6 +247,7 @@ test("Agent redirect with timeout", async (t) => {
 	const response = await faithFetch(url("/redirect/3"), { agent });
 	t.ok(response.ok, "Should follow redirects with timeout");
 	t.equal(response.status, 200, "Status should be 200");
+	t.ok(response.redirected, "redirected should be true");
 });
 
 test("Agent redirect with cookies", async (t) => {
@@ -343,7 +365,7 @@ test("Agent redirect stats tracking with error", async (t) => {
 });
 
 test("Agent redirect: 'follow' final URL is correct", async (t) => {
-	t.plan(2);
+	t.plan(3);
 
 	const agent = new Agent({
 		redirect: "follow",
@@ -355,10 +377,11 @@ test("Agent redirect: 'follow' final URL is correct", async (t) => {
 		response.url.includes("/get"),
 		"Final URL should be the target after redirects",
 	);
+	t.ok(response.redirected, "redirected should be true");
 });
 
 test("Agent redirect: 'stop' URL is original", async (t) => {
-	t.plan(2);
+	t.plan(3);
 
 	const agent = new Agent({
 		redirect: "stop",
@@ -368,6 +391,7 @@ test("Agent redirect: 'stop' URL is original", async (t) => {
 	const response = await faithFetch(originalUrl, { agent });
 	t.equal(response.status, 302, "Should return redirect status");
 	t.equal(response.url, originalUrl, "URL should remain original");
+	t.notOk(response.redirected, "redirected should be false");
 });
 
 test("Agent redirect: 'follow' with 301 permanent redirect", async (t) => {
@@ -465,7 +489,7 @@ test("Agent redirect: 'follow' respects redirect limit", async (t) => {
 });
 
 test("Agent redirect mixed with successful requests", async (t) => {
-	t.plan(3);
+	t.plan(6);
 
 	const agent = new Agent({
 		redirect: "follow",
@@ -473,12 +497,15 @@ test("Agent redirect mixed with successful requests", async (t) => {
 
 	const response1 = await faithFetch(url("/get"), { agent });
 	t.ok(response1.ok, "First non-redirect should succeed");
+	t.notOk(response1.redirected, "First request should not be redirected");
 
 	const response2 = await faithFetch(url("/redirect/2"), { agent });
 	t.ok(response2.ok, "Redirect request should succeed");
+	t.ok(response2.redirected, "Second request should be redirected");
 
 	const response3 = await faithFetch(url("/headers"), { agent });
 	t.ok(response3.ok, "Third non-redirect should succeed");
+	t.notOk(response3.redirected, "Third request should not be redirected");
 });
 
 test("Agent redirect: 'error' with redirect chain", async (t) => {
@@ -497,7 +524,7 @@ test("Agent redirect: 'error' with redirect chain", async (t) => {
 });
 
 test("Agent redirect with different response types", async (t) => {
-	t.plan(3);
+	t.plan(6);
 
 	const followAgent = new Agent({ redirect: "follow" });
 	const stopAgent = new Agent({ redirect: "stop" });
@@ -506,11 +533,13 @@ test("Agent redirect with different response types", async (t) => {
 		agent: followAgent,
 	});
 	t.equal(followResponse.status, 200, "Follow response should be 200");
+	t.ok(followResponse.redirected, "Follow response should be redirected");
 
 	const stopResponse = await faithFetch(url("/redirect/2"), {
 		agent: stopAgent,
 	});
 	t.equal(stopResponse.status, 302, "Stop response should be 302");
+	t.notOk(stopResponse.redirected, "Stop response should not be redirected");
 
 	const noRedirectResponse = await faithFetch(url("/get"), {
 		agent: followAgent,
@@ -519,5 +548,9 @@ test("Agent redirect with different response types", async (t) => {
 		noRedirectResponse.status,
 		200,
 		"Non-redirect response should be 200",
+	);
+	t.notOk(
+		noRedirectResponse.redirected,
+		"Non-redirect should not be redirected",
 	);
 });
