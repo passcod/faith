@@ -197,3 +197,5 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          # publishing new platform packages requires a token. generate a new 7d one for it!
+          # and then configure the new platform packages to use trusted publishing
