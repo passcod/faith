@@ -40,7 +40,8 @@
 		"test": "npm run build && cargo test && npm run test:only",
 		"test:only": "tape test/*.test.js",
 		"test:integration": "tape test/integration/*.test.js",
-		"prepublishOnly": "napi prepublish -t npm"
+		"prepublishOnly": "napi prepublish -t npm",
+		"version": "node -e \"const fs=require('fs');const pkg=require('./package.json');let cargo=fs.readFileSync('Cargo.toml','utf8');cargo=cargo.replace(/^version = \\\".*\\\"/m,'version = \\\"'+pkg.version+'\\\"');fs.writeFileSync('Cargo.toml',cargo)\" && cargo check"
 	},
 	"keywords": [
 		"fetch",
