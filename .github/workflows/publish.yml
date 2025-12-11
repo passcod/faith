@@ -65,7 +65,7 @@ jobs:
         with:
           tool: cargo-zigbuild,cargo-xwin
       - run: npm install
-      - run: npm run build --target ${{ matrix.target }} ${{ matrix.flags }}
+      - run: npm run build -- --target ${{ matrix.target }} ${{ matrix.flags }}
         env:
           XWIN_CACHE_DIR: ${{ github.workspace }}/.xwin
       - uses: actions/upload-artifact@v5
