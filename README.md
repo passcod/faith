@@ -40,6 +40,8 @@ async function example() {
 ### Fetch with options
 
 ```javascript
+import { fetch } from '@passcod/faith';
+
 const response = await fetch('https://httpbin.org/post', {
   method: 'POST',
   headers: {
@@ -47,7 +49,27 @@ const response = await fetch('https://httpbin.org/post', {
     'X-Custom-Header': 'value'
   },
   body: JSON.stringify({ message: 'Hello' }),
-  timeout: 30 // seconds
+});
+```
+
+### Fetch with HTTP cache
+
+```javascript
+import { fetch, Agent } from '@passcod/faith';
+
+const agent = new Agent({
+  cache: {
+    store: 'memory',
+  },
+});
+const response = await fetch('https://httpbin.org/post', {
+  agent,
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'X-Custom-Header': 'value'
+  },
+  body: JSON.stringify({ message: 'Hello' }),
 });
 ```
 
