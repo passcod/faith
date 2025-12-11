@@ -51,9 +51,15 @@ export declare class FaithResponse {
   clone(): FaithResponse
 }
 
+export interface AgentHttp3Options {
+  congestion?: Http3Congestion
+  maxIdleTimeout?: number
+}
+
 export interface AgentOptions {
   cookies?: boolean
   headers?: Array<Header>
+  http3?: AgentHttp3Options
   userAgent?: string
 }
 
@@ -102,6 +108,11 @@ export interface Header {
   name: string
   value: string
   sensitive?: boolean
+}
+
+export declare const enum Http3Congestion {
+  Cubic = 'cubic',
+  Bbr1 = 'bbr1'
 }
 
 export const REQWEST_VERSION: string

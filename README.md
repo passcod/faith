@@ -31,7 +31,7 @@ async function example() {
   const response = await fetch('https://httpbin.org/get');
   console.log(response.status); // 200
   console.log(response.ok); // true
-  
+
   const data = response.json();
   console.log(data.url); // https://httpbin.org/get
 }
@@ -457,8 +457,39 @@ Sensitive headers (e.g. `Authorization`) should be marked.
 
 Default: none.
 
-### `http3`
-#### `congestion`
+### `http3: object`
+
+Settings related to HTTP/3. This is a nested object.
+
+#### `enabled: bool`
+
+Default: true.
+
+#### `congestion: string`
+
+The congestion control algorithm. The default is `cubic`, which is the same used in TCP in the
+Linux stack. It's fair for all traffic, but not the most optimal, especially for networks with
+a lot of available bandwidth, high latency, or a lot of packet loss. Cubic reacts to packet loss by
+dropping the speed by 30%, and takes a long time to recover. BBR instead tries to maximise
+bandwidth use and optimises for round-trip time, while ignoring packet loss.
+
+In some networks, BBR can lead to pathological degradation of overall network conditions, by
+flooding the network by up to **100 times** more retransmissions. This is fixed in BBRv2 and BBRv3,
+but Fáith (or rather its underlying QUIC library quinn, [does not implement those yet][2]).
+
+[2]: https://github.com/quinn-rs/quinn/issues/1254
+
+Default: `cubic`. Accepted values: `cubic`, `bbr1`.
+
+#### `maxIdleTimeout: number`
+
+Maximum duration of inactivity to accept before timing out the connection, in seconds. Note that
+this only sets the timeout on this side of the connection: the true idle timeout is the _minimum_
+of this and the peer’s own max idle timeout. While the underlying library has no limits, Fáith
+defines bounds for safety: minimum 1 second, maximum 2 minutes (120 seconds).
+
+Default: 30.
+
 ### `pool`
 #### `maxIdlePerHost`
 #### `idleTimeout`

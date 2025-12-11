@@ -36,11 +36,30 @@ pub struct Header {
 	pub sensitive: Option<bool>,
 }
 
+#[napi(string_enum)]
+#[derive(Debug, Clone, Copy, Default)]
+pub enum Http3Congestion {
+	#[napi(value = "cubic")]
+	#[default]
+	Cubic,
+
+	#[napi(value = "bbr1")]
+	Bbr1,
+}
+
+#[napi(object)]
+#[derive(Debug, Clone, Default)]
+pub struct AgentHttp3Options {
+	pub congestion: Option<Http3Congestion>,
+	pub max_idle_timeout: Option<u8>,
+}
+
 #[napi(object)]
 #[derive(Debug, Clone, Default)]
 pub struct AgentOptions {
 	pub cookies: Option<bool>,
 	pub headers: Option<Vec<Header>>,
+	pub http3: Option<AgentHttp3Options>,
 	pub user_agent: Option<String>,
 }
 
@@ -108,6 +127,19 @@ impl Agent {
 				},
 			));
 			client = client.default_headers(map);
+		}
+
+		#[cfg(feature = "http3")]
+		if let Some(http3) = options.http3 {
+			if let Some(Http3Congestion::Bbr1) = http3.congestion {
+				client = client.http3_congestion_bbr();
+			}
+
+			if let Some(seconds) = http3.max_idle_timeout {
+				use std::time::Duration;
+				client = client
+					.http3_max_idle_timeout(Duration::from_secs(seconds.min(120).max(1).into()));
+			}
 		}
 
 		Ok(Self {
