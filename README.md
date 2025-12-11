@@ -64,7 +64,7 @@ otherwise specified).
 ### Syntax
 
 ```javascript
-const { fetch } = require('faith');
+import { fetch } from '@passcod/faith';
 fetch(resource);
 fetch(resource, options);
 ```

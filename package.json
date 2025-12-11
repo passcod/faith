@@ -1,6 +1,6 @@
 {
-  "name": "faith",
-  "version": "0.1.0",
+  "name": "@passcod/faith",
+  "version": "0.0.0",
   "description": "fáith: a Rust-powered fetch",
   "main": "wrapper.js",
   "types": "wrapper.d.ts",
@@ -26,10 +26,11 @@
   "scripts": {
     "build": "napi build --platform --release",
     "build:debug": "napi build --platform",
-    "test": "cargo test && tape test/*.test.js",
+    "test": "cargo test && npm run test:only",
+    "test:only": "tape test/*.test.js",
     "test:integration": "tape test/integration/*.test.js",
     "postinstall": "command cargo 2>&1 >/dev/null && npm run build",
-    "prepublishOnly": "napi build --platform --release"
+    "prepublishOnly": "napi prepublish -t npm"
   },
   "keywords": [
     "fetch",
@@ -48,6 +49,6 @@
     "tape": "^5.9.0"
   },
   "engines": {
-    "node": ">= 14"
+    "node": ">= 20"
   }
 }
