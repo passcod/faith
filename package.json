@@ -1,54 +1,58 @@
 {
-  "name": "@passcod/faith",
-  "version": "0.0.0",
-  "description": "fáith: a Rust-powered fetch",
-  "main": "wrapper.js",
-  "types": "wrapper.d.ts",
-  "files": [
-    "index.js",
-    "index.d.ts",
-    "wrapper.js",
-    "wrapper.d.ts"
-  ],
-  "napi": {
-    "binaryName": "faith",
-    "targets": [
-      "x86_64-unknown-linux-gnu",
-      "x86_64-unknown-linux-musl",
-      "aarch64-unknown-linux-gnu",
-      "aarch64-unknown-linux-musl",
-      "x86_64-apple-darwin",
-      "aarch64-apple-darwin",
-      "x86_64-pc-windows-msvc",
-      "aarch64-pc-windows-msvc"
-    ]
-  },
-  "scripts": {
-    "build": "napi build --release --platform",
-    "build:debug": "napi build --platform",
-    "test": "cargo test && npm run test:only",
-    "test:only": "tape test/*.test.js",
-    "test:integration": "tape test/integration/*.test.js",
-    "postinstall": "command cargo 2>&1 >/dev/null && npm run build",
-    "prepublishOnly": "napi prepublish -t npm"
-  },
-  "keywords": [
-    "fetch",
-    "rust",
-    "napi",
-    "reqwest",
-    "http",
-    "https",
-    "h2"
-  ],
-  "author": "",
-  "license": "MIT",
-  "devDependencies": {
-    "@napi-rs/cli": "^3.5.0",
-    "@types/node": "^24.10.1",
-    "tape": "^5.9.0"
-  },
-  "engines": {
-    "node": ">= 20"
-  }
+	"name": "@passcod/faith",
+	"version": "0.0.0",
+	"description": "fáith: a Rust-powered fetch",
+	"author": {
+		"name": "Félix Saparelli",
+		"email": "felix@passcod.name",
+		"url": "https://passcod.name"
+	},
+	"license": "Apache-2.0 OR MIT",
+	"main": "wrapper.js",
+	"types": "wrapper.d.ts",
+	"files": [
+		"index.js",
+		"index.d.ts",
+		"wrapper.js",
+		"wrapper.d.ts"
+	],
+	"napi": {
+		"binaryName": "faith",
+		"targets": [
+			"x86_64-unknown-linux-gnu",
+			"x86_64-unknown-linux-musl",
+			"aarch64-unknown-linux-gnu",
+			"aarch64-unknown-linux-musl",
+			"x86_64-apple-darwin",
+			"aarch64-apple-darwin",
+			"x86_64-pc-windows-msvc",
+			"aarch64-pc-windows-msvc"
+		]
+	},
+	"scripts": {
+		"build": "napi build --release --platform",
+		"build:debug": "napi build --platform",
+		"test": "cargo test && npm run test:only",
+		"test:only": "tape test/*.test.js",
+		"test:integration": "tape test/integration/*.test.js",
+		"postinstall": "command cargo 2>&1 >/dev/null && npm run build",
+		"prepublishOnly": "napi prepublish -t npm"
+	},
+	"keywords": [
+		"fetch",
+		"rust",
+		"napi",
+		"reqwest",
+		"http",
+		"https",
+		"h2"
+	],
+	"devDependencies": {
+		"@napi-rs/cli": "^3.5.0",
+		"@types/node": "^24.10.1",
+		"tape": "^5.9.0"
+	},
+	"engines": {
+		"node": ">= 20"
+	}
 }
