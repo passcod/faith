@@ -61,7 +61,13 @@ export interface AgentOptions {
   cookies?: boolean
   headers?: Array<Header>
   http3?: AgentHttp3Options
+  pool?: AgentPoolOptions
   userAgent?: string
+}
+
+export interface AgentPoolOptions {
+  idleTimeout?: number
+  maxIdlePerHost?: number
 }
 
 export declare const enum CredentialsOption {

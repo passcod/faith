@@ -502,9 +502,23 @@ defines bounds for safety: minimum 1 second, maximum 2 minutes (120 seconds).
 
 Default: 30.
 
-### `AgentOptions.pool`
-#### `AgentOptions.pool.maxIdlePerHost`
-#### `AgentOptions.pool.idleTimeout`
+### `AgentOptions.pool: object`
+
+Settings related to the connection pool. This is a nested object.
+
+#### `AgentOptions.pool.idleTimeout: number`
+
+How many seconds of inactivity before a connection is closed.
+
+Default: 90 seconds.
+
+#### `AgentOptions.pool.maxIdlePerHost: number | null`
+
+The maximum amount of idle connections per host to allow in the pool. Connections will be closed
+to keep the idle connections (per host) under that number.
+
+Default: `null` (no limit).
+
 ### `AgentOptions.redirect`
 ### `AgentOptions.retry`
 ### `AgentOptions.timeout`

@@ -4,6 +4,7 @@ use std::{
 		Arc,
 		atomic::{AtomicU64, Ordering},
 	},
+	time::Duration,
 };
 
 use napi::Env;
@@ -56,10 +57,18 @@ pub struct AgentHttp3Options {
 
 #[napi(object)]
 #[derive(Debug, Clone, Default)]
+pub struct AgentPoolOptions {
+	pub idle_timeout: Option<u32>,
+	pub max_idle_per_host: Option<u32>,
+}
+
+#[napi(object)]
+#[derive(Debug, Clone, Default)]
 pub struct AgentOptions {
 	pub cookies: Option<bool>,
 	pub headers: Option<Vec<Header>>,
 	pub http3: Option<AgentHttp3Options>,
+	pub pool: Option<AgentPoolOptions>,
 	pub user_agent: Option<String>,
 }
 
@@ -141,6 +150,18 @@ impl Agent {
 				client = client
 					.http3_max_idle_timeout(Duration::from_secs(seconds.min(120).max(1).into()));
 			}
+		}
+
+		if let Some(pool) = options.pool {
+			if let Some(seconds) = pool.idle_timeout {
+				client = client.pool_idle_timeout(Some(Duration::from_secs(seconds.max(0).into())));
+			}
+
+			client = client.pool_max_idle_per_host(
+				pool.max_idle_per_host
+					.and_then(|n| n.try_into().ok())
+					.unwrap_or(usize::MAX),
+			)
 		}
 
 		Ok(Self {

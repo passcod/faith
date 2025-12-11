@@ -7,6 +7,7 @@
 export {
 	Agent,
 	AgentHttp3Options,
+	AgentPoolOptions,
 	AgentOptions,
 	AgentStats,
 	Header,
