@@ -52,6 +52,11 @@ json(): Async<any>
 clone(): FaithResponse
 }
 
+export interface AgentDnsOptions {
+  system?: boolean
+  overrides?: Array<DnsOverride>
+}
+
 export interface AgentHttp3Options {
   congestion?: Http3Congestion
   maxIdleTimeout?: number
@@ -59,6 +64,7 @@ export interface AgentHttp3Options {
 
 export interface AgentOptions {
   cookies?: boolean
+  dns?: AgentDnsOptions
   headers?: Array<Header>
   http3?: AgentHttp3Options
   pool?: AgentPoolOptions
@@ -91,6 +97,11 @@ export declare const enum CredentialsOption {
   Include = 'include'
 }
 
+export interface DnsOverride {
+  domain: string
+  addresses: Array<string>
+}
+
 export declare const enum DuplexOption {
   Half = 'half'
 }
@@ -101,6 +112,7 @@ export const FAITH_VERSION: string
 
 export declare const enum FaithErrorKind {
   Aborted = 'Aborted',
+  AddressParse = 'AddressParse',
   BodyStream = 'BodyStream',
   InvalidHeader = 'InvalidHeader',
   InvalidMethod = 'InvalidMethod',

@@ -11,6 +11,7 @@ use strum::{EnumIter, IntoEnumIterator};
 #[derive(Debug, Clone, Copy, EnumIter)]
 pub enum FaithErrorKind {
 	Aborted,
+	AddressParse,
 	BodyStream,
 	InvalidHeader,
 	InvalidMethod,
@@ -38,6 +39,7 @@ impl FaithErrorKind {
 	fn default_message(self) -> &'static str {
 		match self {
 			Self::Aborted => "the request was aborted",
+			Self::AddressParse => "invalid IP address and/or port",
 			Self::BodyStream => "internal response body stream copy error",
 			Self::InvalidHeader => "invalid header name or value",
 			Self::InvalidMethod => "invalid HTTP method",
@@ -59,7 +61,9 @@ impl FaithErrorKind {
 			Self::BodyStream | Self::RuntimeThread => JsErrorType::GenericError,
 			Self::Aborted | Self::Timeout => JsErrorType::NamedError("AbortError"),
 			Self::Network | Self::Redirect => JsErrorType::NamedError("NetworkError"),
-			Self::JsonParse | Self::PemParse | Self::Utf8Parse => JsErrorType::SyntaxError,
+			Self::AddressParse | Self::JsonParse | Self::PemParse | Self::Utf8Parse => {
+				JsErrorType::SyntaxError
+			}
 			Self::InvalidHeader
 			| Self::InvalidMethod
 			| Self::InvalidUrl

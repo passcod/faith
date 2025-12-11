@@ -1,5 +1,6 @@
 use std::{
 	fmt::Debug,
+	net::{IpAddr, SocketAddr, SocketAddrV4, SocketAddrV6},
 	str::FromStr as _,
 	sync::{
 		Arc,
@@ -30,6 +31,20 @@ pub const USER_AGENT: &str = concat!(
 	" reqwest/",
 	env!("REQWEST_VERSION")
 );
+
+#[napi(object)]
+#[derive(Debug, Clone)]
+pub struct DnsOverride {
+	pub domain: String,
+	pub addresses: Vec<String>,
+}
+
+#[napi(object)]
+#[derive(Debug, Clone, Default)]
+pub struct AgentDnsOptions {
+	pub system: Option<bool>,
+	pub overrides: Option<Vec<DnsOverride>>,
+}
 
 #[napi(object)]
 #[derive(Debug, Clone)]
@@ -124,6 +139,7 @@ impl Clone for AgentTlsOptions {
 #[derive(Debug, Clone, Default)]
 pub struct AgentOptions {
 	pub cookies: Option<bool>,
+	pub dns: Option<AgentDnsOptions>,
 	pub headers: Option<Vec<Header>>,
 	pub http3: Option<AgentHttp3Options>,
 	pub pool: Option<AgentPoolOptions>,
@@ -172,6 +188,36 @@ impl Agent {
 		} else {
 			None
 		};
+
+		if let Some(dns) = options.dns {
+			if dns.system.unwrap_or(false) {
+				client = client.no_hickory_dns();
+			} else {
+				for DnsOverride { domain, addresses } in dns.overrides.unwrap_or_default() {
+					client = client.resolve_to_addrs(
+						&domain,
+						&addresses
+							.into_iter()
+							.map(|addr| match SocketAddr::from_str(&addr) {
+								Ok(addr) => Ok(addr),
+								Err(err) => match IpAddr::from_str(&addr) {
+									Ok(IpAddr::V4(ip)) => {
+										Ok(SocketAddr::V4(SocketAddrV4::new(ip, 0)))
+									}
+									Ok(IpAddr::V6(ip)) => {
+										Ok(SocketAddr::V6(SocketAddrV6::new(ip, 0, 0, 0)))
+									}
+									Err(_) => Err(FaithError::new(
+										FaithErrorKind::AddressParse,
+										Some(format!("{addr:?}: {err}")),
+									)),
+								},
+							})
+							.collect::<Result<Vec<_>, FaithError>>()?,
+					)
+				}
+			}
+		}
 
 		if let Some(headers) = options.headers
 			&& !headers.is_empty()

@@ -447,6 +447,8 @@ For this reason, and also because in browsers this behaviour is standard, **all*
 Fáith use an `Agent`. For `fetch()` calls that don't specify one explicitly, a global agent with
 default options is created on first use.
 
+There are a lot more options that could be exposed here; if you want one, open an issue.
+
 ### Syntax
 
 ```javascript
@@ -465,7 +467,35 @@ Default: `false`.
 You may use `agent.getCookie(url: string)` and `agent.addCookie(url: string, value: string)` to add
 and retrieve cookies from the store.
 
-### `AgentOptions.dns`
+### `AgentOptions.dns: object`
+
+Settings related to DNS. This is a nested object.
+
+#### `AgentOptions.dns.system: boolean`
+
+Use the system's DNS (via `getaddrinfo` or equivalent) rather than Fáith's own DNS client (based on
+[Hickory]). If you experience issues with DNS where Fáith does not work but e.g. curl or native
+fetch does, this should be your first port of call.
+
+Enabling this also disables Happy Eyeballs (for IPv6 / IPv4 best-effort resolution), the in-memory
+DNS cache, and may lead to worse performance even discounting the cache.
+
+Default: false.
+
+[Hickory]: https://hickory-dns.org/
+
+#### `AgentOptions.dns.overrides: Array<{ domain: string; addresses: string[] }>`
+
+Override DNS resolution for specific domains. This takes effect even with `dns.system: true`.
+
+Will throw if addresses are in invalid formats. You may provide a port number as part of the
+address, it will default to port 0 otherwise, which will select the conventional port for the
+protocol in use (e.g. 80 for plaintext HTTP). If the URL passed to `fetch()` has an explicit port
+number, that one will be used instead. Resolving a domain to an empty `addresses` array effectively
+blocks that domain from this agent.
+
+Default: no overrides.
+
 ### `AgentOptions.headers: Array<{ name: string, value: string, sensitive?: bool }>`
 
 Sets the default headers for every request.
@@ -532,8 +562,6 @@ One of the following values:*
 - `stop`: (Fáith custom) don't follow any redirects, return the responses.
 
 *Defaults to `follow`.*
-
-### `AgentOptions.retry`
 
 ### `AgentOptions.timeout: object`
 

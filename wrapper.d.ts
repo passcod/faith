@@ -6,15 +6,17 @@
 
 export {
 	Agent,
+	AgentDnsOptions,
 	AgentHttp3Options,
 	AgentPoolOptions,
 	AgentTimeoutOptions,
 	AgentTlsOptions,
 	AgentOptions,
 	AgentStats,
-	Redirect,
+	DnsOverride,
 	Header,
 	Http3Congestion,
+	Redirect,
 	FAITH_VERSION,
 	REQWEST_VERSION,
 	USER_AGENT,
@@ -28,6 +30,7 @@ export {
  */
 export const ERROR_CODES: {
 	readonly Aborted: "Aborted";
+	readonly AddressParse: "AddressParse";
 	readonly BodyStream: "BodyStream";
 	readonly InvalidHeader: "InvalidHeader";
 	readonly InvalidMethod: "InvalidMethod";

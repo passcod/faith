@@ -18,6 +18,11 @@ function hostname() {
 	return new URL(HTTPBIN_BASE_URL).host;
 }
 
+function port() {
+	const parsed = new URL(HTTPBIN_BASE_URL);
+	return parsed.port || (parsed.protocol === "https:" ? "443" : "80");
+}
+
 // Skip tests if native fetch is not available
 const hasNativeFetch = typeof globalThis.fetch === "function";
 
@@ -158,4 +163,5 @@ module.exports = {
 	compareResponses,
 	url,
 	hostname,
+	port,
 };
