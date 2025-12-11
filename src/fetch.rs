@@ -9,8 +9,11 @@ use std::{
 use futures::StreamExt;
 use napi::bindgen_prelude::AbortSignal;
 use napi_derive::napi;
-use reqwest::header::{HeaderName, HeaderValue};
 use reqwest::{Method, StatusCode};
+use reqwest::{
+	header::{HeaderName, HeaderValue},
+	tls::TlsInfo,
+};
 use stream_shared::SharedStream;
 use tokio::sync::mpsc;
 
@@ -19,7 +22,7 @@ use crate::{
 	body::{Body, DynStream},
 	error::{FaithError, FaithErrorKind},
 	options::{CredentialsOption, FaithOptions, FaithOptionsAndBody},
-	response::FaithResponse,
+	response::{FaithResponse, PeerInformation},
 };
 
 #[napi]
@@ -142,6 +145,15 @@ pub fn faith_fetch(
 
 		let empty = status == StatusCode::NO_CONTENT || is_head;
 
+		let peer = PeerInformation {
+			address: response.remote_addr(),
+			certificate: response
+				.extensions()
+				.get::<TlsInfo>()
+				.and_then(|info| info.peer_certificate())
+				.map(|cert| cert.into()),
+		};
+
 		Ok(FaithResponse {
 			inner_body: if empty {
 				Body::None
@@ -155,6 +167,7 @@ pub fn faith_fetch(
 			disturbed: Arc::new(AtomicBool::new(false)),
 			headers: headers_vec,
 			ok,
+			peer: Arc::new(peer),
 			redirected,
 			status,
 			status_text,

@@ -1,5 +1,6 @@
 use std::{
 	fmt::Debug,
+	net::SocketAddr,
 	result::Result,
 	sync::{
 		Arc,
@@ -25,6 +26,7 @@ pub struct FaithResponse {
 	pub(crate) disturbed: Arc<AtomicBool>,
 	pub(crate) headers: Vec<(String, String)>,
 	pub(crate) ok: bool,
+	pub(crate) peer: Arc<PeerInformation>,
 	pub(crate) redirected: bool,
 	pub(crate) status: u16,
 	pub(crate) status_text: String,
@@ -39,6 +41,7 @@ impl Clone for FaithResponse {
 			disturbed: Arc::clone(&self.disturbed),
 			headers: self.headers.clone(),
 			ok: self.ok,
+			peer: self.peer.clone(),
 			redirected: self.redirected,
 			status: self.status,
 			status_text: self.status_text.clone(),
@@ -47,6 +50,12 @@ impl Clone for FaithResponse {
 			inner_body: self.inner_body.clone(),
 		}
 	}
+}
+
+#[derive(Debug)]
+pub struct PeerInformation {
+	pub address: Option<SocketAddr>,
+	pub certificate: Option<Vec<u8>>,
 }
 
 #[napi]
@@ -59,6 +68,20 @@ impl FaithResponse {
 	#[napi(getter)]
 	pub fn ok(&self) -> bool {
 		self.ok
+	}
+
+	#[napi(getter, ts_return_type = "{ address?: string; certificate?: Buffer }")]
+	pub fn peer<'env>(&self, env: &'env Env) -> Result<Object<'env>, napi::Error> {
+		let mut obj = Object::new(env)?;
+		obj.set("address", self.peer.address.map(|addr| addr.to_string()))?;
+		obj.set(
+			"certificate",
+			self.peer
+				.certificate
+				.as_deref()
+				.map(|cert| Buffer::from(cert)),
+		)?;
+		Ok(obj)
 	}
 
 	#[napi(getter)]
@@ -230,14 +253,7 @@ impl FaithResponse {
 
 		Ok(Self {
 			disturbed: Arc::new(AtomicBool::new(false)),
-			headers: self.headers.clone(),
-			ok: self.ok,
-			redirected: self.redirected,
-			status: self.status,
-			status_text: self.status_text.clone(),
-			url: self.url.clone(),
-			version: self.version.clone(),
-			inner_body: self.inner_body.clone(),
+			..Clone::clone(self)
 		})
 	}
 }

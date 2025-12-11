@@ -48,10 +48,16 @@ export interface FetchOptions {
 	agent?: Agent;
 }
 
+export interface PeerInformation {
+	address?: string;
+	certificate?: Buffer;
+}
+
 export class Response {
 	readonly bodyUsed: boolean;
 	readonly headers: Headers;
 	readonly ok: boolean;
+	readonly peer: PeerInformation;
 	readonly redirected: boolean;
 	readonly status: number;
 	readonly statusText: string;

@@ -153,7 +153,7 @@ It is specified as an instance of any of the following types:*
 
 Fáith deliberately does not implement this.
 
-### `cache`
+### `FetchOptions.cache`
 
 Fáith does not respect this option on the `RequestInit` dictionary. Instead, the option is present
 on `Agent` and applies to all requests made with that `Agent`.
@@ -235,7 +235,7 @@ Fáith deliberately does not implement this, as there is no CORS/origin.
 
 Not supported.
 
-### `redirect`
+### `FetchOptions.redirect`
 
 Fáith does not respect this option on the `RequestInit` dictionary. Instead, the option is present
 on `Agent` and applies to all requests made with that `Agent`.
@@ -304,6 +304,20 @@ is used directly and constructed by Fáith when needed.
 *The `ok` read-only property of the `Response` interface contains a boolean stating whether the
 response was successful (status in the range 200-299) or not.*
 
+### `Response.peer: object`
+
+Custom to Fáith.
+
+The `peer` read-only property of the `Response` interface contains an object with information about
+the remote peer that sent this response:
+
+#### `Response.peer.address: string | null`
+
+The IP address and port of the peer, if available.
+
+#### `Response.peer.certificate: Buffer | null`
+
+When connected over HTTPS, this is the DER-encoded leaf certificate of the peer.
 
 ### `Response.redirected: boolean`
 

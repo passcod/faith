@@ -15,40 +15,41 @@ export declare class AgentStats {
 export declare class FaithResponse {
   get headers(): Array<[string, string]>
   get ok(): boolean
-  get redirected(): boolean
-  get status(): number
-  get statusText(): string
-  get type(): string
-  get url(): string
-  get version(): string
-  /** Check if the response body has been disturbed (read) */
-  get bodyUsed(): boolean
-  /** Get the response body as a ReadableStream */
-  get body(): ReadableStream<Buffer> | null
-  /**
-   * Get response body as bytes
-   *
-   * This may use up to 2x the amount of memory that the response body takes
-   * when the Response is cloned() and will create a full copy of the data.
-   */
-  bytes(): Async<Buffer>
-  /** Convert response body to text (UTF-8) */
-  text(): Async<string>
-  /** Parse response body as JSON */
-  json(): Async<any>
-  /**
-   * Create a clone of the response
-   *
-   * Specially, this doesn't set the disturbed flag, so that `body()` or other such
-   * methods can work afterwards. However, it will throw if the body has already
-   * been read from.
-   *
-   * Clones will cache in memory the section of the response body that is read
-   * from one clone and not yet consumed by all others. In the worst case, you can
-   * end up with a copy of the entire response body if you end up not consuming one
-   * of the clones.
-   */
-  clone(): FaithResponse
+get peer(): { address?: string; certificate?: Buffer }
+get redirected(): boolean
+get status(): number
+get statusText(): string
+get type(): string
+get url(): string
+get version(): string
+/** Check if the response body has been disturbed (read) */
+get bodyUsed(): boolean
+/** Get the response body as a ReadableStream */
+get body(): ReadableStream<Buffer> | null
+/**
+ * Get response body as bytes
+ *
+ * This may use up to 2x the amount of memory that the response body takes
+ * when the Response is cloned() and will create a full copy of the data.
+ */
+bytes(): Async<Buffer>
+/** Convert response body to text (UTF-8) */
+text(): Async<string>
+/** Parse response body as JSON */
+json(): Async<any>
+/**
+ * Create a clone of the response
+ *
+ * Specially, this doesn't set the disturbed flag, so that `body()` or other such
+ * methods can work afterwards. However, it will throw if the body has already
+ * been read from.
+ *
+ * Clones will cache in memory the section of the response body that is read
+ * from one clone and not yet consumed by all others. In the worst case, you can
+ * end up with a copy of the entire response body if you end up not consuming one
+ * of the clones.
+ */
+clone(): FaithResponse
 }
 
 export interface AgentHttp3Options {
