@@ -90,6 +90,7 @@ practice the `RequestInit` class does not exist in browsers or Node.js, and so t
 
 *A `Promise` that resolves to a `Response` object.*
 
+<!-- //full duplex mode is not yet implemented//
 In `half` duplex mode (the default), the promise resolves when the request body has been fully sent
 and the response headers have been received. In `full` duplex mode (supported by Fáith but not yet
 browsers), the promise resolves as soon as response headers have been received, even if the request
@@ -97,6 +98,7 @@ body has not yet finished sending. Most HTTP servers will not send response head
 finished receiving the body so this distinction doesn't matter, but some do, and it is possible to
 take advantage of this behaviour with `full` duplex mode for decreased latency in specific cases.
 You may even be able to vary the request body stream based on the response body stream.
+-->
 
 ## `Request`
 
