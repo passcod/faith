@@ -77,6 +77,8 @@ jobs:
           rustup default stable
           rustup target add ${{ matrix.settings.target }}
       - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.settings.target }}
       - uses: mlugg/setup-zig@v2
         if: ${{ contains(matrix.settings.target, 'musl') }}
         with:
