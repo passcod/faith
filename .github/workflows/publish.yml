@@ -192,7 +192,7 @@ jobs:
         run: ls -R .
         shell: bash
       - name: Start httpbin
-        uses: lfreleng-actions/go-httpbin-action@v0
+        uses: lfreleng-actions/go-httpbin-action@v0.1.1
         with:
           port: 8888
       - name: Test bindings
@@ -276,7 +276,7 @@ jobs:
         run: ls -R .
         shell: bash
       - name: Start httpbin
-        uses: lfreleng-actions/go-httpbin-action@v0
+        uses: lfreleng-actions/go-httpbin-action@v0.1.1
         with:
           port: 8888
       - name: Set up QEMU
