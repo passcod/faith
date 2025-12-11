@@ -7,6 +7,7 @@ use std::{
 };
 
 use futures::StreamExt;
+use http_cache_reqwest::CacheMode;
 use napi::bindgen_prelude::AbortSignal;
 use napi_derive::napi;
 use reqwest::{Method, StatusCode};
@@ -59,7 +60,10 @@ pub fn faith_fetch(
 			let _ = parsed_url.set_password(None);
 		}
 
-		let mut request = agent.client.request(method, parsed_url);
+		let mut request = agent
+			.client
+			.request(method, parsed_url)
+			.with_extension(CacheMode::from(options.cache));
 
 		if let Some(headers) = &options.headers {
 			for (key, value) in headers {

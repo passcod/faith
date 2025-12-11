@@ -6,8 +6,8 @@ mod fetch;
 mod options;
 mod response;
 
-pub use agent::{Agent, AgentOptions, AgentStats, FAITH_VERSION, REQWEST_VERSION, USER_AGENT};
+pub use agent::*;
 pub use error::error_codes;
 pub use fetch::faith_fetch;
-pub use options::FaithOptionsAndBody;
+pub use options::{FaithOptionsAndBody, RequestCacheMode as CacheMode};
 pub use response::FaithResponse;

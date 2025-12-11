@@ -11,8 +11,8 @@ easily work around its limitations. The native fetch implementation, `undici`, e
 HTTP/1.1, and doesn't support HTTP/2+, among many other complaints.
 
 Fáith tries to bring a Node.js fetch that is closer to the browser's fetch, notably by having
-transparent support for HTTP/2 and HTTP/3, IPv6 and IPv4 using the "Happy Eyeballs" algorithm, an
-HTTP cache and a cookie jar, a DNS cache, and actual support for `half` and `full` duplex modes.
+transparent support for HTTP/2 and HTTP/3, IPv6 and IPv4 using the "Happy Eyeballs" algorithm, a
+DNS cache, an optional cookie jar, and your choice of two HTTP caches.
 
 ## Installation
 
@@ -155,12 +155,46 @@ Fáith deliberately does not implement this.
 
 ### `FetchOptions.cache`
 
-Fáith does not respect this option on the `RequestInit` dictionary. Instead, the option is present
-on `Agent` and applies to all requests made with that `Agent`.
+*The cache mode you want to use for the request. This may be any one of the following values:*
+
+- *`default`: The client looks in its HTTP cache for a response matching the request.*
+  - *If there is a match and it is fresh, it will be returned from the cache.*
+  - *If there is a match but it is stale, the client will make a conditional request to the remote
+    server. If the server indicates that the resource has not changed, it will be returned from the
+    cache. Otherwise the resource will be downloaded from the server and the cache will be updated.*
+  - *If there is no match, the client will make a normal request, and will update the cache with
+    the downloaded resource.*
+
+- *`no-store`: The client fetches the resource from the remote server without first looking in the
+  cache, and will not update the cache with the downloaded resource.*
+
+- *`reload`: The client fetches the resource from the remote server without first looking in the
+  cache, but then will update the cache with the downloaded resource.*
+
+- *`no-cache`: The client looks in its HTTP cache for a response matching the request.*
+  - *If there is a match, fresh or stale, the client will make a conditional request to the remote
+    server. If the server indicates that the resource has not changed, it will be returned from the
+    cache. Otherwise the resource will be downloaded from the server and the cache will be updated.*
+  - *If there is no match, the client will make a normal request, and will update the cache with
+    the downloaded resource.*
+
+- *`force-cache`: The client looks in its HTTP cache for a response matching the request.*
+  - *If there is a match, fresh or stale, it will be returned from the cache.*
+  - *If there is no match, the client will make a normal request, and will update the cache with
+    the downloaded resource.*
+
+- *`only-if-cached`: The client looks in its HTTP cache for a response matching the request.*
+  - *If there is a match, fresh or stale, it will be returned from the cache.*
+  - *If there is no match, a network error is returned.*
+
+- `ignore-rules`: Custom to Fáith. Overrides the check that determines if a response can be cached
+  to always return true on 200. Uses any response in the HTTP cache matching the request, not
+  paying attention to staleness. If there was no response, it creates a normal request and updates
+  the HTTP cache with the response.
 
 ### `FetchOptions.credentials: string`
 
-*Controls whether or not the browser sends credentials with the request, as well as whether any
+*Controls whether or not the client sends credentials with the request, as well as whether any
 `Set-Cookie` response headers are respected. Credentials are cookies, ~~TLS client certificates,~~
 or authentication headers containing a username and password. This option may be any one of the
 following values:*
@@ -456,7 +490,44 @@ new Agent()
 new Agent(options)
 ```
 
-### `AgentOptions.cache`
+### `AgentOptions.cache: object`
+
+Settings related to the HTTP cache. This is a nested object.
+
+#### `AgentOptions.cache.store: string | null`
+
+Which cache store to use: either `disk` or `memory`. Set to null to disable the cache.
+
+Default: null.
+
+#### `AgentOptions.cache.capacity: number`
+
+If `cache.store: "memory"`, the maximum amount of items stored.
+
+Default: 10_000.
+
+#### `AgentOptions.cache.mode: string`
+
+Default cache mode. This is the same as [`FetchOptions.cache`](#fetchoptionscache), and is used if
+no cache mode is set on a request.
+
+Default: `"default"`.
+
+#### `AgentOptions.cache.path: string`
+
+If `cache.store: "disk"`, then this is the path at which the cache data is. Must be writeable.
+
+Required if `cache.store: "disk"`.
+
+#### `AgentOptions.cache.shared: boolean`
+
+If `true`, then the response is evaluated from a perspective of a shared cache (i.e. `private` is
+not cacheable and `s-maxage` is respected). If `false`, then the response is evaluated from a
+perspective of a single-user cache (i.e. `private` is cacheable and `s-maxage` is ignored).
+`shared: true` is required for proxies and multi-user caches.
+
+Default: true.
+
 ### `AgentOptions.cookies: bool`
 
 Enable a persistent cookie store for the agent. Cookies received in responses will be preserved and
@@ -685,6 +756,7 @@ error kind, documented in this comprehensive mapping:
   - `ResponseBodyNotAvailable` — body is null or not available
 - JS generic `Error`:
   - `BodyStream` — internal stream handling error
+  - `Config` — invalid agent configuration
   - `RuntimeThread` — failed to start or schedule threads on the internal tokio runtime
 
 The library exports an `ERROR_CODES` object which has every error code the library throws, and

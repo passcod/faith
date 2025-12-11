@@ -13,6 +13,7 @@ pub enum FaithErrorKind {
 	Aborted,
 	AddressParse,
 	BodyStream,
+	Config,
 	InvalidHeader,
 	InvalidMethod,
 	InvalidUrl,
@@ -41,6 +42,7 @@ impl FaithErrorKind {
 			Self::Aborted => "the request was aborted",
 			Self::AddressParse => "invalid IP address and/or port",
 			Self::BodyStream => "internal response body stream copy error",
+			Self::Config => "invalid agent configuration",
 			Self::InvalidHeader => "invalid header name or value",
 			Self::InvalidMethod => "invalid HTTP method",
 			Self::InvalidUrl => "invalid URL",
@@ -58,7 +60,7 @@ impl FaithErrorKind {
 
 	fn js_type(self) -> JsErrorType {
 		match self {
-			Self::BodyStream | Self::RuntimeThread => JsErrorType::GenericError,
+			Self::BodyStream | Self::Config | Self::RuntimeThread => JsErrorType::GenericError,
 			Self::Aborted | Self::Timeout => JsErrorType::NamedError("AbortError"),
 			Self::Network | Self::Redirect => JsErrorType::NamedError("NetworkError"),
 			Self::AddressParse | Self::JsonParse | Self::PemParse | Self::Utf8Parse => {
@@ -142,6 +144,17 @@ impl From<reqwest::Error> for FaithError {
 			FaithError::new(FaithErrorKind::Timeout, Some(err.to_string()))
 		} else {
 			FaithError::new(FaithErrorKind::Network, Some(err.to_string()))
+		}
+	}
+}
+
+impl From<reqwest_middleware::Error> for FaithError {
+	fn from(err: reqwest_middleware::Error) -> Self {
+		match err {
+			reqwest_middleware::Error::Middleware(err) => {
+				FaithError::new(FaithErrorKind::Network, Some(err.to_string()))
+			}
+			reqwest_middleware::Error::Reqwest(err) => err.into(),
 		}
 	}
 }

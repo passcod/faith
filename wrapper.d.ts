@@ -6,6 +6,7 @@
 
 export {
 	Agent,
+	AgentCacheOptions,
 	AgentDnsOptions,
 	AgentHttp3Options,
 	AgentPoolOptions,
@@ -13,7 +14,11 @@ export {
 	AgentTlsOptions,
 	AgentOptions,
 	AgentStats,
+	CacheMode,
+	CacheStore,
+	CredentialsOption as Credentials,
 	DnsOverride,
+	DuplexOption as Duplex,
 	Header,
 	Http3Congestion,
 	Redirect,
@@ -47,14 +52,22 @@ export const ERROR_CODES: {
 };
 
 export interface FetchOptions {
-	method?: string;
-	headers?: Record<string, string> | Headers;
+	agent?: Agent;
 	body?: string | Buffer | Uint8Array | Array<number> | ArrayBuffer;
-	timeout?: number; // milliseconds
+	cache?:
+		| "default"
+		| "force-cache"
+		| "ignore-rules"
+		| "no-cache"
+		| "no-store"
+		| "only-if-cached"
+		| "reload";
 	credentials?: "omit" | "same-origin" | "include";
 	duplex?: "half";
+	headers?: Record<string, string> | Headers;
+	method?: string;
 	signal?: AbortSignal;
-	agent?: Agent;
+	timeout?: number; // milliseconds
 }
 
 export interface PeerInformation {

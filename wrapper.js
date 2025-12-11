@@ -321,9 +321,15 @@ async function fetch(input, options = {}) {
 
 module.exports = {
 	Agent: native.Agent,
+	CacheMode: native.CacheMode,
+	CacheStore: native.CacheStore,
+	Credentials: native.CredentialsOption,
+	Duplex: native.DuplexOption,
 	ERROR_CODES,
 	FAITH_VERSION: native.FAITH_VERSION,
 	fetch,
+	Http3Congestion: native.Http3Congestion,
+	Redirect: native.Redirect,
 	REQWEST_VERSION: native.REQWEST_VERSION,
 	Response,
 	USER_AGENT: native.USER_AGENT,

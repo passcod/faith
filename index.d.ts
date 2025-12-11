@@ -52,6 +52,14 @@ json(): Async<any>
 clone(): FaithResponse
 }
 
+export interface AgentCacheOptions {
+  store?: CacheStore
+  capacity?: number
+  mode?: RequestCacheMode
+  path?: string
+  shared?: boolean
+}
+
 export interface AgentDnsOptions {
   system?: boolean
   overrides?: Array<DnsOverride>
@@ -63,6 +71,7 @@ export interface AgentHttp3Options {
 }
 
 export interface AgentOptions {
+  cache?: AgentCacheOptions
   cookies?: boolean
   dns?: AgentDnsOptions
   headers?: Array<Header>
@@ -91,6 +100,21 @@ export interface AgentTlsOptions {
   required?: boolean
 }
 
+export declare const enum CacheMode {
+  Default = 'default',
+  ForceCache = 'force-cache',
+  IgnoreRules = 'ignore-rules',
+  NoCache = 'no-cache',
+  NoStore = 'no-store',
+  OnlyIfCached = 'only-if-cached',
+  Reload = 'reload'
+}
+
+export declare const enum CacheStore {
+  Disk = 'disk',
+  Memory = 'memory'
+}
+
 export declare const enum CredentialsOption {
   Omit = 'omit',
   SameOrigin = 'same-origin',
@@ -114,6 +138,7 @@ export declare const enum FaithErrorKind {
   Aborted = 'Aborted',
   AddressParse = 'AddressParse',
   BodyStream = 'BodyStream',
+  Config = 'Config',
   InvalidHeader = 'InvalidHeader',
   InvalidMethod = 'InvalidMethod',
   InvalidUrl = 'InvalidUrl',
@@ -131,13 +156,14 @@ export declare const enum FaithErrorKind {
 export declare function faithFetch(url: string, options: FaithOptionsAndBody, signal?: AbortSignal | undefined | null): Async<FaithResponse>
 
 export interface FaithOptionsAndBody {
-  method?: string
-  headers?: Array<[string, string]>
+  agent: Agent
   body?: string | Buffer | Uint8Array
-  timeout?: number
+  cache?: CacheMode
   credentials?: CredentialsOption
   duplex?: DuplexOption
-  agent: Agent
+  headers?: Array<[string, string]>
+  method?: string
+  timeout?: number
 }
 
 export interface Header {

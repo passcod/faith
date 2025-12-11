@@ -9,6 +9,9 @@ use std::{
 	time::Duration,
 };
 
+use http_cache_reqwest::{
+	CACacheManager, Cache, CacheOptions, HttpCache, HttpCacheOptions, MokaCacheBuilder, MokaManager,
+};
 use napi::{Either, Env, bindgen_prelude::Buffer};
 use napi_derive::napi;
 use reqwest::{
@@ -17,8 +20,12 @@ use reqwest::{
 	header::{HeaderMap, HeaderName, HeaderValue},
 	redirect::Policy,
 };
+use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 
-use crate::error::{FaithError, FaithErrorKind};
+use crate::{
+	error::{FaithError, FaithErrorKind},
+	options::RequestCacheMode,
+};
 
 #[napi]
 pub const FAITH_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -31,6 +38,26 @@ pub const USER_AGENT: &str = concat!(
 	" reqwest/",
 	env!("REQWEST_VERSION")
 );
+
+#[napi(string_enum)]
+#[derive(Debug, Clone, Copy)]
+pub enum CacheStore {
+	#[napi(value = "disk")]
+	Disk,
+
+	#[napi(value = "memory")]
+	Memory,
+}
+
+#[napi(object)]
+#[derive(Debug, Clone, Default)]
+pub struct AgentCacheOptions {
+	pub store: Option<CacheStore>,
+	pub capacity: Option<u32>,
+	pub mode: Option<RequestCacheMode>,
+	pub path: Option<String>,
+	pub shared: Option<bool>,
+}
 
 #[napi(object)]
 #[derive(Debug, Clone)]
@@ -138,6 +165,7 @@ impl Clone for AgentTlsOptions {
 #[napi(object)]
 #[derive(Debug, Clone, Default)]
 pub struct AgentOptions {
+	pub cache: Option<AgentCacheOptions>,
 	pub cookies: Option<bool>,
 	pub dns: Option<AgentDnsOptions>,
 	pub headers: Option<Vec<Header>>,
@@ -165,7 +193,7 @@ pub struct AgentStats {
 #[napi]
 #[derive(Debug, Clone)]
 pub struct Agent {
-	pub(crate) client: Client,
+	pub(crate) client: ClientWithMiddleware,
 	pub(crate) cookie_jar: Option<Arc<Jar>>,
 	pub(crate) stats: Arc<InnerAgentStats>,
 }
@@ -322,8 +350,54 @@ impl Agent {
 			}
 		}
 
+		let mut client = ClientBuilder::new(client.build()?);
+
+		if let Some(cache) = options.cache
+			&& let Some(store) = cache.store
+		{
+			let mode = cache.mode.unwrap_or_default().into();
+			let cache_options = HttpCacheOptions {
+				cache_options: Some(CacheOptions {
+					shared: cache.shared.unwrap_or(true),
+					ignore_cargo_cult: true,
+					..Default::default()
+				}),
+				..Default::default()
+			};
+			match store {
+				CacheStore::Disk => {
+					client = client.with(Cache(HttpCache {
+						mode,
+						manager: CACacheManager {
+							path: cache
+								.path
+								.ok_or_else(|| {
+									FaithError::new(
+										FaithErrorKind::Config,
+										Some("missing cache.path"),
+									)
+								})?
+								.into(),
+							remove_opts: Default::default(),
+						},
+						options: cache_options,
+					}));
+				}
+				CacheStore::Memory => {
+					client = client.with(Cache(HttpCache {
+						mode,
+						manager: MokaManager::new(
+							MokaCacheBuilder::new(cache.capacity.map_or(10_000, |n| n.into()))
+								.build(),
+						),
+						options: cache_options,
+					}));
+				}
+			}
+		}
+
 		Ok(Self {
-			client: client.build()?,
+			client: client.build(),
 			cookie_jar,
 			stats: Default::default(),
 		})
