@@ -321,6 +321,8 @@ When connected over HTTPS, this is the DER-encoded leaf certificate of the peer.
 
 ### `Response.redirected: boolean`
 
+Not yet supported. Fáith will always return `false` here. This is an upstream limitation.
+
 *The `redirected` read-only property of the `Response` interface indicates whether or not the
 response is the result of a request you made which was redirected.*
 
@@ -519,7 +521,18 @@ to keep the idle connections (per host) under that number.
 
 Default: `null` (no limit).
 
-### `AgentOptions.redirect`
+### `AgentOptions.redirect: string`
+
+*Determines the behavior in case the server replies with a redirect status.
+One of the following values:*
+
+- *`follow`: automatically follow redirects.* Fáith limits this to 10 redirects.
+- *`error`: reject the promise with a network error when a redirect status is returned.*
+- ~~*`manual`*:~~ not supported.
+- `stop`: (Fáith custom) don't follow any redirects, return the responses.
+
+*Defaults to `follow`.*
+
 ### `AgentOptions.retry`
 
 ### `AgentOptions.timeout: object`
@@ -631,6 +644,7 @@ error kind, documented in this comprehensive mapping:
   - `Timeout` — request timed out
 - JS `NetworkError`:
   - `Network` — network error
+  - `Redirect` — when the agent is configured to error on redirects
 - JS `SyntaxError`:
   - `JsonParse` — JSON parse error for `response.json()`
   - `PemParse` — PEM parse error for `AgentOptions.tls.identity`

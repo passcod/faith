@@ -27,7 +27,6 @@ pub struct FaithResponse {
 	pub(crate) headers: Vec<(String, String)>,
 	pub(crate) ok: bool,
 	pub(crate) peer: Arc<PeerInformation>,
-	pub(crate) redirected: bool,
 	pub(crate) status: u16,
 	pub(crate) status_text: String,
 	pub(crate) url: String,
@@ -42,7 +41,6 @@ impl Clone for FaithResponse {
 			headers: self.headers.clone(),
 			ok: self.ok,
 			peer: self.peer.clone(),
-			redirected: self.redirected,
 			status: self.status,
 			status_text: self.status_text.clone(),
 			url: self.url.clone(),
@@ -86,7 +84,8 @@ impl FaithResponse {
 
 	#[napi(getter)]
 	pub fn redirected(&self) -> bool {
-		self.redirected
+		false // TODO: depends on upstream
+		// may also be possible by re-implementing the redirect handling :(
 	}
 
 	#[napi(getter)]

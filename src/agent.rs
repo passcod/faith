@@ -14,6 +14,7 @@ use reqwest::{
 	Client, Identity, Url,
 	cookie::{CookieStore, Jar},
 	header::{HeaderMap, HeaderName, HeaderValue},
+	redirect::Policy,
 };
 
 use crate::error::{FaithError, FaithErrorKind};
@@ -63,6 +64,23 @@ pub struct AgentPoolOptions {
 	pub max_idle_per_host: Option<u32>,
 }
 
+#[napi(string_enum)]
+#[derive(Debug, Clone, Copy, Default)]
+pub enum Redirect {
+	#[napi(value = "follow")]
+	#[default]
+	Follow,
+
+	#[napi(value = "error")]
+	Error,
+
+	#[napi(value = "manual")]
+	Manual,
+
+	#[napi(value = "stop")]
+	Stop,
+}
+
 #[napi(object)]
 #[derive(Debug, Clone, Copy, Default)]
 pub struct AgentTimeoutOptions {
@@ -109,6 +127,7 @@ pub struct AgentOptions {
 	pub headers: Option<Vec<Header>>,
 	pub http3: Option<AgentHttp3Options>,
 	pub pool: Option<AgentPoolOptions>,
+	pub redirect: Option<Redirect>,
 	pub timeout: Option<AgentTimeoutOptions>,
 	pub tls: Option<AgentTlsOptions>,
 	pub user_agent: Option<String>,
@@ -204,6 +223,21 @@ impl Agent {
 					.and_then(|n| n.try_into().ok())
 					.unwrap_or(usize::MAX),
 			)
+		}
+
+		if let Some(redir) = options.redirect {
+			match redir {
+				// follow is the default, and we ignore manual
+				Redirect::Follow | Redirect::Manual => {}
+				Redirect::Error => {
+					client = client.redirect(Policy::custom(|attempt| {
+						attempt.error(Box::new(FaithError::from(FaithErrorKind::Redirect)))
+					}));
+				}
+				Redirect::Stop => {
+					client = client.redirect(Policy::none());
+				}
+			}
 		}
 
 		if let Some(timeouts) = options.timeout {

@@ -122,7 +122,6 @@ pub fn faith_fetch(
 			.to_string();
 		let ok = response.status().is_success();
 		let url = response.url().to_string();
-		let redirected = response.status().is_redirection();
 		let version = format!("{:?}", response.version());
 
 		let headers_vec: Vec<(String, String)> = response
@@ -168,7 +167,6 @@ pub fn faith_fetch(
 			headers: headers_vec,
 			ok,
 			peer: Arc::new(peer),
-			redirected,
 			status,
 			status_text,
 			url,

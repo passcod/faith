@@ -582,5 +582,6 @@ module.exports.FAITH_VERSION = nativeBinding.FAITH_VERSION
 module.exports.FaithErrorKind = nativeBinding.FaithErrorKind
 module.exports.faithFetch = nativeBinding.faithFetch
 module.exports.Http3Congestion = nativeBinding.Http3Congestion
+module.exports.Redirect = nativeBinding.Redirect
 module.exports.REQWEST_VERSION = nativeBinding.REQWEST_VERSION
 module.exports.USER_AGENT = nativeBinding.USER_AGENT

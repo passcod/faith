@@ -12,6 +12,7 @@ export {
 	AgentTlsOptions,
 	AgentOptions,
 	AgentStats,
+	Redirect,
 	Header,
 	Http3Congestion,
 	FAITH_VERSION,
@@ -34,6 +35,7 @@ export const ERROR_CODES: {
 	readonly JsonParse: "JsonParse";
 	readonly Network: "Network";
 	readonly PemParse: "PemParse";
+	readonly Redirect: "Redirect";
 	readonly ResponseAlreadyDisturbed: "ResponseAlreadyDisturbed";
 	readonly ResponseBodyNotAvailable: "ResponseBodyNotAvailable";
 	readonly RuntimeThread: "RuntimeThread";

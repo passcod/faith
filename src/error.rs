@@ -1,4 +1,7 @@
-use std::fmt::Debug;
+use std::{
+	error::Error,
+	fmt::{Debug, Display},
+};
 
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
@@ -15,6 +18,7 @@ pub enum FaithErrorKind {
 	JsonParse,
 	Network,
 	PemParse,
+	Redirect,
 	ResponseAlreadyDisturbed,
 	ResponseBodyNotAvailable,
 	RuntimeThread,
@@ -41,6 +45,7 @@ impl FaithErrorKind {
 			Self::JsonParse => "invalid json in response body",
 			Self::Network => "network error",
 			Self::PemParse => "invalid client certificate or key",
+			Self::Redirect => "got a redirect",
 			Self::ResponseAlreadyDisturbed => "response body already disturbed",
 			Self::ResponseBodyNotAvailable => "response body not available",
 			Self::RuntimeThread => "internal tokio runtime thread error",
@@ -53,7 +58,7 @@ impl FaithErrorKind {
 		match self {
 			Self::BodyStream | Self::RuntimeThread => JsErrorType::GenericError,
 			Self::Aborted | Self::Timeout => JsErrorType::NamedError("AbortError"),
-			Self::Network => JsErrorType::NamedError("NetworkError"),
+			Self::Network | Self::Redirect => JsErrorType::NamedError("NetworkError"),
 			Self::JsonParse | Self::PemParse | Self::Utf8Parse => JsErrorType::SyntaxError,
 			Self::InvalidHeader
 			| Self::InvalidMethod
@@ -92,16 +97,7 @@ impl FaithError {
 		self.to_napi()
 	}
 	fn to_napi(&self) -> napi::Error {
-		napi::Error::new(
-			napi::Status::GenericFailure,
-			format!(
-				"{:?}: {}",
-				self.kind,
-				self.message
-					.as_deref()
-					.unwrap_or_else(|| self.kind.default_message())
-			),
-		)
+		napi::Error::new(napi::Status::GenericFailure, format!("{self}"))
 	}
 
 	// whenever possible, we should prefer to use this so that the error types are correct
@@ -143,6 +139,33 @@ impl From<reqwest::Error> for FaithError {
 		} else {
 			FaithError::new(FaithErrorKind::Network, Some(err.to_string()))
 		}
+	}
+}
+
+impl Error for FaithError {
+	fn source(&self) -> Option<&(dyn Error + 'static)> {
+		None
+	}
+
+	fn description(&self) -> &str {
+		"description() is deprecated; use Display"
+	}
+
+	fn cause(&self) -> Option<&dyn Error> {
+		self.source()
+	}
+}
+
+impl Display for FaithError {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		write!(
+			f,
+			"{:?}: {}",
+			self.kind,
+			self.message
+				.as_deref()
+				.unwrap_or_else(|| self.kind.default_message())
+		)
 	}
 }
 

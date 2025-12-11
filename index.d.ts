@@ -62,6 +62,7 @@ export interface AgentOptions {
   headers?: Array<Header>
   http3?: AgentHttp3Options
   pool?: AgentPoolOptions
+  redirect?: Redirect
   timeout?: AgentTimeoutOptions
   tls?: AgentTlsOptions
   userAgent?: string
@@ -107,6 +108,7 @@ export declare const enum FaithErrorKind {
   JsonParse = 'JsonParse',
   Network = 'Network',
   PemParse = 'PemParse',
+  Redirect = 'Redirect',
   ResponseAlreadyDisturbed = 'ResponseAlreadyDisturbed',
   ResponseBodyNotAvailable = 'ResponseBodyNotAvailable',
   RuntimeThread = 'RuntimeThread',
@@ -135,6 +137,13 @@ export interface Header {
 export declare const enum Http3Congestion {
   Cubic = 'cubic',
   Bbr1 = 'bbr1'
+}
+
+export declare const enum Redirect {
+  Follow = 'follow',
+  Error = 'error',
+  Manual = 'manual',
+  Stop = 'stop'
 }
 
 export const REQWEST_VERSION: string
