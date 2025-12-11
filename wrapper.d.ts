@@ -55,6 +55,7 @@ export class Response {
 	readonly redirected: boolean;
 	readonly status: number;
 	readonly statusText: string;
+	readonly type: "basic";
 	readonly url: string;
 	readonly version: string;
 
@@ -93,6 +94,9 @@ export class Response {
 	 * @returns Promise that resolves with the response body as Blob
 	 */
 	blob(): Promise<Blob>;
+
+	/** Not supported. Will throw. */
+	formData(): Promise<FormData>;
 
 	/**
 	 * Create a clone of the Response object
