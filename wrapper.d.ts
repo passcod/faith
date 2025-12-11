@@ -37,6 +37,7 @@ export const ERROR_CODES: {
 	readonly Aborted: "Aborted";
 	readonly AddressParse: "AddressParse";
 	readonly BodyStream: "BodyStream";
+	readonly Config: "Config";
 	readonly InvalidHeader: "InvalidHeader";
 	readonly InvalidMethod: "InvalidMethod";
 	readonly InvalidUrl: "InvalidUrl";

@@ -496,11 +496,11 @@ new Agent(options)
 
 Settings related to the HTTP cache. This is a nested object.
 
-#### `AgentOptions.cache.store: string | null`
+#### `AgentOptions.cache.store: string`
 
-Which cache store to use: either `disk` or `memory`. Set to null to disable the cache.
+Which cache store to use: either `disk` or `memory`.
 
-Default: null.
+Default: none (cache disabled).
 
 #### `AgentOptions.cache.capacity: number`
 
