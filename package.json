@@ -2,6 +2,7 @@
 	"name": "@passcod/faith",
 	"version": "0.0.1",
 	"description": "fáith: a Rust-powered fetch",
+	"repository": "https://github.com/passcod/faith",
 	"author": {
 		"name": "Félix Saparelli",
 		"email": "felix@passcod.name",
