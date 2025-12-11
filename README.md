@@ -118,7 +118,7 @@ then the value passed directly into `fetch()` is used.*
 
 Note that you can include options that Fáith does not support; they will simply be ignored.
 
-### `agent`
+### `FetchOptions.agent: Agent`
 
 This is custom to Fáith.
 
@@ -128,11 +128,11 @@ Notably an agent has a DNS cache, and may be configured to handle cookies and/or
 
 When not provided, a global default `Agent` is created on first use.
 
-### `attributionReporting`
+### `FetchOptions.attributionReporting`
 
 Fáith deliberately does not implement this.
 
-### `body`
+### `FetchOptions.body`
 
 *The request body contains content to send to the server, for example in a `POST` or `PUT` request.
 It is specified as an instance of any of the following types:*
@@ -149,7 +149,7 @@ It is specified as an instance of any of the following types:*
 
 *If `body` is a `ReadableStream`, the `duplex` option must also be set.*
 
-### `browsingTopics`
+### `FetchOptions.browsingTopics`
 
 Fáith deliberately does not implement this.
 
@@ -158,7 +158,7 @@ Fáith deliberately does not implement this.
 Fáith does not respect this option on the `RequestInit` dictionary. Instead, the option is present
 on `Agent` and applies to all requests made with that `Agent`.
 
-### `credentials`
+### `FetchOptions.credentials: string`
 
 *Controls whether or not the browser sends credentials with the request, as well as whether any
 `Set-Cookie` response headers are respected. Credentials are cookies, ~~TLS client certificates,~~
@@ -180,14 +180,14 @@ This is an upstream limitation.
 
 Defaults to `include` (browsers default to `same-origin`).
 
-### `duplex`
+### `FetchOptions.duplex: string`
 
 *Controls duplex behavior of the request. If this is present it must have the value `half`, meaning
 that Fáith will send the entire request before processing the response.*
 
 *This option must be present when `body` is a `ReadableStream`.*
 
-### `headers`
+### `FetchOptions.headers: Headers | object`
 
 *Any headers you want to add to your request, contained within a `Headers` object or an object
 literal whose keys are the names of headers and whose values are the header values.*
@@ -196,7 +196,7 @@ Fáith allows all request headers to be set (unlike browsers, which [forbid][1] 
 
 [1]: https://developer.mozilla.org/en-US/docs/Glossary/Forbidden_request_header
 
-### `integrity`
+### `FetchOptions.integrity: string`
 
 Not implemented yet.
 
@@ -214,7 +214,7 @@ Fáith only checks the integrity when using `bytes()`, `json()`, `text()`, `arra
 Note that browsers will throw at the `fetch()` call when integrity fails, but Fáith will only throw
 when the above methods are called, as until then the body contents are not available.
 
-### `keepalive`
+### `FetchOptions.keepalive`
 
 Not supported.
 
@@ -223,15 +223,15 @@ single `Agent`, so subsequent requests to the same endpoint are faster until the
 times out. The `keepalive` option in browsers is instead a way to send a `fetch()` right before the
 page is unloaded, for tracking or analytics purposes. This concept does not exist in Node.js.
 
-### `method`
+### `FetchOptions.method: string`
 
 *The request method. Defaults to `GET`.*
 
-### `mode`
+### `FetchOptions.mode`
 
 Fáith deliberately does not implement this, as there is no CORS/origin.
 
-### `priority`
+### `FetchOptions.priority`
 
 Not supported.
 
@@ -240,24 +240,24 @@ Not supported.
 Fáith does not respect this option on the `RequestInit` dictionary. Instead, the option is present
 on `Agent` and applies to all requests made with that `Agent`.
 
-### `referrer`
+### `FetchOptions.referrer`
 
 Fáith deliberately does not implement this, as there is no origin.
 
 However, Fáith does set the `Referer` header when redirecting automatically.
 
-### `referrerPolicy`
+### `FetchOptions.referrerPolicy`
 
 Fáith deliberately does not implement this, as there is no origin.
 
 However, Fáith does set the `Referer` header when redirecting automatically.
 
-### `signal`
+### `FetchOptions.signal: AbortSignal`
 
 *An `AbortSignal`. If this option is set, the request can be canceled by calling `abort()` on the
 corresponding `AbortController`.*
 
-### `timeout`
+### `FetchOptions.timeout: number`
 
 Custom to Fáith. Cancels the request after this many milliseconds.
 
@@ -273,7 +273,7 @@ response receipt.
 Fáith does not allow its `Response` object to be constructed. If you need to, you may use the
 `webResponse()` method to convert one into a Web API `Response` object; note the caveats.
 
-### `Response.body`
+### `Response.body: ReadableStream | null`
 
 *The `body` read-only property of the `Response` interface is a `ReadableStream` of the body
 contents,* or `null` for any actual HTTP response that has no body, such as `HEAD` requests and
@@ -282,7 +282,7 @@ contents,* or `null` for any actual HTTP response that has no body, such as `HEA
 Note that browsers currently do not return `null` for those responses, but the spec requires it.
 Fáith chooses to respect the spec rather than the browsers in this case.
 
-### `Response.bodyUsed`
+### `Response.bodyUsed: boolean`
 
 *The `bodyUsed` read-only property of the `Response` interface is a boolean value that indicates
 whether the body has been read yet.*
@@ -291,7 +291,7 @@ In Fáith, this indicates whether the body stream has ever been read from or can
 [in the spec](https://streams.spec.whatwg.org/#is-readable-stream-disturbed). Note that accessing
 the `.body` property counts as a read, even if you don't actually consume any bytes of content.
 
-### `Response.headers`
+### `Response.headers: Headers`
 
 *The `headers` read-only property of the `Response` interface contains the `Headers` object
 associated with the response.*
@@ -299,12 +299,13 @@ associated with the response.*
 Note that Fáith does not provide a custom `Headers` class; instead the Web API `Headers` structure
 is used directly and constructed by Fáith when needed.
 
-### `Response.ok`
+### `Response.ok: boolean`
 
 *The `ok` read-only property of the `Response` interface contains a boolean stating whether the
 response was successful (status in the range 200-299) or not.*
 
-### `Response.redirected`
+
+### `Response.redirected: boolean`
 
 *The `redirected` read-only property of the `Response` interface indicates whether or not the
 response is the result of a request you made which was redirected.*
@@ -312,14 +313,14 @@ response is the result of a request you made which was redirected.*
 *Note that by the time you read this property, the redirect will already have happened, and you
 cannot prevent it by aborting the fetch at this point.*
 
-### `Response.status`
+### `Response.status: number`
 
 *The `status` read-only property of the `Response` interface contains the HTTP status codes of the
 response. For example, 200 for success, 404 if the resource could not be found.*
 
 *A value is `0` is returned for a response whose `type` is `opaque`, `opaqueredirect`, or `error`.*
 
-### `Response.statusText`
+### `Response.statusText: string`
 
 *The `statusText` read-only property of the `Response` interface contains the status message
 corresponding to the HTTP status code in `Response.status`. For example, this would be `OK` for a
@@ -329,45 +330,45 @@ In HTTP/1, servers can send custom status text. This is returned here. In HTTP/2
 status text is not supported at all, and the `statusText` property is either empty or simulated
 from well-known status codes.
 
-### `Response.type`
+### `Response.type: string`
 
 *The `type` read-only property of the `Response` interface contains the type of the response. The
 type determines whether scripts are able to access the response body and headers.*
 
 In Fáith, this is always set to `basic`.
 
-### `Response.url`
+### `Response.url: string`
 
 *The `url` read-only property of the `Response` interface contains the URL of the response. The
 value of the `url` property will be the final URL obtained after any redirects.*
 
-### `Response.version`
+### `Response.version: string`
 
 The `version` read-only property of the `Response` interface contains the HTTP version of the
 response. The value will be the final HTTP version after any redirects and protocol upgrades.
 
 This is custom to Fáith.
 
-### `Response.arrayBuffer()`
+### `Response.arrayBuffer(): Promise<ArrayBuffer>`
 
 *The `arrayBuffer()` method of the `Response` interface takes a `Response` stream and reads it to
 completion. It returns a promise that resolves with an `ArrayBuffer`.*
 
-### `Response.blob()`
+### `Response.blob(): Promise<Blob>`
 
 *The `blob()` method of the `Response` interface takes a `Response` stream and reads it to
 completion. It returns a promise that resolves with a `Blob`.*
 
 *The `type` of the `Blob` is set to the value of the `Content-Type` response header.*
 
-### `Response.bytes()`
+### `Response.bytes(): Promise<Buffer>`
 
 *The `bytes()` method of the `Response` interface takes a `Response` stream and reads it to
 completion. It returns a promise that resolves with a `Uint8Array`.*
 
 In Fáith, this returns a Node.js `Buffer`, which can be used as (and is a subclass of) a `Uint8Array`.
 
-### `Response.clone()`
+### `Response.clone(): Response`
 
 *The `clone()` method of the `Response` interface creates a clone of a response object, identical
 in every way, but stored in a different variable.*
@@ -376,11 +377,12 @@ in every way, but stored in a different variable.*
 
 (In-spec, this should throw a `TypeError`, but for technical reasons this is not possible with Fáith.)
 
-### `Response.formData()`
+### `Response.formData(): !`
 
-Fáith deliberately does not implement this.
+Fáith deliberately does not implement this. The method exists so the types work out, but it will
+always throw.
 
-### `Response.json()`
+### `Response.json(): Promise<unknown>`
 
 *The `json()` method of the `Response` interface takes a `Response` stream and reads it to
 completion. It returns a promise which resolves with the result of parsing the body text as
@@ -393,13 +395,13 @@ Further note that, at least in Fáith, this method first reads the entire respon
 and then parses that as JSON. This can use up to double the amount of memory. If you need more
 efficient access, consider handling the response body as a stream.
 
-### `Response.text()`
+### `Response.text(): Promise<string>`
 
 *The `text()` method of the `Response` interface takes a `Response` stream and reads it to
 completion. It returns a promise that resolves with a `String`. The response is always decoded
 using UTF-8.*
 
-### `Response.webResponse()`
+### `Response.webResponse(): globalThis.Response`
 
 This is entirely custom to Fáith. It returns a Web API `Response` instead of Fáith's custom
 `Response` class. However, it's not possible to construct a Web API `Response` that has all the
@@ -436,8 +438,8 @@ new Agent()
 new Agent(options)
 ```
 
-### `cache`
-### `cookies: bool`
+### `AgentOptions.cache`
+### `AgentOptions.cookies: bool`
 
 Enable a persistent cookie store for the agent. Cookies received in responses will be preserved and
 included in additional requests.
@@ -447,8 +449,8 @@ Default: `false`.
 You may use `agent.getCookie(url: string)` and `agent.addCookie(url: string, value: string)` to add
 and retrieve cookies from the store.
 
-### `dns`
-### `headers: Array<{ name: string, value: string, sensitive?: bool }>`
+### `AgentOptions.dns`
+### `AgentOptions.headers: Array<{ name: string, value: string, sensitive?: bool }>`
 
 Sets the default headers for every request.
 
@@ -457,11 +459,11 @@ Sensitive headers (e.g. `Authorization`) should be marked.
 
 Default: none.
 
-### `http3: object`
+### `AgentOptions.http3: object`
 
 Settings related to HTTP/3. This is a nested object.
 
-#### `congestion: string`
+#### `AgentOptions.http3.congestion: string`
 
 The congestion control algorithm. The default is `cubic`, which is the same used in TCP in the
 Linux stack. It's fair for all traffic, but not the most optimal, especially for networks with
@@ -477,7 +479,7 @@ but Fáith (or rather its underlying QUIC library quinn, [does not implement tho
 
 Default: `cubic`. Accepted values: `cubic`, `bbr1`.
 
-#### `maxIdleTimeout: number`
+#### `AgentOptions.http3.maxIdleTimeout: number`
 
 Maximum duration of inactivity to accept before timing out the connection, in seconds. Note that
 this only sets the timeout on this side of the connection: the true idle timeout is the _minimum_
@@ -486,21 +488,21 @@ defines bounds for safety: minimum 1 second, maximum 2 minutes (120 seconds).
 
 Default: 30.
 
-### `pool`
-#### `maxIdlePerHost`
-#### `idleTimeout`
-### `redirect`
-### `retry`
-### `timeout`
-#### `connect`
-#### `read`
-#### `total`
-### `tls`
-#### `earlyData`
-#### `identity`
-#### `required`
+### `AgentOptions.pool`
+#### `AgentOptions.pool.maxIdlePerHost`
+#### `AgentOptions.pool.idleTimeout`
+### `AgentOptions.redirect`
+### `AgentOptions.retry`
+### `AgentOptions.timeout`
+#### `AgentOptions.timeout.connect`
+#### `AgentOptions.timeout.read`
+#### `AgentOptions.timeout.total`
+### `AgentOptions.tls`
+#### `AgentOptions.tls.earlyData`
+#### `AgentOptions.tls.identity`
+#### `AgentOptions.tls.required`
 
-### `userAgent`
+### `AgentOptions.userAgent`
 
 Custom user agent string.
 
@@ -515,7 +517,7 @@ const agent = new Agent({
 });
 ```
 
-### `addCookie(url: string, cookie: string)`
+### `Agent.addCookie(url: string, cookie: string)`
 
 Add a cookie into the agent.
 
@@ -523,7 +525,7 @@ Does nothing if:
 - the cookie store is disabled
 - the url is malformed
 
-### `getCookie(url: string): string | null`
+### `Agent.getCookie(url: string): string | null`
 
 Retrieve a cookie from the store.
 
@@ -533,7 +535,7 @@ Returns `null` if:
 - the url is malformed
 - the cookie cannot be represented as a string
 
-### `stats(): object`
+### `Agent.stats(): object`
 
 Returns statistics gathered by this agent:
 
