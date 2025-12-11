@@ -7,6 +7,39 @@ use napi::bindgen_prelude::*;
 use napi_derive::napi;
 use strum::{EnumIter, IntoEnumIterator};
 
+/// Fáith produces fine-grained errors, but maps them to a few javascript error types for fetch
+/// compatibility. The `.code` property on errors thrown from Fáith is set to a stable name for each
+/// error kind, documented in this comprehensive mapping:
+///
+/// - JS `AbortError`:
+///   - `Aborted` — request was aborted using `signal`
+///   - `Timeout` — request timed out
+/// - JS `NetworkError`:
+///   - `Network` — network error
+///   - `Redirect` — when the agent is configured to error on redirects
+/// - JS `SyntaxError`:
+///   - `JsonParse` — JSON parse error for `response.json()`
+///   - `PemParse` — PEM parse error for `AgentOptions.tls.identity`
+///   - `Utf8Parse` — UTF8 decoding error for `response.text()`
+/// - JS `TypeError`:
+///   - `InvalidHeader` — invalid header name or value
+///   - `InvalidMethod` — invalid HTTP method
+///   - `InvalidUrl` — invalid URL string
+///   - `ResponseAlreadyDisturbed` — body already read (mutually exclusive operations)
+///   - `ResponseBodyNotAvailable` — body is null or not available
+/// - JS generic `Error`:
+///   - `BodyStream` — internal stream handling error
+///   - `Config` — invalid agent configuration
+///   - `RuntimeThread` — failed to start or schedule threads on the internal tokio runtime
+///
+/// The library exports an `ERROR_CODES` object which has every error code the library throws, and
+/// every error thrown also has a `code` property that is set to one of those codes. So you can
+/// accurately respond to the exact error kind by checking its code and matching against the right
+/// constant from `ERROR_CODES`, instead of doing string matching on the error message, or coarse
+/// `instance of` matching.
+///
+/// Due to technical limitations, when reading a body stream, reads might fail, but that error
+/// will not have a `code` property.
 #[napi(string_enum)]
 #[derive(Debug, Clone, Copy, EnumIter)]
 pub enum FaithErrorKind {

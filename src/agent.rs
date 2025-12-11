@@ -31,6 +31,18 @@ use crate::{
 pub const FAITH_VERSION: &str = env!("CARGO_PKG_VERSION");
 #[napi]
 pub const REQWEST_VERSION: &str = env!("REQWEST_VERSION");
+/// Custom user agent string.
+///
+/// Default: `Faith/{version} reqwest/{version}`.
+///
+/// You may use the `USER_AGENT` constant if you wish to prepend your own agent to the default, e.g.
+///
+/// ```javascript
+/// import { Agent, USER_AGENT } from '@passcod/faith';
+/// const agent = new Agent({
+///   userAgent: `YourApp/1.2.3 ${USER_AGENT}`,
+/// });
+/// ```
 #[napi]
 pub const USER_AGENT: &str = concat!(
 	"Faith/",
@@ -49,13 +61,33 @@ pub enum CacheStore {
 	Memory,
 }
 
+/// Settings related to the HTTP cache. This is a nested object.
 #[napi(object)]
 #[derive(Debug, Clone, Default)]
 pub struct AgentCacheOptions {
+	/// Which cache store to use: either `disk` or `memory`.
+	///
+	/// Default: none (cache disabled).
 	pub store: Option<CacheStore>,
+	/// If `cache.store: "memory"`, the maximum amount of items stored.
+	///
+	/// Default: 10_000.
 	pub capacity: Option<u32>,
+	/// Default cache mode. This is the same as [`FetchOptions.cache`](#fetchoptionscache), and is used if
+	/// no cache mode is set on a request.
+	///
+	/// Default: `"default"`.
 	pub mode: Option<RequestCacheMode>,
+	/// If `cache.store: "disk"`, then this is the path at which the cache data is. Must be writeable.
+	///
+	/// Required if `cache.store: "disk"`.
 	pub path: Option<String>,
+	/// If `true`, then the response is evaluated from a perspective of a shared cache (i.e. `private` is
+	/// not cacheable and `s-maxage` is respected). If `false`, then the response is evaluated from a
+	/// perspective of a single-user cache (i.e. `private` is cacheable and `s-maxage` is ignored).
+	/// `shared: true` is required for proxies and multi-user caches.
+	///
+	/// Default: true.
 	pub shared: Option<bool>,
 }
 
@@ -66,13 +98,39 @@ pub struct DnsOverride {
 	pub addresses: Vec<String>,
 }
 
+/// Settings related to DNS. This is a nested object.
 #[napi(object)]
 #[derive(Debug, Clone, Default)]
 pub struct AgentDnsOptions {
+	/// Use the system's DNS (via `getaddrinfo` or equivalent) rather than Fáith's own DNS client (based on
+	/// [Hickory]). If you experience issues with DNS where Fáith does not work but e.g. curl or native
+	/// fetch does, this should be your first port of call.
+	///
+	/// Enabling this also disables Happy Eyeballs (for IPv6 / IPv4 best-effort resolution), the in-memory
+	/// DNS cache, and may lead to worse performance even discounting the cache.
+	///
+	/// Default: false.
+	///
+	/// [Hickory]: https://hickory-dns.org/
 	pub system: Option<bool>,
+	/// Override DNS resolution for specific domains. This takes effect even with `dns.system: true`.
+	///
+	/// Will throw if addresses are in invalid formats. You may provide a port number as part of the
+	/// address, it will default to port 0 otherwise, which will select the conventional port for the
+	/// protocol in use (e.g. 80 for plaintext HTTP). If the URL passed to `fetch()` has an explicit port
+	/// number, that one will be used instead. Resolving a domain to an empty `addresses` array effectively
+	/// blocks that domain from this agent.
+	///
+	/// Default: no overrides.
 	pub overrides: Option<Vec<DnsOverride>>,
 }
 
+/// Sets the default headers for every request.
+///
+/// If header names or values are invalid, they are silently omitted.
+/// Sensitive headers (e.g. `Authorization`) should be marked.
+///
+/// Default: none.
 #[napi(object)]
 #[derive(Debug, Clone)]
 pub struct Header {
@@ -92,20 +150,57 @@ pub enum Http3Congestion {
 	Bbr1,
 }
 
+/// Settings related to HTTP/3. This is a nested object.
 #[napi(object)]
 #[derive(Debug, Clone, Default)]
 pub struct AgentHttp3Options {
+	/// The congestion control algorithm. The default is `cubic`, which is the same used in TCP in the
+	/// Linux stack. It's fair for all traffic, but not the most optimal, especially for networks with
+	/// a lot of available bandwidth, high latency, or a lot of packet loss. Cubic reacts to packet loss by
+	/// dropping the speed by 30%, and takes a long time to recover. BBR instead tries to maximise
+	/// bandwidth use and optimises for round-trip time, while ignoring packet loss.
+	///
+	/// In some networks, BBR can lead to pathological degradation of overall network conditions, by
+	/// flooding the network by up to **100 times** more retransmissions. This is fixed in BBRv2 and BBRv3,
+	/// but Fáith (or rather its underlying QUIC library quinn, [does not implement those yet][2]).
+	///
+	/// [2]: https://github.com/quinn-rs/quinn/issues/1254
+	///
+	/// Default: `cubic`. Accepted values: `cubic`, `bbr1`.
 	pub congestion: Option<Http3Congestion>,
+	/// Maximum duration of inactivity to accept before timing out the connection, in seconds. Note that
+	/// this only sets the timeout on this side of the connection: the true idle timeout is the _minimum_
+	/// of this and the peer's own max idle timeout. While the underlying library has no limits, Fáith
+	/// defines bounds for safety: minimum 1 second, maximum 2 minutes (120 seconds).
+	///
+	/// Default: 30.
 	pub max_idle_timeout: Option<u8>,
 }
 
+/// Settings related to the connection pool. This is a nested object.
 #[napi(object)]
 #[derive(Debug, Clone, Default)]
 pub struct AgentPoolOptions {
+	/// How many seconds of inactivity before a connection is closed.
+	///
+	/// Default: 90 seconds.
 	pub idle_timeout: Option<u32>,
+	/// The maximum amount of idle connections per host to allow in the pool. Connections will be closed
+	/// to keep the idle connections (per host) under that number.
+	///
+	/// Default: `null` (no limit).
 	pub max_idle_per_host: Option<u32>,
 }
 
+/// Determines the behavior in case the server replies with a redirect status.
+/// One of the following values:
+///
+/// - `follow`: automatically follow redirects. Fáith limits this to 10 redirects.
+/// - `error`: reject the promise with a network error when a redirect status is returned.
+/// - ~~`manual`~~: not supported.
+/// - `stop`: (Fáith custom) don't follow any redirects, return the responses.
+///
+/// Defaults to `follow`.
 #[napi(string_enum)]
 #[derive(Debug, Clone, Copy, Default)]
 pub enum Redirect {
@@ -123,19 +218,53 @@ pub enum Redirect {
 	Stop,
 }
 
+/// Timeouts for requests made with this agent. This is a nested object.
 #[napi(object)]
 #[derive(Debug, Clone, Copy, Default)]
 pub struct AgentTimeoutOptions {
+	/// Set a timeout for only the connect phase, in milliseconds.
+	///
+	/// Default: none.
 	pub connect: Option<u32>,
+	/// Set a timeout for read operations, in milliseconds.
+	///
+	/// The timeout applies to each read operation, and resets after a successful read. This is more
+	/// appropriate for detecting stalled connections when the size isn't known beforehand.
+	///
+	/// Default: none.
 	pub read: Option<u32>,
+	/// Set a timeout for the entire request-response cycle, in milliseconds.
+	///
+	/// The timeout applies from when the request starts connecting until the response body has finished.
+	/// Also considered a total deadline.
+	///
+	/// Default: none.
 	pub total: Option<u32>,
 }
 
+/// Settings related to the connection pool. This is a nested object.
 #[napi(object)]
 #[derive(Default)]
 pub struct AgentTlsOptions {
+	/// Enable TLS 1.3 Early Data. Early data is an optimisation where the client sends the first packet
+	/// of application data alongside the opening packet of the TLS handshake. That can enable the server
+	/// to answer faster, improving latency by up to one round-trip. However, Early Data has significant
+	/// security implications: it's vulnerable to replay attacks and has weaker forward secrecy. It should
+	/// really only be used for static assets or to squeeze out the last drop of performance for endpoints
+	/// that are replay-safe.
+	///
+	/// Default: false.
 	pub early_data: Option<bool>,
+	/// Provide a PEM-formatted certificate and private key to present as a TLS client certificate (also
+	/// called mutual TLS or mTLS) authentication.
+	///
+	/// The input should contain a PEM encoded private key and at least one PEM encoded certificate. The
+	/// private key must be in RSA, SEC1 Elliptic Curve or PKCS#8 format. This is one of the few options
+	/// that will cause the `Agent` constructor to throw if the input is in the wrong format.
 	pub identity: Option<Either<Buffer, String>>,
+	/// Disables plain-text HTTP.
+	///
+	/// Default: false.
 	pub required: Option<bool>,
 }
 
@@ -165,15 +294,38 @@ impl Clone for AgentTlsOptions {
 #[napi(object)]
 #[derive(Debug, Clone, Default)]
 pub struct AgentOptions {
+	/// Settings related to the HTTP cache. This is a nested object.
 	pub cache: Option<AgentCacheOptions>,
+	/// Enable a persistent cookie store for the agent. Cookies received in responses will be preserved and
+	/// included in additional requests.
+	///
+	/// Default: `false`.
+	///
+	/// You may use `agent.getCookie(url: string)` and `agent.addCookie(url: string, value: string)` to add
+	/// and retrieve cookies from the store.
 	pub cookies: Option<bool>,
+	/// Settings related to DNS. This is a nested object.
 	pub dns: Option<AgentDnsOptions>,
+	/// Sets the default headers for every request.
+	///
+	/// If header names or values are invalid, they are silently omitted.
+	/// Sensitive headers (e.g. `Authorization`) should be marked.
+	///
+	/// Default: none.
 	pub headers: Option<Vec<Header>>,
+	/// Settings related to HTTP/3. This is a nested object.
 	pub http3: Option<AgentHttp3Options>,
+	/// Settings related to the connection pool. This is a nested object.
 	pub pool: Option<AgentPoolOptions>,
+	/// Determines the behavior in case the server replies with a redirect status.
 	pub redirect: Option<Redirect>,
+	/// Timeouts for requests made with this agent. This is a nested object.
 	pub timeout: Option<AgentTimeoutOptions>,
+	/// Settings related to the connection pool. This is a nested object.
 	pub tls: Option<AgentTlsOptions>,
+	/// Custom user agent string.
+	///
+	/// Default: `Faith/{version} reqwest/{version}`.
 	pub user_agent: Option<String>,
 }
 
@@ -190,6 +342,21 @@ pub struct AgentStats {
 	pub responses_received: i64,
 }
 
+/// The `Agent` interface of the Fáith API represents an instance of an HTTP client. Each `Agent` has
+/// its own options, connection pool, caches, etc. There are also conveniences such as `headers` for
+/// setting default headers on all requests done with the agent, and statistics collected by the agent.
+///
+/// Re-using connections between requests is a significant performance improvement: not only because
+/// the TCP and TLS handshake is only performed once across many different requests, but also because
+/// the DNS lookup doesn't need to occur for subsequent requests on the same connection. Depending on
+/// DNS technology (DoH and DoT add a whole separate handshake to the process) and overall latency,
+/// this can not only speed up requests on average, but also reduce system load.
+///
+/// For this reason, and also because in browsers this behaviour is standard, **all** requests with
+/// Fáith use an `Agent`. For `fetch()` calls that don't specify one explicitly, a global agent with
+/// default options is created on first use.
+///
+/// There are a lot more options that could be exposed here; if you want one, open an issue.
 #[napi]
 #[derive(Debug, Clone)]
 pub struct Agent {
@@ -413,6 +580,11 @@ impl Agent {
 		.map_err(|err| err.into_js_error(&env))?)
 	}
 
+	/// Add a cookie into the agent.
+	///
+	/// Does nothing if:
+	/// - the cookie store is disabled
+	/// - the url is malformed
 	#[napi]
 	pub fn add_cookie(&self, url: String, cookie: String) {
 		let Some(jar) = &self.cookie_jar else {
@@ -426,6 +598,13 @@ impl Agent {
 		jar.add_cookie_str(&cookie, &url);
 	}
 
+	/// Retrieve a cookie from the store.
+	///
+	/// Returns `null` if:
+	/// - there's no cookie at this url
+	/// - the cookie store is disabled
+	/// - the url is malformed
+	/// - the cookie cannot be represented as a string
 	#[napi]
 	pub fn get_cookie(&self, url: String) -> Option<String> {
 		let Some(jar) = &self.cookie_jar else {
@@ -440,6 +619,10 @@ impl Agent {
 			.and_then(|val| val.to_str().ok().map(ToOwned::to_owned))
 	}
 
+	/// Returns statistics gathered by this agent:
+	///
+	/// - `requestsSent`
+	/// - `responsesReceived`
 	#[napi]
 	pub fn stats(&self) -> AgentStats {
 		AgentStats {

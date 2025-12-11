@@ -26,6 +26,18 @@ use crate::{
 	response::{FaithResponse, PeerInformation},
 };
 
+/// This defines the resource that you wish to fetch. This can either be:
+///
+/// - A string or any other object with a stringifier — including a `URL` object — that provides the
+///   URL of the resource you want to fetch. The URL must be absolute and include a scheme.
+///
+/// - A `Request` object.
+///
+/// A `RequestInit` object containing any custom settings that you want to apply to the request. In
+/// practice the `RequestInit` class does not exist in browsers or Node.js, and so this is always a
+/// "plain object" or "dictionary". The fields supported by Fáith are documented below.
+///
+/// A `Promise` that resolves to a `Response` object.
 #[napi]
 pub fn faith_fetch(
 	url: String,

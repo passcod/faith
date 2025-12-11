@@ -146,7 +146,7 @@ It is specified as an instance of any of the following types:*
 - *`File`*
 - *`FormData`*
 - *`TypedArray`*
-- *`URLSearchParams`* Not yet implemented.
+- ~~*`URLSearchParams`*~~ Not yet implemented.
 - *`ReadableStream`* Note that Fáith currently reads this into memory before sending the request.
 
 *If `body` is a `ReadableStream`, the `duplex` option must also be set.*
@@ -370,8 +370,6 @@ cannot prevent it by aborting the fetch at this point.*
 *The `status` read-only property of the `Response` interface contains the HTTP status codes of the
 response. For example, 200 for success, 404 if the resource could not be found.*
 
-*A value is `0` is returned for a response whose `type` is `opaque`, `opaqueredirect`, or `error`.*
-
 ### `Response.statusText: string`
 
 *The `statusText` read-only property of the `Response` interface contains the status message
@@ -425,9 +423,7 @@ In Fáith, this returns a Node.js `Buffer`, which can be used as (and is a subcl
 *The `clone()` method of the `Response` interface creates a clone of a response object, identical
 in every way, but stored in a different variable.*
 
-*`clone()` throws* an `Error` *if the response body has already been used.*
-
-(In-spec, this should throw a `TypeError`, but for technical reasons this is not possible with Fáith.)
+*`clone()` throws an error if the response body has already been used.*
 
 ### `Response.formData(): !`
 

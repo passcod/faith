@@ -6,6 +6,42 @@ use napi_derive::napi;
 
 use crate::agent::Agent;
 
+/// The cache mode you want to use for the request. This may be any one of the following values:
+///
+/// - `default`: The client looks in its HTTP cache for a response matching the request.
+///   - If there is a match and it is fresh, it will be returned from the cache.
+///   - If there is a match but it is stale, the client will make a conditional request to the remote
+///     server. If the server indicates that the resource has not changed, it will be returned from the
+///     cache. Otherwise the resource will be downloaded from the server and the cache will be updated.
+///   - If there is no match, the client will make a normal request, and will update the cache with
+///     the downloaded resource.
+///
+/// - `no-store`: The client fetches the resource from the remote server without first looking in the
+///   cache, and will not update the cache with the downloaded resource.
+///
+/// - `reload`: The client fetches the resource from the remote server without first looking in the
+///   cache, but then will update the cache with the downloaded resource.
+///
+/// - `no-cache`: The client looks in its HTTP cache for a response matching the request.
+///   - If there is a match, fresh or stale, the client will make a conditional request to the remote
+///     server. If the server indicates that the resource has not changed, it will be returned from the
+///     cache. Otherwise the resource will be downloaded from the server and the cache will be updated.
+///   - If there is no match, the client will make a normal request, and will update the cache with
+///     the downloaded resource.
+///
+/// - `force-cache`: The client looks in its HTTP cache for a response matching the request.
+///   - If there is a match, fresh or stale, it will be returned from the cache.
+///   - If there is no match, the client will make a normal request, and will update the cache with
+///     the downloaded resource.
+///
+/// - `only-if-cached`: The client looks in its HTTP cache for a response matching the request.
+///   - If there is a match, fresh or stale, it will be returned from the cache.
+///   - If there is no match, a network error is returned.
+///
+/// - `ignore-rules`: Custom to Fáith. Overrides the check that determines if a response can be cached
+///   to always return true on 200. Uses any response in the HTTP cache matching the request, not
+///   paying attention to staleness. If there was no response, it creates a normal request and updates
+///   the HTTP cache with the response.
 #[napi(string_enum, js_name = "CacheMode")]
 #[derive(Debug, Clone, Copy, Default)]
 pub enum RequestCacheMode {
@@ -46,6 +82,25 @@ impl From<RequestCacheMode> for CacheMode {
 	}
 }
 
+/// Controls whether or not the client sends credentials with the request, as well as whether any
+/// `Set-Cookie` response headers are respected. Credentials are cookies, ~~TLS client certificates,~~
+/// or authentication headers containing a username and password. This option may be any one of the
+/// following values:
+///
+/// - `omit`: Never send credentials in the request or include credentials in the response.
+/// - ~~`same-origin`~~: Fáith does not implement this, as there is no concept of "origin" on the server.
+/// - `include`: Always include credentials, ~~even for cross-origin requests.~~
+///
+/// Fáith ignores the `Access-Control-Allow-Credentials` and `Access-Control-Allow-Origin` headers.
+///
+/// Fáith currently does not `omit` the TLS client certificate when the request's `Agent` has one
+/// configured. This is an upstream limitation.
+///
+/// If the request's `Agent` has cookies enabled, new cookies from the response will be added to the
+/// cookie jar, even as Fáith strips them from the request and response headers returned to the user.
+/// This is an upstream limitation.
+///
+/// Defaults to `include` (browsers default to `same-origin`).
 #[napi(string_enum)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CredentialsOption {
@@ -63,6 +118,10 @@ impl Default for CredentialsOption {
 	}
 }
 
+/// Controls duplex behavior of the request. If this is present it must have the value `half`, meaning
+/// that Fáith will send the entire request before processing the response.
+///
+/// This option must be present when `body` is a `ReadableStream`.
 #[napi(string_enum)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DuplexOption {
