@@ -521,10 +521,34 @@ Default: `null` (no limit).
 
 ### `AgentOptions.redirect`
 ### `AgentOptions.retry`
-### `AgentOptions.timeout`
-#### `AgentOptions.timeout.connect`
-#### `AgentOptions.timeout.read`
-#### `AgentOptions.timeout.total`
+
+### `AgentOptions.timeout: object`
+
+Timeouts for requests made with this agent. This is a nested object.
+
+#### `AgentOptions.timeout.connect: number | null`
+
+Set a timeout for only the connect phase, in milliseconds.
+
+Default: none.
+
+#### `AgentOptions.timeout.read: number | null`
+
+Set a timeout for read operations, in milliseconds.
+
+The timeout applies to each read operation, and resets after a successful read. This is more
+appropriate for detecting stalled connections when the size isn’t known beforehand.
+
+Default: none.
+
+#### `AgentOptions.timeout.total: number | null`
+
+Set a timeout for the entire request-response cycle, in milliseconds.
+
+The timeout applies from when the request starts connecting until the response body has finished.
+Also considered a total deadline.
+
+Default: none.
 
 ### `AgentOptions.tls: object`
 

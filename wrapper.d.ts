@@ -8,6 +8,7 @@ export {
 	Agent,
 	AgentHttp3Options,
 	AgentPoolOptions,
+	AgentTimeoutOptions,
 	AgentTlsOptions,
 	AgentOptions,
 	AgentStats,

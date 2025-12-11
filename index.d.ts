@@ -62,6 +62,7 @@ export interface AgentOptions {
   headers?: Array<Header>
   http3?: AgentHttp3Options
   pool?: AgentPoolOptions
+  timeout?: AgentTimeoutOptions
   tls?: AgentTlsOptions
   userAgent?: string
 }
@@ -69,6 +70,12 @@ export interface AgentOptions {
 export interface AgentPoolOptions {
   idleTimeout?: number
   maxIdlePerHost?: number
+}
+
+export interface AgentTimeoutOptions {
+  connect?: number
+  read?: number
+  total?: number
 }
 
 export interface AgentTlsOptions {

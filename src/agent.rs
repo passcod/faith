@@ -64,6 +64,14 @@ pub struct AgentPoolOptions {
 }
 
 #[napi(object)]
+#[derive(Debug, Clone, Copy, Default)]
+pub struct AgentTimeoutOptions {
+	pub connect: Option<u32>,
+	pub read: Option<u32>,
+	pub total: Option<u32>,
+}
+
+#[napi(object)]
 #[derive(Default)]
 pub struct AgentTlsOptions {
 	pub early_data: Option<bool>,
@@ -101,6 +109,7 @@ pub struct AgentOptions {
 	pub headers: Option<Vec<Header>>,
 	pub http3: Option<AgentHttp3Options>,
 	pub pool: Option<AgentPoolOptions>,
+	pub timeout: Option<AgentTimeoutOptions>,
 	pub tls: Option<AgentTlsOptions>,
 	pub user_agent: Option<String>,
 }
@@ -195,6 +204,20 @@ impl Agent {
 					.and_then(|n| n.try_into().ok())
 					.unwrap_or(usize::MAX),
 			)
+		}
+
+		if let Some(timeouts) = options.timeout {
+			if let Some(millis) = timeouts.connect {
+				client = client.connect_timeout(Duration::from_millis(millis.into()));
+			}
+
+			if let Some(millis) = timeouts.read {
+				client = client.read_timeout(Duration::from_millis(millis.into()));
+			}
+
+			if let Some(millis) = timeouts.total {
+				client = client.timeout(Duration::from_millis(millis.into()));
+			}
 		}
 
 		if let Some(tls) = options.tls {
