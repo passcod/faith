@@ -62,12 +62,19 @@ export interface AgentOptions {
   headers?: Array<Header>
   http3?: AgentHttp3Options
   pool?: AgentPoolOptions
+  tls?: AgentTlsOptions
   userAgent?: string
 }
 
 export interface AgentPoolOptions {
   idleTimeout?: number
   maxIdlePerHost?: number
+}
+
+export interface AgentTlsOptions {
+  earlyData?: boolean
+  identity?: Buffer | string
+  required?: boolean
 }
 
 export declare const enum CredentialsOption {
@@ -92,6 +99,7 @@ export declare const enum FaithErrorKind {
   InvalidUrl = 'InvalidUrl',
   JsonParse = 'JsonParse',
   Network = 'Network',
+  PemParse = 'PemParse',
   ResponseAlreadyDisturbed = 'ResponseAlreadyDisturbed',
   ResponseBodyNotAvailable = 'ResponseBodyNotAvailable',
   RuntimeThread = 'RuntimeThread',

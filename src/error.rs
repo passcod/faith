@@ -14,6 +14,7 @@ pub enum FaithErrorKind {
 	InvalidUrl,
 	JsonParse,
 	Network,
+	PemParse,
 	ResponseAlreadyDisturbed,
 	ResponseBodyNotAvailable,
 	RuntimeThread,
@@ -39,6 +40,7 @@ impl FaithErrorKind {
 			Self::InvalidUrl => "invalid URL",
 			Self::JsonParse => "invalid json in response body",
 			Self::Network => "network error",
+			Self::PemParse => "invalid client certificate or key",
 			Self::ResponseAlreadyDisturbed => "response body already disturbed",
 			Self::ResponseBodyNotAvailable => "response body not available",
 			Self::RuntimeThread => "internal tokio runtime thread error",
@@ -52,7 +54,7 @@ impl FaithErrorKind {
 			Self::BodyStream | Self::RuntimeThread => JsErrorType::GenericError,
 			Self::Aborted | Self::Timeout => JsErrorType::NamedError("AbortError"),
 			Self::Network => JsErrorType::NamedError("NetworkError"),
-			Self::JsonParse | Self::Utf8Parse => JsErrorType::SyntaxError,
+			Self::JsonParse | Self::PemParse | Self::Utf8Parse => JsErrorType::SyntaxError,
 			Self::InvalidHeader
 			| Self::InvalidMethod
 			| Self::InvalidUrl

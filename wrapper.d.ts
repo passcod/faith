@@ -8,6 +8,7 @@ export {
 	Agent,
 	AgentHttp3Options,
 	AgentPoolOptions,
+	AgentTlsOptions,
 	AgentOptions,
 	AgentStats,
 	Header,
@@ -31,6 +32,7 @@ export const ERROR_CODES: {
 	readonly InvalidUrl: "InvalidUrl";
 	readonly JsonParse: "JsonParse";
 	readonly Network: "Network";
+	readonly PemParse: "PemParse";
 	readonly ResponseAlreadyDisturbed: "ResponseAlreadyDisturbed";
 	readonly ResponseBodyNotAvailable: "ResponseBodyNotAvailable";
 	readonly RuntimeThread: "RuntimeThread";

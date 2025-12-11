@@ -1,4 +1,5 @@
 use std::{
+	fmt::Debug,
 	str::FromStr as _,
 	sync::{
 		Arc,
@@ -7,15 +8,15 @@ use std::{
 	time::Duration,
 };
 
-use napi::Env;
+use napi::{Either, Env, bindgen_prelude::Buffer};
 use napi_derive::napi;
 use reqwest::{
-	Client, Url,
+	Client, Identity, Url,
 	cookie::{CookieStore, Jar},
 	header::{HeaderMap, HeaderName, HeaderValue},
 };
 
-use crate::error::FaithError;
+use crate::error::{FaithError, FaithErrorKind};
 
 #[napi]
 pub const FAITH_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -63,12 +64,44 @@ pub struct AgentPoolOptions {
 }
 
 #[napi(object)]
+#[derive(Default)]
+pub struct AgentTlsOptions {
+	pub early_data: Option<bool>,
+	pub identity: Option<Either<Buffer, String>>,
+	pub required: Option<bool>,
+}
+
+impl Debug for AgentTlsOptions {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		f.debug_struct("AgentTlsOptions")
+			.field("early_data", &self.early_data)
+			.field("identity", &"[sensitive]")
+			.field("required", &self.required)
+			.finish()
+	}
+}
+
+impl Clone for AgentTlsOptions {
+	fn clone(&self) -> Self {
+		Self {
+			early_data: self.early_data.clone(),
+			identity: self.identity.as_ref().map(|either| match either {
+				Either::A(buf) => Either::A(Buffer::from(buf.as_ref())),
+				Either::B(string) => Either::B(string.clone()),
+			}),
+			required: self.required.clone(),
+		}
+	}
+}
+
+#[napi(object)]
 #[derive(Debug, Clone, Default)]
 pub struct AgentOptions {
 	pub cookies: Option<bool>,
 	pub headers: Option<Vec<Header>>,
 	pub http3: Option<AgentHttp3Options>,
 	pub pool: Option<AgentPoolOptions>,
+	pub tls: Option<AgentTlsOptions>,
 	pub user_agent: Option<String>,
 }
 
@@ -162,6 +195,28 @@ impl Agent {
 					.and_then(|n| n.try_into().ok())
 					.unwrap_or(usize::MAX),
 			)
+		}
+
+		if let Some(tls) = options.tls {
+			if let Some(early_data) = tls.early_data {
+				client = client.tls_early_data(early_data);
+			}
+
+			if let Some(identity) = tls.identity {
+				client = client.identity(
+					Identity::from_pem(match &identity {
+						Either::A(buf) => buf.as_ref(),
+						Either::B(string) => string.as_bytes(),
+					})
+					.map_err(|err| {
+						FaithError::new(FaithErrorKind::PemParse, Some(err.to_string()))
+					})?,
+				);
+			}
+
+			if let Some(https_only) = tls.required {
+				client = client.https_only(https_only);
+			}
 		}
 
 		Ok(Self {

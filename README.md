@@ -525,10 +525,36 @@ Default: `null` (no limit).
 #### `AgentOptions.timeout.connect`
 #### `AgentOptions.timeout.read`
 #### `AgentOptions.timeout.total`
-### `AgentOptions.tls`
-#### `AgentOptions.tls.earlyData`
-#### `AgentOptions.tls.identity`
+
+### `AgentOptions.tls: object`
+
+Settings related to the connection pool. This is a nested object.
+
+#### `AgentOptions.tls.earlyData: boolean`
+
+Enable TLS 1.3 Early Data. Early data is an optimisation where the client sends the first packet
+of application data alongside the opening packet of the TLS handshake. That can enable the server
+to answer faster, improving latency by up to one round-trip. However, Early Data has significant
+security implications: it's vulnerable to replay attacks and has weaker forward secrecy. It should
+really only be used for static assets or to squeeze out the last drop of performance for endpoints
+that are replay-safe.
+
+Default: false.
+
+#### `AgentOptions.tls.identity: string | Buffer`
+
+Provide a PEM-formatted certificate and private key to present as a TLS client certificate (also
+called mutual TLS or mTLS) authentication.
+
+The input should contain a PEM encoded private key and at least one PEM encoded certificate. The
+private key must be in RSA, SEC1 Elliptic Curve or PKCS#8 format. This is one of the few options
+that will cause the `Agent` constructor to throw if the input is in the wrong format.
+
 #### `AgentOptions.tls.required`
+
+Disables plain-text HTTP.
+
+Default: false.
 
 ### `AgentOptions.userAgent`
 
@@ -583,6 +609,7 @@ error kind, documented in this comprehensive mapping:
   - `Network` — network error
 - JS `SyntaxError`:
   - `JsonParse` — JSON parse error for `response.json()`
+  - `PemParse` — PEM parse error for `AgentOptions.tls.identity`
   - `Utf8Parse` — UTF8 decoding error for `response.text()`
 - JS `TypeError`:
   - `InvalidHeader` — invalid header name or value
@@ -601,4 +628,4 @@ constant from `ERROR_CODES`, instead of doing string matching on the error messa
 `instance of` matching.
 
 Due to technical limitations, when reading a body stream, reads might fail, but that error
-will not have a `.code` property.
+will not have a `code` property.
