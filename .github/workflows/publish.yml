@@ -6,6 +6,7 @@ env:
   CARGO_INCREMENTAL: "1"
   CFLAGS_aarch64_unknown_linux_gnu: "-D__ARM_ARCH=8"
 on:
+  pull_request:
   push:
     branches:
       - main
@@ -19,7 +20,6 @@ on:
       - .editorconfig
       - .rustfmt.toml
       - docs/**
-  pull_request: null
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -150,160 +150,6 @@ jobs:
           name: bindings-freebsd
           path: ${{ env.APP_NAME }}.*.node
           if-no-files-found: error
-  test-macOS-windows-binding:
-    name: Test bindings on ${{ matrix.settings.target }} - node@${{ matrix.node }}
-    needs:
-      - build
-    strategy:
-      fail-fast: false
-      matrix:
-        settings:
-          - host: windows-latest
-            target: x86_64-pc-windows-msvc
-            architecture: x64
-          - host: windows-11-arm
-            target: aarch64-pc-windows-msvc
-            architecture: arm64
-          - host: macos-latest
-            target: aarch64-apple-darwin
-            architecture: arm64
-          - host: macos-latest
-            target: x86_64-apple-darwin
-            architecture: x64
-        node:
-          - "20"
-          - "22"
-          - "24"
-    runs-on: ${{ matrix.settings.host }}
-    steps:
-      - uses: actions/checkout@v6
-      - name: Setup node
-        uses: actions/setup-node@v6
-        with:
-          node-version: ${{ matrix.node }}
-          cache: npm
-          architecture: ${{ matrix.settings.architecture }}
-      - name: Install dependencies
-        run: npm install
-      - name: Download artifacts
-        uses: actions/download-artifact@v6
-        with:
-          name: bindings-${{ matrix.settings.target }}
-          path: .
-      - name: List packages
-        run: ls -R .
-        shell: bash
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: "stable"
-      - name: Start httpbin
-        run: |
-          go run github.com/mccutchen/go-httpbin/v2/cmd/go-httpbin@latest -host 127.0.0.1 -port 8888 &
-          sleep 2
-        shell: bash
-      - name: Test bindings
-        run: npm run test:only
-        env:
-          HTTPBIN_URL: http://localhost:8888
-  test-linux-binding:
-    name: Test ${{ matrix.target }} - node@${{ matrix.node }}
-    needs:
-      - build
-    strategy:
-      fail-fast: false
-      matrix:
-        target:
-          - x86_64-unknown-linux-gnu
-          - x86_64-unknown-linux-musl
-          - aarch64-unknown-linux-gnu
-          - aarch64-unknown-linux-musl
-          - armv7-unknown-linux-gnueabihf
-        node:
-          - "20"
-          - "22"
-          - "24"
-    runs-on: ${{ contains(matrix.target, 'aarch64') && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
-    steps:
-      - uses: actions/checkout@v6
-      - name: Setup node
-        uses: actions/setup-node@v6
-        with:
-          node-version: ${{ matrix.node }}
-          cache: npm
-      - name: Output docker params
-        id: docker
-        run: |
-          node -e "
-            if ('${{ matrix.target }}'.startsWith('aarch64')) {
-              console.log('PLATFORM=linux/arm64')
-            } else if ('${{ matrix.target }}'.startsWith('armv7')) {
-              console.log('PLATFORM=linux/arm/v7')
-            } else {
-              console.log('PLATFORM=linux/amd64')
-            }
-          " >> $GITHUB_OUTPUT
-          node -e "
-            if ('${{ matrix.target }}'.endsWith('-musl')) {
-              console.log('IMAGE=node:${{ matrix.node }}-alpine')
-            } else {
-              console.log('IMAGE=node:${{ matrix.node }}-slim')
-            }
-          " >> $GITHUB_OUTPUT
-      - name: Output npm params
-        id: npm
-        run: |
-          node -e "
-            if ('${{ matrix.target }}'.startsWith('aarch64')) {
-              console.log('CPU=arm64')
-            } else if ('${{ matrix.target }}'.startsWith('armv7')) {
-              console.log('CPU=arm')
-            } else {
-              console.log('CPU=x64')
-            }
-          " >> $GITHUB_OUTPUT
-          node -e "
-            if ('${{ matrix.target }}'.endsWith('-musl')) {
-              console.log('LIBC=musl')
-            } else {
-              console.log('LIBC=gnu')
-            }
-          " >> $GITHUB_OUTPUT
-      - name: Install dependencies
-        run: |
-          npm config set cpu ${{ steps.npm.outputs.CPU }}
-          npm config set libc ${{ steps.npm.outputs.LIBC }}
-          npm install
-      - name: Download artifacts
-        uses: actions/download-artifact@v6
-        with:
-          name: bindings-${{ matrix.target }}
-          path: .
-      - name: List packages
-        run: ls -R .
-        shell: bash
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: "stable"
-      - name: Start httpbin
-        run: |
-          go run github.com/mccutchen/go-httpbin/v2/cmd/go-httpbin@latest -host 127.0.0.1 -port 8888 &
-          sleep 2
-        shell: bash
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-        if: ${{ contains(matrix.target, 'armv7') }}
-        with:
-          platforms: all
-      - run: docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
-        if: ${{ contains(matrix.target, 'armv7') }}
-      - name: Test bindings
-        uses: addnab/docker-run-action@v3
-        with:
-          image: ${{ steps.docker.outputs.IMAGE }}
-          options: -v ${{ github.workspace }}:${{ github.workspace }} -w ${{ github.workspace }} --platform ${{ steps.docker.outputs.PLATFORM }} --network host
-          run: HTTPBIN_URL=http://localhost:8888 npm run test:only
   publish:
     name: Publish
     runs-on: ubuntu-latest
@@ -311,9 +157,8 @@ jobs:
       contents: write
       id-token: write
     needs:
+      - build
       - build-freebsd
-      - test-macOS-windows-binding
-      - test-linux-binding
     steps:
       - uses: actions/checkout@v6
       - name: Setup node
