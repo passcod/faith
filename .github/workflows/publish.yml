@@ -182,7 +182,6 @@ jobs:
       - name: Publish to npm (latest)
         if: startsWith(github.ref, 'refs/tags/v') && !contains(github.ref, '-')
         run: |
-          npm config set provenance true
           echo "//registry.npmjs.org/:_authToken=$NPM_TOKEN" >> ~/.npmrc
           npm publish --access public
         env:
@@ -191,11 +190,10 @@ jobs:
       - name: Publish to npm (next)
         if: startsWith(github.ref, 'refs/tags/v') && contains(github.ref, '-')
         run: |
-          npm config set provenance true
           echo "//registry.npmjs.org/:_authToken=$NPM_TOKEN" >> ~/.npmrc
           npm publish --tag next --access public
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          # NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
           # publishing new platform packages requires a token. generate a new 7d one for it!
           # and then configure the new platform packages to use trusted publishing
