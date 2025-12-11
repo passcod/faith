@@ -139,16 +139,8 @@ let defaultAgent;
 
 /**
  * Fetch function wrapper
- * @param {string|Request|URL|Object} input - The URL to fetch, a Request object, or an object with toString()
- * @param {Object} [options] - Fetch options (when input is a Request, options override Request properties)
- * @param {string} [options.method] - HTTP method
- * @param {Object|Headers} [options.headers] - HTTP headers (Headers object or plain object with {name: value} pairs).
- *                                              Converted to array of tuples for the native binding.
- * @param {Buffer|Array<number>|string|ArrayBuffer|Uint8Array|ReadableStream} [options.body] - Request body
- * @param {number} [options.timeout] - Timeout in milliseconds
- * @param {string} [options.credentials] - Credentials mode: "omit", "same-origin", or "include" (default)
- * @param {string} [options.duplex] - Duplex mode: "half" (required when body is a ReadableStream)
- * @param {AbortSignal} [options.signal] - AbortSignal to cancel the request
+ * @param {string|Request|URL|{ toString(): string }} resource - The URL to fetch, a Request object, or an object with stringifier
+ * @param {FetchOptions|Request} [options] - Fetch options (when resource is a Request, options override Request properties)
  * @returns {Promise<Response>}
  *
  * When a Request object is provided, all its properties (method, headers, body, mode, credentials,
@@ -163,24 +155,24 @@ let defaultAgent;
  * - null/undefined: treated as no headers
  * - Invalid types: throws TypeError
  */
-async function fetch(input, options = {}) {
+async function fetch(resource, options = {}) {
 	let url;
 	let nativeOptions;
 
-	// Handle Request object as input
+	// Handle Request object as resource
 	if (
-		typeof input === "object" &&
-		input !== null &&
-		typeof input.url === "string"
+		typeof resource === "object" &&
+		resource !== null &&
+		typeof resource.url === "string"
 	) {
 		// Extract url separately
-		url = input.url;
+		url = resource.url;
 
 		// Copy all properties from Request object except url and bodyUsed
 		const requestOptions = {};
-		for (const key in input) {
+		for (const key in resource) {
 			if (key !== "url" && key !== "bodyUsed") {
-				const value = input[key];
+				const value = resource[key];
 				if (value !== undefined && value !== null) {
 					requestOptions[key] = value;
 				}
@@ -189,23 +181,23 @@ async function fetch(input, options = {}) {
 
 		// Handle body specially - Request.body is a ReadableStream that needs to be consumed
 		if (requestOptions.body !== undefined && requestOptions.body !== null) {
-			if (typeof input.arrayBuffer === "function") {
-				requestOptions.body = await input.arrayBuffer();
+			if (typeof resource.arrayBuffer === "function") {
+				requestOptions.body = await resource.arrayBuffer();
 			}
 		}
 
 		// Merge Request properties with options, options take precedence
 		nativeOptions = { ...requestOptions, ...options };
-	} else if (typeof input === "string") {
-		url = input;
+	} else if (typeof resource === "string") {
+		url = resource;
 		nativeOptions = { ...options };
-	} else if (input && typeof input.toString === "function") {
-		// Handle objects with toString method (like URL objects)
-		url = input.toString();
+	} else if (resource && typeof resource.toString === "function") {
+		// Handle objects with stringifier (like URL objects)
+		url = resource.toString();
 		nativeOptions = { ...options };
 	} else {
 		throw new TypeError(
-			"First argument must be a string URL, Request object, or an object with a toString method",
+			"First argument must be a string URL, Request object, or an object with a stringifier",
 		);
 	}
 

@@ -143,11 +143,11 @@ export class Response {
 
 /**
  * Fetch function
- * @param input - The URL to fetch, a Request object, URL object, or any object with a toString() method
+ * @param resource - The URL to fetch, a Request object, URL object, or any object with a stringifier
  * @param options - Fetch options (overrides Request properties when provided)
  * @returns Promise that resolves with a Response
  */
 export declare function fetch(
-	input: string | Request | URL | { toString(): string },
+	resource: string | Request | URL | { toString(): string },
 	options?: FetchOptions,
 ): Promise<Response>;
