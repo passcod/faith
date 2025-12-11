@@ -12,16 +12,18 @@ bytes = "1.9.0"
 futures = "0.3.31"
 napi = { version = "3.7.0", features = ["napi9", "serde-json", "tokio_rt", "web_stream"] }
 napi-derive = "3.4.0"
-reqwest = { version = "0.12.25", features = [
+reqwest = { version = "0.12.25", default-features = false, features = [
     "brotli",
     "cookies",
     "deflate",
     "gzip",
     "hickory-dns",
+    "http2",
     "json",
     "rustls-tls-native-roots-no-provider",
     "rustls-tls-webpki-roots",
     "stream",
+    "system-proxy",
     "zstd",
 ] }
 serde = { version = "1.0.228", features = ["derive"] }
