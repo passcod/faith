@@ -192,14 +192,13 @@ jobs:
         run: ls -R .
         shell: bash
       - name: Start httpbin
-        run: docker run --rm -d -p 8888:80 --name httpbin kennethreitz/httpbin
+        uses: lfreleng-actions/go-httpbin-action@v0
+        with:
+          port: 8888
       - name: Test bindings
         run: npm run test:only
         env:
           HTTPBIN_URL: http://localhost:8888
-      - name: Stop httpbin
-        if: always()
-        run: docker stop httpbin
   test-linux-binding:
     name: Test ${{ matrix.target }} - node@${{ matrix.node }}
     needs:
@@ -277,7 +276,9 @@ jobs:
         run: ls -R .
         shell: bash
       - name: Start httpbin
-        run: docker run --rm -d -p 8888:80 --name httpbin kennethreitz/httpbin
+        uses: lfreleng-actions/go-httpbin-action@v0
+        with:
+          port: 8888
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
         if: ${{ contains(matrix.target, 'armv7') }}
@@ -291,9 +292,6 @@ jobs:
           image: ${{ steps.docker.outputs.IMAGE }}
           options: -v ${{ github.workspace }}:${{ github.workspace }} -w ${{ github.workspace }} --platform ${{ steps.docker.outputs.PLATFORM }} --network host
           run: HTTPBIN_URL=http://localhost:8888 npm run test:only
-      - name: Stop httpbin
-        if: always()
-        run: docker stop httpbin
   publish:
     name: Publish
     runs-on: ubuntu-latest

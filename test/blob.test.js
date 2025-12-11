@@ -4,209 +4,213 @@ const native = require("../index.js");
 const { url, hostname } = require("./helpers.js");
 
 test("response.blob() method returns Blob", async (t) => {
-  t.plan(5);
+	t.plan(5);
 
-  try {
-    const response = await fetch(url("/get"));
+	try {
+		const response = await fetch(url("/get"));
 
-    // Test blob() method
-    const blob = await response.blob();
+		// Test blob() method
+		const blob = await response.blob();
 
-    t.ok(blob, "should get Blob");
-    t.equal(blob.constructor.name, "Blob", "should return Blob instance");
-    t.ok(blob.size > 0, "should have non-zero size");
-    t.ok(
-      blob.type === "" || blob.type === "application/json",
-      "should have empty or application/json type",
-    );
+		t.ok(blob, "should get Blob");
+		t.equal(blob.constructor.name, "Blob", "should return Blob instance");
+		t.ok(blob.size > 0, "should have non-zero size");
+		t.ok(
+			blob.type === "" || blob.type.startsWith("application/json"),
+			"should have empty or application/json type",
+		);
 
-    // Read the blob as text to verify content
-    const text = await blob.text();
-    t.ok(text.includes(hostname()), "blob content should contain hostname");
-  } catch (error) {
-    t.fail(`Unexpected error: ${error.message}`);
-  }
+		// Read the blob as text to verify content
+		const text = await blob.text();
+		t.ok(text.includes(hostname()), "blob content should contain hostname");
+	} catch (error) {
+		t.fail(`Unexpected error: ${error.message}`);
+	}
 });
 
 test("response.blob() with content-type header", async (t) => {
-  t.plan(3);
+	t.plan(3);
 
-  try {
-    // Get a response that has content-type
-    const response = await fetch(url("/json"));
+	try {
+		// Get a response that has content-type
+		const response = await fetch(url("/json"));
 
-    const blob = await response.blob();
+		const blob = await response.blob();
 
-    t.ok(blob, "should get Blob");
-    t.ok(blob.size > 0, "should have non-zero size");
-    // ${hostname()}/json returns application/json content-type
-    t.equal(blob.type, "application/json", "should have correct content-type");
-  } catch (error) {
-    t.fail(`Unexpected error: ${error.message}`);
-  }
+		t.ok(blob, "should get Blob");
+		t.ok(blob.size > 0, "should have non-zero size");
+		// ${hostname()}/json returns application/json content-type
+		t.ok(
+			blob.type === "application/json" ||
+				blob.type === "application/json; charset=utf-8",
+			"should have correct content-type",
+		);
+	} catch (error) {
+		t.fail(`Unexpected error: ${error.message}`);
+	}
 });
 
 test("response.blob() marks body as used", async (t) => {
-  t.plan(3);
+	t.plan(3);
 
-  try {
-    const response = await fetch(url("/get"));
+	try {
+		const response = await fetch(url("/get"));
 
-    t.equal(response.bodyUsed, false, "body should not be used initially");
+		t.equal(response.bodyUsed, false, "body should not be used initially");
 
-    await response.blob();
+		await response.blob();
 
-    t.equal(
-      response.bodyUsed,
-      true,
-      "body should be marked as used after blob()",
-    );
+		t.equal(
+			response.bodyUsed,
+			true,
+			"body should be marked as used after blob()",
+		);
 
-    // Try to use blob() again - should fail
-    try {
-      await response.blob();
-      t.fail("Should have thrown error when body already used");
-    } catch (error) {
-      t.equal(
-        error.code,
-        ERROR_CODES.ResponseAlreadyDisturbed,
-        "should set canonical error code 'ResponseAlreadyDisturbed'",
-      );
-    }
-  } catch (error) {
-    t.fail(`Unexpected error: ${error.message}`);
-  }
+		// Try to use blob() again - should fail
+		try {
+			await response.blob();
+			t.fail("Should have thrown error when body already used");
+		} catch (error) {
+			t.equal(
+				error.code,
+				ERROR_CODES.ResponseAlreadyDisturbed,
+				"should set canonical error code 'ResponseAlreadyDisturbed'",
+			);
+		}
+	} catch (error) {
+		t.fail(`Unexpected error: ${error.message}`);
+	}
 });
 
 test("response.blob() and other methods are mutually exclusive", async (t) => {
-  t.plan(2);
+	t.plan(2);
 
-  try {
-    const response = await fetch(url("/get"));
+	try {
+		const response = await fetch(url("/get"));
 
-    // Use blob() first
-    await response.blob();
+		// Use blob() first
+		await response.blob();
 
-    // Try to use text() - should fail
-    try {
-      await response.text();
-      t.fail("Should have thrown error when body already used by blob()");
-    } catch (error) {
-      t.equal(
-        error.code,
-        ERROR_CODES.ResponseAlreadyDisturbed,
-        "should set canonical error code 'ResponseAlreadyDisturbed'",
-      );
-    }
+		// Try to use text() - should fail
+		try {
+			await response.text();
+			t.fail("Should have thrown error when body already used by blob()");
+		} catch (error) {
+			t.equal(
+				error.code,
+				ERROR_CODES.ResponseAlreadyDisturbed,
+				"should set canonical error code 'ResponseAlreadyDisturbed'",
+			);
+		}
 
-    // Try json() - should also fail
-    try {
-      await response.json();
-      t.fail("Should have thrown error when body already used by blob()");
-    } catch (error) {
-      t.equal(
-        error.code,
-        ERROR_CODES.ResponseAlreadyDisturbed,
-        "should set canonical error code 'ResponseAlreadyDisturbed'",
-      );
-    }
-  } catch (error) {
-    t.fail(`Unexpected error: ${error.message}`);
-  }
+		// Try json() - should also fail
+		try {
+			await response.json();
+			t.fail("Should have thrown error when body already used by blob()");
+		} catch (error) {
+			t.equal(
+				error.code,
+				ERROR_CODES.ResponseAlreadyDisturbed,
+				"should set canonical error code 'ResponseAlreadyDisturbed'",
+			);
+		}
+	} catch (error) {
+		t.fail(`Unexpected error: ${error.message}`);
+	}
 });
 
 test("response.blob() and body property are mutually exclusive", async (t) => {
-  t.plan(2);
+	t.plan(2);
 
-  try {
-    const response = await fetch(url("/get"));
+	try {
+		const response = await fetch(url("/get"));
 
-    // Access body property first
-    const stream = response.body;
-    t.ok(stream, "should get stream from body property");
+		// Access body property first
+		const stream = response.body;
+		t.ok(stream, "should get stream from body property");
 
-    // Try to use blob() - should fail
-    try {
-      await response.blob();
-      t.fail("Should have thrown error when body property was accessed");
-    } catch (error) {
-      t.equal(
-        error.code,
-        ERROR_CODES.ResponseAlreadyDisturbed,
-        "should set canonical error code 'ResponseAlreadyDisturbed'",
-      );
-    }
-  } catch (error) {
-    t.fail(`Unexpected error: ${error.message}`);
-  }
+		// Try to use blob() - should fail
+		try {
+			await response.blob();
+			t.fail("Should have thrown error when body property was accessed");
+		} catch (error) {
+			t.equal(
+				error.code,
+				ERROR_CODES.ResponseAlreadyDisturbed,
+				"should set canonical error code 'ResponseAlreadyDisturbed'",
+			);
+		}
+	} catch (error) {
+		t.fail(`Unexpected error: ${error.message}`);
+	}
 });
 
 test("response.blob() works with binary data", async (t) => {
-  t.plan(4);
+	t.plan(4);
 
-  try {
-    // Get bytes response (${hostname()}/bytes returns random bytes)
-    const response = await fetch(url("/bytes/100")); // 100 random bytes
+	try {
+		// Get bytes response (${hostname()}/bytes returns random bytes)
+		const response = await fetch(url("/bytes/100")); // 100 random bytes
 
-    const blob = await response.blob();
+		const blob = await response.blob();
 
-    t.ok(blob, "should get Blob");
-    t.equal(blob.size, 100, "should have correct size (100 bytes)");
-    t.ok(
-      blob.type === "application/octet-stream" || blob.type === "",
-      "should have octet-stream or empty type for binary data",
-    );
+		t.ok(blob, "should get Blob");
+		t.equal(blob.size, 100, "should have correct size (100 bytes)");
+		t.ok(
+			blob.type === "application/octet-stream" || blob.type === "",
+			"should have octet-stream or empty type for binary data",
+		);
 
-    // Verify we can read it as array buffer
-    const arrayBuffer = await blob.arrayBuffer();
-    t.equal(
-      arrayBuffer.byteLength,
-      100,
-      "should be able to read 100 bytes from blob",
-    );
-  } catch (error) {
-    t.fail(`Unexpected error: ${error.message}`);
-  }
+		// Verify we can read it as array buffer
+		const arrayBuffer = await blob.arrayBuffer();
+		t.equal(
+			arrayBuffer.byteLength,
+			100,
+			"should be able to read 100 bytes from blob",
+		);
+	} catch (error) {
+		t.fail(`Unexpected error: ${error.message}`);
+	}
 });
 
 test("response.blob() preserves content-type from response headers", async (t) => {
-  t.plan(2);
+	t.plan(2);
 
-  try {
-    // Test with image (${hostname()}/image returns an image with correct content-type)
-    const response = await fetch(url("/image/jpeg"));
+	try {
+		// Test with image (${hostname()}/image returns an image with correct content-type)
+		const response = await fetch(url("/image/jpeg"));
 
-    const blob = await response.blob();
+		const blob = await response.blob();
 
-    t.ok(blob, "should get Blob");
-    // ${hostname()}/image/jpeg returns image/jpeg content-type
-    t.ok(
-      blob.type === "image/jpeg" || blob.type === "",
-      "should preserve image/jpeg content-type if available",
-    );
-  } catch (error) {
-    t.fail(`Unexpected error: ${error.message}`);
-  }
+		t.ok(blob, "should get Blob");
+		// ${hostname()}/image/jpeg returns image/jpeg content-type
+		t.ok(
+			blob.type === "image/jpeg" || blob.type === "",
+			"should preserve image/jpeg content-type if available",
+		);
+	} catch (error) {
+		t.fail(`Unexpected error: ${error.message}`);
+	}
 });
 
 test("response.blob() with empty response", async (t) => {
-  t.plan(3);
+	t.plan(3);
 
-  try {
-    // HEAD request has no body
-    const response = await fetch(url("/get"), {
-      method: "HEAD",
-    });
+	try {
+		// HEAD request has no body
+		const response = await fetch(url("/get"), {
+			method: "HEAD",
+		});
 
-    const blob = await response.blob();
+		const blob = await response.blob();
 
-    t.ok(blob, "should get Blob even for empty response");
-    t.equal(blob.size, 0, "should have zero size for HEAD request");
-    t.ok(
-      blob.type === "" || blob.type === "application/json",
-      "should have empty or application/json type for empty response",
-    );
-  } catch (error) {
-    t.fail(`Unexpected error: ${error.message}`);
-  }
+		t.ok(blob, "should get Blob even for empty response");
+		t.equal(blob.size, 0, "should have zero size for HEAD request");
+		t.ok(
+			blob.type === "" || blob.type.startsWith("application/json"),
+			"should have empty or application/json type for empty response",
+		);
+	} catch (error) {
+		t.fail(`Unexpected error: ${error.message}`);
+	}
 });
