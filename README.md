@@ -461,10 +461,6 @@ Default: none.
 
 Settings related to HTTP/3. This is a nested object.
 
-#### `enabled: bool`
-
-Default: true.
-
 #### `congestion: string`
 
 The congestion control algorithm. The default is `cubic`, which is the same used in TCP in the
