@@ -15,13 +15,18 @@ async fn main() {
 	let hits: usize = hits.parse().unwrap();
 
 	let client = reqwest::Client::builder()
-                .tls_sslkeylogfile(true)
+		.tls_sslkeylogfile(true)
 		.build()
-                .unwrap();
+		.unwrap();
 
 	for n in 0..hits {
-		if let Err(err) = client.get(&target).send().await {
-			println!("{n}: {err}");
+		match client.get(&target).send().await {
+			Err(err) => {
+				println!("{n}: {err}");
+			}
+			Ok(resp) => {
+				let _ = resp.bytes().await;
+			}
 		}
 	}
 }
