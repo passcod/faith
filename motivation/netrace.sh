@@ -6,7 +6,9 @@ PCAP_FILE="${1:-network-trace.pcap}"
 IMAGE="${PODMAN_IMAGE:-working}"
 COMMAND="${@:2}"
 
+KEYLOG_FILE="${PCAP_FILE%.pcap}.keylog"
 TEMP_PCAP="/tmp/netrace_$$.pcap"
+TEMP_KEYLOG="/tmp/netrace_$$.keylog"
 
 cleanup() {
   if [ -n "$CONTAINER_ID" ]; then
@@ -24,7 +26,7 @@ if ! sudo podman image inspect "$IMAGE" > /dev/null 2>&1; then
   exit 1
 fi
 
-CONTAINER_ID=$(sudo podman create -it --privileged --cap-add=NET_ADMIN --network podman-ipv6 -e TARGET="$TARGET" -e HITS="$HITS" --entrypoint /bin/sh "$IMAGE" -c "while true; do sleep 1; done" 2>/dev/null)
+CONTAINER_ID=$(sudo podman create -it --privileged --cap-add=NET_ADMIN --network podman-ipv6 -e TARGET="$TARGET" -e HITS="$HITS" -e SSLKEYLOGFILE="/tmp/sslkeylog.txt" --entrypoint /bin/sh "$IMAGE" -c "while true; do sleep 1; done" 2>/dev/null)
 
 sudo podman start "$CONTAINER_ID" > /dev/null 2>&1
 
@@ -44,11 +46,15 @@ TSHARK_FILTER="${TSHARK_FILTER:-}"
 if [ -n "$TSHARK_FILTER" ]; then
   sudo podman exec "$CONTAINER_ID" tshark -r /tmp/tcpdump.pcap -w /tmp/filtered.pcap -Y "$TSHARK_FILTER" > /dev/null 2>&1
   sudo podman cp "$CONTAINER_ID":/tmp/filtered.pcap "$PCAP_FILE"
-  sudo podman exec "$CONTAINER_ID" rm -f /tmp/filtered.pcap 2>/dev/null || true
 else
   sudo podman cp "$CONTAINER_ID":/tmp/tcpdump.pcap "$PCAP_FILE"
 fi
 
 sudo chown $(id -u):$(id -g) "$PCAP_FILE"
 
-sudo podman exec "$CONTAINER_ID" rm -f /tmp/tcpdump.pcap 2>/dev/null || true
+# Copy keylog file if it exists
+if sudo podman exec "$CONTAINER_ID" test -f /tmp/sslkeylog.txt 2>/dev/null; then
+  sudo podman cp "$CONTAINER_ID":/tmp/sslkeylog.txt "$KEYLOG_FILE"
+  sudo chown $(id -u):$(id -g) "$KEYLOG_FILE"
+fi
+
