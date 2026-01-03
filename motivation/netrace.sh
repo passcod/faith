@@ -42,8 +42,11 @@ if [ -n "$TCPDUMP_PID" ]; then
   wait $TCPDUMP_PID 2>/dev/null || true
 fi
 
-TSHARK_FILTER="${TSHARK_FILTER:-}"
+echo
+
+TSHARK_FILTER="${TSHARK_FILTER:-tcp or dns or quic}"
 if [ -n "$TSHARK_FILTER" ]; then
+  echo "Filtering to '$TSHARK_FILTER'"
   sudo podman exec "$CONTAINER_ID" tshark -r /tmp/tcpdump.pcap -w /tmp/filtered.pcap -Y "$TSHARK_FILTER" > /dev/null 2>&1
   sudo podman cp "$CONTAINER_ID":/tmp/filtered.pcap "$PCAP_FILE"
 else
@@ -58,3 +61,4 @@ if sudo podman exec "$CONTAINER_ID" test -f /tmp/sslkeylog.txt 2>/dev/null; then
   sudo chown $(id -u):$(id -g) "$KEYLOG_FILE"
 fi
 
+tcpdump --count -r "$PCAP_FILE"
