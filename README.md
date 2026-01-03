@@ -1,14 +1,15 @@
 # fáith - Rust-powered fetch API for Node.js
 
-/ˈɸaːθj/ — pronounced FATH, like FATHER without the ER. This is an old irish word with the same
-root as "fetch", meaning _poet_, _soothsayer_, _seer_, and later, _prophet_.
+/ˈɸaːθj/ — pronounced FATH, like FATHER without the ER. This is an old irish word that is a folk
+etymology of "fetch", and means _poet_, _soothsayer_, _seer_, and later, _prophet_.
 
 Fáith is of course a pun with _faith_, and is meant to be a _faithful_ implementation of the fetch
 API for Node.js, but using a Rust-based network stack instead of undici + libuv.
 
 Most `fetch` implementations for Node.js are based on the Node.js TCP stack (via libuv) and cannot
 easily work around its limitations. The native fetch implementation, `undici`, explicitly targets
-HTTP/1.1, and doesn't support HTTP/2+, among many other complaints.
+HTTP/1.1, and doesn't support HTTP/2+, among many other complaints (of course, for HTTP/1, undici
+is a very good effort! it just feels like a bit of an outdated choice today).
 
 Fáith tries to bring a Node.js fetch that is closer to the browser's fetch, notably by having
 transparent support for HTTP/2 and HTTP/3, IPv6 and IPv4 using the "Happy Eyeballs" algorithm, a

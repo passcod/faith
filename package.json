@@ -10,11 +10,13 @@
 	},
 	"license": "Apache-2.0 OR MIT",
 	"main": "wrapper.js",
+	"module": "wrapper.mjs",
 	"types": "wrapper.d.ts",
 	"files": [
 		"index.js",
 		"index.d.ts",
 		"wrapper.js",
+		"wrapper.mjs",
 		"wrapper.d.ts"
 	],
 	"napi": {

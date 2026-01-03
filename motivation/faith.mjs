@@ -1,5 +1,4 @@
-import faith from '@passcod/faith';
-const { fetch } = faith;
+import { fetch } from "../wrapper.mjs";
 
 const TARGET = process.env.TARGET;
 const HITS = process.env.HITS;

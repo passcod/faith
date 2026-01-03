@@ -5,7 +5,7 @@
 // Base URL for tests - HTTPBIN_URL environment variable is required
 if (!process.env.HTTPBIN_URL) {
 	throw new Error(
-		"HTTPBIN_URL environment variable is required. Start httpbin with: docker run --rm -d -p 8888:80 ghcr.io/mccutchen/go-httpbin",
+		"HTTPBIN_URL environment variable is required. Start httpbin with: podman run --rm -d -p 8888:8080 ghcr.io/mccutchen/go-httpbin",
 	);
 }
 const HTTPBIN_BASE_URL = process.env.HTTPBIN_URL;
