@@ -118,36 +118,13 @@ pub fn faith_fetch(
 			.responses_received
 			.fetch_add(1, Ordering::Relaxed);
 
-		let status = response.status().as_u16();
-		let status_text = response
-			.status()
-			.canonical_reason()
-			.unwrap_or_default()
-			.to_string();
-		let ok = response.status().is_success();
-		let redirected = &parsed_url != response.url();
-		let url = response.url().to_string();
-		let version = format!("{:?}", response.version());
+		let status_code = response.status();
+		let empty = status_code == StatusCode::NO_CONTENT || is_head;
 
-		let headers_vec: Vec<(String, String)> = response
-			.headers()
-			.iter()
-			.filter_map(|(name, value)| {
-				// Skip Set-Cookie header if credentials is omit
-				if options.credentials == CredentialsOption::Omit
-					&& name.as_str().eq_ignore_ascii_case("set-cookie")
-				{
-					return None;
-				}
+		let response_url = response.url().clone();
+		let redirected = parsed_url != response_url;
 
-				value
-					.to_str()
-					.ok()
-					.map(|v| (name.to_string(), v.to_string()))
-			})
-			.collect();
-
-		let empty = status == StatusCode::NO_CONTENT || is_head;
+		let version = response.version();
 
 		let peer = PeerInformation {
 			address: response.remote_addr(),
@@ -158,8 +135,13 @@ pub fn faith_fetch(
 				.map(|cert| cert.into()),
 		};
 
+		let mut headers = response.headers().clone();
+		if options.credentials == CredentialsOption::Omit {
+			headers.remove("set-cookie");
+		}
+
 		Ok(FaithResponse {
-			inner_body: if empty {
+			body: if empty {
 				Body::None
 			} else {
 				Body::Stream(SharedStream::new(Box::pin(
@@ -169,13 +151,11 @@ pub fn faith_fetch(
 				) as Pin<Box<DynStream>>))
 			},
 			disturbed: Arc::new(AtomicBool::new(false)),
-			headers: headers_vec,
-			ok,
+			headers,
 			peer: Arc::new(peer),
 			redirected,
-			status,
-			status_text,
-			url,
+			status_code,
+			url: response_url,
 			version,
 		})
 	})

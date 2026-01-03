@@ -12,6 +12,7 @@ use bytes::Bytes;
 use futures::{StreamExt, TryStreamExt};
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
+use reqwest::{StatusCode, Url, Version, header::HeaderMap};
 use serde_json;
 
 use crate::{
@@ -27,16 +28,14 @@ use crate::{
 #[napi]
 #[derive(Debug)]
 pub struct FaithResponse {
+	pub(crate) body: Body,
 	pub(crate) disturbed: Arc<AtomicBool>,
-	pub(crate) headers: Vec<(String, String)>,
-	pub(crate) ok: bool,
+	pub(crate) headers: HeaderMap,
 	pub(crate) peer: Arc<PeerInformation>,
 	pub(crate) redirected: bool,
-	pub(crate) status: u16,
-	pub(crate) status_text: String,
-	pub(crate) url: String,
-	pub(crate) version: String,
-	pub(crate) inner_body: Body,
+	pub(crate) status_code: StatusCode,
+	pub(crate) url: Url,
+	pub(crate) version: Version,
 }
 
 impl Clone for FaithResponse {
@@ -44,14 +43,12 @@ impl Clone for FaithResponse {
 		Self {
 			disturbed: Arc::clone(&self.disturbed),
 			headers: self.headers.clone(),
-			ok: self.ok,
 			peer: self.peer.clone(),
 			redirected: self.redirected,
-			status: self.status,
-			status_text: self.status_text.clone(),
+			status_code: self.status_code.clone(),
 			url: self.url.clone(),
 			version: self.version.clone(),
-			inner_body: self.inner_body.clone(),
+			body: self.body.clone(),
 		}
 	}
 }
@@ -78,14 +75,22 @@ impl FaithResponse {
 	/// is used directly and constructed by Fáith when needed.
 	#[napi(getter)]
 	pub fn headers(&self) -> Vec<(String, String)> {
-		self.headers.clone()
+		self.headers
+			.iter()
+			.filter_map(|(name, value)| {
+				value
+					.to_str()
+					.ok()
+					.map(|v| (name.to_string(), v.to_string()))
+			})
+			.collect()
 	}
 
 	/// The `ok` read-only property of the `Response` interface contains a boolean stating whether the
 	/// response was successful (status in the range 200-299) or not.
 	#[napi(getter)]
 	pub fn ok(&self) -> bool {
-		self.ok
+		self.status_code.is_success()
 	}
 
 	/// Custom to Fáith.
@@ -122,7 +127,7 @@ impl FaithResponse {
 	/// A value is `0` is returned for a response whose `type` is `opaque`, `opaqueredirect`, or `error`.
 	#[napi(getter)]
 	pub fn status(&self) -> u16 {
-		self.status
+		self.status_code.as_u16()
 	}
 
 	/// The `statusText` read-only property of the `Response` interface contains the status message
@@ -133,8 +138,8 @@ impl FaithResponse {
 	/// status text is not supported at all, and the `statusText` property is either empty or simulated
 	/// from well-known status codes.
 	#[napi(getter)]
-	pub fn status_text(&self) -> String {
-		self.status_text.clone()
+	pub fn status_text(&self) -> &'static str {
+		self.status_code.canonical_reason().unwrap_or_default()
 	}
 
 	/// The `type` read-only property of the `Response` interface contains the type of the response. The
@@ -150,7 +155,7 @@ impl FaithResponse {
 	/// value of the `url` property will be the final URL obtained after any redirects.
 	#[napi(getter)]
 	pub fn url(&self) -> String {
-		self.url.clone()
+		self.url.to_string()
 	}
 
 	/// The `version` read-only property of the `Response` interface contains the HTTP version of the
@@ -159,7 +164,7 @@ impl FaithResponse {
 	/// This is custom to Fáith.
 	#[napi(getter)]
 	pub fn version(&self) -> String {
-		self.version.clone()
+		format!("{:?}", self.version)
 	}
 
 	/// The `bodyUsed` read-only property of the `Response` interface is a boolean value that indicates
@@ -188,7 +193,7 @@ impl FaithResponse {
 		// as essentially, the body() can be accessed many times as the same stream
 		let _ = self.check_stream_disturbed();
 
-		match &self.inner_body {
+		match &self.body {
 			Body::None => Ok(None),
 			Body::Stream(stream) => {
 				let stream = stream.clone();
@@ -223,7 +228,7 @@ impl FaithResponse {
 	/// copy them. Further processing is needed to obtain a Vec<u8> or whatever needed.
 	async fn gather(&self) -> Result<Arc<[Bytes]>, FaithError> {
 		// Clone the stream before reading so we don't need &mut self
-		let mut response = match &self.inner_body {
+		let mut response = match &self.body {
 			Body::None => return Ok(Default::default()),
 			Body::Stream(body) => body.clone(),
 		};
