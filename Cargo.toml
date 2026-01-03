@@ -14,7 +14,7 @@ futures = "0.3.31"
 http-cache-reqwest = { version = "0.16.0", features = ["manager-cacache", "manager-moka"] }
 napi = { version = "3.7.0", features = ["napi9", "serde-json", "tokio_rt", "web_stream"] }
 napi-derive = "3.4.0"
-reqwest = { version = "0.12.25", default-features = false, features = [
+reqwest = { version = "0.12.28", default-features = false, features = [
     "brotli",
     "cookies",
     "deflate",
@@ -36,6 +36,9 @@ strum = { version = "0.27.2", features = ["derive"] }
 tokio = { version = "1.48.0", features = ["full"] }
 tokio-stream = "0.1.16"
 tokio-util = { version = "0.7.10", features = ["io"] }
+
+[replace]
+"reqwest:0.12.28" = { git = "https://github.com/passcod/reqwest", branch = "v0.12-sslkeylogfile" }
 
 [build-dependencies]
 napi-build = "2.3.1"

@@ -374,6 +374,7 @@ impl Agent {
 	pub fn with_options(options: AgentOptions) -> Result<Self, FaithError> {
 		let mut client = Client::builder()
 			.tls_info(true)
+			.tls_sslkeylogfile(true)
 			.user_agent(options.user_agent.as_deref().unwrap_or(USER_AGENT));
 
 		let cookie_jar = if options.cookies.unwrap_or(false) {
