@@ -226,10 +226,22 @@ impl FaithResponse {
 					unsafe { unreachable_unchecked() }
 				};
 
-				let stream = SharedStream::new(Box::pin(BodyStream::new(body).map(|frame| {
-					frame.map_err(|err| err.to_string()).and_then(|frame| {
-						frame.into_data().map_err(|_| "non-DATA frame".to_string())
-					})
+				let trailers_lock = self.trailers.clone();
+				let stream = SharedStream::new(Box::pin(BodyStream::new(body).then(move |frame| {
+					let trailers_lock = trailers_lock.clone();
+					async move {
+						let frame = frame.map_err(|err| err.to_string())?;
+						match frame.into_trailers() {
+							Ok(trailers) => {
+								let mut t = trailers_lock.write().await;
+								*t = Trailers::Some(trailers);
+								Ok(Bytes::new())
+							}
+							Err(frame) => frame
+								.into_data()
+								.map_err(|_| "unknown frame kind".to_string()),
+						}
+					}
 				})) as Pin<Box<DynStream>>);
 
 				// the _ is the Consumed we put in there earlier
