@@ -493,15 +493,26 @@ impl Agent {
 		}
 
 		#[cfg(feature = "http3")]
-		if let Some(ref http3) = options.http3 {
-			if let Some(Http3Congestion::Bbr1) = http3.congestion {
-				client = client.http3_congestion_bbr();
-			}
+		{
+			// Call http3_prior_knowledge() to ensure h3_client is created.
+			// Without this, the H3Connector is not initialized and per-request
+			// Version::HTTP_3 will fall through to hyper, causing hangs.
+			// Note: This doesn't force HTTP/3 for all requests - it just ensures
+			// the h3_client exists so our Alt-Svc middleware can use it.
+			client = client.http3_prior_knowledge();
 
-			if let Some(seconds) = http3.max_idle_timeout {
-				use std::time::Duration;
-				client = client
-					.http3_max_idle_timeout(Duration::from_secs(seconds.min(120).max(1).into()));
+			let idle_timeout = options
+				.http3
+				.as_ref()
+				.and_then(|h| h.max_idle_timeout)
+				.unwrap_or(30);
+			client = client
+				.http3_max_idle_timeout(Duration::from_secs(idle_timeout.min(120).max(1).into()));
+
+			if let Some(ref http3) = options.http3 {
+				if let Some(Http3Congestion::Bbr1) = http3.congestion {
+					client = client.http3_congestion_bbr();
+				}
 			}
 		}
 
