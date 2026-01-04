@@ -42,6 +42,8 @@ export declare class Agent {
    *
    * - `requestsSent`
    * - `responsesReceived`
+   * - `bodiesStarted`
+   * - `bodiesFinished`
    */
   stats(): AgentStats
 }
@@ -49,6 +51,16 @@ export declare class Agent {
 export declare class AgentStats {
   requestsSent: number
   responsesReceived: number
+  /**
+   * Number of response body streams that have been started (converted from raw body to stream).
+   * This happens when `.body`, `.text()`, `.json()`, `.bytes()`, or similar methods are called.
+   */
+  bodiesStarted: number
+  /**
+   * Number of response body streams that have been fully consumed.
+   * When `bodies_started - bodies_finished > 0`, there are bodies holding connections open.
+   */
+  bodiesFinished: number
 }
 
 /**

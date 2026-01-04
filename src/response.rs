@@ -25,6 +25,7 @@ use tokio::{
 };
 
 use crate::{
+	agent::InnerAgentStats,
 	async_task::{Async, FaithAsyncResult, Value},
 	body::{Body, DynStream},
 	error::{FaithError, FaithErrorKind},
@@ -42,6 +43,7 @@ pub struct FaithResponse {
 	pub(crate) headers: HeaderMap,
 	pub(crate) peer: Arc<PeerInformation>,
 	pub(crate) redirected: bool,
+	pub(crate) stats: Arc<InnerAgentStats>,
 	pub(crate) status_code: StatusCode,
 	pub(crate) trailers: Arc<RwLock<Trailers>>,
 	pub(crate) url: Url,
@@ -255,8 +257,12 @@ impl FaithResponse {
 					unsafe { unreachable_unchecked() }
 				};
 
+				// Track that we've started consuming a body
+				self.stats.bodies_started.fetch_add(1, Ordering::Relaxed);
+
 				let trailers_stream = self.trailers.clone();
 				let trailers_finish = self.trailers.clone();
+				let stats_finish = self.stats.clone();
 				let stream = SharedStream::new(Box::pin(
 					BodyStream::new(inner)
 						.then(move |frame| {
@@ -284,6 +290,8 @@ impl FaithResponse {
 							if matches!(*t, Trailers::NotYet) {
 								*t = Trailers::None;
 							}
+							// Track that we've finished consuming a body
+							stats_finish.bodies_finished.fetch_add(1, Ordering::Relaxed);
 							None
 						}))
 						.filter_map(async |item| item),

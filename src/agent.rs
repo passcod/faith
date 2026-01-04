@@ -333,6 +333,8 @@ pub struct AgentOptions {
 pub(crate) struct InnerAgentStats {
 	pub requests_sent: AtomicU64,
 	pub responses_received: AtomicU64,
+	pub bodies_started: AtomicU64,
+	pub bodies_finished: AtomicU64,
 }
 
 #[napi]
@@ -340,6 +342,12 @@ pub(crate) struct InnerAgentStats {
 pub struct AgentStats {
 	pub requests_sent: i64,
 	pub responses_received: i64,
+	/// Number of response body streams that have been started (converted from raw body to stream).
+	/// This happens when `.body`, `.text()`, `.json()`, `.bytes()`, or similar methods are called.
+	pub bodies_started: i64,
+	/// Number of response body streams that have been fully consumed.
+	/// When `bodies_started - bodies_finished > 0`, there are bodies holding connections open.
+	pub bodies_finished: i64,
 }
 
 /// The `Agent` interface of the Fáith API represents an instance of an HTTP client. Each `Agent` has
@@ -624,6 +632,8 @@ impl Agent {
 	///
 	/// - `requestsSent`
 	/// - `responsesReceived`
+	/// - `bodiesStarted`
+	/// - `bodiesFinished`
 	#[napi]
 	pub fn stats(&self) -> AgentStats {
 		AgentStats {
@@ -636,6 +646,18 @@ impl Agent {
 			responses_received: self
 				.stats
 				.responses_received
+				.load(Ordering::Relaxed)
+				.try_into()
+				.unwrap_or(i64::MAX),
+			bodies_started: self
+				.stats
+				.bodies_started
+				.load(Ordering::Relaxed)
+				.try_into()
+				.unwrap_or(i64::MAX),
+			bodies_finished: self
+				.stats
+				.bodies_finished
 				.load(Ordering::Relaxed)
 				.try_into()
 				.unwrap_or(i64::MAX),
