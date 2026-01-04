@@ -12,7 +12,7 @@ use std::{
 };
 
 use bytes::Bytes;
-use futures::{StreamExt, TryStreamExt};
+use futures::{StreamExt, TryStreamExt, stream};
 use http_body_util::{BodyExt as _, BodyStream};
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
@@ -226,23 +226,39 @@ impl FaithResponse {
 					unsafe { unreachable_unchecked() }
 				};
 
-				let trailers_lock = self.trailers.clone();
-				let stream = SharedStream::new(Box::pin(BodyStream::new(body).then(move |frame| {
-					let trailers_lock = trailers_lock.clone();
-					async move {
-						let frame = frame.map_err(|err| err.to_string())?;
-						match frame.into_trailers() {
-							Ok(trailers) => {
-								let mut t = trailers_lock.write().await;
-								*t = Trailers::Some(trailers);
-								Ok(Bytes::new())
+				let trailers_stream = self.trailers.clone();
+				let trailers_finish = self.trailers.clone();
+				let stream = SharedStream::new(Box::pin(
+					BodyStream::new(body)
+						.then(move |frame| {
+							let trailers_lock = trailers_stream.clone();
+							async move {
+								match frame {
+									Err(err) => Some(Err(err.to_string())),
+									Ok(frame) => match frame.into_trailers() {
+										Ok(trailers) => {
+											let mut t = trailers_lock.write().await;
+											*t = Trailers::Some(trailers);
+											None
+										}
+										Err(frame) => Some(
+											frame
+												.into_data()
+												.map_err(|_| "unknown frame kind".to_string()),
+										),
+									},
+								}
 							}
-							Err(frame) => frame
-								.into_data()
-								.map_err(|_| "unknown frame kind".to_string()),
-						}
-					}
-				})) as Pin<Box<DynStream>>);
+						})
+						.chain(stream::once(async move {
+							let mut t = trailers_finish.write().await;
+							if matches!(*t, Trailers::NotYet) {
+								*t = Trailers::None;
+							}
+							None
+						}))
+						.filter_map(async |item| item),
+				) as Pin<Box<DynStream>>);
 
 				// the _ is the Consumed we put in there earlier
 				let _ = replace(lock, Body::Stream(stream.clone()));
