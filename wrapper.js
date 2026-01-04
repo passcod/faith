@@ -286,8 +286,13 @@ async function fetch(resource, options = {}) {
 				);
 			}
 
-			// Pass ReadableStream directly to native for streaming upload
-			const streamBody = nativeOptions.body;
+			// Workaround for NAPI-rs ReadableStream chunk dropping issue:
+			// Pipe through an identity TransformStream to ensure proper chunk delivery.
+			// Without this, NAPI-rs may skip chunks when polling the stream on certain
+			// platforms/Node versions (observed on macOS, Windows, and Ubuntu with Node 22+).
+			const { readable, writable } = new TransformStream();
+			nativeOptions.body.pipeTo(writable).catch(() => {});
+			const streamBody = readable;
 			delete nativeOptions.body;
 
 			// Attach to the default agent if none is provided
