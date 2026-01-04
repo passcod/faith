@@ -638,6 +638,7 @@ export interface FaithOptionsAndBody {
   credentials?: CredentialsOption
   duplex?: DuplexOption
   headers?: Array<[string, string]>
+  integrity?: string
   method?: string
   timeout?: number
 }

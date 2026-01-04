@@ -5,6 +5,7 @@ mod async_task;
 mod body;
 mod error;
 mod fetch;
+mod integrity;
 mod options;
 mod response;
 

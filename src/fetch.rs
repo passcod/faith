@@ -147,6 +147,7 @@ pub fn faith_fetch(
 			},
 			disturbed: Arc::new(AtomicBool::new(false)),
 			headers,
+			integrity: options.integrity,
 			peer: Arc::new(peer),
 			redirected,
 			stats: agent.stats.clone(),

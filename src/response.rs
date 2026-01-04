@@ -26,6 +26,7 @@ use crate::{
 	async_task::{Async, FaithAsyncResult, Value},
 	body::{Body, BodyHolder, DynStream, drain_body_inner},
 	error::{FaithError, FaithErrorKind},
+	integrity::verify_integrity,
 };
 
 /// The `Response` interface of the Fetch API represents the response to a request.
@@ -38,6 +39,7 @@ pub struct FaithResponse {
 	pub(crate) body: BodyHolder,
 	pub(crate) disturbed: Arc<AtomicBool>,
 	pub(crate) headers: HeaderMap,
+	pub(crate) integrity: Option<String>,
 	pub(crate) peer: Arc<PeerInformation>,
 	pub(crate) redirected: bool,
 	pub(crate) stats: Arc<InnerAgentStats>,
@@ -374,6 +376,11 @@ impl FaithResponse {
 		for chunk in body.into_iter() {
 			bytes.extend_from_slice(chunk);
 		}
+
+		if let Some(ref integrity) = self.integrity {
+			verify_integrity(&bytes, integrity)?;
+		}
+
 		Ok(bytes.into())
 	}
 
@@ -386,8 +393,7 @@ impl FaithResponse {
 		let this = Clone::clone(&*self);
 		FaithAsyncResult::run(async move || {
 			this.check_stream_disturbed()?;
-			let buf = this.gather_contiguous().await?;
-			Ok(buf)
+			this.gather_contiguous().await
 		})
 	}
 

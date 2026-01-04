@@ -137,6 +137,7 @@ pub struct FaithOptionsAndBody {
 	pub credentials: Option<CredentialsOption>,
 	pub duplex: Option<DuplexOption>,
 	pub headers: Option<Vec<(String, String)>>,
+	pub integrity: Option<String>,
 	pub method: Option<String>,
 	pub timeout: Option<u32>,
 }
@@ -146,6 +147,7 @@ pub(crate) struct FaithOptions {
 	pub(crate) cache: RequestCacheMode,
 	pub(crate) credentials: CredentialsOption,
 	pub(crate) headers: Option<Vec<(String, String)>>,
+	pub(crate) integrity: Option<String>,
 	pub(crate) method: Option<String>,
 	pub(crate) timeout: Option<Duration>,
 }
@@ -165,6 +167,7 @@ impl FaithOptions {
 				cache: opts.cache.unwrap_or_default(),
 				credentials,
 				headers: opts.headers,
+				integrity: opts.integrity,
 				method: opts.method,
 				timeout: opts.timeout.map(Into::into).map(Duration::from_millis),
 			},

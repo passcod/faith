@@ -149,6 +149,25 @@ export interface FetchOptions {
 	 */
 	duplex?: "half";
 	/**
+	 * Contains the subresource integrity value of the request.
+	 *
+	 * The format of this option is `<hash-algo>-<hash-source>` where:
+	 *
+	 * - `<hash-algo>` is one of the following values: `sha256`, `sha384`, or `sha512`
+	 * - `<hash-source>` is the Base64-encoding of the result of hashing the resource with the
+	 *   specified hash algorithm.
+	 *
+	 * Multiple space-separated values are supported; if any matches, verification passes. Unknown
+	 * algorithms are silently ignored (but if all algorithms are unknown, an error is thrown).
+	 *
+	 * Fáith only checks the integrity when using `bytes()`, `json()`, `text()`, `arrayBuffer()`, and
+	 * `blob()`. Verification when reading through the `body` stream is not currently supported.
+	 *
+	 * Note that browsers will throw at the `fetch()` call when integrity fails, but Fáith will only
+	 * throw when the above methods are called, as until then the body contents are not available.
+	 */
+	integrity?: string;
+	/**
 	 * Any headers you want to add to your request, contained within a `Headers` object or an object
 	 * literal whose keys are the names of headers and whose values are the header values.
 	 *
