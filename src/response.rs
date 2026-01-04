@@ -13,7 +13,7 @@ use std::{
 
 use bytes::Bytes;
 use futures::{StreamExt, TryStreamExt, stream};
-use http_body_util::{BodyExt as _, BodyStream};
+use http_body_util::BodyStream;
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
 use reqwest::{StatusCode, Url, Version, header::HeaderMap};
@@ -214,14 +214,43 @@ impl FaithResponse {
 			.try_lock()
 			.map_err(|_| FaithError::from(FaithErrorKind::ResponseAlreadyDisturbed).into_napi())?;
 
-		let stream = match &mut *body {
-			Body::Consumed => {
-				return Err(FaithError::from(FaithErrorKind::ResponseAlreadyDisturbed).into_napi());
-			}
-			Body::Stream(stream) => stream.clone(),
+		let stream = self.ensure_stream(&mut body).map_err(|e| e.into_napi())?;
+
+		let stream = napi::bindgen_prelude::ReadableStream::create_with_stream_bytes(
+			&env,
+			stream
+				.map_err(|err| FaithError::new(FaithErrorKind::BodyStream, Some(err)).into_napi()),
+		)
+		.map_err(|e| {
+			napi::Error::from(
+				FaithError::new(FaithErrorKind::BodyStream, Some(e.to_string()))
+					.into_js_error(&env),
+			)
+		})?;
+		Ok(Some(stream))
+	}
+
+	fn check_stream_disturbed(&self) -> Result<(), FaithError> {
+		if self.disturbed.swap(true, Ordering::SeqCst) {
+			Err(FaithErrorKind::ResponseAlreadyDisturbed.into())
+		} else {
+			Ok(())
+		}
+	}
+
+	/// Ensures the body is converted to a SharedStream, returning a clone of it.
+	///
+	/// This allows multiple consumers (original + clones) to independently read the body.
+	fn ensure_stream(
+		&self,
+		body: &mut Body,
+	) -> Result<SharedStream<Pin<Box<DynStream>>>, FaithError> {
+		match body {
+			Body::Consumed => Err(FaithErrorKind::ResponseAlreadyDisturbed.into()),
+			Body::Stream(stream) => Ok(stream.clone()),
 			lock @ Body::Inner(_) => {
 				// temporarily replace with Consumed until we can put in the Stream
-				let Body::Inner(body) = replace(lock, Body::Consumed) else {
+				let Body::Inner(inner) = replace(lock, Body::Consumed) else {
 					// SAFETY: we're inside the match checking for this exact thing
 					unsafe { unreachable_unchecked() }
 				};
@@ -229,7 +258,7 @@ impl FaithResponse {
 				let trailers_stream = self.trailers.clone();
 				let trailers_finish = self.trailers.clone();
 				let stream = SharedStream::new(Box::pin(
-					BodyStream::new(body)
+					BodyStream::new(inner)
 						.then(move |frame| {
 							let trailers_lock = trailers_stream.clone();
 							async move {
@@ -263,29 +292,8 @@ impl FaithResponse {
 				// the _ is the Consumed we put in there earlier
 				let _ = replace(lock, Body::Stream(stream.clone()));
 
-				stream
+				Ok(stream)
 			}
-		};
-
-		let stream = napi::bindgen_prelude::ReadableStream::create_with_stream_bytes(
-			&env,
-			stream
-				.map_err(|err| FaithError::new(FaithErrorKind::BodyStream, Some(err)).into_napi()),
-		)
-		.map_err(|e| {
-			napi::Error::from(
-				FaithError::new(FaithErrorKind::BodyStream, Some(e.to_string()))
-					.into_js_error(&env),
-			)
-		})?;
-		Ok(Some(stream))
-	}
-
-	fn check_stream_disturbed(&self) -> Result<(), FaithError> {
-		if self.disturbed.swap(true, Ordering::SeqCst) {
-			Err(FaithErrorKind::ResponseAlreadyDisturbed.into())
-		} else {
-			Ok(())
 		}
 	}
 
@@ -299,50 +307,15 @@ impl FaithResponse {
 		};
 
 		let mut body = lock.lock().await;
-		let mut inner = match &mut *body {
-			lock @ Body::Inner(_) => {
-				let Body::Inner(body) = replace(lock, Body::Consumed) else {
-					// SAFETY: we're inside the match checking for this exact thing
-					unsafe { unreachable_unchecked() }
-				};
-				body
-			}
-			_ => {
-				return Err(FaithErrorKind::ResponseAlreadyDisturbed.into());
-			}
-		};
+		let stream = self.ensure_stream(&mut body)?;
+		drop(body); // release lock before consuming stream
 
 		let mut chunks = Vec::new();
-		let mut has_trailers = false;
-
-		while let Some(frame_res) = inner.frame().await {
-			let frame = frame_res.map_err(|err| {
-				FaithError::new(FaithErrorKind::BodyStream, Some(err.to_string()))
-			})?;
-
-			match frame.into_trailers() {
-				Ok(trailers) => {
-					let mut t = self.trailers.write().await;
-					*t = Trailers::Some(trailers);
-					has_trailers = true;
-				}
-				Err(frame) => match frame.into_data() {
-					Ok(chunk) => {
-						chunks.push(chunk);
-					}
-					Err(_) => {
-						return Err(FaithError::new(
-							FaithErrorKind::BodyStream,
-							Some("unknown frame kind".to_string()),
-						));
-					}
-				},
-			}
-		}
-
-		if !has_trailers {
-			let mut t = self.trailers.write().await;
-			*t = Trailers::None;
+		futures::pin_mut!(stream);
+		while let Some(result) = stream.next().await {
+			let chunk =
+				result.map_err(|err| FaithError::new(FaithErrorKind::BodyStream, Some(err)))?;
+			chunks.push(chunk);
 		}
 
 		Ok(Arc::from(chunks.into_boxed_slice()))

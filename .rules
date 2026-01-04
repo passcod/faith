@@ -9,6 +9,7 @@
   - run all tests: `HTTPBIN_URL=http://localhost:8888 npm it`
   - when using `npx tape` directly, remember to run `npm run build` (or `npm i`) first so the native binding is rebuilt if there were Rust changes—`npx tape` by itself doesn’t rebuild. The repo’s `test` script runs `cargo test` first.
   - if localhost:8888 isn't available, prompt the user to start it with: `podman run --rm -d -p 8888:8080 ghcr.io/mccutchen/go-httpbin`
+  - the test output is very long, so use `tee` to write it to a file so you can look through it better
 - Attitude:
   - Don't edit the README.md
   - Don't leave comments in the code referencing actions taken
