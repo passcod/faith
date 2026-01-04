@@ -12,6 +12,13 @@
 	"main": "wrapper.js",
 	"module": "wrapper.mjs",
 	"types": "wrapper.d.ts",
+	"exports": {
+		".": {
+			"import": "./wrapper.mjs",
+			"require": "./wrapper.js",
+			"types": "./wrapper.d.ts"
+		}
+	},
 	"files": [
 		"index.js",
 		"index.d.ts",

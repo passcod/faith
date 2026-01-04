@@ -1,21 +1,6 @@
-import faith from "./wrapper.js";
-const {
-	Agent,
-	CacheMode,
-	CacheStore,
-	Credentials,
-	Duplex,
-	ERROR_CODES,
-	FAITH_VERSION,
-	fetch,
-	Http3Congestion,
-	Redirect,
-	REQWEST_VERSION,
-	Response,
-	USER_AGENT,
-} = faith;
+import wrapper from "./wrapper.js";
 
-export {
+export const {
 	Agent,
 	CacheMode,
 	CacheStore,
@@ -29,4 +14,6 @@ export {
 	REQWEST_VERSION,
 	Response,
 	USER_AGENT,
-};
+} = wrapper;
+
+export default wrapper;
