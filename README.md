@@ -226,7 +226,7 @@ following values:*
 
 - *`omit`: Never send credentials in the request or include credentials in the response.*
 - ~~`same-origin`~~: Fáith does not implement this, as there is no concept of "origin" on the server.
-- *`include`: *Always include credentials,* ~~even for cross-origin requests.~~
+- *`include`: Always include credentials,* ~~even for cross-origin requests.~~
 
 Fáith ignores the `Access-Control-Allow-Credentials` and `Access-Control-Allow-Origin` headers.
 
