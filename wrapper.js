@@ -254,11 +254,28 @@ async function fetch(resource, options = {}) {
 
 	// Convert body to Buffer if needed
 	// Native binding handles: string, Buffer, Uint8Array
-	// We convert: ArrayBuffer, Array<number>, ReadableStream
+	// We convert: ArrayBuffer, Array<number>, ReadableStream, URLSearchParams
 	// Validate ReadableStream bodies require duplex option
 	if (nativeOptions.body !== undefined && nativeOptions.body !== null) {
+		// Handle URLSearchParams
+		if (nativeOptions.body instanceof URLSearchParams) {
+			nativeOptions.body = nativeOptions.body.toString();
+			// Set Content-Type if not already set (per Fetch spec)
+			if (!nativeOptions.headers) {
+				nativeOptions.headers = [];
+			}
+			const hasContentType = nativeOptions.headers.some(
+				([name]) => name.toLowerCase() === "content-type",
+			);
+			if (!hasContentType) {
+				nativeOptions.headers.push([
+					"Content-Type",
+					"application/x-www-form-urlencoded;charset=UTF-8",
+				]);
+			}
+		}
 		// Check if body is a ReadableStream
-		if (
+		else if (
 			typeof nativeOptions.body === "object" &&
 			typeof nativeOptions.body.getReader === "function"
 		) {

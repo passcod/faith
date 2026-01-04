@@ -67,12 +67,21 @@ export interface FetchOptions {
 	 * - `File`
 	 * - `FormData`
 	 * - `TypedArray`
-	 * - ~~`URLSearchParams`~~ Not yet implemented.
+	 * - `URLSearchParams`
 	 * - `ReadableStream` Note that Fáith currently reads this into memory before sending the request.
 	 *
 	 * If `body` is a `ReadableStream`, the `duplex` option must also be set.
+	 *
+	 * If `body` is a `URLSearchParams`, the `Content-Type` header will be set to
+	 * `application/x-www-form-urlencoded;charset=UTF-8` unless already specified.
 	 */
-	body?: string | Buffer | Uint8Array | Array<number> | ArrayBuffer;
+	body?:
+		| string
+		| Buffer
+		| Uint8Array
+		| Array<number>
+		| ArrayBuffer
+		| URLSearchParams;
 	/**
 	 * The cache mode you want to use for the request. This may be any one of the following values:
 	 *
