@@ -23,15 +23,12 @@ codegen-units = 16
 fn main() {}
 EOF
 RUN chmod +x reqw13.rs
-RUN cp reqw13.rs reqw12.rs
 RUN ./reqw13.rs
-RUN ./reqw12.rs
 
 COPY package.json package-lock.json .
 RUN npm ci
 
-COPY native-fetch.js node-fetch.js faith.js .
-COPY reqw13.rs reqw12.rs .
-RUN chmod +x reqw13.rs reqw12.rs
+COPY native-fetch.js node-fetch.js faith.mjs .
+COPY reqw13.rs .
+RUN chmod +x reqw13.rs
 RUN ./reqw13.rs
-RUN ./reqw12.rs
