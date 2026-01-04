@@ -1,6 +1,9 @@
 use std::{
 	fmt::Debug,
+	hint::unreachable_unchecked,
+	mem::replace,
 	net::SocketAddr,
+	pin::Pin,
 	result::Result,
 	sync::{
 		Arc,
@@ -10,14 +13,20 @@ use std::{
 
 use bytes::Bytes;
 use futures::{StreamExt, TryStreamExt};
+use http_body_util::{BodyExt as _, BodyStream};
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
 use reqwest::{StatusCode, Url, Version, header::HeaderMap};
 use serde_json;
+use stream_shared::SharedStream;
+use tokio::{
+	sync::{Mutex, RwLock},
+	task::yield_now,
+};
 
 use crate::{
 	async_task::{Async, FaithAsyncResult, Value},
-	body::Body,
+	body::{Body, DynStream},
 	error::{FaithError, FaithErrorKind},
 };
 
@@ -26,9 +35,9 @@ use crate::{
 /// Fáith does not allow its `Response` object to be constructed. If you need to, you may use the
 /// `webResponse()` method to convert one into a Web API `Response` object; note the caveats.
 #[napi]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FaithResponse {
-	pub(crate) body: Body,
+	pub(crate) body: Option<Arc<Mutex<Body>>>,
 	pub(crate) disturbed: Arc<AtomicBool>,
 	pub(crate) headers: HeaderMap,
 	pub(crate) peer: Arc<PeerInformation>,
@@ -36,21 +45,6 @@ pub struct FaithResponse {
 	pub(crate) status_code: StatusCode,
 	pub(crate) url: Url,
 	pub(crate) version: Version,
-}
-
-impl Clone for FaithResponse {
-	fn clone(&self) -> Self {
-		Self {
-			disturbed: Arc::clone(&self.disturbed),
-			headers: self.headers.clone(),
-			peer: self.peer.clone(),
-			redirected: self.redirected,
-			status_code: self.status_code.clone(),
-			url: self.url.clone(),
-			version: self.version.clone(),
-			body: self.body.clone(),
-		}
-	}
 }
 
 /// Custom to Fáith.
@@ -182,9 +176,16 @@ impl FaithResponse {
 	/// contents, or `null` for any actual HTTP response that has no body, such as `HEAD` requests and
 	/// `204 No Content` responses.
 	///
-	/// Note that browsers currently do not return `null` for those responses, but the spec requires it.
-	/// Fáith chooses to respect the spec rather than the browsers in this case.
-	#[napi(getter)]
+	/// Note that browsers currently do not return `null` for those responses, but the spec requires
+	/// it. Fáith chooses to respect the spec rather than the browsers in this case.
+	///
+	/// An important consideration exists in conjunction with the connection pool: if you start the
+	/// body stream, this will hold the connection until the stream is fully consumed. If another
+	/// request is started during that time, and you don't have an available connection in the pool
+	/// for the host already, the new request will open one.
+	///
+	/// Note that this is a function as an implementation detail; the wrapper makes it a property.
+	#[napi]
 	pub fn body(
 		&self,
 		env: Env,
@@ -193,25 +194,52 @@ impl FaithResponse {
 		// as essentially, the body() can be accessed many times as the same stream
 		let _ = self.check_stream_disturbed();
 
-		match &self.body {
-			Body::None => Ok(None),
-			Body::Stream(stream) => {
-				let stream = stream.clone();
-				let stream = napi::bindgen_prelude::ReadableStream::create_with_stream_bytes(
-					&env,
-					stream.map_err(|err| {
-						FaithError::new(FaithErrorKind::BodyStream, Some(err)).into_napi()
-					}),
-				)
-				.map_err(|e| {
-					napi::Error::from(
-						FaithError::new(FaithErrorKind::BodyStream, Some(e.to_string()))
-							.into_js_error(&env),
-					)
-				})?;
-				Ok(Some(stream))
+		let Some(lock) = &self.body else {
+			return Ok(None);
+		};
+
+		// if the lock is taken then we're consuming the body somehow
+		let mut body = lock
+			.try_lock()
+			.map_err(|_| FaithError::from(FaithErrorKind::ResponseAlreadyDisturbed).into_napi())?;
+
+		let stream = match &mut *body {
+			Body::Consumed => {
+				return Err(FaithError::from(FaithErrorKind::ResponseAlreadyDisturbed).into_napi());
 			}
-		}
+			Body::Stream(stream) => stream.clone(),
+			lock @ Body::Inner(_) => {
+				// temporarily replace with Consumed until we can put in the Stream
+				let Body::Inner(body) = replace(lock, Body::Consumed) else {
+					// SAFETY: we're inside the match checking for this exact thing
+					unsafe { unreachable_unchecked() }
+				};
+
+				let stream = SharedStream::new(Box::pin(BodyStream::new(body).map(|frame| {
+					frame.map_err(|err| err.to_string()).and_then(|frame| {
+						frame.into_data().map_err(|_| "non-DATA frame".to_string())
+					})
+				})) as Pin<Box<DynStream>>);
+
+				// the _ is the Consumed we put in there earlier
+				let _ = replace(lock, Body::Stream(stream.clone()));
+
+				stream
+			}
+		};
+
+		let stream = napi::bindgen_prelude::ReadableStream::create_with_stream_bytes(
+			&env,
+			stream
+				.map_err(|err| FaithError::new(FaithErrorKind::BodyStream, Some(err)).into_napi()),
+		)
+		.map_err(|e| {
+			napi::Error::from(
+				FaithError::new(FaithErrorKind::BodyStream, Some(e.to_string()))
+					.into_js_error(&env),
+			)
+		})?;
+		Ok(Some(stream))
 	}
 
 	fn check_stream_disturbed(&self) -> Result<(), FaithError> {
@@ -227,20 +255,51 @@ impl FaithResponse {
 	/// Unlike bytes() and co, this grabs all the chunks of the response but doesn't
 	/// copy them. Further processing is needed to obtain a Vec<u8> or whatever needed.
 	async fn gather(&self) -> Result<Arc<[Bytes]>, FaithError> {
-		// Clone the stream before reading so we don't need &mut self
-		let mut response = match &self.body {
-			Body::None => return Ok(Default::default()),
-			Body::Stream(body) => body.clone(),
+		let Some(lock) = &self.body else {
+			return Ok(Default::default());
+		};
+
+		let mut body = lock.lock().await;
+		let mut inner = match &mut *body {
+			lock @ Body::Inner(_) => {
+				let Body::Inner(body) = replace(lock, Body::Consumed) else {
+					// SAFETY: we're inside the match checking for this exact thing
+					unsafe { unreachable_unchecked() }
+				};
+				body
+			}
+			_ => {
+				return Err(FaithErrorKind::ResponseAlreadyDisturbed.into());
+			}
 		};
 
 		let mut chunks = Vec::new();
-		while let Some(chunk) = response
-			.next()
-			.await
-			.transpose()
-			.map_err(|err| FaithError::new(FaithErrorKind::BodyStream, Some(err)))?
-		{
-			chunks.push(chunk);
+		while let Some(frame_res) = inner.frame().await {
+			let frame = frame_res.map_err(|err| {
+				FaithError::new(FaithErrorKind::BodyStream, Some(err.to_string()))
+			})?;
+
+			match frame.into_trailers() {
+				Ok(trailers) => {
+					todo!()
+				}
+				Err(frame) => match frame.into_data() {
+					Ok(chunk) => {
+						chunks.push(chunk);
+					}
+					Err(_) => {
+						return Err(FaithError::new(
+							FaithErrorKind::BodyStream,
+							Some("unknown frame kind".to_string()),
+						));
+					}
+				},
+			}
+		}
+
+		if !has_trailers {
+			let mut t = self.trailers.write().await;
+			*t = Trailers::None;
 		}
 
 		Ok(Arc::from(chunks.into_boxed_slice()))

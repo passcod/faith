@@ -6,16 +6,17 @@ use stream_shared::SharedStream;
 
 pub(crate) type DynStream = dyn Stream<Item = std::result::Result<Bytes, String>> + Send + Sync;
 
-#[derive(Clone)]
 pub(crate) enum Body {
-	None,
+	Inner(reqwest::Body),
+	Consumed,
 	Stream(SharedStream<Pin<Box<DynStream>>>),
 }
 
 impl Debug for Body {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		match self {
-			Self::None => write!(f, "None"),
+			Self::Inner(body) => write!(f, "{body:?}"),
+			Self::Consumed => write!(f, "Consumed"),
 			Self::Stream(stream) => {
 				let field = f
 					.debug_struct("SharedStream")

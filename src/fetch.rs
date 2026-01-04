@@ -1,12 +1,8 @@
-use std::{
-	pin::Pin,
-	sync::{
-		Arc,
-		atomic::{AtomicBool, Ordering},
-	},
+use std::sync::{
+	Arc,
+	atomic::{AtomicBool, Ordering},
 };
 
-use futures::StreamExt;
 use http_cache_reqwest::CacheMode;
 use napi::bindgen_prelude::AbortSignal;
 use napi_derive::napi;
@@ -15,12 +11,11 @@ use reqwest::{
 	header::{HeaderName, HeaderValue},
 	tls::TlsInfo,
 };
-use stream_shared::SharedStream;
-use tokio::sync::mpsc;
+use tokio::sync::{Mutex, mpsc};
 
 use crate::{
 	async_task::{Async, FaithAsyncResult},
-	body::{Body, DynStream},
+	body::Body,
 	error::{FaithError, FaithErrorKind},
 	options::{CredentialsOption, FaithOptions, FaithOptionsAndBody},
 	response::{FaithResponse, PeerInformation},
@@ -142,13 +137,10 @@ pub fn faith_fetch(
 
 		Ok(FaithResponse {
 			body: if empty {
-				Body::None
+				None
 			} else {
-				Body::Stream(SharedStream::new(Box::pin(
-					response
-						.bytes_stream()
-						.map(|chunk| chunk.map_err(|err| err.to_string())),
-				) as Pin<Box<DynStream>>))
+				let http_response: http::Response<_> = response.into();
+				Some(Arc::new(Mutex::new(Body::Inner(http_response.into_body()))))
 			},
 			disturbed: Arc::new(AtomicBool::new(false)),
 			headers,
