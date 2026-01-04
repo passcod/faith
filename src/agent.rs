@@ -9,6 +9,8 @@ use std::{
 	time::Duration,
 };
 
+use napi::bindgen_prelude::within_runtime_if_available;
+
 use http_cache_reqwest::{
 	CACacheManager, Cache, CacheOptions, HttpCache, HttpCacheOptions, MokaCacheBuilder, MokaManager,
 };
@@ -422,6 +424,12 @@ impl Agent {
 	}
 
 	pub fn with_options(options: AgentOptions) -> Result<Self, FaithError> {
+		// Wrap in tokio runtime context for HTTP/3 endpoint initialization.
+		// Quinn's Endpoint::client() requires a tokio runtime to be available.
+		within_runtime_if_available(|| Self::with_options_inner(options))
+	}
+
+	fn with_options_inner(options: AgentOptions) -> Result<Self, FaithError> {
 		let mut client = Client::builder()
 			.tls_info(true)
 			.tls_sslkeylogfile(true)
@@ -580,7 +588,10 @@ impl Agent {
 			}
 		}
 
-		let mut client = ClientBuilder::new(client.build()?);
+		let reqwest_client = client
+			.build()
+			.map_err(|e| FaithError::new(FaithErrorKind::Config, Some(format!("{e:?}"))))?;
+		let mut client = ClientBuilder::new(reqwest_client);
 
 		#[cfg(feature = "http3")]
 		let alt_svc_cache = {

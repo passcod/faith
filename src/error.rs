@@ -181,10 +181,18 @@ impl FaithError {
 
 impl From<reqwest::Error> for FaithError {
 	fn from(err: reqwest::Error) -> Self {
+		// Always include full error chain for debugging
+		let mut msg = format!("{err:?}");
+		let mut source = err.source();
+		while let Some(e) = source {
+			msg.push_str(&format!(" -> {e:?}"));
+			source = e.source();
+		}
+
 		if err.is_timeout() {
-			FaithError::new(FaithErrorKind::Timeout, Some(err.to_string()))
+			FaithError::new(FaithErrorKind::Timeout, Some(msg))
 		} else {
-			FaithError::new(FaithErrorKind::Network, Some(err.to_string()))
+			FaithError::new(FaithErrorKind::Network, Some(msg))
 		}
 	}
 }
