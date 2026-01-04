@@ -264,8 +264,13 @@ export class Response {
 	 * contents, or `null` for any actual HTTP response that has no body, such as `HEAD` requests and
 	 * `204 No Content` responses.
 	 *
-	 * Note that browsers currently do not return `null` for those responses, but the spec requires it.
-	 * Fáith chooses to respect the spec rather than the browsers in this case.
+	 * Note that browsers currently do not return `null` for those responses, but the spec requires
+	 * it. Fáith chooses to respect the spec rather than the browsers in this case.
+	 *
+	 * An important consideration exists in conjunction with the connection pool: if you start the
+	 * body stream, this will hold the connection until the stream is fully consumed. If another
+	 * request is started during that time, and you don't have an available connection in the pool
+	 * for the host already, the new request will open one.
 	 */
 	readonly body: ReadableStream<Uint8Array> | null;
 

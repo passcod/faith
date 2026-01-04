@@ -56,6 +56,10 @@ class Response {
 		}
 	}
 
+	get body() {
+		return this.#nativeResponse.body();
+	}
+
 	/**
 	 * Convert response body to text (UTF-8)
 	 * @returns {Promise<string>}

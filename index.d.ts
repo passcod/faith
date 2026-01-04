@@ -136,10 +136,17 @@ get bodyUsed(): boolean
  * contents, or `null` for any actual HTTP response that has no body, such as `HEAD` requests and
  * `204 No Content` responses.
  *
- * Note that browsers currently do not return `null` for those responses, but the spec requires it.
- * Fáith chooses to respect the spec rather than the browsers in this case.
+ * Note that browsers currently do not return `null` for those responses, but the spec requires
+ * it. Fáith chooses to respect the spec rather than the browsers in this case.
+ *
+ * An important consideration exists in conjunction with the connection pool: if you start the
+ * body stream, this will hold the connection until the stream is fully consumed. If another
+ * request is started during that time, and you don't have an available connection in the pool
+ * for the host already, the new request will open one.
+ *
+ * Note that this is a function as an implementation detail; the wrapper makes it a property.
  */
-get body(): ReadableStream<Buffer> | null
+body(): ReadableStream<Buffer> | null
 /**
  * The `bytes()` method of the `Response` interface takes a `Response` stream and reads it to
  * completion. It returns a promise that resolves with a `Uint8Array`.
@@ -166,6 +173,18 @@ text(): Async<string>
  * efficient access, consider handling the response body as a stream.
  */
 json(): Async<any>
+/**
+ * The `trailers()` read-only property of the `Response` interface returns a promise that
+ * resolves to either `null` or a `Headers` structure that contains the HTTP/2 or /3 trailing
+ * headers.
+ *
+ * This was once in the spec as a getter but was removed as it wasn't implemented by any browser.
+ *
+ * Note that this will never resolve if you don't also consume the body in some way.
+ *
+ * This is an async fn as an internal implementation detail and the wrapper makes it a property.
+ */
+trailers(): Promise<Array<[string, string]> | null>
 /**
  * The `clone()` method of the `Response` interface creates a clone of a response object, identical
  * in every way, but stored in a different variable.
