@@ -837,3 +837,12 @@ constant from `ERROR_CODES`, instead of doing string matching on the error messa
 
 Due to technical limitations, when reading a body stream, reads might fail, but that error
 will not have a `code` property.
+
+## Versions
+
+Two version constants are exposed:
+
+- `FAITH_VERSION` is the version of the Fáith library itself
+- `REQWEST_VERSION` is the version of the underlying [reqwest](https://github.com/seanmonstar/reqwest) library
+
+These can be used to construct your own user agent strings, in logging, or for seeking help.
