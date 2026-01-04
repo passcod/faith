@@ -14,6 +14,7 @@ use reqwest::{
 	tls::TlsInfo,
 };
 use tokio::sync::{Mutex, mpsc};
+use tokio_stream::wrappers::ReceiverStream;
 
 use crate::{
 	async_task::{Async, FaithAsyncResult},
@@ -108,12 +109,26 @@ pub fn faith_fetch(
 
 		// Handle body: prefer streaming body over buffered body
 		if let Some(reader) = stream_reader {
-			// Map Reader<Buffer> to Stream<Item = Result<Bytes, std::io::Error>>
-			let byte_stream = reader.map(|result| {
-				result
-					.map(|buf| Bytes::copy_from_slice(buf.as_ref()))
-					.map_err(|e| std::io::Error::other(e.to_string()))
+			// Use a channel to synchronize chunk delivery from the NAPI Reader.
+			// This ensures chunks are properly sequenced and not dropped due to
+			// timing issues between the JS ReadableStream and reqwest's body stream.
+			let (tx, rx) = mpsc::channel::<Result<Bytes, std::io::Error>>(16);
+
+			// Spawn a task to read from the NAPI Reader and send chunks through the channel
+			tokio::spawn(async move {
+				futures::pin_mut!(reader);
+				while let Some(result) = reader.next().await {
+					let chunk = result
+						.map(|buf| Bytes::copy_from_slice(buf.as_ref()))
+						.map_err(|e| std::io::Error::other(e.to_string()));
+					if tx.send(chunk).await.is_err() {
+						// Receiver dropped, stop reading
+						break;
+					}
+				}
 			});
+
+			let byte_stream = ReceiverStream::new(rx);
 			request = request.body(reqwest::Body::wrap_stream(byte_stream));
 		} else if let Some(body) = &body {
 			request = request.body(body.to_vec());
