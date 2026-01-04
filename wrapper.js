@@ -286,32 +286,72 @@ async function fetch(resource, options = {}) {
 				);
 			}
 
-			// Workaround for NAPI-rs ReadableStream chunk dropping issue:
-			// NAPI-rs's Reader drops chunks unpredictably when polling ReadableStream.
-			// The only reliable workaround is to fully consume the stream in JavaScript
-			// and pass the collected bytes as a Buffer to the native binding.
-			// This sacrifices true streaming but ensures data integrity.
-			const originalReader = nativeOptions.body.getReader();
-			const chunks = [];
-			while (true) {
-				const { done, value } = await originalReader.read();
-				if (done) break;
-				chunks.push(value);
-			}
-			// Concatenate all chunks into a single Buffer
-			const totalLength = chunks.reduce(
-				(sum, chunk) => sum + chunk.length,
-				0,
-			);
-			const buffer = Buffer.alloc(totalLength);
-			let offset = 0;
-			for (const chunk of chunks) {
-				buffer.set(chunk, offset);
-				offset += chunk.length;
-			}
-			nativeOptions.body = buffer;
+			// Use our custom StreamBody to bypass NAPI-rs's buggy ReadableStream Reader.
+			// We create a channel-based stream and push chunks from JavaScript,
+			// which avoids the chunk dropping issue while preserving true streaming.
+			const { body: streamBody, sender } = native.createStreamBodyPair();
+			const originalStream = nativeOptions.body;
+			delete nativeOptions.body;
 
-			// Now fall through to the normal Buffer body handling below
+			// Attach to the default agent if none is provided
+			if (!nativeOptions.agent) {
+				if (!defaultAgent) {
+					defaultAgent = new native.Agent();
+				}
+				nativeOptions.agent = defaultAgent;
+			}
+
+			// Extract signal to pass as separate parameter
+			const signal = nativeOptions.signal;
+			delete nativeOptions.signal;
+
+			// Check if signal is already aborted
+			if (signal && signal.aborted) {
+				sender.close();
+				const error = new Error(
+					"Aborted: the request was aborted before it could start",
+				);
+				error.name = "AbortError";
+				error.code = ERROR_CODES.Aborted;
+				throw error;
+			}
+
+			// Start the fetch with the StreamBody
+			const responsePromise = faithFetch(
+				url,
+				nativeOptions,
+				signal,
+				streamBody,
+			);
+
+			// Pump chunks from the ReadableStream to the StreamBodySender
+			const reader = originalStream.getReader();
+			(async () => {
+				try {
+					while (true) {
+						const { done, value } = await reader.read();
+						if (done) {
+							sender.close();
+							break;
+						}
+						// Convert to Buffer if needed and push
+						const buffer = Buffer.isBuffer(value)
+							? value
+							: Buffer.from(value);
+						const sent = await sender.push(buffer);
+						if (!sent) {
+							// Receiver dropped (request completed/aborted)
+							break;
+						}
+					}
+				} catch (err) {
+					// Stream error - close the sender
+					sender.close();
+				}
+			})();
+
+			const nativeResponse = await responsePromise;
+			return new Response(nativeResponse);
 		} else if (nativeOptions.body instanceof ArrayBuffer) {
 			nativeOptions.body = Buffer.from(nativeOptions.body);
 		} else if (Array.isArray(nativeOptions.body)) {
@@ -352,6 +392,7 @@ module.exports = {
 	Agent: native.Agent,
 	CacheMode: native.CacheMode,
 	CacheStore: native.CacheStore,
+	createStreamBodyPair: native.createStreamBodyPair,
 	Credentials: native.CredentialsOption,
 	Duplex: native.DuplexOption,
 	ERROR_CODES,
@@ -361,5 +402,7 @@ module.exports = {
 	Redirect: native.Redirect,
 	REQWEST_VERSION: native.REQWEST_VERSION,
 	Response,
+	StreamBody: native.StreamBody,
+	StreamBodySender: native.StreamBodySender,
 	USER_AGENT: native.USER_AGENT,
 };

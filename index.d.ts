@@ -223,6 +223,29 @@ trailers(): Promise<Array<[string, string]> | null>
 clone(): FaithResponse
 }
 
+/**
+ * A streaming body that can be passed to fetch().
+ * Create one with createStreamBodyPair(), then use the returned sender to push chunks.
+ */
+export declare class StreamBody {
+
+}
+
+/**
+ * A sender that allows JavaScript to push chunks into a Rust stream.
+ * This bypasses NAPI-rs's buggy ReadableStream Reader by letting JS
+ * drive the chunk delivery explicitly.
+ */
+export declare class StreamBodySender {
+  /**
+   * Push a chunk of data into the stream.
+   * Returns true if the chunk was sent successfully, false if the receiver was dropped.
+   */
+  push(chunk: Buffer): Promise<boolean>
+  /** Close the stream, signaling that no more chunks will be sent. */
+  close(): void
+}
+
 /** Settings related to the HTTP cache. This is a nested object. */
 export interface AgentCacheOptions {
   /**
@@ -528,6 +551,25 @@ export declare const enum CacheStore {
 }
 
 /**
+ * Create a paired StreamBody and StreamBodySender for streaming request bodies.
+ *
+ * Usage:
+ * ```js
+ * const { body, sender } = createStreamBodyPair();
+ * // Start the fetch with the body
+ * const responsePromise = fetch(url, { method: 'POST', body, duplex: 'half' });
+ * // Push chunks asynchronously
+ * await sender.push(Buffer.from('chunk1'));
+ * await sender.push(Buffer.from('chunk2'));
+ * // Close when done
+ * sender.close();
+ * // Wait for response
+ * const response = await responsePromise;
+ * ```
+ */
+export declare function createStreamBodyPair(bufferSize?: number | undefined | null): { body: StreamBody, sender: StreamBodySender }
+
+/**
  * Controls whether or not the client sends credentials with the request, as well as whether any
  * `Set-Cookie` response headers are respected. Credentials are cookies, ~~TLS client certificates,~~
  * or authentication headers containing a username and password. This option may be any one of the
@@ -629,7 +671,7 @@ export declare const enum FaithErrorKind {
   Utf8Parse = 'Utf8Parse'
 }
 
-export declare function faithFetch(url: string, options: FaithOptionsAndBody, signal?: AbortSignal | undefined | null, streamBody?: ReadableStream<Buffer> | undefined | null): Async<FaithResponse>
+export declare function faithFetch(url: string, options: FaithOptionsAndBody, signal?: AbortSignal | undefined | null, streamBody?: StreamBody | undefined | null): Async<FaithResponse>
 
 export interface FaithOptionsAndBody {
   agent: Agent
