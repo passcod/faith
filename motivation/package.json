@@ -10,7 +10,7 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
-    "@passcod/faith": "^0.0.4",
+    "@passcod/faith": "^0.0.5",
     "node-fetch": "^3.3.2"
   }
 }
