@@ -547,6 +547,7 @@ impl Agent {
 		}
 
 		if let Some(tls) = options.tls {
+			#[cfg(feature = "http3")]
 			if let Some(early_data) = tls.early_data {
 				client = client.tls_early_data(early_data);
 			}
