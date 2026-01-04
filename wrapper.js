@@ -52,6 +52,21 @@ class Response {
 		return headers;
 	}
 
+	get trailers() {
+		return (async () => {
+			const headerPairs = await this.#nativeResponse.trailers();
+			if (!Array.isArray(headerPairs)) {
+				return null;
+			}
+
+			const headers = new Headers();
+			for (const [name, value] of headerPairs) {
+				headers.append(name, value);
+			}
+			return headers;
+		})();
+	}
+
 	get body() {
 		return this.#nativeResponse.body();
 	}

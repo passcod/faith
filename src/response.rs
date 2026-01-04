@@ -381,12 +381,15 @@ impl FaithResponse {
 		})
 	}
 
-	/// The `trailers()` method of the `Response` interface returns a promise that resolves to either
-	/// `null` or a `Headers` structure that contains the HTTP/2 or /3 trailing headers.
+	/// The `trailers()` read-only property of the `Response` interface returns a promise that
+	/// resolves to either `null` or a `Headers` structure that contains the HTTP/2 or /3 trailing
+	/// headers.
 	///
 	/// This was once in the spec as a getter but was removed as it wasn't implemented by any browser.
 	///
 	/// Note that this will never resolve if you don't also consume the body in some way.
+	///
+	/// This is an async fn as an internal implementation detail and the wrapper makes it a property.
 	#[napi]
 	pub async fn trailers(&self) -> Option<Vec<(String, String)>> {
 		let t = Arc::clone(&self.trailers);

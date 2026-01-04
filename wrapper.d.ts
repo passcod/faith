@@ -323,6 +323,16 @@ export class Response {
 	formData(): Promise<FormData>;
 
 	/**
+	 * The `trailers()` method of the `Response` interface returns a promise that resolves to either
+	 * `null` or a `Headers` structure that contains the HTTP/2 or /3 trailing headers.
+	 *
+	 * This was once in the spec as a getter but was removed as it wasn't implemented by any browser.
+	 *
+	 * Note that this will never resolve if you don't also consume the body in some way.
+	 */
+	trailers(): Promise<Headers | null>;
+
+	/**
 	 * The `clone()` method of the `Response` interface creates a clone of a response object, identical
 	 * in every way, but stored in a different variable.
 	 *
