@@ -275,6 +275,17 @@ export class Response {
 	readonly body: ReadableStream<Uint8Array> | null;
 
 	/**
+	 * The `trailers()` read-only property of the `Response` interface returns a promise that
+	 * resolves to either `null` or a `Headers` structure that contains the HTTP/2 or /3 trailing
+	 * headers.
+	 *
+	 * This was once in the spec but was removed as it wasn't implemented by any browser.
+	 *
+	 * Note that this will never resolve if you don't also consume the body in some way.
+	 */
+	readonly trailers: Promise<Headers | null>;
+
+	/**
 	 * Discard the response body, releasing the connection back to the pool.
 	 *
 	 * This is useful when you don't need the body but want to ensure the connection
@@ -334,16 +345,6 @@ export class Response {
 	 * Fáith deliberately does not implement this. It will always throw.
 	 */
 	formData(): Promise<FormData>;
-
-	/**
-	 * The `trailers()` method of the `Response` interface returns a promise that resolves to either
-	 * `null` or a `Headers` structure that contains the HTTP/2 or /3 trailing headers.
-	 *
-	 * This was once in the spec as a getter but was removed as it wasn't implemented by any browser.
-	 *
-	 * Note that this will never resolve if you don't also consume the body in some way.
-	 */
-	trailers(): Promise<Headers | null>;
 
 	/**
 	 * The `clone()` method of the `Response` interface creates a clone of a response object, identical

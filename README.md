@@ -401,6 +401,15 @@ In HTTP/1, servers can send custom status text. This is returned here. In HTTP/2
 status text is not supported at all, and the `statusText` property is either empty or simulated
 from well-known status codes.
 
+### `Response.trailers: Promise<Headers | null>`
+
+The `trailers()` read-only property of the `Response` interface returns a promise that resolves to
+either `null` or a `Headers` structure that contains the HTTP/2 or /3 trailing headers.
+
+Note that this will never resolve if you don't also consume the body in some way.
+
+Custom to Fáith. This was once in the spec but was removed as it wasn't implemented by any browser.
+
 ### `Response.type: string`
 
 *The `type` read-only property of the `Response` interface contains the type of the response. The
@@ -445,6 +454,20 @@ In Fáith, this returns a Node.js `Buffer`, which can be used as (and is a subcl
 in every way, but stored in a different variable.*
 
 *`clone()` throws an error if the response body has already been used.*
+
+### `Response.discard(): Promise<void>`
+
+Discard the response body, releasing the connection back to the pool.
+
+This is useful when you don't need the body but want to ensure the connection can be reused for
+subsequent requests. If you don't call this and don't consume the body, the connection may be held
+open until the response is garbage collected. When the connection is HTTP/2 or /3, calling this is
+not necessary as the connection can be reused regardless, but it's still good practice to make it
+explicit and won't do unnecessary work in those cases.
+
+The returned promise resolves when the body has been fully discarded.
+
+This is custom to Fáith.
 
 ### `Response.formData(): !`
 
@@ -624,6 +647,31 @@ defines bounds for safety: minimum 1 second, maximum 2 minutes (120 seconds).
 
 Default: 30.
 
+#### `AgentOptions.http3.upgradeEnabled: bool`
+
+Fáith keeps track of "Alt-Svc" advertisements from the servers, which indicate if and how HTTP/3 is
+available. It then uses those advertisements to attempt connection over HTTP/3, and also keeps
+track of failures, so it doesn't waste time retrying HTTP/3 for hosts that don't actually support
+it even if they did advertise it.
+
+Setting this setting to `false` disables this mechanism, which effectively disables HTTP/3 usage.
+
+Default: `true`.
+
+#### `AgentOptions.http3.hints: Array<{ host: string; port: number }>`
+
+If you know upfront that a host has HTTP/3 support, and at what port it's listening, you can skip
+a first HTTP/1 or /2 connection by providing a hint here. If the connection fails, the hint will
+be ignored for the `upgradeFailedTtl` duration, just like for the normal pathway with Alt-Svc
+advertisements (essentially, hints pre-populate the Alt-Svc advertisements cache).
+
+#### `AgentOptions.http3.upgradeAdvertisedTtl: number`
+#### `AgentOptions.http3.upgradeConfirmedTtl: number`
+#### `AgentOptions.http3.upgradeFailedTtl: number`
+#### `AgentOptions.http3.upgradeCacheCapacity: number`
+
+These four settings allow tweaking the HTTP/3 advertisement/knowledge cache behaviour.
+
 ### `AgentOptions.pool: object`
 
 Settings related to the connection pool. This is a nested object.
@@ -750,6 +798,8 @@ Returns statistics gathered by this agent:
 
 - `requestsSent`
 - `responsesReceived`
+- `bodiesStarted`
+- `bodiesFinished`
 
 ## Error mapping
 
