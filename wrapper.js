@@ -287,12 +287,23 @@ async function fetch(resource, options = {}) {
 			}
 
 			// Workaround for NAPI-rs ReadableStream chunk dropping issue:
-			// Pipe through an identity TransformStream to ensure proper chunk delivery.
-			// Without this, NAPI-rs may skip chunks when polling the stream on certain
-			// platforms/Node versions (observed on macOS, Windows, and Ubuntu with Node 22+).
-			const { readable, writable } = new TransformStream();
-			nativeOptions.body.pipeTo(writable).catch(() => {});
-			const streamBody = readable;
+			// NAPI-rs's Reader may skip chunks when polling rapidly. We work around this
+			// by creating a new pull-based stream that explicitly reads from the original
+			// using getReader(), which ensures proper sequencing.
+			const originalReader = nativeOptions.body.getReader();
+			const streamBody = new ReadableStream({
+				async pull(controller) {
+					const { done, value } = await originalReader.read();
+					if (done) {
+						controller.close();
+					} else {
+						controller.enqueue(value);
+					}
+				},
+				cancel(reason) {
+					originalReader.cancel(reason);
+				},
+			});
 			delete nativeOptions.body;
 
 			// Attach to the default agent if none is provided
