@@ -15,7 +15,7 @@ use tokio::sync::{Mutex, mpsc};
 
 use crate::{
 	async_task::{Async, FaithAsyncResult},
-	body::Body,
+	body::{Body, BodyHolder},
 	error::{FaithError, FaithErrorKind},
 	options::{CredentialsOption, FaithOptions, FaithOptionsAndBody},
 	response::{FaithResponse, PeerInformation},
@@ -137,10 +137,12 @@ pub fn faith_fetch(
 
 		Ok(FaithResponse {
 			body: if empty {
-				None
+				BodyHolder::none()
 			} else {
 				let http_response: http::Response<_> = response.into();
-				Some(Arc::new(Mutex::new(Body::Inner(http_response.into_body()))))
+				BodyHolder::new(Some(Arc::new(Mutex::new(Body::Inner(
+					http_response.into_body(),
+				)))))
 			},
 			disturbed: Arc::new(AtomicBool::new(false)),
 			headers,

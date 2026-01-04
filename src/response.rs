@@ -19,15 +19,12 @@ use napi_derive::napi;
 use reqwest::{StatusCode, Url, Version, header::HeaderMap};
 use serde_json;
 use stream_shared::SharedStream;
-use tokio::{
-	sync::{Mutex, RwLock},
-	task::yield_now,
-};
+use tokio::{sync::RwLock, task::yield_now};
 
 use crate::{
 	agent::InnerAgentStats,
 	async_task::{Async, FaithAsyncResult, Value},
-	body::{Body, DynStream},
+	body::{Body, BodyHolder, DynStream, drain_body_inner},
 	error::{FaithError, FaithErrorKind},
 };
 
@@ -38,7 +35,7 @@ use crate::{
 #[napi]
 #[derive(Debug, Clone)]
 pub struct FaithResponse {
-	pub(crate) body: Option<Arc<Mutex<Body>>>,
+	pub(crate) body: BodyHolder,
 	pub(crate) disturbed: Arc<AtomicBool>,
 	pub(crate) headers: HeaderMap,
 	pub(crate) peer: Arc<PeerInformation>,
@@ -207,7 +204,7 @@ impl FaithResponse {
 		// as essentially, the body() can be accessed many times as the same stream
 		let _ = self.check_stream_disturbed();
 
-		let Some(lock) = &self.body else {
+		let Some(lock) = &self.body.body else {
 			return Ok(None);
 		};
 
@@ -216,7 +213,9 @@ impl FaithResponse {
 			.try_lock()
 			.map_err(|_| FaithError::from(FaithErrorKind::ResponseAlreadyDisturbed).into_napi())?;
 
-		let stream = self.ensure_stream(&mut body).map_err(|e| e.into_napi())?;
+		let stream = self
+			.ensure_stream(&mut body, self.body.drained.clone())
+			.map_err(|e| e.into_napi())?;
 
 		let stream = napi::bindgen_prelude::ReadableStream::create_with_stream_bytes(
 			&env,
@@ -246,6 +245,7 @@ impl FaithResponse {
 	fn ensure_stream(
 		&self,
 		body: &mut Body,
+		drained_flag: Arc<AtomicBool>,
 	) -> Result<SharedStream<Pin<Box<DynStream>>>, FaithError> {
 		match body {
 			Body::Consumed => Err(FaithErrorKind::ResponseAlreadyDisturbed.into()),
@@ -263,6 +263,7 @@ impl FaithResponse {
 				let trailers_stream = self.trailers.clone();
 				let trailers_finish = self.trailers.clone();
 				let stats_finish = self.stats.clone();
+				let drained_finish = drained_flag.clone();
 				let stream = SharedStream::new(Box::pin(
 					BodyStream::new(inner)
 						.then(move |frame| {
@@ -292,6 +293,8 @@ impl FaithResponse {
 							}
 							// Track that we've finished consuming a body
 							stats_finish.bodies_finished.fetch_add(1, Ordering::Relaxed);
+							// Mark body as drained so Drop doesn't try to drain again
+							drained_finish.store(true, Ordering::SeqCst);
 							None
 						}))
 						.filter_map(async |item| item),
@@ -310,12 +313,12 @@ impl FaithResponse {
 	/// Unlike bytes() and co, this grabs all the chunks of the response but doesn't
 	/// copy them. Further processing is needed to obtain a Vec<u8> or whatever needed.
 	async fn gather(&self) -> Result<Arc<[Bytes]>, FaithError> {
-		let Some(lock) = &self.body else {
+		let Some(lock) = &self.body.body else {
 			return Ok(Default::default());
 		};
 
 		let mut body = lock.lock().await;
-		let stream = self.ensure_stream(&mut body)?;
+		let stream = self.ensure_stream(&mut body, self.body.drained.clone())?;
 		drop(body); // release lock before consuming stream
 
 		let mut chunks = Vec::new();
@@ -326,7 +329,30 @@ impl FaithResponse {
 			chunks.push(chunk);
 		}
 
+		// Mark as drained since we consumed everything
+		self.body.mark_drained();
+
 		Ok(Arc::from(chunks.into_boxed_slice()))
+	}
+
+	/// Discard the response body, releasing the connection back to the pool.
+	///
+	/// This is useful when you don't need the body but want to ensure the connection
+	/// can be reused for subsequent requests. If you don't call this and don't consume
+	/// the body, the connection may be held open until the response is garbage collected.
+	///
+	/// Returns a promise that resolves when the body has been fully discarded.
+	#[napi]
+	pub fn discard(&self) -> Async<()> {
+		let body = self.body.body.clone();
+		let drained_flag = self.body.drained.clone();
+		FaithAsyncResult::run(async move || {
+			if let Some(arc) = body {
+				drain_body_inner(arc).await;
+				drained_flag.store(true, Ordering::SeqCst);
+			}
+			Ok(())
+		})
 	}
 
 	/// gather() and then copy into one contiguous buffer

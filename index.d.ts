@@ -162,6 +162,16 @@ get bodyUsed(): boolean
  */
 body(): ReadableStream<Buffer> | null
 /**
+ * Discard the response body, releasing the connection back to the pool.
+ *
+ * This is useful when you don't need the body but want to ensure the connection
+ * can be reused for subsequent requests. If you don't call this and don't consume
+ * the body, the connection may be held open until the response is garbage collected.
+ *
+ * Returns a promise that resolves when the body has been fully discarded.
+ */
+discard(): Async<undefined>
+/**
  * The `bytes()` method of the `Response` interface takes a `Response` stream and reads it to
  * completion. It returns a promise that resolves with a `Uint8Array`.
  *

@@ -120,6 +120,19 @@ class Response {
 	}
 
 	/**
+	 * Discard the response body, releasing the connection back to the pool.
+	 *
+	 * This is useful when you don't need the body but want to ensure the connection
+	 * can be reused for subsequent requests. If you don't call this and don't consume
+	 * the body, the connection may be held open until the response is garbage collected.
+	 *
+	 * @returns {Promise<void>} Resolves when the body has been fully discarded
+	 */
+	async discard() {
+		return await this.#nativeResponse.discard();
+	}
+
+	/**
 	 * Create a clone of the Response object
 	 * @returns {Response} A new Response object with the same properties
 	 * @throws {Error} If response body has already been read
