@@ -317,6 +317,44 @@ export interface AgentHttp3Options {
    * Default: 30.
    */
   maxIdleTimeout?: number
+  /**
+   * Whether HTTP/3 upgrade via Alt-Svc is enabled. When enabled, the agent will track Alt-Svc
+   * headers from responses and automatically upgrade subsequent requests to HTTP/3 when available.
+   *
+   * Default: true.
+   */
+  upgradeEnabled?: boolean
+  /**
+   * How long (in seconds) to cache an Alt-Svc advertisement before the first HTTP/3 attempt.
+   * This is overridden by the `ma` (max-age) parameter in the Alt-Svc header if present.
+   *
+   * Default: 86400 (24 hours).
+   */
+  upgradeAdvertisedTtl?: number
+  /**
+   * How long (in seconds) to cache a confirmed working HTTP/3 connection.
+   *
+   * Default: 86400 (24 hours).
+   */
+  upgradeConfirmedTtl?: number
+  /**
+   * How long (in seconds) to cache a failed HTTP/3 attempt. During this time, no HTTP/3
+   * upgrades will be attempted for the origin, even if the server sends Alt-Svc headers.
+   *
+   * Default: 300 (5 minutes).
+   */
+  upgradeFailedTtl?: number
+  /**
+   * Maximum number of origins to track in the Alt-Svc cache.
+   *
+   * Default: 10000.
+   */
+  upgradeCacheCapacity?: number
+  /**
+   * Hints for hosts that are known to support HTTP/3. These are added to the Alt-Svc cache
+   * on agent initialization, so the first request to these hosts will attempt HTTP/3.
+   */
+  hints?: Array<Http3Hint>
 }
 
 export interface AgentOptions {
@@ -619,6 +657,17 @@ export interface Header {
 export declare const enum Http3Congestion {
   Cubic = 'cubic',
   Bbr1 = 'bbr1'
+}
+
+/**
+ * A hint that HTTP/3 is available at a specific host and port. This pre-populates the Alt-Svc
+ * cache so the first request to this host will attempt HTTP/3 immediately.
+ */
+export interface Http3Hint {
+  /** The hostname (e.g., "example.com"). */
+  host: string
+  /** The port number (e.g., 443). */
+  port: number
 }
 
 /**

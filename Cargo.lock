@@ -476,11 +476,13 @@ dependencies = [
 name = "faith"
 version = "0.0.7"
 dependencies = [
+ "async-trait",
  "bytes",
  "futures",
  "http",
  "http-body-util",
  "http-cache-reqwest",
+ "moka",
  "napi",
  "napi-build",
  "napi-derive",

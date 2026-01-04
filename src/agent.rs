@@ -22,6 +22,8 @@ use reqwest::{
 };
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 
+#[cfg(feature = "http3")]
+use crate::alt_svc::{AltSvcCache, AltSvcMiddleware};
 use crate::{
 	error::{FaithError, FaithErrorKind},
 	options::RequestCacheMode,
@@ -150,6 +152,17 @@ pub enum Http3Congestion {
 	Bbr1,
 }
 
+/// A hint that HTTP/3 is available at a specific host and port. This pre-populates the Alt-Svc
+/// cache so the first request to this host will attempt HTTP/3 immediately.
+#[napi(object)]
+#[derive(Debug, Clone)]
+pub struct Http3Hint {
+	/// The hostname (e.g., "example.com").
+	pub host: String,
+	/// The port number (e.g., 443).
+	pub port: u16,
+}
+
 /// Settings related to HTTP/3. This is a nested object.
 #[napi(object)]
 #[derive(Debug, Clone, Default)]
@@ -175,6 +188,32 @@ pub struct AgentHttp3Options {
 	///
 	/// Default: 30.
 	pub max_idle_timeout: Option<u8>,
+	/// Whether HTTP/3 upgrade via Alt-Svc is enabled. When enabled, the agent will track Alt-Svc
+	/// headers from responses and automatically upgrade subsequent requests to HTTP/3 when available.
+	///
+	/// Default: true.
+	pub upgrade_enabled: Option<bool>,
+	/// How long (in seconds) to cache an Alt-Svc advertisement before the first HTTP/3 attempt.
+	/// This is overridden by the `ma` (max-age) parameter in the Alt-Svc header if present.
+	///
+	/// Default: 86400 (24 hours).
+	pub upgrade_advertised_ttl: Option<u32>,
+	/// How long (in seconds) to cache a confirmed working HTTP/3 connection.
+	///
+	/// Default: 86400 (24 hours).
+	pub upgrade_confirmed_ttl: Option<u32>,
+	/// How long (in seconds) to cache a failed HTTP/3 attempt. During this time, no HTTP/3
+	/// upgrades will be attempted for the origin, even if the server sends Alt-Svc headers.
+	///
+	/// Default: 300 (5 minutes).
+	pub upgrade_failed_ttl: Option<u32>,
+	/// Maximum number of origins to track in the Alt-Svc cache.
+	///
+	/// Default: 10000.
+	pub upgrade_cache_capacity: Option<u32>,
+	/// Hints for hosts that are known to support HTTP/3. These are added to the Alt-Svc cache
+	/// on agent initialization, so the first request to these hosts will attempt HTTP/3.
+	pub hints: Option<Vec<Http3Hint>>,
 }
 
 /// Settings related to the connection pool. This is a nested object.
@@ -371,6 +410,9 @@ pub struct Agent {
 	pub(crate) client: ClientWithMiddleware,
 	pub(crate) cookie_jar: Option<Arc<Jar>>,
 	pub(crate) stats: Arc<InnerAgentStats>,
+	#[cfg(feature = "http3")]
+	#[allow(dead_code)]
+	pub(crate) alt_svc_cache: Option<Arc<AltSvcCache>>,
 }
 
 #[napi]
@@ -451,7 +493,7 @@ impl Agent {
 		}
 
 		#[cfg(feature = "http3")]
-		if let Some(http3) = options.http3 {
+		if let Some(ref http3) = options.http3 {
 			if let Some(Http3Congestion::Bbr1) = http3.congestion {
 				client = client.http3_congestion_bbr();
 			}
@@ -528,6 +570,52 @@ impl Agent {
 
 		let mut client = ClientBuilder::new(client.build()?);
 
+		#[cfg(feature = "http3")]
+		let alt_svc_cache = {
+			let http3_opts = options.http3.as_ref();
+			let enabled = http3_opts.and_then(|o| o.upgrade_enabled).unwrap_or(true);
+
+			let advertised_ttl = Duration::from_secs(
+				http3_opts
+					.and_then(|o| o.upgrade_advertised_ttl)
+					.unwrap_or(86400)
+					.into(),
+			);
+			let confirmed_ttl = Duration::from_secs(
+				http3_opts
+					.and_then(|o| o.upgrade_confirmed_ttl)
+					.unwrap_or(86400)
+					.into(),
+			);
+			let failed_ttl = Duration::from_secs(
+				http3_opts
+					.and_then(|o| o.upgrade_failed_ttl)
+					.unwrap_or(300)
+					.into(),
+			);
+			let capacity = http3_opts
+				.and_then(|o| o.upgrade_cache_capacity)
+				.unwrap_or(10_000)
+				.into();
+
+			let cache = Arc::new(AltSvcCache::new(
+				advertised_ttl,
+				confirmed_ttl,
+				failed_ttl,
+				capacity,
+			));
+
+			if let Some(hints) = http3_opts.and_then(|o| o.hints.as_ref()) {
+				for hint in hints {
+					cache.add_hint(&hint.host, hint.port);
+				}
+			}
+
+			client = client.with(AltSvcMiddleware::new(cache.clone(), enabled));
+
+			Some(cache)
+		};
+
 		if let Some(cache) = options.cache
 			&& let Some(store) = cache.store
 		{
@@ -576,6 +664,8 @@ impl Agent {
 			client: client.build(),
 			cookie_jar,
 			stats: Default::default(),
+			#[cfg(feature = "http3")]
+			alt_svc_cache,
 		})
 	}
 
