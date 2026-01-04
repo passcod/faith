@@ -6,11 +6,8 @@
   "author": "Félix Saparelli <felix@passcod.name> (https://passcod.name/)",
   "type": "module",
   "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
   "dependencies": {
-    "@passcod/faith": "^0.0.5",
+    "@passcod/faith": "^0.0.7",
     "node-fetch": "^3.3.2"
   }
 }

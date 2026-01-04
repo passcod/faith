@@ -275,6 +275,19 @@ export class Response {
 	readonly body: ReadableStream<Uint8Array> | null;
 
 	/**
+	 * Discard the response body, releasing the connection back to the pool.
+	 *
+	 * This is useful when you don't need the body but want to ensure the connection
+	 * can be reused for subsequent requests. If you don't call this and don't consume
+	 * the body, the connection may be held open until the response is garbage collected.
+	 *
+	 * This is custom to Fáith.
+	 *
+	 * @returns {Promise<void>} Resolves when the body has been fully discarded
+	 */
+	discard(): Promise<void>;
+
+	/**
 	 * The `text()` method of the `Response` interface takes a `Response` stream and reads it to
 	 * completion. It returns a promise that resolves with a `String`. The response is always decoded
 	 * using UTF-8.
