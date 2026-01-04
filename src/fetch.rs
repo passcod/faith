@@ -14,7 +14,6 @@ use reqwest::{
 	tls::TlsInfo,
 };
 use tokio::sync::{Mutex, mpsc};
-use tokio_stream::wrappers::ReceiverStream;
 
 use crate::{
 	async_task::{Async, FaithAsyncResult},
@@ -109,26 +108,34 @@ pub fn faith_fetch(
 
 		// Handle body: prefer streaming body over buffered body
 		if let Some(reader) = stream_reader {
-			// Use a channel to synchronize chunk delivery from the NAPI Reader.
-			// This ensures chunks are properly sequenced and not dropped due to
-			// timing issues between the JS ReadableStream and reqwest's body stream.
-			let (tx, rx) = mpsc::channel::<Result<Bytes, std::io::Error>>(16);
-
-			// Spawn a task to read from the NAPI Reader and send chunks through the channel
-			tokio::spawn(async move {
+			// Use async_stream to lazily consume chunks from the NAPI Reader.
+			// This ensures chunks are read on-demand when reqwest needs them,
+			// avoiding race conditions that can occur with eager spawned tasks.
+			let byte_stream = async_stream::stream! {
 				futures::pin_mut!(reader);
+				let mut chunk_index = 0usize;
+				eprintln!("[faith debug] starting to read stream");
 				while let Some(result) = reader.next().await {
 					let chunk = result
-						.map(|buf| Bytes::copy_from_slice(buf.as_ref()))
-						.map_err(|e| std::io::Error::other(e.to_string()));
-					if tx.send(chunk).await.is_err() {
-						// Receiver dropped, stop reading
-						break;
-					}
+						.map(|buf| {
+							let bytes = Bytes::copy_from_slice(buf.as_ref());
+							eprintln!(
+								"[faith debug] chunk {}: {} bytes: {:?}",
+								chunk_index,
+								bytes.len(),
+								String::from_utf8_lossy(&bytes)
+							);
+							bytes
+						})
+						.map_err(|e| {
+							eprintln!("[faith debug] chunk {} error: {}", chunk_index, e);
+							std::io::Error::other(e.to_string())
+						});
+					chunk_index += 1;
+					yield chunk;
 				}
-			});
-
-			let byte_stream = ReceiverStream::new(rx);
+				eprintln!("[faith debug] finished reading {} chunks", chunk_index);
+			};
 			request = request.body(reqwest::Body::wrap_stream(byte_stream));
 		} else if let Some(body) = &body {
 			request = request.body(body.to_vec());
