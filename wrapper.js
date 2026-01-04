@@ -287,63 +287,31 @@ async function fetch(resource, options = {}) {
 			}
 
 			// Workaround for NAPI-rs ReadableStream chunk dropping issue:
-			// NAPI-rs's Reader may skip chunks when polling rapidly with async pull().
-			// We work around this by pre-reading all chunks into a buffer in start(),
-			// then using a synchronous pull() to deliver them one at a time.
+			// NAPI-rs's Reader drops chunks unpredictably when polling ReadableStream.
+			// The only reliable workaround is to fully consume the stream in JavaScript
+			// and pass the collected bytes as a Buffer to the native binding.
+			// This sacrifices true streaming but ensures data integrity.
 			const originalReader = nativeOptions.body.getReader();
-			const streamBody = new ReadableStream({
-				async start(controller) {
-					// Pre-read all chunks into an array
-					this.chunks = [];
-					while (true) {
-						const { done, value } = await originalReader.read();
-						if (done) break;
-						this.chunks.push(value);
-					}
-					this.index = 0;
-				},
-				pull(controller) {
-					if (this.index < this.chunks.length) {
-						controller.enqueue(this.chunks[this.index++]);
-					} else {
-						controller.close();
-					}
-				},
-				cancel(reason) {
-					originalReader.cancel(reason);
-				},
-			});
-			delete nativeOptions.body;
-
-			// Attach to the default agent if none is provided
-			if (!nativeOptions.agent) {
-				if (!defaultAgent) {
-					defaultAgent = new native.Agent();
-				}
-				nativeOptions.agent = defaultAgent;
+			const chunks = [];
+			while (true) {
+				const { done, value } = await originalReader.read();
+				if (done) break;
+				chunks.push(value);
 			}
-
-			// Extract signal to pass as separate parameter
-			const signal = nativeOptions.signal;
-			delete nativeOptions.signal;
-
-			// Check if signal is already aborted
-			if (signal && signal.aborted) {
-				const error = new Error(
-					"Aborted: the request was aborted before it could start",
-				);
-				error.name = "AbortError";
-				error.code = ERROR_CODES.Aborted;
-				throw error;
-			}
-
-			const nativeResponse = await faithFetch(
-				url,
-				nativeOptions,
-				signal,
-				streamBody,
+			// Concatenate all chunks into a single Buffer
+			const totalLength = chunks.reduce(
+				(sum, chunk) => sum + chunk.length,
+				0,
 			);
-			return new Response(nativeResponse);
+			const buffer = Buffer.alloc(totalLength);
+			let offset = 0;
+			for (const chunk of chunks) {
+				buffer.set(chunk, offset);
+				offset += chunk.length;
+			}
+			nativeOptions.body = buffer;
+
+			// Now fall through to the normal Buffer body handling below
 		} else if (nativeOptions.body instanceof ArrayBuffer) {
 			nativeOptions.body = Buffer.from(nativeOptions.body);
 		} else if (Array.isArray(nativeOptions.body)) {
