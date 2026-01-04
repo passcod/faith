@@ -168,6 +168,9 @@ body(): ReadableStream<Buffer> | null
  * can be reused for subsequent requests. If you don't call this and don't consume
  * the body, the connection may be held open until the response is garbage collected.
  *
+ * For HTTP/2 and HTTP/3, this is a no-op since multiplexed connections don't need
+ * draining - the connection can be reused immediately for other streams.
+ *
  * Returns a promise that resolves when the body has been fully discarded.
  */
 discard(): Async<undefined>

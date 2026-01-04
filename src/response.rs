@@ -341,12 +341,23 @@ impl FaithResponse {
 	/// can be reused for subsequent requests. If you don't call this and don't consume
 	/// the body, the connection may be held open until the response is garbage collected.
 	///
+	/// For HTTP/2 and HTTP/3, this is a no-op since multiplexed connections don't need
+	/// draining - the connection can be reused immediately for other streams.
+	///
 	/// Returns a promise that resolves when the body has been fully discarded.
 	#[napi]
 	pub fn discard(&self) -> Async<()> {
 		let body = self.body.body.clone();
 		let drained_flag = self.body.drained.clone();
+		let is_multiplexed = self.body.is_multiplexed();
 		FaithAsyncResult::run(async move || {
+			// For HTTP/2 and HTTP/3, connections are multiplexed - dropping a body
+			// stream doesn't prevent connection reuse, so no need to drain.
+			if is_multiplexed {
+				drained_flag.store(true, Ordering::SeqCst);
+				return Ok(());
+			}
+
 			if let Some(arc) = body {
 				drain_body_inner(arc).await;
 				drained_flag.store(true, Ordering::SeqCst);

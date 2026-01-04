@@ -11,6 +11,7 @@ use std::{
 use bytes::Bytes;
 use futures::{Stream, StreamExt};
 use http_body_util::BodyExt;
+use reqwest::Version;
 use stream_shared::SharedStream;
 use tokio::sync::Mutex;
 
@@ -27,12 +28,15 @@ pub(crate) struct BodyHolder {
 	pub body: Option<Arc<Mutex<Body>>>,
 	/// Flag to prevent drain if body was properly consumed
 	pub(crate) drained: Arc<AtomicBool>,
+	/// HTTP version - HTTP/2+ doesn't need draining for connection reuse
+	pub(crate) version: Version,
 }
 
 impl BodyHolder {
-	pub fn new(body: Option<Arc<Mutex<Body>>>) -> Self {
+	pub fn new(body: Option<Arc<Mutex<Body>>>, version: Version) -> Self {
 		Self {
 			body,
+			version,
 			drained: Arc::new(AtomicBool::new(false)),
 		}
 	}
@@ -40,18 +44,20 @@ impl BodyHolder {
 	pub fn none() -> Self {
 		Self {
 			body: None,
+			version: Version::HTTP_11,
 			drained: Arc::new(AtomicBool::new(true)),
 		}
+	}
+
+	/// Returns true if this is HTTP/2 or HTTP/3 (multiplexed protocols)
+	/// where dropping a body doesn't block connection reuse.
+	pub fn is_multiplexed(&self) -> bool {
+		matches!(self.version, Version::HTTP_2 | Version::HTTP_3)
 	}
 
 	/// Mark the body as drained (called when body is fully consumed)
 	pub fn mark_drained(&self) {
 		self.drained.store(true, Ordering::SeqCst);
-	}
-
-	/// Check if already drained
-	pub fn is_drained(&self) -> bool {
-		self.drained.load(Ordering::SeqCst)
 	}
 }
 
@@ -60,6 +66,7 @@ impl Clone for BodyHolder {
 		Self {
 			body: self.body.clone(),
 			drained: self.drained.clone(),
+			version: self.version,
 		}
 	}
 }
@@ -69,6 +76,7 @@ impl Debug for BodyHolder {
 		f.debug_struct("BodyHolder")
 			.field("body", &self.body)
 			.field("drained", &self.drained.load(Ordering::SeqCst))
+			.field("version", &self.version)
 			.finish()
 	}
 }
@@ -76,6 +84,12 @@ impl Debug for BodyHolder {
 impl Drop for BodyHolder {
 	fn drop(&mut self) {
 		if self.drained.load(Ordering::SeqCst) {
+			return;
+		}
+
+		// For HTTP/2 and HTTP/3, connections are multiplexed - dropping a body
+		// stream doesn't prevent connection reuse, so no need to drain.
+		if self.is_multiplexed() {
 			return;
 		}
 

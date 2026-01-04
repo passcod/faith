@@ -140,9 +140,10 @@ pub fn faith_fetch(
 				BodyHolder::none()
 			} else {
 				let http_response: http::Response<_> = response.into();
-				BodyHolder::new(Some(Arc::new(Mutex::new(Body::Inner(
-					http_response.into_body(),
-				)))))
+				BodyHolder::new(
+					Some(Arc::new(Mutex::new(Body::Inner(http_response.into_body())))),
+					version,
+				)
 			},
 			disturbed: Arc::new(AtomicBool::new(false)),
 			headers,
