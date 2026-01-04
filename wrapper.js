@@ -286,31 +286,39 @@ async function fetch(resource, options = {}) {
 				);
 			}
 
-			// Consume the ReadableStream into a Buffer
-			const reader = nativeOptions.body.getReader();
-			const chunks = [];
-			try {
-				while (true) {
-					const { done, value } = await reader.read();
-					if (done) break;
-					chunks.push(value);
+			// Pass ReadableStream directly to native for streaming upload
+			const streamBody = nativeOptions.body;
+			delete nativeOptions.body;
+
+			// Attach to the default agent if none is provided
+			if (!nativeOptions.agent) {
+				if (!defaultAgent) {
+					defaultAgent = new native.Agent();
 				}
-			} finally {
-				reader.releaseLock();
+				nativeOptions.agent = defaultAgent;
 			}
 
-			// Concatenate all chunks into a single Buffer
-			const totalLength = chunks.reduce(
-				(acc, chunk) => acc + chunk.length,
-				0,
-			);
-			const result = new Uint8Array(totalLength);
-			let offset = 0;
-			for (const chunk of chunks) {
-				result.set(chunk, offset);
-				offset += chunk.length;
+			// Extract signal to pass as separate parameter
+			const signal = nativeOptions.signal;
+			delete nativeOptions.signal;
+
+			// Check if signal is already aborted
+			if (signal && signal.aborted) {
+				const error = new Error(
+					"Aborted: the request was aborted before it could start",
+				);
+				error.name = "AbortError";
+				error.code = ERROR_CODES.Aborted;
+				throw error;
 			}
-			nativeOptions.body = Buffer.from(result);
+
+			const nativeResponse = await faithFetch(
+				url,
+				nativeOptions,
+				signal,
+				streamBody,
+			);
+			return new Response(nativeResponse);
 		} else if (nativeOptions.body instanceof ArrayBuffer) {
 			nativeOptions.body = Buffer.from(nativeOptions.body);
 		} else if (Array.isArray(nativeOptions.body)) {
@@ -343,7 +351,7 @@ async function fetch(resource, options = {}) {
 		throw error;
 	}
 
-	const nativeResponse = await faithFetch(url, nativeOptions, signal);
+	const nativeResponse = await faithFetch(url, nativeOptions, signal, null);
 	return new Response(nativeResponse);
 }
 

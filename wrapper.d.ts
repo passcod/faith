@@ -68,7 +68,7 @@ export interface FetchOptions {
 	 * - `FormData`
 	 * - `TypedArray`
 	 * - `URLSearchParams`
-	 * - `ReadableStream` Note that Fáith currently reads this into memory before sending the request.
+	 * - `ReadableStream`
 	 *
 	 * If `body` is a `ReadableStream`, the `duplex` option must also be set.
 	 *

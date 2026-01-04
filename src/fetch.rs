@@ -3,8 +3,10 @@ use std::sync::{
 	atomic::{AtomicBool, Ordering},
 };
 
+use bytes::Bytes;
+use futures::StreamExt;
 use http_cache_reqwest::CacheMode;
-use napi::bindgen_prelude::AbortSignal;
+use napi::bindgen_prelude::{AbortSignal, Buffer, ReadableStream};
 use napi_derive::napi;
 use reqwest::{Method, StatusCode};
 use reqwest::{
@@ -26,6 +28,7 @@ pub fn faith_fetch(
 	url: String,
 	options: FaithOptionsAndBody,
 	signal: Option<AbortSignal>,
+	stream_body: Option<ReadableStream<'_, Buffer>>,
 ) -> Async<FaithResponse> {
 	let (options, agent, body) = FaithOptions::extract(options);
 	let (s, abort) = mpsc::channel(8);
@@ -35,6 +38,23 @@ pub fn faith_fetch(
 		});
 	}
 	let has_signal = signal.is_some();
+
+	// Convert ReadableStream to Reader BEFORE async block (sync operation)
+	// Reader<Buffer> is Send, but ReadableStream is not
+	let stream_reader = stream_body.map(|s| s.read());
+	let stream_reader = match stream_reader {
+		Some(Ok(reader)) => Some(reader),
+		Some(Err(e)) => {
+			return FaithAsyncResult::run(async move || {
+				Err(FaithError::new(
+					FaithErrorKind::BodyStream,
+					Some(e.reason.clone()),
+				))
+			});
+		}
+		None => None,
+	};
+
 	FaithAsyncResult::with_signal(signal, async move || {
 		let mut abort = abort;
 		let method = options
@@ -86,7 +106,16 @@ pub fn faith_fetch(
 			}
 		}
 
-		if let Some(body) = &body {
+		// Handle body: prefer streaming body over buffered body
+		if let Some(reader) = stream_reader {
+			// Map Reader<Buffer> to Stream<Item = Result<Bytes, std::io::Error>>
+			let byte_stream = reader.map(|result| {
+				result
+					.map(|buf| Bytes::copy_from_slice(buf.as_ref()))
+					.map_err(|e| std::io::Error::other(e.to_string()))
+			});
+			request = request.body(reqwest::Body::wrap_stream(byte_stream));
+		} else if let Some(body) = &body {
 			request = request.body(body.to_vec());
 		}
 

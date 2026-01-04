@@ -629,7 +629,7 @@ export declare const enum FaithErrorKind {
   Utf8Parse = 'Utf8Parse'
 }
 
-export declare function faithFetch(url: string, options: FaithOptionsAndBody, signal?: AbortSignal | undefined | null): Async<FaithResponse>
+export declare function faithFetch(url: string, options: FaithOptionsAndBody, signal?: AbortSignal | undefined | null, streamBody?: ReadableStream<Buffer> | undefined | null): Async<FaithResponse>
 
 export interface FaithOptionsAndBody {
   agent: Agent
