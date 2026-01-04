@@ -27,26 +27,11 @@ class Response {
 	constructor(nativeResponse) {
 		this.#nativeResponse = nativeResponse;
 
-		// Create a Headers object from the array of header pairs
-		const headers = new Headers();
-		const headerPairs = this.#nativeResponse.headers;
-		if (Array.isArray(headerPairs)) {
-			for (const [name, value] of headerPairs) {
-				headers.append(name, value);
-			}
-		}
-
-		Object.defineProperty(this, "headers", {
-			get: () => headers,
-			enumerable: true,
-			configurable: true,
-		});
-
 		const nativeProto = Object.getPrototypeOf(this.#nativeResponse);
 		const descriptors = Object.getOwnPropertyDescriptors(nativeProto);
 
 		for (const [key, descriptor] of Object.entries(descriptors)) {
-			if (descriptor.get && key !== "headers") {
+			if (descriptor.get) {
 				Object.defineProperty(this, key, {
 					get: () => this.#nativeResponse[key],
 					enumerable: true,
@@ -54,6 +39,17 @@ class Response {
 				});
 			}
 		}
+	}
+
+	get headers() {
+		const headers = new Headers();
+		const headerPairs = this.#nativeResponse.headers();
+		if (Array.isArray(headerPairs)) {
+			for (const [name, value] of headerPairs) {
+				headers.append(name, value);
+			}
+		}
+		return headers;
 	}
 
 	get body() {

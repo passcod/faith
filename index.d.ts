@@ -64,8 +64,10 @@ export declare class FaithResponse {
    *
    * Note that Fáith does not provide a custom `Headers` class; instead the Web API `Headers` structure
    * is used directly and constructed by Fáith when needed.
+   *
+   * This is a function as an internal implementation detail and the wrapper makes it a property.
    */
-  get headers(): Array<[string, string]>
+  headers(): Array<[string, string]>
   /**
    * The `ok` read-only property of the `Response` interface contains a boolean stating whether the
    * response was successful (status in the range 200-299) or not.

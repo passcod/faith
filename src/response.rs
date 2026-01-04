@@ -76,7 +76,9 @@ impl FaithResponse {
 	///
 	/// Note that Fáith does not provide a custom `Headers` class; instead the Web API `Headers` structure
 	/// is used directly and constructed by Fáith when needed.
-	#[napi(getter)]
+	///
+	/// This is a function as an internal implementation detail and the wrapper makes it a property.
+	#[napi]
 	pub fn headers(&self) -> Vec<(String, String)> {
 		self.headers
 			.iter()
