@@ -96,7 +96,7 @@ impl AltSvcCache {
 
 		let entry = AltSvcEntry {
 			port,
-			expires: Instant::now() + self.advertised_ttl,
+			expires: Instant::now() + Duration::from_hours(10_000), // forever
 		};
 
 		self.advertised.insert(origin, entry);
