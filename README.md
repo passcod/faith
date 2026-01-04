@@ -814,6 +814,7 @@ error kind, documented in this comprehensive mapping:
   - `Network` — network error
   - `Redirect` — when the agent is configured to error on redirects
 - JS `SyntaxError`:
+  - `AddressParse` — IP parse error for `AgentOptions.dns.overrides`
   - `JsonParse` — JSON parse error for `response.json()`
   - `PemParse` — PEM parse error for `AgentOptions.tls.identity`
   - `Utf8Parse` — UTF8 decoding error for `response.text()`
