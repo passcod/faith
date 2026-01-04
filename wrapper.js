@@ -287,17 +287,26 @@ async function fetch(resource, options = {}) {
 			}
 
 			// Workaround for NAPI-rs ReadableStream chunk dropping issue:
-			// NAPI-rs's Reader may skip chunks when polling rapidly. We work around this
-			// by creating a new pull-based stream that explicitly reads from the original
-			// using getReader(), which ensures proper sequencing.
+			// NAPI-rs's Reader may skip chunks when polling rapidly with async pull().
+			// We work around this by pre-reading all chunks into a buffer in start(),
+			// then using a synchronous pull() to deliver them one at a time.
 			const originalReader = nativeOptions.body.getReader();
 			const streamBody = new ReadableStream({
-				async pull(controller) {
-					const { done, value } = await originalReader.read();
-					if (done) {
-						controller.close();
+				async start(controller) {
+					// Pre-read all chunks into an array
+					this.chunks = [];
+					while (true) {
+						const { done, value } = await originalReader.read();
+						if (done) break;
+						this.chunks.push(value);
+					}
+					this.index = 0;
+				},
+				pull(controller) {
+					if (this.index < this.chunks.length) {
+						controller.enqueue(this.chunks[this.index++]);
 					} else {
-						controller.enqueue(value);
+						controller.close();
 					}
 				},
 				cancel(reason) {

@@ -113,28 +113,12 @@ pub fn faith_fetch(
 			// avoiding race conditions that can occur with eager spawned tasks.
 			let byte_stream = async_stream::stream! {
 				futures::pin_mut!(reader);
-				let mut chunk_index = 0usize;
-				eprintln!("[faith debug] starting to read stream");
 				while let Some(result) = reader.next().await {
 					let chunk = result
-						.map(|buf| {
-							let bytes = Bytes::copy_from_slice(buf.as_ref());
-							eprintln!(
-								"[faith debug] chunk {}: {} bytes: {:?}",
-								chunk_index,
-								bytes.len(),
-								String::from_utf8_lossy(&bytes)
-							);
-							bytes
-						})
-						.map_err(|e| {
-							eprintln!("[faith debug] chunk {} error: {}", chunk_index, e);
-							std::io::Error::other(e.to_string())
-						});
-					chunk_index += 1;
+						.map(|buf| Bytes::copy_from_slice(buf.as_ref()))
+						.map_err(|e| std::io::Error::other(e.to_string()));
 					yield chunk;
 				}
-				eprintln!("[faith debug] finished reading {} chunks", chunk_index);
 			};
 			request = request.body(reqwest::Body::wrap_stream(byte_stream));
 		} else if let Some(body) = &body {

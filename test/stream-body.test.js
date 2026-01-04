@@ -15,16 +15,9 @@ test("Streaming body with ReadableStream", async (t) => {
 	const stream = new ReadableStream({
 		pull(controller) {
 			if (index < chunks.length) {
-				const chunk = chunks[index];
-				console.error(
-					`[js debug] pull() called, enqueueing chunk ${index}: ${chunk.length} bytes`,
-				);
-				controller.enqueue(chunk);
+				controller.enqueue(chunks[index]);
 				index++;
 			} else {
-				console.error(
-					`[js debug] pull() called, closing stream after ${index} chunks`,
-				);
 				controller.close();
 			}
 		},
