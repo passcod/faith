@@ -286,8 +286,11 @@ async function fetch(resource, options = {}) {
 				);
 			}
 
-			// Pass ReadableStream directly to native for streaming upload
-			const streamBody = nativeOptions.body;
+			// Use our custom StreamBody to bypass NAPI-rs's buggy ReadableStream Reader.
+			// We create a channel-based stream and push chunks from JavaScript,
+			// which avoids the chunk dropping issue while preserving true streaming.
+			const { body: streamBody, sender } = native.createStreamBodyPair();
+			const originalStream = nativeOptions.body;
 			delete nativeOptions.body;
 
 			// Attach to the default agent if none is provided
@@ -304,6 +307,7 @@ async function fetch(resource, options = {}) {
 
 			// Check if signal is already aborted
 			if (signal && signal.aborted) {
+				sender.close();
 				const error = new Error(
 					"Aborted: the request was aborted before it could start",
 				);
@@ -312,12 +316,41 @@ async function fetch(resource, options = {}) {
 				throw error;
 			}
 
-			const nativeResponse = await faithFetch(
+			// Start the fetch with the StreamBody
+			const responsePromise = faithFetch(
 				url,
 				nativeOptions,
 				signal,
 				streamBody,
 			);
+
+			// Pump chunks from the ReadableStream to the StreamBodySender
+			const reader = originalStream.getReader();
+			(async () => {
+				try {
+					while (true) {
+						const { done, value } = await reader.read();
+						if (done) {
+							sender.close();
+							break;
+						}
+						// Convert to Buffer if needed and push
+						const buffer = Buffer.isBuffer(value)
+							? value
+							: Buffer.from(value);
+						const sent = await sender.push(buffer);
+						if (!sent) {
+							// Receiver dropped (request completed/aborted)
+							break;
+						}
+					}
+				} catch (err) {
+					// Stream error - close the sender
+					sender.close();
+				}
+			})();
+
+			const nativeResponse = await responsePromise;
 			return new Response(nativeResponse);
 		} else if (nativeOptions.body instanceof ArrayBuffer) {
 			nativeOptions.body = Buffer.from(nativeOptions.body);
@@ -359,6 +392,7 @@ module.exports = {
 	Agent: native.Agent,
 	CacheMode: native.CacheMode,
 	CacheStore: native.CacheStore,
+	createStreamBodyPair: native.createStreamBodyPair,
 	Credentials: native.CredentialsOption,
 	Duplex: native.DuplexOption,
 	ERROR_CODES,
@@ -368,5 +402,7 @@ module.exports = {
 	Redirect: native.Redirect,
 	REQWEST_VERSION: native.REQWEST_VERSION,
 	Response,
+	StreamBody: native.StreamBody,
+	StreamBodySender: native.StreamBodySender,
 	USER_AGENT: native.USER_AGENT,
 };

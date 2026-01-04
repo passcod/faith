@@ -3,10 +3,8 @@ use std::sync::{
 	atomic::{AtomicBool, Ordering},
 };
 
-use bytes::Bytes;
-use futures::StreamExt;
 use http_cache_reqwest::CacheMode;
-use napi::bindgen_prelude::{AbortSignal, Buffer, ReadableStream};
+use napi::bindgen_prelude::AbortSignal;
 use napi_derive::napi;
 use reqwest::{Method, StatusCode};
 use reqwest::{
@@ -14,7 +12,6 @@ use reqwest::{
 	tls::TlsInfo,
 };
 use tokio::sync::{Mutex, mpsc};
-use tokio_stream::wrappers::ReceiverStream;
 
 use crate::{
 	async_task::{Async, FaithAsyncResult},
@@ -22,6 +19,7 @@ use crate::{
 	error::{FaithError, FaithErrorKind},
 	options::{CredentialsOption, FaithOptions, FaithOptionsAndBody},
 	response::{FaithResponse, PeerInformation},
+	stream_body::StreamBody,
 };
 
 #[napi]
@@ -29,7 +27,7 @@ pub fn faith_fetch(
 	url: String,
 	options: FaithOptionsAndBody,
 	signal: Option<AbortSignal>,
-	stream_body: Option<ReadableStream<'_, Buffer>>,
+	stream_body: Option<&StreamBody>,
 ) -> Async<FaithResponse> {
 	let (options, agent, body) = FaithOptions::extract(options);
 	let (s, abort) = mpsc::channel(8);
@@ -40,21 +38,8 @@ pub fn faith_fetch(
 	}
 	let has_signal = signal.is_some();
 
-	// Convert ReadableStream to Reader BEFORE async block (sync operation)
-	// Reader<Buffer> is Send, but ReadableStream is not
-	let stream_reader = stream_body.map(|s| s.read());
-	let stream_reader = match stream_reader {
-		Some(Ok(reader)) => Some(reader),
-		Some(Err(e)) => {
-			return FaithAsyncResult::run(async move || {
-				Err(FaithError::new(
-					FaithErrorKind::BodyStream,
-					Some(e.reason.clone()),
-				))
-			});
-		}
-		None => None,
-	};
+	// Get the stream body receiver if provided
+	let stream_receiver = stream_body.map(|sb| sb.receiver.clone());
 
 	FaithAsyncResult::with_signal(signal, async move || {
 		let mut abort = abort;
@@ -108,28 +93,18 @@ pub fn faith_fetch(
 		}
 
 		// Handle body: prefer streaming body over buffered body
-		if let Some(reader) = stream_reader {
-			// Use a channel to synchronize chunk delivery from the NAPI Reader.
-			// This ensures chunks are properly sequenced and not dropped due to
-			// timing issues between the JS ReadableStream and reqwest's body stream.
-			let (tx, rx) = mpsc::channel::<Result<Bytes, std::io::Error>>(16);
+		if let Some(receiver_arc) = stream_receiver {
+			// Take the receiver from the Arc<Mutex<Option<...>>>
+			let receiver = {
+				let mut guard = receiver_arc.lock().await;
+				guard.take()
+			};
 
-			// Spawn a task to read from the NAPI Reader and send chunks through the channel
-			tokio::spawn(async move {
-				futures::pin_mut!(reader);
-				while let Some(result) = reader.next().await {
-					let chunk = result
-						.map(|buf| Bytes::copy_from_slice(buf.as_ref()))
-						.map_err(|e| std::io::Error::other(e.to_string()));
-					if tx.send(chunk).await.is_err() {
-						// Receiver dropped, stop reading
-						break;
-					}
-				}
-			});
-
-			let byte_stream = ReceiverStream::new(rx);
-			request = request.body(reqwest::Body::wrap_stream(byte_stream));
+			if let Some(receiver) = receiver {
+				// Convert the receiver into a stream for reqwest
+				let byte_stream = receiver.into_stream();
+				request = request.body(reqwest::Body::wrap_stream(byte_stream));
+			}
 		} else if let Some(body) = &body {
 			request = request.body(body.to_vec());
 		}
