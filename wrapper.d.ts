@@ -29,7 +29,9 @@ export const ERROR_CODES: {
 	readonly AddressParse: "AddressParse";
 	readonly BodyStream: "BodyStream";
 	readonly Config: "Config";
+	readonly IntegrityMismatch: "IntegrityMismatch";
 	readonly InvalidHeader: "InvalidHeader";
+	readonly InvalidIntegrity: "InvalidIntegrity";
 	readonly InvalidMethod: "InvalidMethod";
 	readonly InvalidUrl: "InvalidUrl";
 	readonly JsonParse: "JsonParse";

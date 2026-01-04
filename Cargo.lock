@@ -490,6 +490,7 @@ dependencies = [
  "reqwest-middleware",
  "serde",
  "serde_json",
+ "ssri",
  "stream_shared",
  "strum",
  "tokio",

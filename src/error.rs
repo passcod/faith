@@ -47,7 +47,9 @@ pub enum FaithErrorKind {
 	AddressParse,
 	BodyStream,
 	Config,
+	IntegrityMismatch,
 	InvalidHeader,
+	InvalidIntegrity,
 	InvalidMethod,
 	InvalidUrl,
 	JsonParse,
@@ -76,7 +78,9 @@ impl FaithErrorKind {
 			Self::AddressParse => "invalid IP address and/or port",
 			Self::BodyStream => "internal response body stream copy error",
 			Self::Config => "invalid agent configuration",
+			Self::IntegrityMismatch => "resource integrity check failed",
 			Self::InvalidHeader => "invalid header name or value",
+			Self::InvalidIntegrity => "invalid integrity value",
 			Self::InvalidMethod => "invalid HTTP method",
 			Self::InvalidUrl => "invalid URL",
 			Self::JsonParse => "invalid json in response body",
@@ -93,12 +97,16 @@ impl FaithErrorKind {
 
 	fn js_type(self) -> JsErrorType {
 		match self {
-			Self::BodyStream | Self::Config | Self::RuntimeThread => JsErrorType::GenericError,
+			Self::BodyStream | Self::Config | Self::IntegrityMismatch | Self::RuntimeThread => {
+				JsErrorType::GenericError
+			}
 			Self::Aborted | Self::Timeout => JsErrorType::NamedError("AbortError"),
 			Self::Network | Self::Redirect => JsErrorType::NamedError("NetworkError"),
-			Self::AddressParse | Self::JsonParse | Self::PemParse | Self::Utf8Parse => {
-				JsErrorType::SyntaxError
-			}
+			Self::AddressParse
+			| Self::InvalidIntegrity
+			| Self::JsonParse
+			| Self::PemParse
+			| Self::Utf8Parse => JsErrorType::SyntaxError,
 			Self::InvalidHeader
 			| Self::InvalidMethod
 			| Self::InvalidUrl

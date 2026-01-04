@@ -257,8 +257,6 @@ Fáith allows all request headers to be set (unlike browsers, which [forbid][1] 
 
 ### `FetchOptions.integrity: string`
 
-Not implemented yet.
-
 *Contains the subresource integrity value of the request.*
 
 *The format of this option is `<hash-algo>-<hash-source>` where:*
@@ -266,6 +264,9 @@ Not implemented yet.
 - *`<hash-algo>` is one of the following values: `sha256`, `sha384`, or `sha512`*
 - *`<hash-source>` is the Base64-encoding of the result of hashing the resource with the specified
   hash algorithm.*
+
+Multiple space-separated values are supported; if any matches, verification passes. Unknown
+algorithms are silently ignored (but if all algorithms are unknown, an error is thrown).
 
 Fáith only checks the integrity when using `bytes()`, `json()`, `text()`, `arrayBuffer()`, and
 `blob()`. Verification when reading through the `body` stream is not currently supported.
@@ -815,6 +816,7 @@ error kind, documented in this comprehensive mapping:
   - `Redirect` — when the agent is configured to error on redirects
 - JS `SyntaxError`:
   - `AddressParse` — IP parse error for `AgentOptions.dns.overrides`
+  - `InvalidIntegrity` — SRI parse error for `RequestInit.integrity`
   - `JsonParse` — JSON parse error for `response.json()`
   - `PemParse` — PEM parse error for `AgentOptions.tls.identity`
   - `Utf8Parse` — UTF8 decoding error for `response.text()`
@@ -827,6 +829,7 @@ error kind, documented in this comprehensive mapping:
 - JS generic `Error`:
   - `BodyStream` — internal stream handling error
   - `Config` — invalid agent configuration
+  - `IntegrityMismatch` — SRI checksum mismatch (with `RequestInit.integrity`)
   - `RuntimeThread` — failed to start or schedule threads on the internal tokio runtime
 
 The library exports an `ERROR_CODES` object which has every error code the library throws, and
