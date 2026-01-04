@@ -147,6 +147,7 @@ pub fn faith_fetch(
 			peer: Arc::new(peer),
 			redirected,
 			status_code,
+			trailers: Default::default(),
 			url: response_url,
 			version,
 		})

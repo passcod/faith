@@ -43,6 +43,7 @@ pub struct FaithResponse {
 	pub(crate) peer: Arc<PeerInformation>,
 	pub(crate) redirected: bool,
 	pub(crate) status_code: StatusCode,
+	pub(crate) trailers: Arc<RwLock<Trailers>>,
 	pub(crate) url: Url,
 	pub(crate) version: Version,
 }
@@ -58,6 +59,14 @@ pub struct FaithResponse {
 pub struct PeerInformation {
 	pub address: Option<SocketAddr>,
 	pub certificate: Option<Vec<u8>>,
+}
+
+#[derive(Debug, Default)]
+pub enum Trailers {
+	#[default]
+	NotYet,
+	None,
+	Some(HeaderMap),
 }
 
 #[napi]
@@ -274,6 +283,8 @@ impl FaithResponse {
 		};
 
 		let mut chunks = Vec::new();
+		let mut has_trailers = false;
+
 		while let Some(frame_res) = inner.frame().await {
 			let frame = frame_res.map_err(|err| {
 				FaithError::new(FaithErrorKind::BodyStream, Some(err.to_string()))
@@ -281,7 +292,9 @@ impl FaithResponse {
 
 			match frame.into_trailers() {
 				Ok(trailers) => {
-					todo!()
+					let mut t = self.trailers.write().await;
+					*t = Trailers::Some(trailers);
+					has_trailers = true;
 				}
 				Err(frame) => match frame.into_data() {
 					Ok(chunk) => {
@@ -364,6 +377,38 @@ impl FaithResponse {
 				.map_err(|e| FaithError::new(FaithErrorKind::JsonParse, Some(e.to_string())))?;
 			Ok(Value(value))
 		})
+	}
+
+	/// The `trailers()` method of the `Response` interface returns a promise that resolves to either
+	/// `null` or a `Headers` structure that contains the HTTP/2 or /3 trailing headers.
+	///
+	/// This was once in the spec as a getter but was removed as it wasn't implemented by any browser.
+	///
+	/// Note that this will never resolve if you don't also consume the body in some way.
+	#[napi]
+	pub async fn trailers(&self) -> Option<Vec<(String, String)>> {
+		let t = Arc::clone(&self.trailers);
+		loop {
+			match &*t.read().await {
+				Trailers::NotYet => {
+					yield_now().await;
+					continue;
+				}
+				Trailers::None => break None,
+				Trailers::Some(h) => {
+					break Some(
+						h.iter()
+							.filter_map(|(name, value)| {
+								value
+									.to_str()
+									.ok()
+									.map(|v| (name.to_string(), v.to_string()))
+							})
+							.collect(),
+					);
+				}
+			}
+		}
 	}
 
 	/// The `clone()` method of the `Response` interface creates a clone of a response object, identical
