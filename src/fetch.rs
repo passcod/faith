@@ -4,6 +4,7 @@ use std::sync::{
 };
 
 use http_cache_reqwest::CacheMode;
+use hyper_util::client::legacy::connect::HttpInfo;
 use napi::bindgen_prelude::AbortSignal;
 use napi_derive::napi;
 use reqwest::{Method, StatusCode};
@@ -139,6 +140,13 @@ pub fn faith_fetch(
 		let redirected = parsed_url != response_url;
 
 		let version = response.version();
+
+		// Track connection for TCP stats (if we can get both local and remote addr)
+		if let Some(http_info) = response.extensions().get::<HttpInfo>() {
+			let local_addr = http_info.local_addr();
+			let remote_addr = http_info.remote_addr();
+			agent.conn_tracker.track(local_addr, remote_addr).await;
+		}
 
 		let peer = PeerInformation {
 			address: response.remote_addr(),

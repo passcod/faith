@@ -3,9 +3,12 @@ mod agent;
 mod alt_svc;
 mod async_task;
 mod body;
+mod conn_tracker;
 mod error;
 mod fetch;
 mod integrity;
+#[cfg(target_os = "linux")]
+mod netlink;
 mod options;
 mod response;
 mod stream_body;

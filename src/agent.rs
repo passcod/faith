@@ -27,6 +27,7 @@ use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 #[cfg(feature = "http3")]
 use crate::alt_svc::{AltSvcCache, AltSvcMiddleware};
 use crate::{
+	conn_tracker::{ConnectionInfo, ConnectionTracker},
 	error::{FaithError, FaithErrorKind},
 	options::RequestCacheMode,
 };
@@ -412,6 +413,7 @@ pub struct Agent {
 	pub(crate) client: ClientWithMiddleware,
 	pub(crate) cookie_jar: Option<Arc<Jar>>,
 	pub(crate) stats: Arc<InnerAgentStats>,
+	pub(crate) conn_tracker: Arc<ConnectionTracker>,
 	#[cfg(feature = "http3")]
 	#[allow(dead_code)]
 	pub(crate) alt_svc_cache: Option<Arc<AltSvcCache>>,
@@ -687,6 +689,7 @@ impl Agent {
 			client: client.build(),
 			cookie_jar,
 			stats: Default::default(),
+			conn_tracker: ConnectionTracker::new(),
 			#[cfg(feature = "http3")]
 			alt_svc_cache,
 		})
@@ -775,5 +778,43 @@ impl Agent {
 				.try_into()
 				.unwrap_or(i64::MAX),
 		}
+	}
+
+	/// Returns TCP connection statistics for connections tracked by this agent.
+	///
+	/// This queries the Linux kernel via netlink for TCP_INFO on each tracked connection,
+	/// returning metrics like RTT, packet loss, retransmissions, and congestion window.
+	///
+	/// Only available on Linux. Returns an empty array on other platforms.
+	#[napi]
+	pub async fn connection_stats(&self) -> Vec<ConnectionInfo> {
+		#[cfg(target_os = "linux")]
+		{
+			use crate::netlink::query_tcp_stats;
+
+			let keys = self.conn_tracker.keys().await;
+			if keys.is_empty() {
+				return Vec::new();
+			}
+
+			if let Ok(stats) = query_tcp_stats(&keys) {
+				for (key, tcp_stats) in &stats {
+					self.conn_tracker.update_stats(key, *tcp_stats).await;
+				}
+			}
+
+			self.conn_tracker.get_all().await
+		}
+
+		#[cfg(not(target_os = "linux"))]
+		{
+			Vec::new()
+		}
+	}
+
+	/// Remove stale connections that haven't been seen for the specified number of seconds.
+	#[napi]
+	pub async fn prune_connections(&self, max_age_secs: u32) {
+		self.conn_tracker.remove_stale(max_age_secs as u64).await;
 	}
 }

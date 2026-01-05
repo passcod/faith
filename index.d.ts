@@ -46,6 +46,17 @@ export declare class Agent {
    * - `bodiesFinished`
    */
   stats(): AgentStats
+  /**
+   * Returns TCP connection statistics for connections tracked by this agent.
+   *
+   * This queries the Linux kernel via netlink for TCP_INFO on each tracked connection,
+   * returning metrics like RTT, packet loss, retransmissions, and congestion window.
+   *
+   * Only available on Linux. Returns an empty array on other platforms.
+   */
+  connectionStats(): Promise<Array<ConnectionInfo>>
+  /** Remove stale connections that haven't been seen for the specified number of seconds. */
+  pruneConnections(maxAgeSecs: number): Promise<void>
 }
 
 export declare class AgentStats {
@@ -548,6 +559,24 @@ export declare const enum CacheMode {
 export declare const enum CacheStore {
   Disk = 'disk',
   Memory = 'memory'
+}
+
+export interface ConnectionInfo {
+  connectionType: string
+  localAddress: string
+  localPort: number
+  remoteAddress: string
+  remotePort: number
+  firstSeen: number
+  lastSeen: number
+  responseCount: number
+  rttUs?: number
+  rttVarUs?: number
+  lostPackets?: number
+  retransmits?: number
+  totalRetransmits?: number
+  congestionWindow?: number
+  deliveryRateBps?: number
 }
 
 /**
