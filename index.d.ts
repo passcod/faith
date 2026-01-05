@@ -47,16 +47,13 @@ export declare class Agent {
    */
   stats(): AgentStats
   /**
-   * Returns TCP connection statistics for connections tracked by this agent.
+   * Returns information on current connections open by this agent.
    *
-   * This queries the Linux kernel via netlink for TCP_INFO on each tracked connection,
-   * returning metrics like RTT, packet loss, retransmissions, and congestion window.
+   * Tracks TCP connections only currently (upstream limitation).
    *
    * Only available on Linux. Returns an empty array on other platforms.
    */
-  connectionStats(): Promise<Array<ConnectionInfo>>
-  /** Remove stale connections that haven't been seen for the specified number of seconds. */
-  pruneConnections(maxAgeSecs: number): Promise<void>
+  connections(): Promise<Array<ConnectionInfo>>
 }
 
 export declare class AgentStats {
@@ -569,6 +566,7 @@ export interface ConnectionInfo {
   remotePort: number
   firstSeen: number
   lastSeen: number
+  expiry: number
   responseCount: number
   rttUs?: number
   rttVarUs?: number

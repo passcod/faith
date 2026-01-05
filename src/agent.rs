@@ -776,14 +776,13 @@ impl Agent {
 		}
 	}
 
-	/// Returns TCP connection statistics for connections tracked by this agent.
+	/// Returns information on current connections open by this agent.
 	///
-	/// This queries the Linux kernel via netlink for TCP_INFO on each tracked connection,
-	/// returning metrics like RTT, packet loss, retransmissions, and congestion window.
+	/// Tracks TCP connections only currently (upstream limitation).
 	///
 	/// Only available on Linux. Returns an empty array on other platforms.
 	#[napi]
-	pub async fn connection_stats(&self) -> Vec<ConnectionInfo> {
+	pub async fn connections(&self) -> Vec<ConnectionInfo> {
 		#[cfg(target_os = "linux")]
 		{
 			use crate::netlink::query_tcp_stats;

@@ -41,6 +41,7 @@ pub struct ConnectionInfo {
 	pub remote_port: u16,
 	pub first_seen: i64,
 	pub last_seen: i64,
+	pub expiry: i64,
 	pub response_count: i64,
 	pub rtt_us: Option<i64>,
 	pub rtt_var_us: Option<i64>,
@@ -111,6 +112,17 @@ impl ConnectionTracker {
 					.unwrap_or_else(|err| err.duration())
 					.as_millis()
 					.try_into()
+					.unwrap_or(i64::MAX),
+				expiry: conn
+					.last_seen
+					.checked_add(self.timeout)
+					.and_then(|exp| {
+						exp.duration_since(UNIX_EPOCH)
+							.unwrap_or_else(|err| err.duration())
+							.as_millis()
+							.try_into()
+							.ok()
+					})
 					.unwrap_or(i64::MAX),
 				response_count: conn.response_count as i64,
 				rtt_us: conn.latest_stats.map(|s| s.rtt_us as i64),
