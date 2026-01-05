@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::io;
 use std::mem;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
+use std::ptr;
 
 use windows::Win32::NetworkManagement::IpHelper::{
 	GetPerTcp6ConnectionEStats, GetPerTcpConnectionEStats, GetTcp6Table2, GetTcpTable2,
@@ -14,6 +15,8 @@ use windows::Win32::NetworkManagement::IpHelper::{
 };
 
 use super::{ConnectionKey, TcpStats};
+
+const ERROR_SUCCESS: u32 = 0;
 
 pub fn query_tcp_stats(keys: &[ConnectionKey]) -> io::Result<Vec<(ConnectionKey, TcpStats)>> {
 	if keys.is_empty() {
@@ -59,8 +62,8 @@ fn query_tcp4_stats(
 	let table = buffer.as_mut_ptr() as *mut MIB_TCPTABLE2;
 
 	let ret = unsafe { GetTcpTable2(Some(table), &mut size, false) };
-	if ret.is_err() {
-		return Err(io::Error::from_raw_os_error(ret.0 as i32));
+	if ret != ERROR_SUCCESS {
+		return Err(io::Error::from_raw_os_error(ret as i32));
 	}
 
 	let table = unsafe { &*table };
@@ -68,15 +71,15 @@ fn query_tcp4_stats(
 		unsafe { std::slice::from_raw_parts(table.table.as_ptr(), table.dwNumEntries as usize) };
 
 	for row in entries {
-		if row.dwState != MIB_TCP_STATE_ESTAB {
+		if row.dwState != MIB_TCP_STATE_ESTAB.0 as u32 {
 			continue;
 		}
 
-		let local_ip = Ipv4Addr::from(u32::from_be(unsafe { row.dwLocalAddr.S_un.S_addr }));
+		let local_ip = Ipv4Addr::from(u32::from_be(row.dwLocalAddr));
 		let local_port = (row.dwLocalPort & 0xFFFF) as u16;
 		let local_port = u16::from_be(local_port);
 
-		let remote_ip = Ipv4Addr::from(u32::from_be(unsafe { row.dwRemoteAddr.S_un.S_addr }));
+		let remote_ip = Ipv4Addr::from(u32::from_be(row.dwRemoteAddr));
 		let remote_port = (row.dwRemotePort & 0xFFFF) as u16;
 		let remote_port = u16::from_be(remote_port);
 
@@ -102,7 +105,7 @@ fn query_tcp6_stats(
 
 	let mut size: u32 = 0;
 	unsafe {
-		let _ = GetTcp6Table2(None, &mut size, false);
+		let _ = GetTcp6Table2(ptr::null_mut(), &mut size, false);
 	}
 
 	if size == 0 {
@@ -112,9 +115,9 @@ fn query_tcp6_stats(
 	let mut buffer = vec![0u8; size as usize];
 	let table = buffer.as_mut_ptr() as *mut MIB_TCP6TABLE2;
 
-	let ret = unsafe { GetTcp6Table2(Some(table), &mut size, false) };
-	if ret.is_err() {
-		return Err(io::Error::from_raw_os_error(ret.0 as i32));
+	let ret = unsafe { GetTcp6Table2(table, &mut size, false) };
+	if ret != ERROR_SUCCESS {
+		return Err(io::Error::from_raw_os_error(ret as i32));
 	}
 
 	let table = unsafe { &*table };
@@ -149,6 +152,14 @@ fn query_tcp6_stats(
 	Ok(results)
 }
 
+fn struct_as_bytes<T>(s: &T) -> &[u8] {
+	unsafe { std::slice::from_raw_parts(s as *const T as *const u8, mem::size_of::<T>()) }
+}
+
+fn struct_as_bytes_mut<T>(s: &mut T) -> &mut [u8] {
+	unsafe { std::slice::from_raw_parts_mut(s as *mut T as *mut u8, mem::size_of::<T>()) }
+}
+
 fn enable_estats_for_row4(row: &MIB_TCPROW2) {
 	let rw_data = TCP_ESTATS_DATA_RW_v0 {
 		EnableCollection: true,
@@ -165,25 +176,22 @@ fn enable_estats_for_row4(row: &MIB_TCPROW2) {
 		let _ = SetPerTcpConnectionEStats(
 			row as *const MIB_TCPROW2 as *const _,
 			TcpConnectionEstatsData,
-			&rw_data as *const _ as *const u8,
+			struct_as_bytes(&rw_data),
 			0,
-			mem::size_of::<TCP_ESTATS_DATA_RW_v0>() as u32,
 			0,
 		);
 		let _ = SetPerTcpConnectionEStats(
 			row as *const MIB_TCPROW2 as *const _,
 			TcpConnectionEstatsSndCong,
-			&rw_snd as *const _ as *const u8,
+			struct_as_bytes(&rw_snd),
 			0,
-			mem::size_of::<TCP_ESTATS_SND_CONG_RW_v0>() as u32,
 			0,
 		);
 		let _ = SetPerTcpConnectionEStats(
 			row as *const MIB_TCPROW2 as *const _,
 			TcpConnectionEstatsBandwidth,
-			&rw_bw as *const _ as *const u8,
+			struct_as_bytes(&rw_bw),
 			0,
-			mem::size_of::<TCP_ESTATS_BANDWIDTH_RW_v0>() as u32,
 			0,
 		);
 	}
@@ -205,25 +213,22 @@ fn enable_estats_for_row6(row: &MIB_TCP6ROW2) {
 		let _ = SetPerTcp6ConnectionEStats(
 			row as *const MIB_TCP6ROW2 as *const _,
 			TcpConnectionEstatsData,
-			&rw_data as *const _ as *const u8,
+			struct_as_bytes(&rw_data),
 			0,
-			mem::size_of::<TCP_ESTATS_DATA_RW_v0>() as u32,
 			0,
 		);
 		let _ = SetPerTcp6ConnectionEStats(
 			row as *const MIB_TCP6ROW2 as *const _,
 			TcpConnectionEstatsSndCong,
-			&rw_snd as *const _ as *const u8,
+			struct_as_bytes(&rw_snd),
 			0,
-			mem::size_of::<TCP_ESTATS_SND_CONG_RW_v0>() as u32,
 			0,
 		);
 		let _ = SetPerTcp6ConnectionEStats(
 			row as *const MIB_TCP6ROW2 as *const _,
 			TcpConnectionEstatsBandwidth,
-			&rw_bw as *const _ as *const u8,
+			struct_as_bytes(&rw_bw),
 			0,
-			mem::size_of::<TCP_ESTATS_BANDWIDTH_RW_v0>() as u32,
 			0,
 		);
 	}
@@ -242,15 +247,11 @@ fn get_tcp4_estats(row: &MIB_TCPROW2) -> Option<TcpStats> {
 			TcpConnectionEstatsPath,
 			None,
 			0,
-			0,
 			None,
 			0,
+			Some(struct_as_bytes_mut(&mut path_rod)),
 			0,
-			Some(&mut path_rod as *mut _ as *mut u8),
-			0,
-			mem::size_of::<TCP_ESTATS_PATH_ROD_v0>() as u32,
-		)
-		.is_ok()
+		) == ERROR_SUCCESS
 	};
 
 	let data_ok = unsafe {
@@ -259,15 +260,11 @@ fn get_tcp4_estats(row: &MIB_TCPROW2) -> Option<TcpStats> {
 			TcpConnectionEstatsData,
 			None,
 			0,
-			0,
 			None,
 			0,
+			Some(struct_as_bytes_mut(&mut data_rod)),
 			0,
-			Some(&mut data_rod as *mut _ as *mut u8),
-			0,
-			mem::size_of::<TCP_ESTATS_DATA_ROD_v0>() as u32,
-		)
-		.is_ok()
+		) == ERROR_SUCCESS
 	};
 
 	let snd_ok = unsafe {
@@ -276,15 +273,11 @@ fn get_tcp4_estats(row: &MIB_TCPROW2) -> Option<TcpStats> {
 			TcpConnectionEstatsSndCong,
 			None,
 			0,
-			0,
 			None,
 			0,
+			Some(struct_as_bytes_mut(&mut snd_rod)),
 			0,
-			Some(&mut snd_rod as *mut _ as *mut u8),
-			0,
-			mem::size_of::<TCP_ESTATS_SND_CONG_ROD_v0>() as u32,
-		)
-		.is_ok()
+		) == ERROR_SUCCESS
 	};
 
 	if !path_ok && !data_ok && !snd_ok {
@@ -299,16 +292,8 @@ fn get_tcp4_estats(row: &MIB_TCPROW2) -> Option<TcpStats> {
 		},
 		rtt_var_us: if path_ok { path_rod.RttVar * 1000 } else { 0 },
 		lost: None,
-		retrans: if data_ok {
-			data_rod.DataSegsRetrans as u32
-		} else {
-			0
-		},
-		total_retrans: if data_ok {
-			data_rod.DataSegsRetrans as u32
-		} else {
-			0
-		},
+		retrans: if path_ok { path_rod.PktsRetrans } else { 0 },
+		total_retrans: if path_ok { path_rod.PktsRetrans } else { 0 },
 		cwnd: if snd_ok { snd_rod.CurCwnd } else { 0 },
 		delivery_rate: None,
 	})
@@ -327,15 +312,11 @@ fn get_tcp6_estats(row: &MIB_TCP6ROW2) -> Option<TcpStats> {
 			TcpConnectionEstatsPath,
 			None,
 			0,
-			0,
 			None,
 			0,
+			Some(struct_as_bytes_mut(&mut path_rod)),
 			0,
-			Some(&mut path_rod as *mut _ as *mut u8),
-			0,
-			mem::size_of::<TCP_ESTATS_PATH_ROD_v0>() as u32,
-		)
-		.is_ok()
+		) == ERROR_SUCCESS
 	};
 
 	let data_ok = unsafe {
@@ -344,15 +325,11 @@ fn get_tcp6_estats(row: &MIB_TCP6ROW2) -> Option<TcpStats> {
 			TcpConnectionEstatsData,
 			None,
 			0,
-			0,
 			None,
 			0,
+			Some(struct_as_bytes_mut(&mut data_rod)),
 			0,
-			Some(&mut data_rod as *mut _ as *mut u8),
-			0,
-			mem::size_of::<TCP_ESTATS_DATA_ROD_v0>() as u32,
-		)
-		.is_ok()
+		) == ERROR_SUCCESS
 	};
 
 	let snd_ok = unsafe {
@@ -361,15 +338,11 @@ fn get_tcp6_estats(row: &MIB_TCP6ROW2) -> Option<TcpStats> {
 			TcpConnectionEstatsSndCong,
 			None,
 			0,
-			0,
 			None,
 			0,
+			Some(struct_as_bytes_mut(&mut snd_rod)),
 			0,
-			Some(&mut snd_rod as *mut _ as *mut u8),
-			0,
-			mem::size_of::<TCP_ESTATS_SND_CONG_ROD_v0>() as u32,
-		)
-		.is_ok()
+		) == ERROR_SUCCESS
 	};
 
 	if !path_ok && !data_ok && !snd_ok {
@@ -384,16 +357,8 @@ fn get_tcp6_estats(row: &MIB_TCP6ROW2) -> Option<TcpStats> {
 		},
 		rtt_var_us: if path_ok { path_rod.RttVar * 1000 } else { 0 },
 		lost: None,
-		retrans: if data_ok {
-			data_rod.DataSegsRetrans as u32
-		} else {
-			0
-		},
-		total_retrans: if data_ok {
-			data_rod.DataSegsRetrans as u32
-		} else {
-			0
-		},
+		retrans: if path_ok { path_rod.PktsRetrans } else { 0 },
+		total_retrans: if path_ok { path_rod.PktsRetrans } else { 0 },
 		cwnd: if snd_ok { snd_rod.CurCwnd } else { 0 },
 		delivery_rate: None,
 	})
