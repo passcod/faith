@@ -782,29 +782,7 @@ impl Agent {
 	///
 	/// Only available on Linux. Returns an empty array on other platforms.
 	#[napi]
-	pub async fn connections(&self) -> Vec<ConnectionInfo> {
-		#[cfg(target_os = "linux")]
-		{
-			use crate::netlink::query_tcp_stats;
-
-			let keys = self.conn_tracker.keys().await;
-			if keys.is_empty() {
-				return Vec::new();
-			}
-
-			if let Ok(stats) = query_tcp_stats(&keys) {
-				for (key, tcp_stats) in &stats {
-					self.conn_tracker.update_stats(key, *tcp_stats).await;
-				}
-			}
-
-			self.conn_tracker.remove_stale().await;
-			self.conn_tracker.get_all().await
-		}
-
-		#[cfg(not(target_os = "linux"))]
-		{
-			Vec::new()
-		}
+	pub fn connections<'env>(&self, env: &'env Env) -> Vec<ConnectionInfo<'env>> {
+		self.conn_tracker.get_for_napi(env)
 	}
 }

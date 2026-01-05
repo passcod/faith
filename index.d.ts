@@ -53,7 +53,7 @@ export declare class Agent {
    *
    * Only available on Linux. Returns an empty array on other platforms.
    */
-  connections(): Promise<Array<ConnectionInfo>>
+  connections(): Array<ConnectionInfo>
 }
 
 export declare class AgentStats {
@@ -564,9 +564,9 @@ export interface ConnectionInfo {
   localPort: number
   remoteAddress: string
   remotePort: number
-  firstSeen: number
-  lastSeen: number
-  expiry: number
+  firstSeen?: Date
+  lastSeen?: Date
+  expiry?: Date
   responseCount: number
   rttUs?: number
   rttVarUs?: number

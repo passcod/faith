@@ -145,7 +145,7 @@ pub fn faith_fetch(
 		if let Some(http_info) = response.extensions().get::<HttpInfo>() {
 			let local_addr = http_info.local_addr();
 			let remote_addr = http_info.remote_addr();
-			agent.conn_tracker.track(local_addr, remote_addr).await;
+			agent.conn_tracker.track(local_addr, remote_addr);
 		}
 
 		let peer = PeerInformation {
