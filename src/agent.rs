@@ -519,9 +519,12 @@ impl Agent {
 			}
 		}
 
+		let mut conn_timeout = Duration::from_secs(90); // default from reqwest
 		if let Some(pool) = options.pool {
 			if let Some(seconds) = pool.idle_timeout {
-				client = client.pool_idle_timeout(Some(Duration::from_secs(seconds.max(0).into())));
+				let dur = Duration::from_secs(seconds.max(0).into());
+				conn_timeout = dur;
+				client = client.pool_idle_timeout(Some(dur));
 			}
 
 			client = client.pool_max_idle_per_host(
@@ -682,7 +685,7 @@ impl Agent {
 			client: client.build(),
 			cookie_jar,
 			stats: Default::default(),
-			conn_tracker: ConnectionTracker::new(),
+			conn_tracker: ConnectionTracker::new(conn_timeout),
 			#[cfg(feature = "http3")]
 			alt_svc_cache,
 		})
@@ -796,6 +799,7 @@ impl Agent {
 				}
 			}
 
+			self.conn_tracker.remove_stale().await;
 			self.conn_tracker.get_all().await
 		}
 
@@ -803,11 +807,5 @@ impl Agent {
 		{
 			Vec::new()
 		}
-	}
-
-	/// Remove stale connections that haven't been seen for the specified number of seconds.
-	#[napi]
-	pub async fn prune_connections(&self, max_age_secs: u32) {
-		self.conn_tracker.remove_stale(max_age_secs as u64).await;
 	}
 }
