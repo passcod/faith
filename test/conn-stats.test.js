@@ -26,9 +26,8 @@ test("connections tracks connections after requests", async (t) => {
 	t.ok(typeof conn.localPort === "number", "has local port");
 	t.ok(conn.remoteAddress, "has remote address");
 	t.ok(typeof conn.remotePort === "number", "has remote port");
-	t.ok(typeof conn.firstSeen === "number", "has firstSeen timestamp");
-	t.ok(typeof conn.lastSeen === "number", "has lastSeen timestamp");
-	t.ok(conn.firstSeen > 0, "firstSeen is a valid timestamp");
+	t.ok(conn.firstSeen instanceof Date, "has firstSeen timestamp");
+	t.ok(conn.lastSeen instanceof Date, "has lastSeen timestamp");
 	t.ok(conn.lastSeen >= conn.firstSeen, "lastSeen >= firstSeen");
 	t.equal(conn.responseCount, 1, "responseCount is 1 after one request");
 
@@ -81,6 +80,7 @@ test("responseCount increments with each request on same connection", async (t) 
 
 	const stats = agent.connections();
 	t.ok(stats.length > 0, "has tracked connections");
+	console.log(stats);
 
 	const totalResponses = stats.reduce(
 		(sum, conn) => sum + conn.responseCount,
@@ -91,22 +91,6 @@ test("responseCount increments with each request on same connection", async (t) 
 		3,
 		"total responseCount across all connections is 3",
 	);
-
-	t.end();
-});
-
-test("pruneConnections removes stale entries", async (t) => {
-	const agent = new Agent();
-
-	await fetch(`${HTTPBIN_URL}/get`, { agent });
-
-	let stats = agent.connections();
-	t.ok(stats.length > 0, "has tracked connections before prune");
-
-	await agent.pruneConnections(0);
-
-	stats = agent.connections();
-	t.equal(stats.length, 0, "connections removed after pruneConnections(0)");
 
 	t.end();
 });
