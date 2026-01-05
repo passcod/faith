@@ -3,20 +3,20 @@ const { Agent, fetch } = require("../wrapper.js");
 
 const HTTPBIN_URL = process.env.HTTPBIN_URL || "http://localhost:8888";
 
-test("connectionStats returns empty array initially", async (t) => {
+test("connections returns empty array initially", async (t) => {
 	const agent = new Agent();
-	const stats = await agent.connectionStats();
+	const stats = agent.connections();
 	t.ok(Array.isArray(stats), "returns an array");
 	t.equal(stats.length, 0, "array is empty before any requests");
 	t.end();
 });
 
-test("connectionStats tracks connections after requests", async (t) => {
+test("connections tracks connections after requests", async (t) => {
 	const agent = new Agent();
 
 	await fetch(`${HTTPBIN_URL}/get`, { agent });
 
-	const stats = await agent.connectionStats();
+	const stats = agent.connections();
 	t.ok(Array.isArray(stats), "returns an array");
 	t.ok(stats.length > 0, "has at least one tracked connection");
 
@@ -35,7 +35,7 @@ test("connectionStats tracks connections after requests", async (t) => {
 	t.end();
 });
 
-test("connectionStats includes TCP info when available", async (t) => {
+test("connections includes TCP info when available", async (t) => {
 	const agent = new Agent();
 
 	// Use a slow request to ensure connection stays open
@@ -47,7 +47,7 @@ test("connectionStats includes TCP info when available", async (t) => {
 	// Wait a bit then query stats
 	await new Promise((r) => setTimeout(r, 300));
 
-	const stats = await agent.connectionStats();
+	const stats = agent.connections();
 	t.ok(stats.length > 0, "has tracked connections");
 
 	const conn = stats[0];
@@ -79,7 +79,7 @@ test("responseCount increments with each request on same connection", async (t) 
 		await resp.text();
 	}
 
-	const stats = await agent.connectionStats();
+	const stats = agent.connections();
 	t.ok(stats.length > 0, "has tracked connections");
 
 	const totalResponses = stats.reduce(
@@ -100,18 +100,18 @@ test("pruneConnections removes stale entries", async (t) => {
 
 	await fetch(`${HTTPBIN_URL}/get`, { agent });
 
-	let stats = await agent.connectionStats();
+	let stats = agent.connections();
 	t.ok(stats.length > 0, "has tracked connections before prune");
 
 	await agent.pruneConnections(0);
 
-	stats = await agent.connectionStats();
+	stats = agent.connections();
 	t.equal(stats.length, 0, "connections removed after pruneConnections(0)");
 
 	t.end();
 });
 
-test("connectionStats tracks multiple connections", async (t) => {
+test("connections tracks multiple connections", async (t) => {
 	const agent = new Agent();
 
 	await Promise.all([
@@ -120,7 +120,7 @@ test("connectionStats tracks multiple connections", async (t) => {
 		fetch(`${HTTPBIN_URL}/ip`, { agent }),
 	]);
 
-	const stats = await agent.connectionStats();
+	const stats = agent.connections();
 	t.ok(Array.isArray(stats), "returns an array");
 	t.ok(stats.length >= 1, "has at least one connection (may be pooled)");
 
