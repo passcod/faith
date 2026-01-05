@@ -793,6 +793,47 @@ Returns `null` if:
 - the url is malformed
 - the cookie cannot be represented as a string
 
+### `Agent.connections(): Array<object>`
+
+Returns information on current (TCP) connections open by this agent.
+
+Only tracks TCP connections currently (upstream limitation). Stats are updated once a second:
+this makes it possible to track indicators over time to find the retransmission rate, for
+example. The `lostPackets` and `deliveryRateBps` stats are only available on Linux. Some other
+fields might also be missing depending on platform support; and no forward guarantees are made
+on field availability. If the platform isn't supported at all, this will always return empty.
+
+```js
+{
+    connectionType: 'tcp', // always set to `tcp` currently
+
+    localAddress: '10.0.100.10',
+    localPort: 58336,
+    remoteAddress: '142.250.195.132',
+    remotePort: 443,
+
+    responseCount: 1, // how many responses were handled by this connection.
+                      // this may undercount when redirects are handled internally.
+
+    firstSeen: 2026-01-05T08:42:48.695Z,
+    lastSeen: 2026-01-05T08:42:48.695Z,
+    expiry: 2026-01-05T08:44:18.695Z, // when the connection is due to expire out of the pool.
+                                      // this will be pushed back on connection reuse.
+
+    rttUs: 27317, // round-trip time estimate in microseconds
+    rttVarUs: 882, // round-trip time variance in microseconds
+
+    lostPackets: 0, // (Linux-only) count of segments considered lost (requiring retransmission)
+    retransmits: 0, // how many segments are in-flight right now
+    totalRetransmits: 0, // how many segments were retransmitted in total
+
+    congestionWindow: 10, // the maximum number of segments allowed in flight
+
+    deliveryRateBps: 210887, // (Linux-only) the goodput (application-level throughput).
+                             // the rate at which data was actually delivered, in bytes per second
+}
+```
+
 ### `Agent.stats(): object`
 
 Returns statistics gathered by this agent:

@@ -1,3 +1,10 @@
+#[cfg(target_os = "linux")]
+mod linux;
+#[cfg(target_os = "macos")]
+mod macos;
+#[cfg(target_os = "windows")]
+mod windows;
+
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -65,11 +72,11 @@ impl Expiry<ConnectionKey, TrackedConnection> for ExpireAfterTimeout {
 pub struct TcpStats {
 	pub rtt_us: u32,
 	pub rtt_var_us: u32,
-	pub lost: u32,
+	pub lost: Option<u32>,
 	pub retrans: u32,
 	pub total_retrans: u32,
 	pub cwnd: u32,
-	pub delivery_rate: u64,
+	pub delivery_rate: Option<u64>,
 }
 
 #[napi(object)]
@@ -117,7 +124,7 @@ impl ConnectionTracker {
 		let conns = connections.clone();
 		let task_abort = spawn(async move {
 			loop {
-				update_all(conns.clone());
+				let _ = update_all(conns.clone());
 				sleep(Duration::from_secs(1)).await;
 			}
 		})
@@ -182,26 +189,44 @@ impl ConnectionTracker {
 				response_count: conn.response_count as i64,
 				rtt_us: conn.latest_stats.map(|s| s.rtt_us as i64),
 				rtt_var_us: conn.latest_stats.map(|s| s.rtt_var_us as i64),
-				lost_packets: conn.latest_stats.map(|s| s.lost as i64),
+				lost_packets: conn.latest_stats.and_then(|s| s.lost.map(|v| v as i64)),
 				retransmits: conn.latest_stats.map(|s| s.retrans as i64),
 				total_retransmits: conn.latest_stats.map(|s| s.total_retrans as i64),
 				congestion_window: conn.latest_stats.map(|s| s.cwnd as i64),
-				delivery_rate_bps: conn.latest_stats.map(|s| s.delivery_rate as i64),
+				delivery_rate_bps: conn
+					.latest_stats
+					.and_then(|s| s.delivery_rate.map(|v| v as i64)),
 			})
 			.collect()
 	}
 }
 
-fn update_all(conns: Conns) {
-	#[cfg(target_os = "linux")]
-	{
-		let keys: Vec<ConnectionKey> = conns.iter().map(|(k, _)| *k).collect();
-		if let Ok(stats) = crate::netlink::query_tcp_stats(&keys) {
-			for (key, tcp_stats) in &stats {
-				update_stats(&conns, *key, *tcp_stats);
-			}
-		}
+fn update_all(conns: Conns) -> std::io::Result<()> {
+	let keys: Vec<ConnectionKey> = conns.iter().map(|(k, _)| *k).collect();
+	if keys.is_empty() {
+		return Ok(());
 	}
+
+	#[allow(
+		unused_variables,
+		reason = "when any of the platform-specific impls work, this will be shadowed"
+	)]
+	let stats: Vec<(ConnectionKey, TcpStats)> = Vec::new();
+
+	#[cfg(target_os = "linux")]
+	let stats = linux::query_tcp_stats(&keys)?;
+
+	#[cfg(target_os = "macos")]
+	let stats = macos::query_tcp_stats(&keys)?;
+
+	#[cfg(target_os = "windows")]
+	let stats = windows::query_tcp_stats(&keys)?;
+
+	for (key, tcp_stats) in &stats {
+		update_stats(&conns, *key, *tcp_stats);
+	}
+
+	Ok(())
 }
 
 fn update_stats(conns: &Conns, key: ConnectionKey, stats: TcpStats) {

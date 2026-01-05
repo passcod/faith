@@ -778,9 +778,11 @@ impl Agent {
 
 	/// Returns information on current connections open by this agent.
 	///
-	/// Tracks TCP connections only currently (upstream limitation).
-	///
-	/// Only available on Linux. Returns an empty array on other platforms.
+	/// Only tracks TCP connections currently (upstream limitation). Stats are updated once a second:
+	/// this makes it possible to track indicators over time to find the retransmission rate, for
+	/// example. The `lostPackets` and `deliveryRateBps` stats are only available on Linux. Some other
+	/// fields might also be missing depending on platform support; and no forward guarantees are made
+	/// on field availability. If the platform isn't supported at all, this will always return empty.
 	#[napi]
 	pub fn connections<'env>(&self, env: &'env Env) -> Vec<ConnectionInfo<'env>> {
 		self.conn_tracker.get_for_napi(env)

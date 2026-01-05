@@ -12,7 +12,7 @@ use netlink_packet_sock_diag::{
 };
 use netlink_sys::{Socket, SocketAddr as NetlinkSocketAddr, protocols::NETLINK_SOCK_DIAG};
 
-use crate::conn_tracker::{ConnectionKey, TcpStats};
+use super::{ConnectionKey, TcpStats};
 
 pub fn query_tcp_stats(keys: &[ConnectionKey]) -> io::Result<Vec<(ConnectionKey, TcpStats)>> {
 	if keys.is_empty() {
@@ -144,11 +144,11 @@ fn process_response(
 		if let Nla::TcpInfo(info) = nla {
 			stats.rtt_us = info.rtt;
 			stats.rtt_var_us = info.rttvar;
-			stats.lost = info.lost;
+			stats.lost = Some(info.lost);
 			stats.retrans = info.retrans;
 			stats.total_retrans = info.total_retrans;
 			stats.cwnd = info.snd_cwnd;
-			stats.delivery_rate = info.delivery_rate;
+			stats.delivery_rate = Some(info.delivery_rate);
 		}
 	}
 

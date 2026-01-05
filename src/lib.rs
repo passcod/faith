@@ -7,8 +7,6 @@ mod conn_tracker;
 mod error;
 mod fetch;
 mod integrity;
-#[cfg(target_os = "linux")]
-mod netlink;
 mod options;
 mod response;
 mod stream_body;

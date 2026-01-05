@@ -518,6 +518,7 @@ dependencies = [
  "http-body-util",
  "http-cache-reqwest",
  "hyper-util",
+ "libc",
  "moka",
  "napi",
  "napi-build",
@@ -535,6 +536,7 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "tokio-util",
+ "windows",
 ]
 
 [[package]]

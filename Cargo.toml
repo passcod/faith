@@ -18,9 +18,7 @@ http = "1.4.0"
 http-body-util = "0.1.3"
 http-cache-reqwest = { version = "0.16.0", features = ["manager-cacache", "manager-moka"] }
 hyper-util = { version = "0.1", features = ["client-legacy", "tokio"] }
-netlink-packet-core = "0.7.0"
-netlink-packet-sock-diag = { version = "0.4.2", features = ["rich_nlas"] }
-netlink-sys = "0.8.7"
+libc = "0.2.179"
 napi = { version = "3.7.0", features = ["napi9", "serde-json", "tokio_rt", "web_stream"] }
 napi-derive = "3.4.0"
 reqwest = { version = "0.12.28", default-features = false, features = [
@@ -49,6 +47,17 @@ tokio-util = { version = "0.7.10", features = ["io"] }
 
 [replace]
 "reqwest:0.12.28" = { git = "https://github.com/passcod/reqwest", branch = "v0.12-h3alpn" }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+netlink-packet-core = "0.7.0"
+netlink-packet-sock-diag = { version = "0.4.2", features = ["rich_nlas"] }
+netlink-sys = "0.8.7"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { version = "0.62.2", features = [
+    "Win32_NetworkManagement_IpHelper",
+    "Win32_Networking_WinSock",
+] }
 
 [build-dependencies]
 napi-build = "2.3.1"
