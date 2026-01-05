@@ -805,32 +805,52 @@ on field availability. If the platform isn't supported at all, this will always 
 
 ```js
 {
-    connectionType: 'tcp', // always set to `tcp` currently
+    // always set to `tcp` currently.
+    // if QUIC connections are able to be tracked in future, this will be `quic`.
+    connectionType: 'tcp',
 
+    // local and remote addresses and ports for this connection.
+    // this uniquely identifies the connection for its duration.
     localAddress: '10.0.100.10',
     localPort: 58336,
     remoteAddress: '142.250.195.132',
     remotePort: 443,
 
-    responseCount: 1, // how many responses were handled by this connection.
-                      // this may undercount when redirects are handled internally.
+    // how many responses were handled by this connection.
+    // this may undercount when redirects are handled internally.
+    responseCount: 1,
 
-    firstSeen: 2026-01-05T08:42:48.695Z,
-    lastSeen: 2026-01-05T08:42:48.695Z,
-    expiry: 2026-01-05T08:44:18.695Z, // when the connection is due to expire out of the pool.
-                                      // this will be pushed back on connection reuse.
+    // when the first request done on the connection returned as a response.
+    firstSeen: new Date('2026-01-05T08:42:48.695Z'),
 
-    rttUs: 27317, // round-trip time estimate in microseconds
-    rttVarUs: 882, // round-trip time variance in microseconds
+    // when the latest request done on the connection returned as a response.
+    lastSeen: new Date('2026-01-05T08:42:48.695Z'),
 
-    lostPackets: 0, // (Linux-only) count of segments considered lost (requiring retransmission)
-    retransmits: 0, // how many segments are in-flight right now
-    totalRetransmits: 0, // how many segments were retransmitted in total
+    // an estimate of when the connection is due to expire out of the pool.
+    // this will be pushed back on connection reuse.
+    expiry: new Date('2026-01-05T08:44:18.695Z'),
 
-    congestionWindow: 10, // the maximum number of segments allowed in flight
+    // round-trip time estimate in microseconds.
+    rttUs: 27317,
+    // round-trip time variance in microseconds.
+    rttVarUs: 882,
 
-    deliveryRateBps: 210887, // (Linux-only) the goodput (application-level throughput).
-                             // the rate at which data was actually delivered, in bytes per second
+    // (Linux-only) count of segments considered lost (requiring retransmission).
+    lostPackets: 0,
+
+    // how many retransmitted segments are in-flight right now.
+    retransmits: 0,
+
+    // how many segments were retransmitted in total.
+    totalRetransmits: 0,
+
+    // the maximum number of segments allowed in flight at any one time.
+    // this is what is varied by the congestion control algorithm (CUBIC, BBR).
+    congestionWindow: 10,
+
+    // (Linux-only) the goodput (application-level throughput).
+    // the rate at which data was actually delivered, in bytes per second.
+    deliveryRateBps: 210887,
 }
 ```
 
