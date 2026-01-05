@@ -1657,12 +1657,12 @@ name = "reqwest"
 version = "0.12.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "eddd3ca559203180a307f12d114c268abf583f59b03cb906fd0b3ff8646c1147"
-replace = "reqwest 0.12.28 (git+https://github.com/passcod/reqwest?branch=v0.12-sslkeylogfile)"
+replace = "reqwest 0.12.28 (git+https://github.com/passcod/reqwest?branch=v0.12-h3alpn)"
 
 [[package]]
 name = "reqwest"
 version = "0.12.28"
-source = "git+https://github.com/passcod/reqwest?branch=v0.12-sslkeylogfile#3c9687633fdf85d5de7271c00db29c9d2501235d"
+source = "git+https://github.com/passcod/reqwest?branch=v0.12-h3alpn#9ce0247090782d809a81768e3566a9146c2d7176"
 dependencies = [
  "base64 0.22.1",
  "bytes",
@@ -2281,9 +2281,9 @@ dependencies = [
 
 [[package]]
 name = "tokio-stream"
-version = "0.1.17"
+version = "0.1.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eca58d7bba4a75707817a2c44174253f9236b2d5fbd055602e9d5c07c139a047"
+checksum = "32da49809aab5c3bc678af03902d4ccddea2a87d028d86392a4b1560c6906c70"
 dependencies = [
  "futures-core",
  "pin-project-lite",
@@ -2292,9 +2292,9 @@ dependencies = [
 
 [[package]]
 name = "tokio-util"
-version = "0.7.17"
+version = "0.7.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2efa149fe76073d6e8fd97ef4f4eca7b67f599660115591483572e406e165594"
+checksum = "9ae9cec805b01e8fc3fd2fe289f89149a9b66dd16786abd8b19cfa7b48cb0098"
 dependencies = [
  "bytes",
  "futures-core",

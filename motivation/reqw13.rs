@@ -2,7 +2,7 @@
 ---cargo
 [dependencies]
 tokio = { version = "1", features = ["full"] }
-reqwest = { version = "0.13", features = ["hickory-dns", "stream"], git = "https://github.com/passcod/reqwest", branch = "feat-2676-sslkeylogfile" }
+reqwest = { version = "0.13", features = ["hickory-dns", "stream", "http3"], git = "https://github.com/passcod/reqwest", rev = "8d07893" }
 
 [profile.dev]
 opt-level = 3
@@ -24,16 +24,18 @@ async fn main() {
 	let hits: usize = hits.parse().unwrap();
 
 	let client = reqwest::Client::builder()
-		.tls_sslkeylogfile(true)
+		.http3_prior_knowledge()
 		.build()
 		.unwrap();
 
 	for n in 0..hits {
-		match client.get(&target).send().await {
+		let req = client.request(Default::default(), &target).version(reqwest::Version::HTTP_3);
+		match req.send().await {
 			Err(err) => {
-				println!("{n}: {err}");
+				println!("{n}: {err:?}");
 			}
 			Ok(resp) => {
+				println!("{:?}", resp.version());
 				let _ = resp.bytes_stream();
 			}
 		}

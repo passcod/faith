@@ -504,13 +504,6 @@ impl Agent {
 
 		#[cfg(feature = "http3")]
 		{
-			// Call http3_prior_knowledge() to ensure h3_client is created.
-			// Without this, the H3Connector is not initialized and per-request
-			// Version::HTTP_3 will fall through to hyper, causing hangs.
-			// Note: This doesn't force HTTP/3 for all requests - it just ensures
-			// the h3_client exists so our Alt-Svc middleware can use it.
-			client = client.http3_prior_knowledge();
-
 			let idle_timeout = options
 				.http3
 				.as_ref()
