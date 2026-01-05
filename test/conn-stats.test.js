@@ -80,7 +80,6 @@ test("responseCount increments with each request on same connection", async (t) 
 
 	const stats = agent.connections();
 	t.ok(stats.length > 0, "has tracked connections");
-	console.log(stats);
 
 	const totalResponses = stats.reduce(
 		(sum, conn) => sum + conn.responseCount,

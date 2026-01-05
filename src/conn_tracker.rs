@@ -139,18 +139,25 @@ impl ConnectionTracker {
 
 	pub fn track(&self, local_addr: SocketAddr, remote_addr: SocketAddr) {
 		let now = SystemTime::now();
-		self.connections.insert(
-			ConnectionKey {
-				local_addr,
-				remote_addr,
-			},
-			TrackedConnection {
-				first_seen: now,
-				last_seen: now,
-				response_count: 1,
-				latest_stats: None,
-			},
-		);
+		let key = ConnectionKey {
+			local_addr,
+			remote_addr,
+		};
+		self.connections.entry(key).and_compute_with(|entry| {
+			if let Some(entry) = entry {
+				let mut conn = entry.into_value();
+				conn.last_seen = now;
+				conn.response_count += 1;
+				Op::Put(conn)
+			} else {
+				Op::Put(TrackedConnection {
+					first_seen: now,
+					last_seen: now,
+					response_count: 1,
+					latest_stats: None,
+				})
+			}
+		});
 	}
 
 	pub fn get_for_napi<'env>(&self, env: &'env Env) -> Vec<ConnectionInfo<'env>> {
