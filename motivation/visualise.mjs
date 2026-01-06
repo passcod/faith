@@ -275,8 +275,12 @@ function calculateStats(durations) {
 
 // Generate a gnuplot script and data file
 async function generateChart(name, config) {
+	const output = `${name}.png`;
+	const dataFile = `${name}_data.txt`;
+	const dataPath = `charts/${dataFile}`;
+
 	const gnuplotScript = `set terminal png size 1200,800 font "sans,10" enhanced
-set output 'charts/${config.output}'
+set output 'charts/${output}'
 set title '${config.title}'
 set xlabel '${config.xlabel}'
 set ylabel '${config.ylabel}'
@@ -290,17 +294,17 @@ set offset 0,0,graph 0.15,0
 ${config.xtics || 'set xtics ("1" 0, "10" 1, "100" 2)'}
 ${config.extra || ""}
 
-${config.plot}
+${typeof config.plot === "function" ? config.plot(dataPath) : config.plot}
 `;
 
 	await writeFile(`${OUTPUT_DIR}/${name}.gnuplot`, gnuplotScript);
-	await writeFile(`${OUTPUT_DIR}/${config.dataFile}`, config.data);
+	await writeFile(`${OUTPUT_DIR}/${dataFile}`, config.data);
 
 	try {
 		await execFileAsync("gnuplot", [`${OUTPUT_DIR}/${name}.gnuplot`]);
-		console.log(`✓ Generated: ${config.output}`);
+		console.log(`✓ Generated: ${output}`);
 	} catch (err) {
-		console.error(`✗ Failed to generate ${config.output}:`, err.message);
+		console.error(`✗ Failed to generate ${output}:`, err.message);
 	}
 }
 
@@ -365,7 +369,7 @@ async function main() {
 
 	console.log("Generating performance comparison charts...");
 
-	// Chart 1: Local performance
+	// Local performance
 	const localData = [1, 10, 100]
 		.map((hits) => {
 			const native = getAvgDuration(
@@ -394,13 +398,13 @@ async function main() {
 		.join("\n");
 
 	await generateChart("performance_local", {
-		output: "performance_by_impl_local.png",
 		title: "Performance Comparison (Local Target)",
 		xlabel: "Number of Requests",
 		ylabel: "Duration (ms)",
-		dataFile: "local_tcp_data.txt",
 		data: localData,
-		plot: `plot 'charts/local_tcp_data.txt' using 2:xtic(1) title 'native', \\
+		plot: (
+			dataPath,
+		) => `plot '${dataPath}' using 2:xtic(1) title 'native', \\
      '' using 3 title 'node-fetch', \\
      '' using 4 title 'Fáith', \\
      '' using ($0-0.27):2:(sprintf("%.0f",$2)) with labels center offset 0,1 font ",8" notitle, \\
@@ -408,7 +412,7 @@ async function main() {
      '' using ($0+0.27):4:(sprintf("%.0f",$4)) with labels center offset 0,1 font ",8" notitle`,
 	});
 
-	// Chart 2: Local overhead
+	// Local overhead
 	const localOverheadData = [10, 100]
 		.map((hits) => {
 			const native = calculateOverhead("native", "local", false, hits);
@@ -424,14 +428,14 @@ async function main() {
 		.join("\n");
 
 	await generateChart("performance_overhead_local", {
-		output: "performance_overhead_local.png",
 		title: "Request Overhead (Local Target - minus x1 baseline)",
 		xlabel: "Number of Requests",
 		ylabel: "Overhead Duration (ms)",
-		dataFile: "local_tcp_overhead_data.txt",
 		data: localOverheadData,
 		xtics: 'set xtics ("10" 0, "100" 1)',
-		plot: `plot 'charts/local_tcp_overhead_data.txt' using 2:xtic(1) title 'native', \\
+		plot: (
+			dataPath,
+		) => `plot '${dataPath}' using 2:xtic(1) title 'native', \\
      '' using 3 title 'node-fetch', \\
      '' using 4 title 'Fáith', \\
      '' using ($0-0.27):2:(sprintf("%.0f",$2)) with labels center offset 0,1 font ",8" notitle, \\
@@ -439,7 +443,65 @@ async function main() {
      '' using ($0+0.27):4:(sprintf("%.0f",$4)) with labels center offset 0,1 font ",8" notitle`,
 	});
 
-	// Chart 3: Google performance
+	// Parallelism impact (native-local, HITS=100, varying SEQ)
+	console.log("Generating parallelism comparison charts...");
+
+	const parallelismNativeLocalData = [1, 10, 25, 50]
+		.map((seq) => {
+			const duration = getAvgDuration(
+				(e) =>
+					e.impl === "native" &&
+					e.target === "local" &&
+					e.http3 === false &&
+					e.hits === 100 &&
+					e.seq === seq,
+			);
+			return `${seq}\t${duration}`;
+		})
+		.join("\n");
+
+	await generateChart("parallelism_native_local", {
+		title: "Parallelism Impact: native (Local Target, 100 requests)",
+		xlabel: "Parallel Requests (SEQ)",
+		ylabel: "Duration (ms)",
+		data: parallelismNativeLocalData,
+		xtics: 'set xtics ("1" 0, "10" 1, "25" 2, "50" 3)',
+		plot: (
+			dataPath,
+		) => `plot '${dataPath}' using 2:xtic(1) title 'native' with boxes, \\
+     '' using 0:2:(sprintf("%.0f",$2)) with labels center offset 0,1 font ",8" notitle`,
+	});
+
+	// Throughput by parallelism (native-local, HITS=100, varying SEQ)
+	const throughputParallelismData = [1, 10, 25, 50]
+		.map((seq) => {
+			const duration = getAvgDuration(
+				(e) =>
+					e.impl === "native" &&
+					e.target === "local" &&
+					e.http3 === false &&
+					e.hits === 100 &&
+					e.seq === seq,
+			);
+			const throughput =
+				duration > 0 ? (100 / (duration / 1000)).toFixed(1) : 0;
+			return `${seq}\t${throughput}`;
+		})
+		.join("\n");
+
+	await generateChart("throughput_parallelism_native_local", {
+		title: "Throughput by Parallelism: native (Local Target, 100 requests)",
+		xlabel: "Parallel Requests (SEQ)",
+		ylabel: "Requests/Second",
+		data: throughputParallelismData,
+		xtics: 'set xtics ("1" 0, "10" 1, "25" 2, "50" 3)',
+		plot: (
+			dataPath,
+		) => `plot '${dataPath}' using 2:xtic(1) title 'native' with boxes, \\
+     '' using 0:2:(sprintf("%.1f",$2)) with labels center offset 0,1 font ",8" notitle`,
+	});
+
+	// Google performance
 	const googleData = [1, 10, 100]
 		.map((hits) => {
 			const native = getAvgDuration(
@@ -468,13 +530,13 @@ async function main() {
 		.join("\n");
 
 	await generateChart("performance_google", {
-		output: "performance_by_impl_google.png",
 		title: "Performance Comparison (Google Target - TCP)",
 		xlabel: "Number of Requests",
 		ylabel: "Duration (ms)",
-		dataFile: "google_tcp_data.txt",
 		data: googleData,
-		plot: `plot 'charts/google_tcp_data.txt' using 2:xtic(1) title 'native', \\
+		plot: (
+			dataPath,
+		) => `plot '${dataPath}' using 2:xtic(1) title 'native', \\
      '' using 3 title 'node-fetch', \\
      '' using 4 title 'Fáith', \\
      '' using ($0-0.27):2:(sprintf("%.0f",$2)) with labels center offset 0,1 font ",8" notitle, \\
@@ -482,7 +544,7 @@ async function main() {
      '' using ($0+0.27):4:(sprintf("%.0f",$4)) with labels center offset 0,1 font ",8" notitle`,
 	});
 
-	// Chart 4: Google overhead
+	// Google overhead
 	const googleOverheadData = [10, 100]
 		.map((hits) => {
 			const native = calculateOverhead("native", "google", false, hits);
@@ -498,14 +560,14 @@ async function main() {
 		.join("\n");
 
 	await generateChart("performance_overhead_google", {
-		output: "performance_overhead_google.png",
 		title: "Request Overhead (Google Target - TCP, minus x1 baseline)",
 		xlabel: "Number of Requests",
 		ylabel: "Overhead Duration (ms)",
-		dataFile: "google_tcp_overhead_data.txt",
 		data: googleOverheadData,
 		xtics: 'set xtics ("10" 0, "100" 1)',
-		plot: `plot 'charts/google_tcp_overhead_data.txt' using 2:xtic(1) title 'native', \\
+		plot: (
+			dataPath,
+		) => `plot '${dataPath}' using 2:xtic(1) title 'native', \\
      '' using 3 title 'node-fetch', \\
      '' using 4 title 'Fáith', \\
      '' using ($0-0.27):2:(sprintf("%.0f",$2)) with labels center offset 0,1 font ",8" notitle, \\
@@ -513,7 +575,7 @@ async function main() {
      '' using ($0+0.27):4:(sprintf("%.0f",$4)) with labels center offset 0,1 font ",8" notitle`,
 	});
 
-	// Chart 5: Protocol comparison
+	// Protocol comparison
 	const protocolData = [1, 10, 100]
 		.map((hits) => {
 			const tcp = getAvgDuration(
@@ -542,13 +604,11 @@ async function main() {
 		.join("\n");
 
 	await generateChart("protocol_comparison", {
-		output: "faith_tcp_vs_quic.png",
 		title: "Fáith: TCP vs QUIC (Google Target)",
 		xlabel: "Number of Requests",
 		ylabel: "Duration (ms)",
-		dataFile: "faith_protocol_data.txt",
 		data: protocolData,
-		plot: `plot 'charts/faith_protocol_data.txt' using 2:xtic(1) title 'TCP', \\
+		plot: (dataPath) => `plot '${dataPath}' using 2:xtic(1) title 'TCP', \\
      '' using 3 title 'QUIC (Cubic)', \\
      '' using 4 title 'QUIC (BBR)', \\
      '' using ($0-0.27):2:(sprintf("%.0f",$2)) with labels center offset 0,1 font ",8" notitle, \\
@@ -556,7 +616,7 @@ async function main() {
      '' using ($0+0.27):4:(sprintf("%.0f",$4)) with labels center offset 0,1 font ",8" notitle`,
 	});
 
-	// Chart 6: Protocol overhead
+	// Protocol overhead
 	const protocolOverheadData = [10, 100]
 		.map((hits) => {
 			const tcp = calculateOverhead("faith", "google", false, hits);
@@ -567,14 +627,12 @@ async function main() {
 		.join("\n");
 
 	await generateChart("protocol_overhead", {
-		output: "faith_protocol_overhead.png",
 		title: "Fáith Protocol Overhead (Google Target - minus x1 baseline)",
 		xlabel: "Number of Requests",
 		ylabel: "Overhead Duration (ms)",
-		dataFile: "faith_protocol_overhead_data.txt",
 		data: protocolOverheadData,
 		xtics: 'set xtics ("10" 0, "100" 1)',
-		plot: `plot 'charts/faith_protocol_overhead_data.txt' using 2:xtic(1) title 'TCP', \\
+		plot: (dataPath) => `plot '${dataPath}' using 2:xtic(1) title 'TCP', \\
      '' using 3 title 'QUIC (Cubic)', \\
      '' using 4 title 'QUIC (BBR)', \\
      '' using ($0-0.27):2:(sprintf("%.0f",$2)) with labels center offset 0,1 font ",8" notitle, \\
@@ -582,7 +640,7 @@ async function main() {
      '' using ($0+0.27):4:(sprintf("%.0f",$4)) with labels center offset 0,1 font ",8" notitle`,
 	});
 
-	// Chart 7: Variance (box plot)
+	// Variance (box plot)
 	const varianceEntries = entries.filter(
 		(e) => e.target === "google" && e.hits === 10,
 	);
@@ -612,19 +670,19 @@ async function main() {
 		.join("\n");
 
 	await generateChart("variance", {
-		output: "performance_variance.png",
 		title: "Performance Variance (Google, 10 requests)",
 		xlabel: "",
 		ylabel: "Duration (ms)",
-		dataFile: "variance_data.txt",
 		data: varianceData,
 		xtics: "",
 		extra: "set offsets 0.5, 0.5, 0, 0\nset style fill solid 0.5\nset boxwidth 0.5\nset xtics rotate by -45\nset key off",
-		plot: `plot 'charts/variance_data.txt' using 0:2:1:5:4:xtic(6) with candlesticks whiskerbars lw 2 title 'Min/Max', \\
+		plot: (
+			dataPath,
+		) => `plot '${dataPath}' using 0:2:1:5:4:xtic(6) with candlesticks whiskerbars lw 2 title 'Min/Max', \\
      '' using 0:3:3:3:3 with candlesticks lw 2 lt -1 notitle`,
 	});
 
-	// Chart 8: Packet efficiency
+	// Packet efficiency
 	const packetEffData = [1, 10, 100]
 		.map((hits) => {
 			const native =
@@ -680,13 +738,13 @@ async function main() {
 		.join("\n");
 
 	await generateChart("packet_efficiency", {
-		output: "packet_efficiency.png",
 		title: "Network Efficiency: Packets per Request",
 		xlabel: "Number of Requests",
 		ylabel: "Average Packets per Request",
-		dataFile: "packet_efficiency_data.txt",
 		data: packetEffData,
-		plot: `plot 'charts/packet_efficiency_data.txt' using 2:xtic(1) title 'native', \\
+		plot: (
+			dataPath,
+		) => `plot '${dataPath}' using 2:xtic(1) title 'native', \\
      '' using 3 title 'node-fetch', \\
      '' using 4 title 'Fáith-TCP', \\
      '' using 5 title 'Fáith-QUIC', \\
@@ -696,7 +754,7 @@ async function main() {
      '' using ($0+0.33):5:(sprintf("%.1f",$5)) with labels center offset 0,1 font ",8" notitle`,
 	});
 
-	// Chart 9: Bytes per request
+	// Bytes per request
 	const bytesPerReqData = [1, 10, 100]
 		.map((hits) => {
 			const native =
@@ -752,13 +810,13 @@ async function main() {
 		.join("\n");
 
 	await generateChart("bytes_per_request", {
-		output: "bytes_per_request.png",
 		title: "Data Efficiency: Bytes per Request",
 		xlabel: "Number of Requests",
 		ylabel: "Average Bytes per Request",
-		dataFile: "bytes_per_request_data.txt",
 		data: bytesPerReqData,
-		plot: `plot 'charts/bytes_per_request_data.txt' using 2:xtic(1) title 'native', \\
+		plot: (
+			dataPath,
+		) => `plot '${dataPath}' using 2:xtic(1) title 'native', \\
      '' using 3 title 'node-fetch', \\
      '' using 4 title 'Fáith-TCP', \\
      '' using 5 title 'Fáith-QUIC', \\
@@ -768,7 +826,7 @@ async function main() {
      '' using ($0+0.33):5:(sprintf("%.1f",$5)) with labels center offset 0,1 font ",8" notitle`,
 	});
 
-	// Chart 10: Bytes per packet
+	// Bytes per packet
 	const bytesPerPacketData = [1, 10, 100]
 		.map((hits) => {
 			const nativeEntries = entries.filter(
@@ -839,13 +897,13 @@ async function main() {
 		.join("\n");
 
 	await generateChart("bytes_per_packet", {
-		output: "bytes_per_packet.png",
 		title: "Network Efficiency: Average Bytes per Packet",
 		xlabel: "Number of Requests",
 		ylabel: "Bytes per Packet",
-		dataFile: "bytes_per_packet_data.txt",
 		data: bytesPerPacketData,
-		plot: `plot 'charts/bytes_per_packet_data.txt' using 2:xtic(1) title 'native', \\
+		plot: (
+			dataPath,
+		) => `plot '${dataPath}' using 2:xtic(1) title 'native', \\
      '' using 3 title 'node-fetch', \\
      '' using 4 title 'Fáith-TCP', \\
      '' using 5 title 'Fáith-QUIC', \\
@@ -855,7 +913,7 @@ async function main() {
      '' using ($0+0.33):5:(sprintf("%.1f",$5)) with labels center offset 0,1 font ",8" notitle`,
 	});
 
-	// Chart 11: Throughput
+	// Throughput
 	const throughputData = [1, 10, 100]
 		.map((hits) => {
 			const native =
@@ -913,13 +971,13 @@ async function main() {
 		.join("\n");
 
 	await generateChart("throughput_google", {
-		output: "throughput_google.png",
 		title: "Throughput: Requests per Second (Google Target)",
 		xlabel: "Number of Requests",
 		ylabel: "Requests/Second",
-		dataFile: "throughput_google_data.txt",
 		data: throughputData,
-		plot: `plot 'charts/throughput_google_data.txt' using 2:xtic(1) title 'native', \\
+		plot: (
+			dataPath,
+		) => `plot '${dataPath}' using 2:xtic(1) title 'native', \\
      '' using 3 title 'node-fetch', \\
      '' using 4 title 'Fáith-TCP', \\
      '' using 5 title 'Fáith-QUIC (Cubic)', \\
@@ -931,7 +989,7 @@ async function main() {
      '' using ($0+0.4):6:(sprintf("%.1f",$6)) with labels center offset 0,1 font ",8" notitle`,
 	});
 
-	// Chart 12: Throughput (local)
+	// Throughput (local)
 	const throughputLocalData = [1, 10, 100]
 		.map((hits) => {
 			const native =
@@ -969,13 +1027,13 @@ async function main() {
 		.join("\n");
 
 	await generateChart("throughput_local", {
-		output: "throughput_local.png",
 		title: "Throughput: Requests per Second (Local Target)",
 		xlabel: "Number of Requests",
 		ylabel: "Requests/Second",
-		dataFile: "throughput_local_data.txt",
 		data: throughputLocalData,
-		plot: `plot 'charts/throughput_local_data.txt' using 2:xtic(1) title 'native', \\
+		plot: (
+			dataPath,
+		) => `plot '${dataPath}' using 2:xtic(1) title 'native', \\
      '' using 3 title 'node-fetch', \\
      '' using 4 title 'Fáith', \\
      '' using ($0-0.27):2:(sprintf("%.1f",$2)) with labels center offset 0,1 font ",8" notitle, \\
@@ -983,7 +1041,7 @@ async function main() {
      '' using ($0+0.27):4:(sprintf("%.1f",$4)) with labels center offset 0,1 font ",8" notitle`,
 	});
 
-	// Chart 13: Connections per request
+	// Connections per request
 	const connectionsPerReqData = [1, 10, 100]
 		.map((hits) => {
 			const nativeEntries = entries.filter(
@@ -1039,13 +1097,13 @@ async function main() {
 		.join("\n");
 
 	await generateChart("connections_per_request", {
-		output: "connections_per_request.png",
 		title: "Connection Reuse: Total Connections",
 		xlabel: "Number of Requests",
 		ylabel: "Total Connections",
-		dataFile: "connections_per_request_data.txt",
 		data: connectionsPerReqData,
-		plot: `plot 'charts/connections_per_request_data.txt' using 2:xtic(1) title 'native', \\
+		plot: (
+			dataPath,
+		) => `plot '${dataPath}' using 2:xtic(1) title 'native', \\
      '' using 3 title 'node-fetch', \\
      '' using 4 title 'Fáith-TCP', \\
      '' using 5 title 'Fáith-QUIC', \\
@@ -1055,7 +1113,7 @@ async function main() {
      '' using ($0+0.33):5:(sprintf("%.2f",$5)) with labels center offset 0,1 font ",8" notitle`,
 	});
 
-	// Chart 14: DNS requests
+	// DNS requests
 	const dnsData = [1, 10, 100]
 		.map((hits) => {
 			const nativeEntries = entries.filter(
@@ -1111,13 +1169,13 @@ async function main() {
 		.join("\n");
 
 	await generateChart("dns_queries", {
-		output: "dns_queries.png",
 		title: "DNS Resolution: DNS Queries",
 		xlabel: "Number of Requests",
 		ylabel: "DNS Queries",
-		dataFile: "dns_queries_data.txt",
 		data: dnsData,
-		plot: `plot 'charts/dns_queries_data.txt' using 2:xtic(1) title 'native', \\
+		plot: (
+			dataPath,
+		) => `plot '${dataPath}' using 2:xtic(1) title 'native', \\
      '' using 3 title 'node-fetch', \\
      '' using 4 title 'Fáith-TCP', \\
      '' using 5 title 'Fáith-QUIC', \\
@@ -1127,7 +1185,7 @@ async function main() {
      '' using ($0+0.33):5:(sprintf("%.1f",$5)) with labels center offset 0,1 font ",8" notitle`,
 	});
 
-	// Chart 15: DNS responses
+	// DNS responses
 	const dnsResponseData = [1, 10, 100]
 		.map((hits) => {
 			const nativeEntries = entries.filter(
@@ -1183,13 +1241,13 @@ async function main() {
 		.join("\n");
 
 	await generateChart("dns_responses", {
-		output: "dns_responses.png",
 		title: "DNS Resolution: DNS Responses",
 		xlabel: "Number of Requests",
 		ylabel: "DNS Responses",
-		dataFile: "dns_responses_data.txt",
 		data: dnsResponseData,
-		plot: `plot 'charts/dns_responses_data.txt' using 2:xtic(1) title 'native', \\
+		plot: (
+			dataPath,
+		) => `plot '${dataPath}' using 2:xtic(1) title 'native', \\
      '' using 3 title 'node-fetch', \\
      '' using 4 title 'Fáith-TCP', \\
      '' using 5 title 'Fáith-QUIC', \\
@@ -1203,7 +1261,7 @@ async function main() {
 	const allTargets = [...new Set(entries.map((e) => e.target))].sort();
 	console.log(`\nDiscovered targets: ${allTargets.join(", ")}`);
 
-	// Chart 16: Cross-target comparison for Fáith (100 requests, TCP)
+	// Cross-target comparison for Fáith (100 requests, TCP)
 	const crossTargetData = allTargets
 		.map((target) => {
 			const duration = getAvgDuration(
@@ -1220,19 +1278,19 @@ async function main() {
 
 	if (crossTargetData) {
 		await generateChart("cross_target_faith", {
-			output: "cross_target_faith.png",
 			title: "Fáith Performance Across Targets (100 requests, TCP)",
 			xlabel: "Target",
 			ylabel: "Duration (ms)",
-			dataFile: "cross_target_faith_data.txt",
 			data: crossTargetData,
 			xtics: "",
-			plot: `plot 'charts/cross_target_faith_data.txt' using 2:xtic(1) title 'Fáith' with boxes, \\
+			plot: (
+				dataPath,
+			) => `plot '${dataPath}' using 2:xtic(1) title 'Fáith' with boxes, \\
      '' using 0:2:(sprintf("%.0f",$2)) with labels center offset 0,1 font ",8" notitle`,
 		});
 	}
 
-	// Chart 17: All implementations comparison (100 requests, TCP) for each target
+	// All implementations comparison (100 requests, TCP) for each target
 	for (const target of allTargets) {
 		const targetData = ["native", "node-fetch", "faith"]
 			.map((impl) => {
@@ -1251,20 +1309,20 @@ async function main() {
 		if (targetData) {
 			const safeTarget = target.replace(/[^a-z0-9]/gi, "_");
 			await generateChart(`impl_comparison_${safeTarget}`, {
-				output: `impl_comparison_${safeTarget}.png`,
 				title: `Implementation Comparison: ${target} (100 requests, TCP)`,
 				xlabel: "Implementation",
 				ylabel: "Duration (ms)",
-				dataFile: `impl_comparison_${safeTarget}_data.txt`,
 				data: targetData,
 				xtics: "",
-				plot: `plot 'charts/impl_comparison_${safeTarget}_data.txt' using 2:xtic(1) title 'Duration' with boxes, \\
+				plot: (
+					dataPath,
+				) => `plot '${dataPath}' using 2:xtic(1) title 'Duration' with boxes, \\
      '' using 0:2:(sprintf("%.0f",$2)) with labels center offset 0,1 font ",8" notitle`,
 			});
 		}
 	}
 
-	// Chart 18: Throughput comparison across all targets (Fáith only, 100 requests)
+	// Throughput comparison across all targets (Fáith only, 100 requests)
 	const throughputAllTargetsData = allTargets
 		.map((target) => {
 			// Try TCP first
@@ -1293,14 +1351,14 @@ async function main() {
 
 	if (throughputAllTargetsData) {
 		await generateChart("throughput_all_targets", {
-			output: "throughput_all_targets.png",
 			title: "Fáith Throughput Across All Targets (100 requests)",
 			xlabel: "Target",
 			ylabel: "Requests/Second",
-			dataFile: "throughput_all_targets_data.txt",
 			data: throughputAllTargetsData,
 			xtics: "",
-			plot: `plot 'charts/throughput_all_targets_data.txt' using 2:xtic(1) title 'Fáith' with boxes, \\
+			plot: (
+				dataPath,
+			) => `plot '${dataPath}' using 2:xtic(1) title 'Fáith' with boxes, \\
      '' using 0:2:(sprintf("%.1f",$2)) with labels center offset 0,1 font ",8" notitle`,
 		});
 	}
