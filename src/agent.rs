@@ -589,7 +589,7 @@ impl Agent {
 		let reqwest_client = client
 			.build()
 			.map_err(|e| FaithError::new(FaithErrorKind::Config, Some(format!("{e:?}"))))?;
-		let mut client = ClientBuilder::new(reqwest_client);
+		let mut client = ClientBuilder::new(reqwest_client.clone());
 
 		#[cfg(feature = "http3")]
 		let alt_svc_cache = {

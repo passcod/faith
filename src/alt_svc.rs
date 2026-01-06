@@ -253,17 +253,45 @@ impl Middleware for AltSvcMiddleware {
 		let trying_h3 = self.cache.should_use_h3(&url).is_some();
 
 		if trying_h3 {
-			*req.version_mut() = http::Version::HTTP_3;
-		}
+			// Clone the request before attempting HTTP/3 so we can retry with TCP if it fails
+			if let Some(req_clone) = req.try_clone() {
+				*req.version_mut() = http::Version::HTTP_3;
 
-		let result = next.run(req, extensions).await;
+				let result = next.clone().run(req, extensions).await;
 
-		match &result {
-			Ok(response) => {
-				if trying_h3 && response.version() == http::Version::HTTP_3 {
-					self.cache.confirm_h3(&url);
+				match result {
+					Ok(response) => {
+						if response.version() == http::Version::HTTP_3 {
+							self.cache.confirm_h3(&url);
+						}
+
+						if let Some(alt_svc) = response.headers().get("alt-svc") {
+							if let Ok(value) = alt_svc.to_str() {
+								if let Some((port, max_age)) = parse_alt_svc_header(value) {
+									self.cache.record_alt_svc(&url, port, max_age);
+								}
+							}
+						}
+
+						Ok(response)
+					}
+					Err(_) => {
+						// HTTP/3 failed, record the failure and retry with HTTP/2 (or /1)
+						self.cache.record_h3_failure(&url);
+
+						// Use the cloned request (which still has default HTTP version)
+						next.run(req_clone, extensions).await
+					}
 				}
+			} else {
+				// Can't clone request (streaming body), just proceed without HTTP/3
+				next.run(req, extensions).await
+			}
+		} else {
+			let result = next.run(req, extensions).await;
 
+			// Check for Alt-Svc header in non-HTTP/3 responses
+			if let Ok(ref response) = result {
 				if let Some(alt_svc) = response.headers().get("alt-svc") {
 					if let Ok(value) = alt_svc.to_str() {
 						if let Some((port, max_age)) = parse_alt_svc_header(value) {
@@ -272,13 +300,9 @@ impl Middleware for AltSvcMiddleware {
 					}
 				}
 			}
-			Err(_) if trying_h3 => {
-				self.cache.record_h3_failure(&url);
-			}
-			Err(_) => {}
-		}
 
-		result
+			result
+		}
 	}
 }
 
