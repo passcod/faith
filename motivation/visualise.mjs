@@ -158,7 +158,42 @@ async function extractPcapStats(filename) {
 						},
 					).catch(() => ({ stdout: "0 packets" })),
 				),
-			// Use tshark to detect DNS responses]);
+			// Use tshark to detect DNS responses specifically
+			execFileAsync(
+				"tshark",
+				[
+					"-r",
+					pcapFile,
+					"-Y",
+					"dns.flags.response == 1",
+					"-T",
+					"fields",
+					"-e",
+					"frame.number",
+				],
+				{
+					encoding: "utf8",
+				},
+			)
+				.then((result) => {
+					const lines = result.stdout.trim();
+					return {
+						stdout: lines
+							? lines.split("\n").length + " packets"
+							: "0 packets",
+					};
+				})
+				.catch(() =>
+					// Fall back to tcpdump if tshark fails
+					execFileAsync(
+						"tcpdump",
+						["-r", pcapFile, "--count", "udp port 53"],
+						{
+							encoding: "utf8",
+						},
+					).catch(() => ({ stdout: "0 packets" })),
+				),
+		]);
 
 		const total = parseInt(totalResult.stdout.split(" ")[0]) || 0;
 		const tcp = parseInt(tcpResult.stdout.split(" ")[0]) || 0;
@@ -181,9 +216,20 @@ async function extractPcapStats(filename) {
 
 		const connections = tcp > 0 ? tcpSyn : udp > 0 ? quicConnections : 0;
 
-		const dns = parseInt(dnsResult.stdout.split(" ")[0]) || 0;
+		const dnsQueries = parseInt(dnsQueryResult.stdout.split(" ")[0]) || 0;
+		const dnsResponses =
+			parseInt(dnsResponseResult.stdout.split(" ")[0]) || 0;
 
-		return { filename, total, tcp, udp, bytes, connections, dns };
+		return {
+			filename,
+			total,
+			tcp,
+			udp,
+			bytes,
+			connections,
+			dnsQueries,
+			dnsResponses,
+		};
 	} catch (err) {
 		console.error(`Error reading ${pcapFile}:`, err.message);
 		return {
@@ -193,7 +239,8 @@ async function extractPcapStats(filename) {
 			udp: 0,
 			bytes: 0,
 			connections: 0,
-			dns: 0,
+			dnsQueries: 0,
+			dnsResponses: 0,
 		};
 	}
 }
@@ -1019,7 +1066,7 @@ async function main() {
 					e.http3 === false,
 			);
 			const nativeDns = nativeEntries
-				.map((e) => packetStatsMap.get(e.filename)?.dns || 0)
+				.map((e) => packetStatsMap.get(e.filename)?.dnsQueries || 0)
 				.reduce((sum, val) => sum + val, 0);
 			const native = nativeDns / nativeEntries.length;
 
@@ -1031,7 +1078,7 @@ async function main() {
 					e.http3 === false,
 			);
 			const nodefetchDns = nodefetchEntries
-				.map((e) => packetStatsMap.get(e.filename)?.dns || 0)
+				.map((e) => packetStatsMap.get(e.filename)?.dnsQueries || 0)
 				.reduce((sum, val) => sum + val, 0);
 			const nodefetch = nodefetchDns / nodefetchEntries.length;
 
@@ -1043,7 +1090,7 @@ async function main() {
 					e.http3 === false,
 			);
 			const faithTcpDns = faithTcpEntries
-				.map((e) => packetStatsMap.get(e.filename)?.dns || 0)
+				.map((e) => packetStatsMap.get(e.filename)?.dnsQueries || 0)
 				.reduce((sum, val) => sum + val, 0);
 			const faithTcp = faithTcpDns / faithTcpEntries.length;
 
@@ -1055,7 +1102,7 @@ async function main() {
 					e.http3 !== false,
 			);
 			const faithQuicDns = faithQuicEntries
-				.map((e) => packetStatsMap.get(e.filename)?.dns || 0)
+				.map((e) => packetStatsMap.get(e.filename)?.dnsQueries || 0)
 				.reduce((sum, val) => sum + val, 0);
 			const faithQuic = faithQuicDns / faithQuicEntries.length;
 
@@ -1063,14 +1110,14 @@ async function main() {
 		})
 		.join("\n");
 
-	await generateChart("dns_requests", {
-		output: "dns_requests.png",
-		title: "DNS Resolution: Total DNS Queries",
+	await generateChart("dns_queries", {
+		output: "dns_queries.png",
+		title: "DNS Resolution: DNS Queries",
 		xlabel: "Number of Requests",
 		ylabel: "DNS Queries",
-		dataFile: "dns_requests_data.txt",
+		dataFile: "dns_queries_data.txt",
 		data: dnsData,
-		plot: `plot 'charts/dns_requests_data.txt' using 2:xtic(1) title 'native', \\
+		plot: `plot 'charts/dns_queries_data.txt' using 2:xtic(1) title 'native', \\
      '' using 3 title 'node-fetch', \\
      '' using 4 title 'Fáith-TCP', \\
      '' using 5 title 'Fáith-QUIC', \\
@@ -1079,6 +1126,184 @@ async function main() {
      '' using ($0+0.11):4:(sprintf("%.1f",$4)) with labels center offset 0,1 font ",8" notitle, \\
      '' using ($0+0.33):5:(sprintf("%.1f",$5)) with labels center offset 0,1 font ",8" notitle`,
 	});
+
+	// Chart 15: DNS responses
+	const dnsResponseData = [1, 10, 100]
+		.map((hits) => {
+			const nativeEntries = entries.filter(
+				(e) =>
+					e.impl === "native" &&
+					e.target === "local" &&
+					e.hits === hits &&
+					e.http3 === false,
+			);
+			const nativeDnsResp = nativeEntries
+				.map((e) => packetStatsMap.get(e.filename)?.dnsResponses || 0)
+				.reduce((sum, val) => sum + val, 0);
+			const native = nativeDnsResp / nativeEntries.length;
+
+			const nodefetchEntries = entries.filter(
+				(e) =>
+					e.impl === "node-fetch" &&
+					e.target === "local" &&
+					e.hits === hits &&
+					e.http3 === false,
+			);
+			const nodefetchDnsResp = nodefetchEntries
+				.map((e) => packetStatsMap.get(e.filename)?.dnsResponses || 0)
+				.reduce((sum, val) => sum + val, 0);
+			const nodefetch = nodefetchDnsResp / nodefetchEntries.length;
+
+			const faithTcpEntries = entries.filter(
+				(e) =>
+					e.impl === "faith" &&
+					e.target === "local" &&
+					e.hits === hits &&
+					e.http3 === false,
+			);
+			const faithTcpDnsResp = faithTcpEntries
+				.map((e) => packetStatsMap.get(e.filename)?.dnsResponses || 0)
+				.reduce((sum, val) => sum + val, 0);
+			const faithTcp = faithTcpDnsResp / faithTcpEntries.length;
+
+			const faithQuicEntries = entries.filter(
+				(e) =>
+					e.impl === "faith" &&
+					e.target === "google" &&
+					e.hits === hits &&
+					e.http3 !== false,
+			);
+			const faithQuicDnsResp = faithQuicEntries
+				.map((e) => packetStatsMap.get(e.filename)?.dnsResponses || 0)
+				.reduce((sum, val) => sum + val, 0);
+			const faithQuic = faithQuicDnsResp / faithQuicEntries.length;
+
+			return `${hits}\t${native}\t${nodefetch}\t${faithTcp}\t${faithQuic}`;
+		})
+		.join("\n");
+
+	await generateChart("dns_responses", {
+		output: "dns_responses.png",
+		title: "DNS Resolution: DNS Responses",
+		xlabel: "Number of Requests",
+		ylabel: "DNS Responses",
+		dataFile: "dns_responses_data.txt",
+		data: dnsResponseData,
+		plot: `plot 'charts/dns_responses_data.txt' using 2:xtic(1) title 'native', \\
+     '' using 3 title 'node-fetch', \\
+     '' using 4 title 'Fáith-TCP', \\
+     '' using 5 title 'Fáith-QUIC', \\
+     '' using ($0-0.33):2:(sprintf("%.1f",$2)) with labels center offset 0,1 font ",8" notitle, \\
+     '' using ($0-0.11):3:(sprintf("%.1f",$3)) with labels center offset 0,1 font ",8" notitle, \\
+     '' using ($0+0.11):4:(sprintf("%.1f",$4)) with labels center offset 0,1 font ",8" notitle, \\
+     '' using ($0+0.33):5:(sprintf("%.1f",$5)) with labels center offset 0,1 font ",8" notitle`,
+	});
+
+	// Discover all available targets
+	const allTargets = [...new Set(entries.map((e) => e.target))].sort();
+	console.log(`\nDiscovered targets: ${allTargets.join(", ")}`);
+
+	// Chart 16: Cross-target comparison for Fáith (100 requests, TCP)
+	const crossTargetData = allTargets
+		.map((target) => {
+			const duration = getAvgDuration(
+				(e) =>
+					e.impl === "faith" &&
+					e.target === target &&
+					e.http3 === false &&
+					e.hits === 100,
+			);
+			return duration > 0 ? `${target}\t${Math.round(duration)}` : null;
+		})
+		.filter((x) => x !== null)
+		.join("\n");
+
+	if (crossTargetData) {
+		await generateChart("cross_target_faith", {
+			output: "cross_target_faith.png",
+			title: "Fáith Performance Across Targets (100 requests, TCP)",
+			xlabel: "Target",
+			ylabel: "Duration (ms)",
+			dataFile: "cross_target_faith_data.txt",
+			data: crossTargetData,
+			xtics: "",
+			plot: `plot 'charts/cross_target_faith_data.txt' using 2:xtic(1) title 'Fáith' with boxes, \\
+     '' using 0:2:(sprintf("%.0f",$2)) with labels center offset 0,1 font ",8" notitle`,
+		});
+	}
+
+	// Chart 17: All implementations comparison (100 requests, TCP) for each target
+	for (const target of allTargets) {
+		const targetData = ["native", "node-fetch", "faith"]
+			.map((impl) => {
+				const duration = getAvgDuration(
+					(e) =>
+						e.impl === impl &&
+						e.target === target &&
+						e.http3 === false &&
+						e.hits === 100,
+				);
+				return duration > 0 ? `${impl}\t${Math.round(duration)}` : null;
+			})
+			.filter((x) => x !== null)
+			.join("\n");
+
+		if (targetData) {
+			const safeTarget = target.replace(/[^a-z0-9]/gi, "_");
+			await generateChart(`impl_comparison_${safeTarget}`, {
+				output: `impl_comparison_${safeTarget}.png`,
+				title: `Implementation Comparison: ${target} (100 requests, TCP)`,
+				xlabel: "Implementation",
+				ylabel: "Duration (ms)",
+				dataFile: `impl_comparison_${safeTarget}_data.txt`,
+				data: targetData,
+				xtics: "",
+				plot: `plot 'charts/impl_comparison_${safeTarget}_data.txt' using 2:xtic(1) title 'Duration' with boxes, \\
+     '' using 0:2:(sprintf("%.0f",$2)) with labels center offset 0,1 font ",8" notitle`,
+			});
+		}
+	}
+
+	// Chart 18: Throughput comparison across all targets (Fáith only, 100 requests)
+	const throughputAllTargetsData = allTargets
+		.map((target) => {
+			// Try TCP first
+			let duration = getAvgDuration(
+				(e) =>
+					e.impl === "faith" &&
+					e.target === target &&
+					e.http3 === false &&
+					e.hits === 100,
+			);
+			// Fall back to any protocol if TCP not available
+			if (duration === 0) {
+				duration = getAvgDuration(
+					(e) =>
+						e.impl === "faith" &&
+						e.target === target &&
+						e.hits === 100,
+				);
+			}
+			const throughput =
+				duration > 0 ? (100 / (duration / 1000)).toFixed(1) : 0;
+			return throughput > 0 ? `${target}\t${throughput}` : null;
+		})
+		.filter((x) => x !== null)
+		.join("\n");
+
+	if (throughputAllTargetsData) {
+		await generateChart("throughput_all_targets", {
+			output: "throughput_all_targets.png",
+			title: "Fáith Throughput Across All Targets (100 requests)",
+			xlabel: "Target",
+			ylabel: "Requests/Second",
+			dataFile: "throughput_all_targets_data.txt",
+			data: throughputAllTargetsData,
+			xtics: "",
+			plot: `plot 'charts/throughput_all_targets_data.txt' using 2:xtic(1) title 'Fáith' with boxes, \\
+     '' using 0:2:(sprintf("%.1f",$2)) with labels center offset 0,1 font ",8" notitle`,
+		});
+	}
 
 	// Generate summary report
 	console.log("\n=== BENCHMARK SUMMARY ===\n");
@@ -1169,10 +1394,10 @@ async function main() {
 
 	// Save packet stats
 	const packetStatsTxt = [
-		"# filename total_packets tcp_packets udp_packets total_bytes connections dns_queries",
+		"# filename total_packets tcp_packets udp_packets total_bytes connections dns_queries dns_responses",
 		...packetStats.map(
 			(s) =>
-				`${s.filename} ${s.total} ${s.tcp} ${s.udp} ${s.bytes} ${s.connections} ${s.dns}`,
+				`${s.filename} ${s.total} ${s.tcp} ${s.udp} ${s.bytes} ${s.connections} ${s.dnsQueries} ${s.dnsResponses}`,
 		),
 	].join("\n");
 	await writeFile(`${OUTPUT_DIR}/packet_stats.txt`, packetStatsTxt);

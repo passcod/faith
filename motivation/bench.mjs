@@ -8,8 +8,12 @@ const targets = [
 	// { name: "local", url: "http://10.88.0.30:8080" },
 	// { name: "google", url: "https://www.google.com/" },
 	{
-		name: "github-100k",
-		url: "https://github.com/passcod/faith/raw/refs/heads/main/motivation/bench-data.json",
+		name: "cloudflare-100k",
+		url: "https://speed.cloudflare.com/__down?bytes=100000",
+	},
+	{
+		name: "ubuntu-apt-45M",
+		url: "https://archive.ubuntu.com/ubuntu/dists/jammy/Contents-amd64.gz`",
 	},
 ];
 const hitses = [1, 10, 100];
