@@ -26,7 +26,7 @@ if ! sudo podman image inspect "$IMAGE" > /dev/null; then
   exit 1
 fi
 
-CONTAINER_ID=$(sudo podman create -it --privileged --cap-add=NET_ADMIN --network podman-ipv6 -e TARGET="$TARGET" -e HITS="$HITS" -e HTTP3="$HTTP3" -e SSLKEYLOGFILE="/tmp/sslkeylog.txt" --entrypoint /bin/sh "$IMAGE" -c "while true; do sleep 1; done" 2>/dev/null)
+CONTAINER_ID=$(sudo podman create -it --privileged --cap-add=NET_ADMIN --network podman-ipv6 -e TARGET="$TARGET" -e HITS="$HITS" -e HTTP3="$HTTP3" -e SEQ="$SEQ" -e SSLKEYLOGFILE="/tmp/sslkeylog.txt" --entrypoint /bin/sh "$IMAGE" -c "while true; do sleep 1; done" 2>/dev/null)
 
 sudo podman start "$CONTAINER_ID" > /dev/null 2>&1
 
