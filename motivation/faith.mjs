@@ -20,11 +20,7 @@ let n = 0;
 while (n < HITS) {
 	const batch = [];
 	for (let i = 0; i < SEQ && n < HITS; i++, n++) {
-		batch.push(
-			fetch(TARGET, { agent }).then(async (resp) => {
-				await resp.discard();
-			}),
-		);
+		batch.push(fetch(TARGET, { agent }).then((resp) => resp.discard()));
 	}
 	await Promise.all(batch);
 }
