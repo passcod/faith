@@ -1,0 +1,3902 @@
+{
+  "native-google-redirect-x1-tcp-0": {
+    "impl": "native",
+    "http3": false,
+    "hits": 1,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 0,
+    "filename": "native-google-x1-tcp-0",
+    "duration": 2351.049008
+  },
+  "native-google-redirect-x1-tcp-1": {
+    "impl": "native",
+    "http3": false,
+    "hits": 1,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 1,
+    "filename": "native-google-x1-tcp-1",
+    "duration": 2219.097854
+  },
+  "native-google-redirect-x1-tcp-2": {
+    "impl": "native",
+    "http3": false,
+    "hits": 1,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 2,
+    "filename": "native-google-x1-tcp-2",
+    "duration": 2204.5508150000005
+  },
+  "native-google-redirect-x1-tcp-3": {
+    "impl": "native",
+    "http3": false,
+    "hits": 1,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 3,
+    "filename": "native-google-x1-tcp-3",
+    "duration": 2258.9531639999987
+  },
+  "native-google-redirect-x1-tcp-4": {
+    "impl": "native",
+    "http3": false,
+    "hits": 1,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 4,
+    "filename": "native-google-x1-tcp-4",
+    "duration": 2243.528119999999
+  },
+  "native-google-redirect-x1-tcp-5": {
+    "impl": "native",
+    "http3": false,
+    "hits": 1,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 5,
+    "filename": "native-google-x1-tcp-5",
+    "duration": 2230.6117090000007
+  },
+  "native-google-redirect-x1-tcp-6": {
+    "impl": "native",
+    "http3": false,
+    "hits": 1,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 6,
+    "filename": "native-google-x1-tcp-6",
+    "duration": 2388.9469900000004
+  },
+  "native-google-redirect-x1-tcp-7": {
+    "impl": "native",
+    "http3": false,
+    "hits": 1,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 7,
+    "filename": "native-google-x1-tcp-7",
+    "duration": 2261.5312599999997
+  },
+  "native-google-redirect-x1-tcp-8": {
+    "impl": "native",
+    "http3": false,
+    "hits": 1,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 8,
+    "filename": "native-google-x1-tcp-8",
+    "duration": 2223.396058999999
+  },
+  "native-google-redirect-x1-tcp-9": {
+    "impl": "native",
+    "http3": false,
+    "hits": 1,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 9,
+    "filename": "native-google-x1-tcp-9",
+    "duration": 2256.332799
+  },
+  "native-google-redirect-x10-tcp-0": {
+    "impl": "native",
+    "http3": false,
+    "hits": 10,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 0,
+    "filename": "native-google-x10-tcp-0",
+    "duration": 5217.015781999999
+  },
+  "native-google-redirect-x10-tcp-1": {
+    "impl": "native",
+    "http3": false,
+    "hits": 10,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 1,
+    "filename": "native-google-x10-tcp-1",
+    "duration": 5285.905915999996
+  },
+  "native-google-redirect-x10-tcp-2": {
+    "impl": "native",
+    "http3": false,
+    "hits": 10,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 2,
+    "filename": "native-google-x10-tcp-2",
+    "duration": 5239.674426999998
+  },
+  "native-google-redirect-x10-tcp-3": {
+    "impl": "native",
+    "http3": false,
+    "hits": 10,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 3,
+    "filename": "native-google-x10-tcp-3",
+    "duration": 5190.072154000001
+  },
+  "native-google-redirect-x10-tcp-4": {
+    "impl": "native",
+    "http3": false,
+    "hits": 10,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 4,
+    "filename": "native-google-x10-tcp-4",
+    "duration": 5291.177812000002
+  },
+  "native-google-redirect-x10-tcp-5": {
+    "impl": "native",
+    "http3": false,
+    "hits": 10,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 5,
+    "filename": "native-google-x10-tcp-5",
+    "duration": 5261.7578129999965
+  },
+  "native-google-redirect-x10-tcp-6": {
+    "impl": "native",
+    "http3": false,
+    "hits": 10,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 6,
+    "filename": "native-google-x10-tcp-6",
+    "duration": 4928.088293000001
+  },
+  "native-google-redirect-x10-tcp-7": {
+    "impl": "native",
+    "http3": false,
+    "hits": 10,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 7,
+    "filename": "native-google-x10-tcp-7",
+    "duration": 5168.832852
+  },
+  "native-google-redirect-x10-tcp-8": {
+    "impl": "native",
+    "http3": false,
+    "hits": 10,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 8,
+    "filename": "native-google-x10-tcp-8",
+    "duration": 5077.883587000004
+  },
+  "native-google-redirect-x10-tcp-9": {
+    "impl": "native",
+    "http3": false,
+    "hits": 10,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 9,
+    "filename": "native-google-x10-tcp-9",
+    "duration": 5036.819013999993
+  },
+  "native-google-redirect-x100-tcp-0": {
+    "impl": "native",
+    "http3": false,
+    "hits": 100,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 0,
+    "filename": "native-google-x100-tcp-0",
+    "duration": 33452.50417799999
+  },
+  "native-google-redirect-x100-tcp-1": {
+    "impl": "native",
+    "http3": false,
+    "hits": 100,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 1,
+    "filename": "native-google-x100-tcp-1",
+    "duration": 32993.06761900001
+  },
+  "native-google-redirect-x100-tcp-2": {
+    "impl": "native",
+    "http3": false,
+    "hits": 100,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 2,
+    "filename": "native-google-x100-tcp-2",
+    "duration": 32562.433787999995
+  },
+  "native-google-redirect-x100-tcp-3": {
+    "impl": "native",
+    "http3": false,
+    "hits": 100,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 3,
+    "filename": "native-google-x100-tcp-3",
+    "duration": 33260.95735699998
+  },
+  "native-google-redirect-x100-tcp-4": {
+    "impl": "native",
+    "http3": false,
+    "hits": 100,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 4,
+    "filename": "native-google-x100-tcp-4",
+    "duration": 32819.453901
+  },
+  "native-google-redirect-x100-tcp-5": {
+    "impl": "native",
+    "http3": false,
+    "hits": 100,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 5,
+    "filename": "native-google-x100-tcp-5",
+    "duration": 32904.52010300002
+  },
+  "native-google-redirect-x100-tcp-6": {
+    "impl": "native",
+    "http3": false,
+    "hits": 100,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 6,
+    "filename": "native-google-x100-tcp-6",
+    "duration": 32957.39364299999
+  },
+  "native-google-redirect-x100-tcp-7": {
+    "impl": "native",
+    "http3": false,
+    "hits": 100,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 7,
+    "filename": "native-google-x100-tcp-7",
+    "duration": 32857.078694999975
+  },
+  "native-google-redirect-x100-tcp-8": {
+    "impl": "native",
+    "http3": false,
+    "hits": 100,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 8,
+    "filename": "native-google-x100-tcp-8",
+    "duration": 32332.358244000003
+  },
+  "native-google-redirect-x100-tcp-9": {
+    "impl": "native",
+    "http3": false,
+    "hits": 100,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 9,
+    "filename": "native-google-x100-tcp-9",
+    "duration": 124080.48595900001
+  },
+  "node-fetch-google-redirect-x1-tcp-0": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 1,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 0,
+    "filename": "node-fetch-google-x1-tcp-0",
+    "duration": 3901.5238289999543
+  },
+  "node-fetch-google-redirect-x1-tcp-1": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 1,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 1,
+    "filename": "node-fetch-google-x1-tcp-1",
+    "duration": 2732.938029999961
+  },
+  "node-fetch-google-redirect-x1-tcp-2": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 1,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 2,
+    "filename": "node-fetch-google-x1-tcp-2",
+    "duration": 3165.566743000003
+  },
+  "node-fetch-google-redirect-x1-tcp-3": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 1,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 3,
+    "filename": "node-fetch-google-x1-tcp-3",
+    "duration": 2786.8437969999504
+  },
+  "node-fetch-google-redirect-x1-tcp-4": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 1,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 4,
+    "filename": "node-fetch-google-x1-tcp-4",
+    "duration": 3458.6117990000057
+  },
+  "node-fetch-google-redirect-x1-tcp-5": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 1,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 5,
+    "filename": "node-fetch-google-x1-tcp-5",
+    "duration": 2694.0956870000227
+  },
+  "node-fetch-google-redirect-x1-tcp-6": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 1,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 6,
+    "filename": "node-fetch-google-x1-tcp-6",
+    "duration": 2722.108779000002
+  },
+  "node-fetch-google-redirect-x1-tcp-7": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 1,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 7,
+    "filename": "node-fetch-google-x1-tcp-7",
+    "duration": 3332.7711640000343
+  },
+  "node-fetch-google-redirect-x1-tcp-8": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 1,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 8,
+    "filename": "node-fetch-google-x1-tcp-8",
+    "duration": 2765.476506999985
+  },
+  "node-fetch-google-redirect-x1-tcp-9": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 1,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 9,
+    "filename": "node-fetch-google-x1-tcp-9",
+    "duration": 3206.8427629999933
+  },
+  "node-fetch-google-redirect-x10-tcp-0": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 10,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 0,
+    "filename": "node-fetch-google-x10-tcp-0",
+    "duration": 16389.189916000003
+  },
+  "node-fetch-google-redirect-x10-tcp-1": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 10,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 1,
+    "filename": "node-fetch-google-x10-tcp-1",
+    "duration": 18792.250872999895
+  },
+  "node-fetch-google-redirect-x10-tcp-2": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 10,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 2,
+    "filename": "node-fetch-google-x10-tcp-2",
+    "duration": 16990.211174999946
+  },
+  "node-fetch-google-redirect-x10-tcp-3": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 10,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 3,
+    "filename": "node-fetch-google-x10-tcp-3",
+    "duration": 14132.958775000065
+  },
+  "node-fetch-google-redirect-x10-tcp-4": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 10,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 4,
+    "filename": "node-fetch-google-x10-tcp-4",
+    "duration": 15523.30224800005
+  },
+  "node-fetch-google-redirect-x10-tcp-5": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 10,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 5,
+    "filename": "node-fetch-google-x10-tcp-5",
+    "duration": 19040.36984499998
+  },
+  "node-fetch-google-redirect-x10-tcp-6": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 10,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 6,
+    "filename": "node-fetch-google-x10-tcp-6",
+    "duration": 14466.522913999972
+  },
+  "node-fetch-google-redirect-x10-tcp-7": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 10,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 7,
+    "filename": "node-fetch-google-x10-tcp-7",
+    "duration": 14023.640207000077
+  },
+  "node-fetch-google-redirect-x10-tcp-8": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 10,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 8,
+    "filename": "node-fetch-google-x10-tcp-8",
+    "duration": 14084.076451000059
+  },
+  "node-fetch-google-redirect-x10-tcp-9": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 10,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 9,
+    "filename": "node-fetch-google-x10-tcp-9",
+    "duration": 16125.219726999989
+  },
+  "node-fetch-google-redirect-x100-tcp-0": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 100,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 0,
+    "filename": "node-fetch-google-x100-tcp-0",
+    "duration": 121443.80131199991
+  },
+  "node-fetch-google-redirect-x100-tcp-1": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 100,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 1,
+    "filename": "node-fetch-google-x100-tcp-1",
+    "duration": 98914.68969099992
+  },
+  "node-fetch-google-redirect-x100-tcp-2": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 100,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 2,
+    "filename": "node-fetch-google-x100-tcp-2",
+    "duration": 101397.69655700005
+  },
+  "node-fetch-google-redirect-x100-tcp-3": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 100,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 3,
+    "filename": "node-fetch-google-x100-tcp-3",
+    "duration": 97998.13777599996
+  },
+  "node-fetch-google-redirect-x100-tcp-4": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 100,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 4,
+    "filename": "node-fetch-google-x100-tcp-4",
+    "duration": 96733.013912
+  },
+  "node-fetch-google-redirect-x100-tcp-5": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 100,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 5,
+    "filename": "node-fetch-google-x100-tcp-5",
+    "duration": 96556.5638890001
+  },
+  "node-fetch-google-redirect-x100-tcp-6": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 100,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 6,
+    "filename": "node-fetch-google-x100-tcp-6",
+    "duration": 97205.04753200011
+  },
+  "node-fetch-google-redirect-x100-tcp-7": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 100,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 7,
+    "filename": "node-fetch-google-x100-tcp-7",
+    "duration": 97250.0122450001
+  },
+  "node-fetch-google-redirect-x100-tcp-8": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 100,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 8,
+    "filename": "node-fetch-google-x100-tcp-8",
+    "duration": 96506.50897100009
+  },
+  "node-fetch-google-redirect-x100-tcp-9": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 100,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 9,
+    "filename": "node-fetch-google-x100-tcp-9",
+    "duration": 98776.68363100011
+  },
+  "faith-google-redirect-x1-tcp-0": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 1,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 0,
+    "filename": "faith-google-x1-tcp-0",
+    "duration": 2331.785887
+  },
+  "faith-google-redirect-x1-tcp-1": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 1,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 1,
+    "filename": "faith-google-x1-tcp-1",
+    "duration": 2317.094438
+  },
+  "faith-google-redirect-x1-tcp-2": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 1,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 2,
+    "filename": "faith-google-x1-tcp-2",
+    "duration": 2321.4341840000006
+  },
+  "faith-google-redirect-x1-tcp-3": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 1,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 3,
+    "filename": "faith-google-x1-tcp-3",
+    "duration": 2319.6436479999993
+  },
+  "faith-google-redirect-x1-tcp-4": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 1,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 4,
+    "filename": "faith-google-x1-tcp-4",
+    "duration": 2294.5268430000015
+  },
+  "faith-google-redirect-x1-tcp-5": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 1,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 5,
+    "filename": "faith-google-x1-tcp-5",
+    "duration": 2397.604657
+  },
+  "faith-google-redirect-x1-tcp-6": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 1,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 6,
+    "filename": "faith-google-x1-tcp-6",
+    "duration": 2435.0106149999992
+  },
+  "faith-google-redirect-x1-tcp-7": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 1,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 7,
+    "filename": "faith-google-x1-tcp-7",
+    "duration": 2331.9424099999997
+  },
+  "faith-google-redirect-x1-tcp-8": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 1,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 8,
+    "filename": "faith-google-x1-tcp-8",
+    "duration": 2329.787794
+  },
+  "faith-google-redirect-x1-tcp-9": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 1,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 9,
+    "filename": "faith-google-x1-tcp-9",
+    "duration": 2270.433660999999
+  },
+  "faith-google-redirect-x10-tcp-0": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 10,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 0,
+    "filename": "faith-google-x10-tcp-0",
+    "duration": 7543.0258090000025
+  },
+  "faith-google-redirect-x10-tcp-1": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 10,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 1,
+    "filename": "faith-google-x10-tcp-1",
+    "duration": 7708.019629999995
+  },
+  "faith-google-redirect-x10-tcp-2": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 10,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 2,
+    "filename": "faith-google-x10-tcp-2",
+    "duration": 7340.058456999999
+  },
+  "faith-google-redirect-x10-tcp-3": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 10,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 3,
+    "filename": "faith-google-x10-tcp-3",
+    "duration": 7071.890149999999
+  },
+  "faith-google-redirect-x10-tcp-4": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 10,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 4,
+    "filename": "faith-google-x10-tcp-4",
+    "duration": 7279.150278000001
+  },
+  "faith-google-redirect-x10-tcp-5": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 10,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 5,
+    "filename": "faith-google-x10-tcp-5",
+    "duration": 7187.723499999993
+  },
+  "faith-google-redirect-x10-tcp-6": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 10,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 6,
+    "filename": "faith-google-x10-tcp-6",
+    "duration": 7310.246476
+  },
+  "faith-google-redirect-x10-tcp-7": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 10,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 7,
+    "filename": "faith-google-x10-tcp-7",
+    "duration": 7514.913518999994
+  },
+  "faith-google-redirect-x10-tcp-8": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 10,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 8,
+    "filename": "faith-google-x10-tcp-8",
+    "duration": 7429.6589010000025
+  },
+  "faith-google-redirect-x10-tcp-9": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 10,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 9,
+    "filename": "faith-google-x10-tcp-9",
+    "duration": 7583.305820999987
+  },
+  "faith-google-redirect-x100-tcp-0": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 100,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 0,
+    "filename": "faith-google-x100-tcp-0",
+    "duration": 76549.27176599999
+  },
+  "faith-google-redirect-x100-tcp-1": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 100,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 1,
+    "filename": "faith-google-x100-tcp-1",
+    "duration": 82818.294555
+  },
+  "faith-google-redirect-x100-tcp-2": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 100,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 2,
+    "filename": "faith-google-x100-tcp-2",
+    "duration": 77837.388439
+  },
+  "faith-google-redirect-x100-tcp-3": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 100,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 3,
+    "filename": "faith-google-x100-tcp-3",
+    "duration": 80586.30844399997
+  },
+  "faith-google-redirect-x100-tcp-4": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 100,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 4,
+    "filename": "faith-google-x100-tcp-4",
+    "duration": 79129.28879700002
+  },
+  "faith-google-redirect-x100-tcp-5": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 100,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 5,
+    "filename": "faith-google-x100-tcp-5",
+    "duration": 79551.42477800004
+  },
+  "faith-google-redirect-x100-tcp-6": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 100,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 6,
+    "filename": "faith-google-x100-tcp-6",
+    "duration": 71354.22088099993
+  },
+  "faith-google-redirect-x100-tcp-7": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 100,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 7,
+    "filename": "faith-google-x100-tcp-7",
+    "duration": 75365.50761900004
+  },
+  "faith-google-redirect-x100-tcp-8": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 100,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 8,
+    "filename": "faith-google-x100-tcp-8",
+    "duration": 74010.20393900003
+  },
+  "faith-google-redirect-x100-tcp-9": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 100,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 9,
+    "filename": "faith-google-x100-tcp-9",
+    "duration": 75455.04133200005
+  },
+  "faith-google-redirect-x1-quic-cubic-0": {
+    "impl": "faith",
+    "http3": "cubic",
+    "hits": 1,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 0,
+    "filename": "faith-google-x1-quic-cubic-0",
+    "duration": 2537.343944
+  },
+  "faith-google-redirect-x1-quic-cubic-1": {
+    "impl": "faith",
+    "http3": "cubic",
+    "hits": 1,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 1,
+    "filename": "faith-google-x1-quic-cubic-1",
+    "duration": 2372.7665859999997
+  },
+  "faith-google-redirect-x1-quic-cubic-2": {
+    "impl": "faith",
+    "http3": "cubic",
+    "hits": 1,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 2,
+    "filename": "faith-google-x1-quic-cubic-2",
+    "duration": 2342.2238989999996
+  },
+  "faith-google-redirect-x1-quic-cubic-3": {
+    "impl": "faith",
+    "http3": "cubic",
+    "hits": 1,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 3,
+    "filename": "faith-google-x1-quic-cubic-3",
+    "duration": 2288.9359600000007
+  },
+  "faith-google-redirect-x1-quic-cubic-4": {
+    "impl": "faith",
+    "http3": "cubic",
+    "hits": 1,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 4,
+    "filename": "faith-google-x1-quic-cubic-4",
+    "duration": 2393.2908769999995
+  },
+  "faith-google-redirect-x1-quic-cubic-5": {
+    "impl": "faith",
+    "http3": "cubic",
+    "hits": 1,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 5,
+    "filename": "faith-google-x1-quic-cubic-5",
+    "duration": 2344.260692
+  },
+  "faith-google-redirect-x1-quic-cubic-6": {
+    "impl": "faith",
+    "http3": "cubic",
+    "hits": 1,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 6,
+    "filename": "faith-google-x1-quic-cubic-6",
+    "duration": 2325.8296999999984
+  },
+  "faith-google-redirect-x1-quic-cubic-7": {
+    "impl": "faith",
+    "http3": "cubic",
+    "hits": 1,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 7,
+    "filename": "faith-google-x1-quic-cubic-7",
+    "duration": 2328.5846579999998
+  },
+  "faith-google-redirect-x1-quic-cubic-8": {
+    "impl": "faith",
+    "http3": "cubic",
+    "hits": 1,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 8,
+    "filename": "faith-google-x1-quic-cubic-8",
+    "duration": 2365.5793950000007
+  },
+  "faith-google-redirect-x1-quic-cubic-9": {
+    "impl": "faith",
+    "http3": "cubic",
+    "hits": 1,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 9,
+    "filename": "faith-google-x1-quic-cubic-9",
+    "duration": 2354.2880760000007
+  },
+  "faith-google-redirect-x10-quic-cubic-0": {
+    "impl": "faith",
+    "http3": "cubic",
+    "hits": 10,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 0,
+    "filename": "faith-google-x10-quic-cubic-0",
+    "duration": 7766.706683000004
+  },
+  "faith-google-redirect-x10-quic-cubic-1": {
+    "impl": "faith",
+    "http3": "cubic",
+    "hits": 10,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 1,
+    "filename": "faith-google-x10-quic-cubic-1",
+    "duration": 7718.709962000001
+  },
+  "faith-google-redirect-x10-quic-cubic-2": {
+    "impl": "faith",
+    "http3": "cubic",
+    "hits": 10,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 2,
+    "filename": "faith-google-x10-quic-cubic-2",
+    "duration": 7404.5743370000055
+  },
+  "faith-google-redirect-x10-quic-cubic-3": {
+    "impl": "faith",
+    "http3": "cubic",
+    "hits": 10,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 3,
+    "filename": "faith-google-x10-quic-cubic-3",
+    "duration": 8277.597583000002
+  },
+  "faith-google-redirect-x10-quic-cubic-4": {
+    "impl": "faith",
+    "http3": "cubic",
+    "hits": 10,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 4,
+    "filename": "faith-google-x10-quic-cubic-4",
+    "duration": 6941.648410000002
+  },
+  "faith-google-redirect-x10-quic-cubic-5": {
+    "impl": "faith",
+    "http3": "cubic",
+    "hits": 10,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 5,
+    "filename": "faith-google-x10-quic-cubic-5",
+    "duration": 7150.604739000002
+  },
+  "faith-google-redirect-x10-quic-cubic-6": {
+    "impl": "faith",
+    "http3": "cubic",
+    "hits": 10,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 6,
+    "filename": "faith-google-x10-quic-cubic-6",
+    "duration": 7129.113413999992
+  },
+  "faith-google-redirect-x10-quic-cubic-7": {
+    "impl": "faith",
+    "http3": "cubic",
+    "hits": 10,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 7,
+    "filename": "faith-google-x10-quic-cubic-7",
+    "duration": 7339.535906000005
+  },
+  "faith-google-redirect-x10-quic-cubic-8": {
+    "impl": "faith",
+    "http3": "cubic",
+    "hits": 10,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 8,
+    "filename": "faith-google-x10-quic-cubic-8",
+    "duration": 7620.2724670000025
+  },
+  "faith-google-redirect-x10-quic-cubic-9": {
+    "impl": "faith",
+    "http3": "cubic",
+    "hits": 10,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 9,
+    "filename": "faith-google-x10-quic-cubic-9",
+    "duration": 7161.959036
+  },
+  "faith-google-redirect-x100-quic-cubic-0": {
+    "impl": "faith",
+    "http3": "cubic",
+    "hits": 100,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 0,
+    "filename": "faith-google-x100-quic-cubic-0",
+    "duration": 65187.359505000015
+  },
+  "faith-google-redirect-x100-quic-cubic-1": {
+    "impl": "faith",
+    "http3": "cubic",
+    "hits": 100,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 1,
+    "filename": "faith-google-x100-quic-cubic-1",
+    "duration": 63991.98478299999
+  },
+  "faith-google-redirect-x100-quic-cubic-2": {
+    "impl": "faith",
+    "http3": "cubic",
+    "hits": 100,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 2,
+    "filename": "faith-google-x100-quic-cubic-2",
+    "duration": 67035.407015
+  },
+  "faith-google-redirect-x100-quic-cubic-3": {
+    "impl": "faith",
+    "http3": "cubic",
+    "hits": 100,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 3,
+    "filename": "faith-google-x100-quic-cubic-3",
+    "duration": 64850.07102000003
+  },
+  "faith-google-redirect-x100-quic-cubic-4": {
+    "impl": "faith",
+    "http3": "cubic",
+    "hits": 100,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 4,
+    "filename": "faith-google-x100-quic-cubic-4",
+    "duration": 64189.420417000016
+  },
+  "faith-google-redirect-x100-quic-cubic-5": {
+    "impl": "faith",
+    "http3": "cubic",
+    "hits": 100,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 5,
+    "filename": "faith-google-x100-quic-cubic-5",
+    "duration": 65845.49051700003
+  },
+  "faith-google-redirect-x100-quic-cubic-6": {
+    "impl": "faith",
+    "http3": "cubic",
+    "hits": 100,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 6,
+    "filename": "faith-google-x100-quic-cubic-6",
+    "duration": 64448.11228600005
+  },
+  "faith-google-redirect-x100-quic-cubic-7": {
+    "impl": "faith",
+    "http3": "cubic",
+    "hits": 100,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 7,
+    "filename": "faith-google-x100-quic-cubic-7",
+    "duration": 63752.54876799998
+  },
+  "faith-google-redirect-x100-quic-cubic-8": {
+    "impl": "faith",
+    "http3": "cubic",
+    "hits": 100,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 8,
+    "filename": "faith-google-x100-quic-cubic-8",
+    "duration": 63553.952355999965
+  },
+  "faith-google-redirect-x100-quic-cubic-9": {
+    "impl": "faith",
+    "http3": "cubic",
+    "hits": 100,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 9,
+    "filename": "faith-google-x100-quic-cubic-9",
+    "duration": 64371.01943799993
+  },
+  "faith-google-redirect-x1-quic-bbr-0": {
+    "impl": "faith",
+    "http3": "bbr",
+    "hits": 1,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 0,
+    "filename": "faith-google-x1-quic-bbr-0",
+    "duration": 2380.520635000081
+  },
+  "faith-google-redirect-x1-quic-bbr-1": {
+    "impl": "faith",
+    "http3": "bbr",
+    "hits": 1,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 1,
+    "filename": "faith-google-x1-quic-bbr-1",
+    "duration": 2412.0419909999473
+  },
+  "faith-google-redirect-x1-quic-bbr-2": {
+    "impl": "faith",
+    "http3": "bbr",
+    "hits": 1,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 2,
+    "filename": "faith-google-x1-quic-bbr-2",
+    "duration": 2401.4224819999654
+  },
+  "faith-google-redirect-x1-quic-bbr-3": {
+    "impl": "faith",
+    "http3": "bbr",
+    "hits": 1,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 3,
+    "filename": "faith-google-x1-quic-bbr-3",
+    "duration": 2335.046261999989
+  },
+  "faith-google-redirect-x1-quic-bbr-4": {
+    "impl": "faith",
+    "http3": "bbr",
+    "hits": 1,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 4,
+    "filename": "faith-google-x1-quic-bbr-4",
+    "duration": 2392.836678999942
+  },
+  "faith-google-redirect-x1-quic-bbr-5": {
+    "impl": "faith",
+    "http3": "bbr",
+    "hits": 1,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 5,
+    "filename": "faith-google-x1-quic-bbr-5",
+    "duration": 2374.637515999959
+  },
+  "faith-google-redirect-x1-quic-bbr-6": {
+    "impl": "faith",
+    "http3": "bbr",
+    "hits": 1,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 6,
+    "filename": "faith-google-x1-quic-bbr-6",
+    "duration": 2338.191142000025
+  },
+  "faith-google-redirect-x1-quic-bbr-7": {
+    "impl": "faith",
+    "http3": "bbr",
+    "hits": 1,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 7,
+    "filename": "faith-google-x1-quic-bbr-7",
+    "duration": 2476.0007569999434
+  },
+  "faith-google-redirect-x1-quic-bbr-8": {
+    "impl": "faith",
+    "http3": "bbr",
+    "hits": 1,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 8,
+    "filename": "faith-google-x1-quic-bbr-8",
+    "duration": 2434.32572600001
+  },
+  "faith-google-redirect-x1-quic-bbr-9": {
+    "impl": "faith",
+    "http3": "bbr",
+    "hits": 1,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 9,
+    "filename": "faith-google-x1-quic-bbr-9",
+    "duration": 2291.124184000073
+  },
+  "faith-google-redirect-x10-quic-bbr-0": {
+    "impl": "faith",
+    "http3": "bbr",
+    "hits": 10,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 0,
+    "filename": "faith-google-x10-quic-bbr-0",
+    "duration": 7680.849234999972
+  },
+  "faith-google-redirect-x10-quic-bbr-1": {
+    "impl": "faith",
+    "http3": "bbr",
+    "hits": 10,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 1,
+    "filename": "faith-google-x10-quic-bbr-1",
+    "duration": 7659.213977999985
+  },
+  "faith-google-redirect-x10-quic-bbr-2": {
+    "impl": "faith",
+    "http3": "bbr",
+    "hits": 10,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 2,
+    "filename": "faith-google-x10-quic-bbr-2",
+    "duration": 7755.064588000067
+  },
+  "faith-google-redirect-x10-quic-bbr-3": {
+    "impl": "faith",
+    "http3": "bbr",
+    "hits": 10,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 3,
+    "filename": "faith-google-x10-quic-bbr-3",
+    "duration": 7537.812436999986
+  },
+  "faith-google-redirect-x10-quic-bbr-4": {
+    "impl": "faith",
+    "http3": "bbr",
+    "hits": 10,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 4,
+    "filename": "faith-google-x10-quic-bbr-4",
+    "duration": 7439.16572499997
+  },
+  "faith-google-redirect-x10-quic-bbr-5": {
+    "impl": "faith",
+    "http3": "bbr",
+    "hits": 10,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 5,
+    "filename": "faith-google-x10-quic-bbr-5",
+    "duration": 7981.023572999984
+  },
+  "faith-google-redirect-x10-quic-bbr-6": {
+    "impl": "faith",
+    "http3": "bbr",
+    "hits": 10,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 6,
+    "filename": "faith-google-x10-quic-bbr-6",
+    "duration": 7437.0403599999845
+  },
+  "faith-google-redirect-x10-quic-bbr-7": {
+    "impl": "faith",
+    "http3": "bbr",
+    "hits": 10,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 7,
+    "filename": "faith-google-x10-quic-bbr-7",
+    "duration": 7587.2280520000495
+  },
+  "faith-google-redirect-x10-quic-bbr-8": {
+    "impl": "faith",
+    "http3": "bbr",
+    "hits": 10,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 8,
+    "filename": "faith-google-x10-quic-bbr-8",
+    "duration": 7519.000907000038
+  },
+  "faith-google-redirect-x10-quic-bbr-9": {
+    "impl": "faith",
+    "http3": "bbr",
+    "hits": 10,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 9,
+    "filename": "faith-google-x10-quic-bbr-9",
+    "duration": 7527.3552640000125
+  },
+  "faith-google-redirect-x100-quic-bbr-0": {
+    "impl": "faith",
+    "http3": "bbr",
+    "hits": 100,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 0,
+    "filename": "faith-google-x100-quic-bbr-0",
+    "duration": 63392.969873999944
+  },
+  "faith-google-redirect-x100-quic-bbr-1": {
+    "impl": "faith",
+    "http3": "bbr",
+    "hits": 100,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 1,
+    "filename": "faith-google-x100-quic-bbr-1",
+    "duration": 65367.688422000036
+  },
+  "faith-google-redirect-x100-quic-bbr-2": {
+    "impl": "faith",
+    "http3": "bbr",
+    "hits": 100,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 2,
+    "filename": "faith-google-x100-quic-bbr-2",
+    "duration": 65961.15545299998
+  },
+  "faith-google-redirect-x100-quic-bbr-3": {
+    "impl": "faith",
+    "http3": "bbr",
+    "hits": 100,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 3,
+    "filename": "faith-google-x100-quic-bbr-3",
+    "duration": 65340.182137000025
+  },
+  "faith-google-redirect-x100-quic-bbr-4": {
+    "impl": "faith",
+    "http3": "bbr",
+    "hits": 100,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 4,
+    "filename": "faith-google-x100-quic-bbr-4",
+    "duration": 65936.79082899983
+  },
+  "faith-google-redirect-x100-quic-bbr-5": {
+    "impl": "faith",
+    "http3": "bbr",
+    "hits": 100,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 5,
+    "filename": "faith-google-x100-quic-bbr-5",
+    "duration": 64509.92888500006
+  },
+  "faith-google-redirect-x100-quic-bbr-6": {
+    "impl": "faith",
+    "http3": "bbr",
+    "hits": 100,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 6,
+    "filename": "faith-google-x100-quic-bbr-6",
+    "duration": 64257.30559
+  },
+  "faith-google-redirect-x100-quic-bbr-7": {
+    "impl": "faith",
+    "http3": "bbr",
+    "hits": 100,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 7,
+    "filename": "faith-google-x100-quic-bbr-7",
+    "duration": 64844.649126000004
+  },
+  "faith-google-redirect-x100-quic-bbr-8": {
+    "impl": "faith",
+    "http3": "bbr",
+    "hits": 100,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 8,
+    "filename": "faith-google-x100-quic-bbr-8",
+    "duration": 65870.05794700002
+  },
+  "faith-google-redirect-x100-quic-bbr-9": {
+    "impl": "faith",
+    "http3": "bbr",
+    "hits": 100,
+    "target": "google-redirect",
+    "url": "https://google.com",
+    "n": 9,
+    "filename": "faith-google-x100-quic-bbr-9",
+    "duration": 65031.49800299993
+  },
+  "native-local-x1-tcp-0": {
+    "impl": "native",
+    "http3": false,
+    "hits": 1,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 0,
+    "filename": "native-local-x1-tcp-0",
+    "duration": 1166.947482
+  },
+  "native-local-x1-tcp-1": {
+    "impl": "native",
+    "http3": false,
+    "hits": 1,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 1,
+    "filename": "native-local-x1-tcp-1",
+    "duration": 1207.4184800000003
+  },
+  "native-local-x1-tcp-2": {
+    "impl": "native",
+    "http3": false,
+    "hits": 1,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 2,
+    "filename": "native-local-x1-tcp-2",
+    "duration": 1184.599327
+  },
+  "native-local-x1-tcp-3": {
+    "impl": "native",
+    "http3": false,
+    "hits": 1,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 3,
+    "filename": "native-local-x1-tcp-3",
+    "duration": 1176.8729440000006
+  },
+  "native-local-x1-tcp-4": {
+    "impl": "native",
+    "http3": false,
+    "hits": 1,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 4,
+    "filename": "native-local-x1-tcp-4",
+    "duration": 1166.3324590000002
+  },
+  "native-local-x1-tcp-5": {
+    "impl": "native",
+    "http3": false,
+    "hits": 1,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 5,
+    "filename": "native-local-x1-tcp-5",
+    "duration": 1221.5697880000007
+  },
+  "native-local-x1-tcp-6": {
+    "impl": "native",
+    "http3": false,
+    "hits": 1,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 6,
+    "filename": "native-local-x1-tcp-6",
+    "duration": 1168.026976000001
+  },
+  "native-local-x1-tcp-7": {
+    "impl": "native",
+    "http3": false,
+    "hits": 1,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 7,
+    "filename": "native-local-x1-tcp-7",
+    "duration": 1223.6763840000003
+  },
+  "native-local-x1-tcp-8": {
+    "impl": "native",
+    "http3": false,
+    "hits": 1,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 8,
+    "filename": "native-local-x1-tcp-8",
+    "duration": 1223.1524610000015
+  },
+  "native-local-x1-tcp-9": {
+    "impl": "native",
+    "http3": false,
+    "hits": 1,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 9,
+    "filename": "native-local-x1-tcp-9",
+    "duration": 1198.692298
+  },
+  "native-local-x10-tcp-0": {
+    "impl": "native",
+    "http3": false,
+    "hits": 10,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 0,
+    "filename": "native-local-x10-tcp-0",
+    "duration": 1281.7252989999997
+  },
+  "native-local-x10-tcp-1": {
+    "impl": "native",
+    "http3": false,
+    "hits": 10,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 1,
+    "filename": "native-local-x10-tcp-1",
+    "duration": 1221.6290420000005
+  },
+  "native-local-x10-tcp-2": {
+    "impl": "native",
+    "http3": false,
+    "hits": 10,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 2,
+    "filename": "native-local-x10-tcp-2",
+    "duration": 1242.2030419999992
+  },
+  "native-local-x10-tcp-3": {
+    "impl": "native",
+    "http3": false,
+    "hits": 10,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 3,
+    "filename": "native-local-x10-tcp-3",
+    "duration": 1331.5799780000016
+  },
+  "native-local-x10-tcp-4": {
+    "impl": "native",
+    "http3": false,
+    "hits": 10,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 4,
+    "filename": "native-local-x10-tcp-4",
+    "duration": 1249.765715999998
+  },
+  "native-local-x10-tcp-5": {
+    "impl": "native",
+    "http3": false,
+    "hits": 10,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 5,
+    "filename": "native-local-x10-tcp-5",
+    "duration": 1267.351673000001
+  },
+  "native-local-x10-tcp-6": {
+    "impl": "native",
+    "http3": false,
+    "hits": 10,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 6,
+    "filename": "native-local-x10-tcp-6",
+    "duration": 1300.8509120000017
+  },
+  "native-local-x10-tcp-7": {
+    "impl": "native",
+    "http3": false,
+    "hits": 10,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 7,
+    "filename": "native-local-x10-tcp-7",
+    "duration": 1250.9582100000007
+  },
+  "native-local-x10-tcp-8": {
+    "impl": "native",
+    "http3": false,
+    "hits": 10,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 8,
+    "filename": "native-local-x10-tcp-8",
+    "duration": 1278.6582600000002
+  },
+  "native-local-x10-tcp-9": {
+    "impl": "native",
+    "http3": false,
+    "hits": 10,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 9,
+    "filename": "native-local-x10-tcp-9",
+    "duration": 1321.2864990000016
+  },
+  "native-local-x100-tcp-0": {
+    "impl": "native",
+    "http3": false,
+    "hits": 100,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 0,
+    "filename": "native-local-x100-tcp-0",
+    "duration": 1270.1212559999985
+  },
+  "native-local-x100-tcp-1": {
+    "impl": "native",
+    "http3": false,
+    "hits": 100,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 1,
+    "filename": "native-local-x100-tcp-1",
+    "duration": 1288.4766249999993
+  },
+  "native-local-x100-tcp-2": {
+    "impl": "native",
+    "http3": false,
+    "hits": 100,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 2,
+    "filename": "native-local-x100-tcp-2",
+    "duration": 1285.6463079999994
+  },
+  "native-local-x100-tcp-3": {
+    "impl": "native",
+    "http3": false,
+    "hits": 100,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 3,
+    "filename": "native-local-x100-tcp-3",
+    "duration": 1258.817501999998
+  },
+  "native-local-x100-tcp-4": {
+    "impl": "native",
+    "http3": false,
+    "hits": 100,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 4,
+    "filename": "native-local-x100-tcp-4",
+    "duration": 1309.9846160000016
+  },
+  "native-local-x100-tcp-5": {
+    "impl": "native",
+    "http3": false,
+    "hits": 100,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 5,
+    "filename": "native-local-x100-tcp-5",
+    "duration": 1275.4681699999965
+  },
+  "native-local-x100-tcp-6": {
+    "impl": "native",
+    "http3": false,
+    "hits": 100,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 6,
+    "filename": "native-local-x100-tcp-6",
+    "duration": 1316.6703650000054
+  },
+  "native-local-x100-tcp-7": {
+    "impl": "native",
+    "http3": false,
+    "hits": 100,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 7,
+    "filename": "native-local-x100-tcp-7",
+    "duration": 1269.8283489999958
+  },
+  "native-local-x100-tcp-8": {
+    "impl": "native",
+    "http3": false,
+    "hits": 100,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 8,
+    "filename": "native-local-x100-tcp-8",
+    "duration": 1266.6998569999996
+  },
+  "native-local-x100-tcp-9": {
+    "impl": "native",
+    "http3": false,
+    "hits": 100,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 9,
+    "filename": "native-local-x100-tcp-9",
+    "duration": 1307.6201199999996
+  },
+  "node-fetch-local-x1-tcp-0": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 1,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 0,
+    "filename": "node-fetch-local-x1-tcp-0",
+    "duration": 1285.997887000005
+  },
+  "node-fetch-local-x1-tcp-1": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 1,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 1,
+    "filename": "node-fetch-local-x1-tcp-1",
+    "duration": 1237.8473530000047
+  },
+  "node-fetch-local-x1-tcp-2": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 1,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 2,
+    "filename": "node-fetch-local-x1-tcp-2",
+    "duration": 1197.1843900000022
+  },
+  "node-fetch-local-x1-tcp-3": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 1,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 3,
+    "filename": "node-fetch-local-x1-tcp-3",
+    "duration": 1276.6724160000012
+  },
+  "node-fetch-local-x1-tcp-4": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 1,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 4,
+    "filename": "node-fetch-local-x1-tcp-4",
+    "duration": 1186.7523660000006
+  },
+  "node-fetch-local-x1-tcp-5": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 1,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 5,
+    "filename": "node-fetch-local-x1-tcp-5",
+    "duration": 1219.3082770000037
+  },
+  "node-fetch-local-x1-tcp-6": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 1,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 6,
+    "filename": "node-fetch-local-x1-tcp-6",
+    "duration": 1215.4459769999958
+  },
+  "node-fetch-local-x1-tcp-7": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 1,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 7,
+    "filename": "node-fetch-local-x1-tcp-7",
+    "duration": 1308.2932289999953
+  },
+  "node-fetch-local-x1-tcp-8": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 1,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 8,
+    "filename": "node-fetch-local-x1-tcp-8",
+    "duration": 1294.970392999996
+  },
+  "node-fetch-local-x1-tcp-9": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 1,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 9,
+    "filename": "node-fetch-local-x1-tcp-9",
+    "duration": 1300.9776749999946
+  },
+  "node-fetch-local-x10-tcp-0": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 10,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 0,
+    "filename": "node-fetch-local-x10-tcp-0",
+    "duration": 1246.8342899999989
+  },
+  "node-fetch-local-x10-tcp-1": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 10,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 1,
+    "filename": "node-fetch-local-x10-tcp-1",
+    "duration": 1303.4644649999973
+  },
+  "node-fetch-local-x10-tcp-2": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 10,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 2,
+    "filename": "node-fetch-local-x10-tcp-2",
+    "duration": 1300.4176580000058
+  },
+  "node-fetch-local-x10-tcp-3": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 10,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 3,
+    "filename": "node-fetch-local-x10-tcp-3",
+    "duration": 1310.8325260000056
+  },
+  "node-fetch-local-x10-tcp-4": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 10,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 4,
+    "filename": "node-fetch-local-x10-tcp-4",
+    "duration": 1276.3960699999952
+  },
+  "node-fetch-local-x10-tcp-5": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 10,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 5,
+    "filename": "node-fetch-local-x10-tcp-5",
+    "duration": 1278.6580570000006
+  },
+  "node-fetch-local-x10-tcp-6": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 10,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 6,
+    "filename": "node-fetch-local-x10-tcp-6",
+    "duration": 1221.5403949999964
+  },
+  "node-fetch-local-x10-tcp-7": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 10,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 7,
+    "filename": "node-fetch-local-x10-tcp-7",
+    "duration": 1260.3302330000006
+  },
+  "node-fetch-local-x10-tcp-8": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 10,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 8,
+    "filename": "node-fetch-local-x10-tcp-8",
+    "duration": 1267.3364220000003
+  },
+  "node-fetch-local-x10-tcp-9": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 10,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 9,
+    "filename": "node-fetch-local-x10-tcp-9",
+    "duration": 1229.1058730000004
+  },
+  "node-fetch-local-x100-tcp-0": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 100,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 0,
+    "filename": "node-fetch-local-x100-tcp-0",
+    "duration": 1258.4356139999945
+  },
+  "node-fetch-local-x100-tcp-1": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 100,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 1,
+    "filename": "node-fetch-local-x100-tcp-1",
+    "duration": 1251.2491310000041
+  },
+  "node-fetch-local-x100-tcp-2": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 100,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 2,
+    "filename": "node-fetch-local-x100-tcp-2",
+    "duration": 1335.3977980000054
+  },
+  "node-fetch-local-x100-tcp-3": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 100,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 3,
+    "filename": "node-fetch-local-x100-tcp-3",
+    "duration": 1295.3642089999921
+  },
+  "node-fetch-local-x100-tcp-4": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 100,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 4,
+    "filename": "node-fetch-local-x100-tcp-4",
+    "duration": 1478.9384429999918
+  },
+  "node-fetch-local-x100-tcp-5": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 100,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 5,
+    "filename": "node-fetch-local-x100-tcp-5",
+    "duration": 1462.451952000003
+  },
+  "node-fetch-local-x100-tcp-6": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 100,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 6,
+    "filename": "node-fetch-local-x100-tcp-6",
+    "duration": 1293.9260970000032
+  },
+  "node-fetch-local-x100-tcp-7": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 100,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 7,
+    "filename": "node-fetch-local-x100-tcp-7",
+    "duration": 1409.1387959999993
+  },
+  "node-fetch-local-x100-tcp-8": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 100,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 8,
+    "filename": "node-fetch-local-x100-tcp-8",
+    "duration": 1314.7853319999995
+  },
+  "node-fetch-local-x100-tcp-9": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 100,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 9,
+    "filename": "node-fetch-local-x100-tcp-9",
+    "duration": 1274.740306000007
+  },
+  "faith-local-x1-tcp-0": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 1,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 0,
+    "filename": "faith-local-x1-tcp-0",
+    "duration": 1441.0815430000075
+  },
+  "faith-local-x1-tcp-1": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 1,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 1,
+    "filename": "faith-local-x1-tcp-1",
+    "duration": 1434.089564000009
+  },
+  "faith-local-x1-tcp-2": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 1,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 2,
+    "filename": "faith-local-x1-tcp-2",
+    "duration": 1302.8650010000129
+  },
+  "faith-local-x1-tcp-3": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 1,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 3,
+    "filename": "faith-local-x1-tcp-3",
+    "duration": 1358.7765680000011
+  },
+  "faith-local-x1-tcp-4": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 1,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 4,
+    "filename": "faith-local-x1-tcp-4",
+    "duration": 1309.3394640000042
+  },
+  "faith-local-x1-tcp-5": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 1,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 5,
+    "filename": "faith-local-x1-tcp-5",
+    "duration": 1334.4135830000014
+  },
+  "faith-local-x1-tcp-6": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 1,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 6,
+    "filename": "faith-local-x1-tcp-6",
+    "duration": 1395.8079399999988
+  },
+  "faith-local-x1-tcp-7": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 1,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 7,
+    "filename": "faith-local-x1-tcp-7",
+    "duration": 1337.8386499999906
+  },
+  "faith-local-x1-tcp-8": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 1,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 8,
+    "filename": "faith-local-x1-tcp-8",
+    "duration": 1391.6940640000103
+  },
+  "faith-local-x1-tcp-9": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 1,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 9,
+    "filename": "faith-local-x1-tcp-9",
+    "duration": 1361.084984000001
+  },
+  "faith-local-x10-tcp-0": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 10,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 0,
+    "filename": "faith-local-x10-tcp-0",
+    "duration": 1403.6783250000008
+  },
+  "faith-local-x10-tcp-1": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 10,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 1,
+    "filename": "faith-local-x10-tcp-1",
+    "duration": 1410.4116749999957
+  },
+  "faith-local-x10-tcp-2": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 10,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 2,
+    "filename": "faith-local-x10-tcp-2",
+    "duration": 1352.748327999987
+  },
+  "faith-local-x10-tcp-3": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 10,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 3,
+    "filename": "faith-local-x10-tcp-3",
+    "duration": 1423.8344240000006
+  },
+  "faith-local-x10-tcp-4": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 10,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 4,
+    "filename": "faith-local-x10-tcp-4",
+    "duration": 1336.5172280000115
+  },
+  "faith-local-x10-tcp-5": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 10,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 5,
+    "filename": "faith-local-x10-tcp-5",
+    "duration": 1373.0694640000002
+  },
+  "faith-local-x10-tcp-6": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 10,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 6,
+    "filename": "faith-local-x10-tcp-6",
+    "duration": 1311.7366860000038
+  },
+  "faith-local-x10-tcp-7": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 10,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 7,
+    "filename": "faith-local-x10-tcp-7",
+    "duration": 1345.1604599999991
+  },
+  "faith-local-x10-tcp-8": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 10,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 8,
+    "filename": "faith-local-x10-tcp-8",
+    "duration": 1384.9189640000113
+  },
+  "faith-local-x10-tcp-9": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 10,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 9,
+    "filename": "faith-local-x10-tcp-9",
+    "duration": 1387.433474999998
+  },
+  "faith-local-x100-tcp-0": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 100,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 0,
+    "filename": "faith-local-x100-tcp-0",
+    "duration": 1319.9732940000104
+  },
+  "faith-local-x100-tcp-1": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 100,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 1,
+    "filename": "faith-local-x100-tcp-1",
+    "duration": 1351.0154610000027
+  },
+  "faith-local-x100-tcp-2": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 100,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 2,
+    "filename": "faith-local-x100-tcp-2",
+    "duration": 1335.5478830000065
+  },
+  "faith-local-x100-tcp-3": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 100,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 3,
+    "filename": "faith-local-x100-tcp-3",
+    "duration": 1414.3915370000032
+  },
+  "faith-local-x100-tcp-4": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 100,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 4,
+    "filename": "faith-local-x100-tcp-4",
+    "duration": 1370.0954809999967
+  },
+  "faith-local-x100-tcp-5": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 100,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 5,
+    "filename": "faith-local-x100-tcp-5",
+    "duration": 1335.2282109999942
+  },
+  "faith-local-x100-tcp-6": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 100,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 6,
+    "filename": "faith-local-x100-tcp-6",
+    "duration": 1445.6906679999956
+  },
+  "faith-local-x100-tcp-7": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 100,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 7,
+    "filename": "faith-local-x100-tcp-7",
+    "duration": 1370.7860120000114
+  },
+  "faith-local-x100-tcp-8": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 100,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 8,
+    "filename": "faith-local-x100-tcp-8",
+    "duration": 1430.134011000002
+  },
+  "faith-local-x100-tcp-9": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 100,
+    "target": "local",
+    "url": "http://10.88.0.30:8080",
+    "n": 9,
+    "filename": "faith-local-x100-tcp-9",
+    "duration": 1535.316089999993
+  },
+  "native-google-x1-tcp-0": {
+    "impl": "native",
+    "http3": false,
+    "hits": 1,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 0,
+    "filename": "native-google-x1-tcp-0",
+    "duration": 1796.477333
+  },
+  "native-google-x1-tcp-1": {
+    "impl": "native",
+    "http3": false,
+    "hits": 1,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 1,
+    "filename": "native-google-x1-tcp-1",
+    "duration": 1832.0028639999996
+  },
+  "native-google-x1-tcp-2": {
+    "impl": "native",
+    "http3": false,
+    "hits": 1,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 2,
+    "filename": "native-google-x1-tcp-2",
+    "duration": 1874.7121939999997
+  },
+  "native-google-x1-tcp-3": {
+    "impl": "native",
+    "http3": false,
+    "hits": 1,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 3,
+    "filename": "native-google-x1-tcp-3",
+    "duration": 1786.1524479999998
+  },
+  "native-google-x1-tcp-4": {
+    "impl": "native",
+    "http3": false,
+    "hits": 1,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 4,
+    "filename": "native-google-x1-tcp-4",
+    "duration": 1785.1123609999995
+  },
+  "native-google-x1-tcp-5": {
+    "impl": "native",
+    "http3": false,
+    "hits": 1,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 5,
+    "filename": "native-google-x1-tcp-5",
+    "duration": 1849.0672180000001
+  },
+  "native-google-x1-tcp-6": {
+    "impl": "native",
+    "http3": false,
+    "hits": 1,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 6,
+    "filename": "native-google-x1-tcp-6",
+    "duration": 1797.4231950000012
+  },
+  "native-google-x1-tcp-7": {
+    "impl": "native",
+    "http3": false,
+    "hits": 1,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 7,
+    "filename": "native-google-x1-tcp-7",
+    "duration": 1928.8127440000007
+  },
+  "native-google-x1-tcp-8": {
+    "impl": "native",
+    "http3": false,
+    "hits": 1,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 8,
+    "filename": "native-google-x1-tcp-8",
+    "duration": 1817.7968349999992
+  },
+  "native-google-x1-tcp-9": {
+    "impl": "native",
+    "http3": false,
+    "hits": 1,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 9,
+    "filename": "native-google-x1-tcp-9",
+    "duration": 1803.873592
+  },
+  "native-google-x10-tcp-0": {
+    "impl": "native",
+    "http3": false,
+    "hits": 10,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 0,
+    "filename": "native-google-x10-tcp-0",
+    "duration": 5061.929001
+  },
+  "native-google-x10-tcp-1": {
+    "impl": "native",
+    "http3": false,
+    "hits": 10,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 1,
+    "filename": "native-google-x10-tcp-1",
+    "duration": 5043.154918
+  },
+  "native-google-x10-tcp-2": {
+    "impl": "native",
+    "http3": false,
+    "hits": 10,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 2,
+    "filename": "native-google-x10-tcp-2",
+    "duration": 5034.2355849999985
+  },
+  "native-google-x10-tcp-3": {
+    "impl": "native",
+    "http3": false,
+    "hits": 10,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 3,
+    "filename": "native-google-x10-tcp-3",
+    "duration": 5136.190918
+  },
+  "native-google-x10-tcp-4": {
+    "impl": "native",
+    "http3": false,
+    "hits": 10,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 4,
+    "filename": "native-google-x10-tcp-4",
+    "duration": 5075.996961999997
+  },
+  "native-google-x10-tcp-5": {
+    "impl": "native",
+    "http3": false,
+    "hits": 10,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 5,
+    "filename": "native-google-x10-tcp-5",
+    "duration": 5047.033351999999
+  },
+  "native-google-x10-tcp-6": {
+    "impl": "native",
+    "http3": false,
+    "hits": 10,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 6,
+    "filename": "native-google-x10-tcp-6",
+    "duration": 5149.778553999997
+  },
+  "native-google-x10-tcp-7": {
+    "impl": "native",
+    "http3": false,
+    "hits": 10,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 7,
+    "filename": "native-google-x10-tcp-7",
+    "duration": 5100.006488999999
+  },
+  "native-google-x10-tcp-8": {
+    "impl": "native",
+    "http3": false,
+    "hits": 10,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 8,
+    "filename": "native-google-x10-tcp-8",
+    "duration": 5131.438803999998
+  },
+  "native-google-x10-tcp-9": {
+    "impl": "native",
+    "http3": false,
+    "hits": 10,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 9,
+    "filename": "native-google-x10-tcp-9",
+    "duration": 5123.172579999999
+  },
+  "native-google-x100-tcp-0": {
+    "impl": "native",
+    "http3": false,
+    "hits": 100,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 0,
+    "filename": "native-google-x100-tcp-0",
+    "duration": 35838.660112
+  },
+  "native-google-x100-tcp-1": {
+    "impl": "native",
+    "http3": false,
+    "hits": 100,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 1,
+    "filename": "native-google-x100-tcp-1",
+    "duration": 36650.297967000006
+  },
+  "native-google-x100-tcp-2": {
+    "impl": "native",
+    "http3": false,
+    "hits": 100,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 2,
+    "filename": "native-google-x100-tcp-2",
+    "duration": 36951.64060099999
+  },
+  "native-google-x100-tcp-3": {
+    "impl": "native",
+    "http3": false,
+    "hits": 100,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 3,
+    "filename": "native-google-x100-tcp-3",
+    "duration": 36829.37438600001
+  },
+  "native-google-x100-tcp-4": {
+    "impl": "native",
+    "http3": false,
+    "hits": 100,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 4,
+    "filename": "native-google-x100-tcp-4",
+    "duration": 36293.10745800001
+  },
+  "native-google-x100-tcp-5": {
+    "impl": "native",
+    "http3": false,
+    "hits": 100,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 5,
+    "filename": "native-google-x100-tcp-5",
+    "duration": 36236.07207399997
+  },
+  "native-google-x100-tcp-6": {
+    "impl": "native",
+    "http3": false,
+    "hits": 100,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 6,
+    "filename": "native-google-x100-tcp-6",
+    "duration": 36553.00991299999
+  },
+  "native-google-x100-tcp-7": {
+    "impl": "native",
+    "http3": false,
+    "hits": 100,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 7,
+    "filename": "native-google-x100-tcp-7",
+    "duration": 36498.550991999975
+  },
+  "native-google-x100-tcp-8": {
+    "impl": "native",
+    "http3": false,
+    "hits": 100,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 8,
+    "filename": "native-google-x100-tcp-8",
+    "duration": 36252.12233699998
+  },
+  "native-google-x100-tcp-9": {
+    "impl": "native",
+    "http3": false,
+    "hits": 100,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 9,
+    "filename": "native-google-x100-tcp-9",
+    "duration": 36345.09325800004
+  },
+  "node-fetch-google-x1-tcp-0": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 1,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 0,
+    "filename": "node-fetch-google-x1-tcp-0",
+    "duration": 1715.9902460000012
+  },
+  "node-fetch-google-x1-tcp-1": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 1,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 1,
+    "filename": "node-fetch-google-x1-tcp-1",
+    "duration": 1753.0122569999658
+  },
+  "node-fetch-google-x1-tcp-2": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 1,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 2,
+    "filename": "node-fetch-google-x1-tcp-2",
+    "duration": 1815.2841310000513
+  },
+  "node-fetch-google-x1-tcp-3": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 1,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 3,
+    "filename": "node-fetch-google-x1-tcp-3",
+    "duration": 1775.084634000028
+  },
+  "node-fetch-google-x1-tcp-4": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 1,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 4,
+    "filename": "node-fetch-google-x1-tcp-4",
+    "duration": 1769.207059999986
+  },
+  "node-fetch-google-x1-tcp-5": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 1,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 5,
+    "filename": "node-fetch-google-x1-tcp-5",
+    "duration": 1810.8501379999798
+  },
+  "node-fetch-google-x1-tcp-6": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 1,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 6,
+    "filename": "node-fetch-google-x1-tcp-6",
+    "duration": 1762.8500829999684
+  },
+  "node-fetch-google-x1-tcp-7": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 1,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 7,
+    "filename": "node-fetch-google-x1-tcp-7",
+    "duration": 1748.6231449999614
+  },
+  "node-fetch-google-x1-tcp-8": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 1,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 8,
+    "filename": "node-fetch-google-x1-tcp-8",
+    "duration": 1745.9050469999784
+  },
+  "node-fetch-google-x1-tcp-9": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 1,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 9,
+    "filename": "node-fetch-google-x1-tcp-9",
+    "duration": 1760.6115719999652
+  },
+  "node-fetch-google-x10-tcp-0": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 10,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 0,
+    "filename": "node-fetch-google-x10-tcp-0",
+    "duration": 5084.3794990000315
+  },
+  "node-fetch-google-x10-tcp-1": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 10,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 1,
+    "filename": "node-fetch-google-x10-tcp-1",
+    "duration": 5112.602026999986
+  },
+  "node-fetch-google-x10-tcp-2": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 10,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 2,
+    "filename": "node-fetch-google-x10-tcp-2",
+    "duration": 5169.3209730000235
+  },
+  "node-fetch-google-x10-tcp-3": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 10,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 3,
+    "filename": "node-fetch-google-x10-tcp-3",
+    "duration": 5096.799717000045
+  },
+  "node-fetch-google-x10-tcp-4": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 10,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 4,
+    "filename": "node-fetch-google-x10-tcp-4",
+    "duration": 5119.725455000007
+  },
+  "node-fetch-google-x10-tcp-5": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 10,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 5,
+    "filename": "node-fetch-google-x10-tcp-5",
+    "duration": 4942.670840999985
+  },
+  "node-fetch-google-x10-tcp-6": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 10,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 6,
+    "filename": "node-fetch-google-x10-tcp-6",
+    "duration": 5205.339921000006
+  },
+  "node-fetch-google-x10-tcp-7": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 10,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 7,
+    "filename": "node-fetch-google-x10-tcp-7",
+    "duration": 5089.809664
+  },
+  "node-fetch-google-x10-tcp-8": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 10,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 8,
+    "filename": "node-fetch-google-x10-tcp-8",
+    "duration": 5152.259714999993
+  },
+  "node-fetch-google-x10-tcp-9": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 10,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 9,
+    "filename": "node-fetch-google-x10-tcp-9",
+    "duration": 5125.782307000016
+  },
+  "node-fetch-google-x100-tcp-0": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 100,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 0,
+    "filename": "node-fetch-google-x100-tcp-0",
+    "duration": 37511.81248400005
+  },
+  "node-fetch-google-x100-tcp-1": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 100,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 1,
+    "filename": "node-fetch-google-x100-tcp-1",
+    "duration": 36463.97655699996
+  },
+  "node-fetch-google-x100-tcp-2": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 100,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 2,
+    "filename": "node-fetch-google-x100-tcp-2",
+    "duration": 36144.05043299997
+  },
+  "node-fetch-google-x100-tcp-3": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 100,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 3,
+    "filename": "node-fetch-google-x100-tcp-3",
+    "duration": 37422.29966899997
+  },
+  "node-fetch-google-x100-tcp-4": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 100,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 4,
+    "filename": "node-fetch-google-x100-tcp-4",
+    "duration": 36473.012117000064
+  },
+  "node-fetch-google-x100-tcp-5": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 100,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 5,
+    "filename": "node-fetch-google-x100-tcp-5",
+    "duration": 35813.182684
+  },
+  "node-fetch-google-x100-tcp-6": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 100,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 6,
+    "filename": "node-fetch-google-x100-tcp-6",
+    "duration": 35671.27077099995
+  },
+  "node-fetch-google-x100-tcp-7": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 100,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 7,
+    "filename": "node-fetch-google-x100-tcp-7",
+    "duration": 36876.21674000006
+  },
+  "node-fetch-google-x100-tcp-8": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 100,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 8,
+    "filename": "node-fetch-google-x100-tcp-8",
+    "duration": 36575.714875999955
+  },
+  "node-fetch-google-x100-tcp-9": {
+    "impl": "node-fetch",
+    "http3": false,
+    "hits": 100,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 9,
+    "filename": "node-fetch-google-x100-tcp-9",
+    "duration": 36404.33712000004
+  },
+  "faith-google-x1-tcp-0": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 1,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 0,
+    "filename": "faith-google-x1-tcp-0",
+    "duration": 1809.3101040000329
+  },
+  "faith-google-x1-tcp-1": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 1,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 1,
+    "filename": "faith-google-x1-tcp-1",
+    "duration": 1715.6788429999724
+  },
+  "faith-google-x1-tcp-2": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 1,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 2,
+    "filename": "faith-google-x1-tcp-2",
+    "duration": 1682.0461989999749
+  },
+  "faith-google-x1-tcp-3": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 1,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 3,
+    "filename": "faith-google-x1-tcp-3",
+    "duration": 1649.9627239999827
+  },
+  "faith-google-x1-tcp-4": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 1,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 4,
+    "filename": "faith-google-x1-tcp-4",
+    "duration": 1809.5169590000296
+  },
+  "faith-google-x1-tcp-5": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 1,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 5,
+    "filename": "faith-google-x1-tcp-5",
+    "duration": 1703.9465349999955
+  },
+  "faith-google-x1-tcp-6": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 1,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 6,
+    "filename": "faith-google-x1-tcp-6",
+    "duration": 1757.666651000036
+  },
+  "faith-google-x1-tcp-7": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 1,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 7,
+    "filename": "faith-google-x1-tcp-7",
+    "duration": 1643.7929289999884
+  },
+  "faith-google-x1-tcp-8": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 1,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 8,
+    "filename": "faith-google-x1-tcp-8",
+    "duration": 2309.759165000054
+  },
+  "faith-google-x1-tcp-9": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 1,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 9,
+    "filename": "faith-google-x1-tcp-9",
+    "duration": 1639.333193999948
+  },
+  "faith-google-x10-tcp-0": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 10,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 0,
+    "filename": "faith-google-x10-tcp-0",
+    "duration": 4987.264987999923
+  },
+  "faith-google-x10-tcp-1": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 10,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 1,
+    "filename": "faith-google-x10-tcp-1",
+    "duration": 5159.11380000005
+  },
+  "faith-google-x10-tcp-2": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 10,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 2,
+    "filename": "faith-google-x10-tcp-2",
+    "duration": 4362.22285999998
+  },
+  "faith-google-x10-tcp-3": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 10,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 3,
+    "filename": "faith-google-x10-tcp-3",
+    "duration": 5119.0245730000315
+  },
+  "faith-google-x10-tcp-4": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 10,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 4,
+    "filename": "faith-google-x10-tcp-4",
+    "duration": 5268.056407999946
+  },
+  "faith-google-x10-tcp-5": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 10,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 5,
+    "filename": "faith-google-x10-tcp-5",
+    "duration": 4466.712677999982
+  },
+  "faith-google-x10-tcp-6": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 10,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 6,
+    "filename": "faith-google-x10-tcp-6",
+    "duration": 4942.008583000046
+  },
+  "faith-google-x10-tcp-7": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 10,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 7,
+    "filename": "faith-google-x10-tcp-7",
+    "duration": 5578.294157000026
+  },
+  "faith-google-x10-tcp-8": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 10,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 8,
+    "filename": "faith-google-x10-tcp-8",
+    "duration": 4338.492227000068
+  },
+  "faith-google-x10-tcp-9": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 10,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 9,
+    "filename": "faith-google-x10-tcp-9",
+    "duration": 4447.648464000085
+  },
+  "faith-google-x100-tcp-0": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 100,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 0,
+    "filename": "faith-google-x100-tcp-0",
+    "duration": 35338.84915100003
+  },
+  "faith-google-x100-tcp-1": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 100,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 1,
+    "filename": "faith-google-x100-tcp-1",
+    "duration": 34395.33434599999
+  },
+  "faith-google-x100-tcp-2": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 100,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 2,
+    "filename": "faith-google-x100-tcp-2",
+    "duration": 35779.845611999976
+  },
+  "faith-google-x100-tcp-3": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 100,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 3,
+    "filename": "faith-google-x100-tcp-3",
+    "duration": 35768.832395000034
+  },
+  "faith-google-x100-tcp-4": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 100,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 4,
+    "filename": "faith-google-x100-tcp-4",
+    "duration": 35880.30729100015
+  },
+  "faith-google-x100-tcp-5": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 100,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 5,
+    "filename": "faith-google-x100-tcp-5",
+    "duration": 36294.678915000055
+  },
+  "faith-google-x100-tcp-6": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 100,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 6,
+    "filename": "faith-google-x100-tcp-6",
+    "duration": 35592.457952999976
+  },
+  "faith-google-x100-tcp-7": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 100,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 7,
+    "filename": "faith-google-x100-tcp-7",
+    "duration": 37010.92414400005
+  },
+  "faith-google-x100-tcp-8": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 100,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 8,
+    "filename": "faith-google-x100-tcp-8",
+    "duration": 37073.97488399991
+  },
+  "faith-google-x100-tcp-9": {
+    "impl": "faith",
+    "http3": false,
+    "hits": 100,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 9,
+    "filename": "faith-google-x100-tcp-9",
+    "duration": 39453.52870899998
+  },
+  "faith-google-x1-quic-cubic-0": {
+    "impl": "faith",
+    "http3": "cubic",
+    "hits": 1,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 0,
+    "filename": "faith-google-x1-quic-cubic-0",
+    "duration": 1676.4155840000603
+  },
+  "faith-google-x1-quic-cubic-1": {
+    "impl": "faith",
+    "http3": "cubic",
+    "hits": 1,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 1,
+    "filename": "faith-google-x1-quic-cubic-1",
+    "duration": 1711.3444560000207
+  },
+  "faith-google-x1-quic-cubic-2": {
+    "impl": "faith",
+    "http3": "cubic",
+    "hits": 1,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 2,
+    "filename": "faith-google-x1-quic-cubic-2",
+    "duration": 1723.9809090001509
+  },
+  "faith-google-x1-quic-cubic-3": {
+    "impl": "faith",
+    "http3": "cubic",
+    "hits": 1,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 3,
+    "filename": "faith-google-x1-quic-cubic-3",
+    "duration": 1691.6789629999548
+  },
+  "faith-google-x1-quic-cubic-4": {
+    "impl": "faith",
+    "http3": "cubic",
+    "hits": 1,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 4,
+    "filename": "faith-google-x1-quic-cubic-4",
+    "duration": 1854.4202319998294
+  },
+  "faith-google-x1-quic-cubic-5": {
+    "impl": "faith",
+    "http3": "cubic",
+    "hits": 1,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 5,
+    "filename": "faith-google-x1-quic-cubic-5",
+    "duration": 1680.8139199998695
+  },
+  "faith-google-x1-quic-cubic-6": {
+    "impl": "faith",
+    "http3": "cubic",
+    "hits": 1,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 6,
+    "filename": "faith-google-x1-quic-cubic-6",
+    "duration": 1643.8976090000942
+  },
+  "faith-google-x1-quic-cubic-7": {
+    "impl": "faith",
+    "http3": "cubic",
+    "hits": 1,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 7,
+    "filename": "faith-google-x1-quic-cubic-7",
+    "duration": 1715.2702109999955
+  },
+  "faith-google-x1-quic-cubic-8": {
+    "impl": "faith",
+    "http3": "cubic",
+    "hits": 1,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 8,
+    "filename": "faith-google-x1-quic-cubic-8",
+    "duration": 1690.2910170000978
+  },
+  "faith-google-x1-quic-cubic-9": {
+    "impl": "faith",
+    "http3": "cubic",
+    "hits": 1,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 9,
+    "filename": "faith-google-x1-quic-cubic-9",
+    "duration": 1684.6033069998957
+  },
+  "faith-google-x10-quic-cubic-0": {
+    "impl": "faith",
+    "http3": "cubic",
+    "hits": 10,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 0,
+    "filename": "faith-google-x10-quic-cubic-0",
+    "duration": 4486.618246000027
+  },
+  "faith-google-x10-quic-cubic-1": {
+    "impl": "faith",
+    "http3": "cubic",
+    "hits": 10,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 1,
+    "filename": "faith-google-x10-quic-cubic-1",
+    "duration": 4934.413434999995
+  },
+  "faith-google-x10-quic-cubic-2": {
+    "impl": "faith",
+    "http3": "cubic",
+    "hits": 10,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 2,
+    "filename": "faith-google-x10-quic-cubic-2",
+    "duration": 5202.696476000128
+  },
+  "faith-google-x10-quic-cubic-3": {
+    "impl": "faith",
+    "http3": "cubic",
+    "hits": 10,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 3,
+    "filename": "faith-google-x10-quic-cubic-3",
+    "duration": 4302.147176000057
+  },
+  "faith-google-x10-quic-cubic-4": {
+    "impl": "faith",
+    "http3": "cubic",
+    "hits": 10,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 4,
+    "filename": "faith-google-x10-quic-cubic-4",
+    "duration": 4927.210518999957
+  },
+  "faith-google-x10-quic-cubic-5": {
+    "impl": "faith",
+    "http3": "cubic",
+    "hits": 10,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 5,
+    "filename": "faith-google-x10-quic-cubic-5",
+    "duration": 4620.636587999994
+  },
+  "faith-google-x10-quic-cubic-6": {
+    "impl": "faith",
+    "http3": "cubic",
+    "hits": 10,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 6,
+    "filename": "faith-google-x10-quic-cubic-6",
+    "duration": 4250.529890999896
+  },
+  "faith-google-x10-quic-cubic-7": {
+    "impl": "faith",
+    "http3": "cubic",
+    "hits": 10,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 7,
+    "filename": "faith-google-x10-quic-cubic-7",
+    "duration": 4552.925336000044
+  },
+  "faith-google-x10-quic-cubic-8": {
+    "impl": "faith",
+    "http3": "cubic",
+    "hits": 10,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 8,
+    "filename": "faith-google-x10-quic-cubic-8",
+    "duration": 5137.235626999987
+  },
+  "faith-google-x10-quic-cubic-9": {
+    "impl": "faith",
+    "http3": "cubic",
+    "hits": 10,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 9,
+    "filename": "faith-google-x10-quic-cubic-9",
+    "duration": 6173.581883999985
+  },
+  "faith-google-x100-quic-cubic-0": {
+    "impl": "faith",
+    "http3": "cubic",
+    "hits": 100,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 0,
+    "filename": "faith-google-x100-quic-cubic-0",
+    "duration": 37574.47036399995
+  },
+  "faith-google-x100-quic-cubic-1": {
+    "impl": "faith",
+    "http3": "cubic",
+    "hits": 100,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 1,
+    "filename": "faith-google-x100-quic-cubic-1",
+    "duration": 47159.36540999985
+  },
+  "faith-google-x100-quic-cubic-2": {
+    "impl": "faith",
+    "http3": "cubic",
+    "hits": 100,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 2,
+    "filename": "faith-google-x100-quic-cubic-2",
+    "duration": 40062.49414800014
+  },
+  "faith-google-x100-quic-cubic-3": {
+    "impl": "faith",
+    "http3": "cubic",
+    "hits": 100,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 3,
+    "filename": "faith-google-x100-quic-cubic-3",
+    "duration": 40543.85324099986
+  },
+  "faith-google-x100-quic-cubic-4": {
+    "impl": "faith",
+    "http3": "cubic",
+    "hits": 100,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 4,
+    "filename": "faith-google-x100-quic-cubic-4",
+    "duration": 39537.994305000175
+  },
+  "faith-google-x100-quic-cubic-5": {
+    "impl": "faith",
+    "http3": "cubic",
+    "hits": 100,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 5,
+    "filename": "faith-google-x100-quic-cubic-5",
+    "duration": 42397.96305000014
+  },
+  "faith-google-x100-quic-cubic-6": {
+    "impl": "faith",
+    "http3": "cubic",
+    "hits": 100,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 6,
+    "filename": "faith-google-x100-quic-cubic-6",
+    "duration": 44993.70823700004
+  },
+  "faith-google-x100-quic-cubic-7": {
+    "impl": "faith",
+    "http3": "cubic",
+    "hits": 100,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 7,
+    "filename": "faith-google-x100-quic-cubic-7",
+    "duration": 43509.31053499994
+  },
+  "faith-google-x100-quic-cubic-8": {
+    "impl": "faith",
+    "http3": "cubic",
+    "hits": 100,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 8,
+    "filename": "faith-google-x100-quic-cubic-8",
+    "duration": 45504.63993100007
+  },
+  "faith-google-x100-quic-cubic-9": {
+    "impl": "faith",
+    "http3": "cubic",
+    "hits": 100,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 9,
+    "filename": "faith-google-x100-quic-cubic-9",
+    "duration": 40677.58599300007
+  },
+  "faith-google-x1-quic-bbr-0": {
+    "impl": "faith",
+    "http3": "bbr",
+    "hits": 1,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 0,
+    "filename": "faith-google-x1-quic-bbr-0",
+    "duration": 1705.4478209998924
+  },
+  "faith-google-x1-quic-bbr-1": {
+    "impl": "faith",
+    "http3": "bbr",
+    "hits": 1,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 1,
+    "filename": "faith-google-x1-quic-bbr-1",
+    "duration": 1735.3060349998996
+  },
+  "faith-google-x1-quic-bbr-2": {
+    "impl": "faith",
+    "http3": "bbr",
+    "hits": 1,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 2,
+    "filename": "faith-google-x1-quic-bbr-2",
+    "duration": 1723.6281890000682
+  },
+  "faith-google-x1-quic-bbr-3": {
+    "impl": "faith",
+    "http3": "bbr",
+    "hits": 1,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 3,
+    "filename": "faith-google-x1-quic-bbr-3",
+    "duration": 1738.0077339999843
+  },
+  "faith-google-x1-quic-bbr-4": {
+    "impl": "faith",
+    "http3": "bbr",
+    "hits": 1,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 4,
+    "filename": "faith-google-x1-quic-bbr-4",
+    "duration": 1665.874986999901
+  },
+  "faith-google-x1-quic-bbr-5": {
+    "impl": "faith",
+    "http3": "bbr",
+    "hits": 1,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 5,
+    "filename": "faith-google-x1-quic-bbr-5",
+    "duration": 1724.27102799993
+  },
+  "faith-google-x1-quic-bbr-6": {
+    "impl": "faith",
+    "http3": "bbr",
+    "hits": 1,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 6,
+    "filename": "faith-google-x1-quic-bbr-6",
+    "duration": 1670.4041880001314
+  },
+  "faith-google-x1-quic-bbr-7": {
+    "impl": "faith",
+    "http3": "bbr",
+    "hits": 1,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 7,
+    "filename": "faith-google-x1-quic-bbr-7",
+    "duration": 1699.5244479998946
+  },
+  "faith-google-x1-quic-bbr-8": {
+    "impl": "faith",
+    "http3": "bbr",
+    "hits": 1,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 8,
+    "filename": "faith-google-x1-quic-bbr-8",
+    "duration": 1631.803928000154
+  },
+  "faith-google-x1-quic-bbr-9": {
+    "impl": "faith",
+    "http3": "bbr",
+    "hits": 1,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 9,
+    "filename": "faith-google-x1-quic-bbr-9",
+    "duration": 1735.9068729998544
+  },
+  "faith-google-x10-quic-bbr-0": {
+    "impl": "faith",
+    "http3": "bbr",
+    "hits": 10,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 0,
+    "filename": "faith-google-x10-quic-bbr-0",
+    "duration": 4689.498337999918
+  },
+  "faith-google-x10-quic-bbr-1": {
+    "impl": "faith",
+    "http3": "bbr",
+    "hits": 10,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 1,
+    "filename": "faith-google-x10-quic-bbr-1",
+    "duration": 6956.006214999827
+  },
+  "faith-google-x10-quic-bbr-2": {
+    "impl": "faith",
+    "http3": "bbr",
+    "hits": 10,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 2,
+    "filename": "faith-google-x10-quic-bbr-2",
+    "duration": 5059.342213999946
+  },
+  "faith-google-x10-quic-bbr-3": {
+    "impl": "faith",
+    "http3": "bbr",
+    "hits": 10,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 3,
+    "filename": "faith-google-x10-quic-bbr-3",
+    "duration": 4539.382391999941
+  },
+  "faith-google-x10-quic-bbr-4": {
+    "impl": "faith",
+    "http3": "bbr",
+    "hits": 10,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 4,
+    "filename": "faith-google-x10-quic-bbr-4",
+    "duration": 4799.677994999802
+  },
+  "faith-google-x10-quic-bbr-5": {
+    "impl": "faith",
+    "http3": "bbr",
+    "hits": 10,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 5,
+    "filename": "faith-google-x10-quic-bbr-5",
+    "duration": 5109.277130999835
+  },
+  "faith-google-x10-quic-bbr-6": {
+    "impl": "faith",
+    "http3": "bbr",
+    "hits": 10,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 6,
+    "filename": "faith-google-x10-quic-bbr-6",
+    "duration": 5190.995481000049
+  },
+  "faith-google-x10-quic-bbr-7": {
+    "impl": "faith",
+    "http3": "bbr",
+    "hits": 10,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 7,
+    "filename": "faith-google-x10-quic-bbr-7",
+    "duration": 5431.546808999963
+  },
+  "faith-google-x10-quic-bbr-8": {
+    "impl": "faith",
+    "http3": "bbr",
+    "hits": 10,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 8,
+    "filename": "faith-google-x10-quic-bbr-8",
+    "duration": 5214.728955000173
+  },
+  "faith-google-x10-quic-bbr-9": {
+    "impl": "faith",
+    "http3": "bbr",
+    "hits": 10,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 9,
+    "filename": "faith-google-x10-quic-bbr-9",
+    "duration": 4577.926955000032
+  },
+  "faith-google-x100-quic-bbr-0": {
+    "impl": "faith",
+    "http3": "bbr",
+    "hits": 100,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 0,
+    "filename": "faith-google-x100-quic-bbr-0",
+    "duration": 37813.769692
+  },
+  "faith-google-x100-quic-bbr-1": {
+    "impl": "faith",
+    "http3": "bbr",
+    "hits": 100,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 1,
+    "filename": "faith-google-x100-quic-bbr-1",
+    "duration": 38869.38689199998
+  },
+  "faith-google-x100-quic-bbr-2": {
+    "impl": "faith",
+    "http3": "bbr",
+    "hits": 100,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 2,
+    "filename": "faith-google-x100-quic-bbr-2",
+    "duration": 37094.4882410001
+  },
+  "faith-google-x100-quic-bbr-3": {
+    "impl": "faith",
+    "http3": "bbr",
+    "hits": 100,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 3,
+    "filename": "faith-google-x100-quic-bbr-3",
+    "duration": 40491.77984700003
+  },
+  "faith-google-x100-quic-bbr-4": {
+    "impl": "faith",
+    "http3": "bbr",
+    "hits": 100,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 4,
+    "filename": "faith-google-x100-quic-bbr-4",
+    "duration": 37132.77877500001
+  },
+  "faith-google-x100-quic-bbr-5": {
+    "impl": "faith",
+    "http3": "bbr",
+    "hits": 100,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 5,
+    "filename": "faith-google-x100-quic-bbr-5",
+    "duration": 39483.53534899978
+  },
+  "faith-google-x100-quic-bbr-6": {
+    "impl": "faith",
+    "http3": "bbr",
+    "hits": 100,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 6,
+    "filename": "faith-google-x100-quic-bbr-6",
+    "duration": 38043.53454700019
+  },
+  "faith-google-x100-quic-bbr-7": {
+    "impl": "faith",
+    "http3": "bbr",
+    "hits": 100,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 7,
+    "filename": "faith-google-x100-quic-bbr-7",
+    "duration": 36170.232404000126
+  },
+  "faith-google-x100-quic-bbr-8": {
+    "impl": "faith",
+    "http3": "bbr",
+    "hits": 100,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 8,
+    "filename": "faith-google-x100-quic-bbr-8",
+    "duration": 36038.73980100034
+  },
+  "faith-google-x100-quic-bbr-9": {
+    "impl": "faith",
+    "http3": "bbr",
+    "hits": 100,
+    "target": "google",
+    "url": "https://www.google.com/",
+    "n": 9,
+    "filename": "faith-google-x100-quic-bbr-9",
+    "duration": 36438.994564999826
+  }
+}

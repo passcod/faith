@@ -20,13 +20,13 @@ cleanup() {
 trap cleanup EXIT
 
 # Check if image exists
-if ! sudo podman image inspect "$IMAGE" > /dev/null 2>&1; then
+if ! sudo podman image inspect "$IMAGE" > /dev/null; then
   echo "Error: Image '$IMAGE' not found." >&2
   echo "Please build the image with: sudo podman build -t $IMAGE ." >&2
   exit 1
 fi
 
-CONTAINER_ID=$(sudo podman create -it --privileged --cap-add=NET_ADMIN --network podman-ipv6 -e TARGET="$TARGET" -e HITS="$HITS" -e SSLKEYLOGFILE="/tmp/sslkeylog.txt" --entrypoint /bin/sh "$IMAGE" -c "while true; do sleep 1; done" 2>/dev/null)
+CONTAINER_ID=$(sudo podman create -it --privileged --cap-add=NET_ADMIN --network podman-ipv6 -e TARGET="$TARGET" -e HITS="$HITS" -e HTTP3="$HTTP3" -e SSLKEYLOGFILE="/tmp/sslkeylog.txt" --entrypoint /bin/sh "$IMAGE" -c "while true; do sleep 1; done" 2>/dev/null)
 
 sudo podman start "$CONTAINER_ID" > /dev/null 2>&1
 
@@ -41,8 +41,6 @@ if [ -n "$TCPDUMP_PID" ]; then
   kill $TCPDUMP_PID 2>/dev/null || true
   wait $TCPDUMP_PID 2>/dev/null || true
 fi
-
-echo
 
 TSHARK_FILTER="${TSHARK_FILTER:-tcp or dns or quic}"
 if [ -n "$TSHARK_FILTER" ]; then

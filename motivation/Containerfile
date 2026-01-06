@@ -1,0 +1,7 @@
+FROM node:24
+
+RUN apt-get update && apt-get install -y curl npm tcpdump tshark && rm -rf /var/lib/apt/lists/*
+
+COPY package.json package-lock.json .
+RUN npm ci
+COPY native-fetch.js node-fetch.js faith.mjs .
