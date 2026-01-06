@@ -91,11 +91,11 @@ for (const { name: target, url } of targets) {
 					}
 				}
 			}
+
+			await writeFile(
+				"bench-data.json",
+				JSON.stringify(Object.fromEntries(data.entries()), null, 2),
+			);
 		}
 	}
 }
-
-await writeFile(
-	"bench-data.json",
-	JSON.stringify(Object.fromEntries(data.entries()), null, 2),
-);
