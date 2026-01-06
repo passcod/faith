@@ -8,7 +8,7 @@ let n = 0;
 while (n < HITS) {
 	const batch = [];
 	for (let i = 0; i < SEQ && n < HITS; i++, n++) {
-		batch.push(fetch(TARGET));
+		batch.push(fetch(TARGET).then((resp) => resp.text()));
 	}
 	await Promise.all(batch);
 }
