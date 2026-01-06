@@ -596,7 +596,94 @@ async function main() {
      '' using ($0+0.33):5:(sprintf("%.1f",$5)) with labels center offset 0,1 font ",8" notitle`,
 	});
 
-	// Chart 10: Throughput
+	// Chart 10: Bytes per packet
+	const bytesPerPacketData = [1, 10, 100]
+		.map((hits) => {
+			const nativeEntries = entries.filter(
+				(e) =>
+					e.impl === "native" &&
+					e.target === "local" &&
+					e.hits === hits &&
+					e.http3 === false,
+			);
+			const nativeBytes = nativeEntries
+				.map((e) => packetStatsMap.get(e.filename)?.bytes || 0)
+				.reduce((sum, val) => sum + val, 0);
+			const nativePackets = nativeEntries
+				.map((e) => packetStatsMap.get(e.filename)?.total || 0)
+				.reduce((sum, val) => sum + val, 0);
+			const native = nativePackets > 0 ? nativeBytes / nativePackets : 0;
+
+			const nodefetchEntries = entries.filter(
+				(e) =>
+					e.impl === "node-fetch" &&
+					e.target === "local" &&
+					e.hits === hits &&
+					e.http3 === false,
+			);
+			const nodefetchBytes = nodefetchEntries
+				.map((e) => packetStatsMap.get(e.filename)?.bytes || 0)
+				.reduce((sum, val) => sum + val, 0);
+			const nodefetchPackets = nodefetchEntries
+				.map((e) => packetStatsMap.get(e.filename)?.total || 0)
+				.reduce((sum, val) => sum + val, 0);
+			const nodefetch =
+				nodefetchPackets > 0 ? nodefetchBytes / nodefetchPackets : 0;
+
+			const faithTcpEntries = entries.filter(
+				(e) =>
+					e.impl === "faith" &&
+					e.target === "local" &&
+					e.hits === hits &&
+					e.http3 === false,
+			);
+			const faithTcpBytes = faithTcpEntries
+				.map((e) => packetStatsMap.get(e.filename)?.bytes || 0)
+				.reduce((sum, val) => sum + val, 0);
+			const faithTcpPackets = faithTcpEntries
+				.map((e) => packetStatsMap.get(e.filename)?.total || 0)
+				.reduce((sum, val) => sum + val, 0);
+			const faithTcp =
+				faithTcpPackets > 0 ? faithTcpBytes / faithTcpPackets : 0;
+
+			const faithQuicEntries = entries.filter(
+				(e) =>
+					e.impl === "faith" &&
+					e.target === "google" &&
+					e.hits === hits &&
+					e.http3 !== false,
+			);
+			const faithQuicBytes = faithQuicEntries
+				.map((e) => packetStatsMap.get(e.filename)?.bytes || 0)
+				.reduce((sum, val) => sum + val, 0);
+			const faithQuicPackets = faithQuicEntries
+				.map((e) => packetStatsMap.get(e.filename)?.total || 0)
+				.reduce((sum, val) => sum + val, 0);
+			const faithQuic =
+				faithQuicPackets > 0 ? faithQuicBytes / faithQuicPackets : 0;
+
+			return `${hits}\t${native}\t${nodefetch}\t${faithTcp}\t${faithQuic}`;
+		})
+		.join("\n");
+
+	await generateChart("bytes_per_packet", {
+		output: "bytes_per_packet.png",
+		title: "Network Efficiency: Average Bytes per Packet",
+		xlabel: "Number of Requests",
+		ylabel: "Bytes per Packet",
+		dataFile: "bytes_per_packet_data.txt",
+		data: bytesPerPacketData,
+		plot: `plot 'charts/bytes_per_packet_data.txt' using 2:xtic(1) title 'native', \\
+     '' using 3 title 'node-fetch', \\
+     '' using 4 title 'Fáith-TCP', \\
+     '' using 5 title 'Fáith-QUIC', \\
+     '' using ($0-0.33):2:(sprintf("%.1f",$2)) with labels center offset 0,1 font ",8" notitle, \\
+     '' using ($0-0.11):3:(sprintf("%.1f",$3)) with labels center offset 0,1 font ",8" notitle, \\
+     '' using ($0+0.11):4:(sprintf("%.1f",$4)) with labels center offset 0,1 font ",8" notitle, \\
+     '' using ($0+0.33):5:(sprintf("%.1f",$5)) with labels center offset 0,1 font ",8" notitle`,
+	});
+
+	// Chart 11: Throughput
 	const throughputData = [1, 10, 100]
 		.map((hits) => {
 			const native =
