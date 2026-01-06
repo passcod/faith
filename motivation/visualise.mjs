@@ -39,25 +39,126 @@ async function extractPcapStats(filename) {
 	const pcapFile = `data/${filename}.pcap`;
 
 	if (!existsSync(pcapFile)) {
-		return { filename, total: 0, tcp: 0, udp: 0, bytes: 0 };
+		return {
+			filename,
+			total: 0,
+			tcp: 0,
+			udp: 0,
+			bytes: 0,
+			connections: 0,
+			dnsQueries: 0,
+			dnsResponses: 0,
+		};
 	}
 
 	try {
-		const [totalResult, tcpResult, udpResult, bytesResult] =
-			await Promise.all([
-				execFileAsync("tcpdump", ["-r", pcapFile, "--count"], {
+		const [
+			totalResult,
+			tcpResult,
+			udpResult,
+			bytesResult,
+			tcpSynResult,
+			quicInitialResult,
+			dnsQueryResult,
+			dnsResponseResult,
+		] = await Promise.all([
+			execFileAsync("tcpdump", ["-r", pcapFile, "--count"], {
+				encoding: "utf8",
+			}).catch(() => ({ stdout: "0 packets" })),
+			execFileAsync("tcpdump", ["-r", pcapFile, "--count", "tcp"], {
+				encoding: "utf8",
+			}).catch(() => ({ stdout: "0 packets" })),
+			execFileAsync("tcpdump", ["-r", pcapFile, "--count", "udp"], {
+				encoding: "utf8",
+			}).catch(() => ({ stdout: "0 packets" })),
+			execFileAsync("capinfos", ["-M", pcapFile], {
+				encoding: "utf8",
+			}).catch(() => ({ stdout: "" })),
+			execFileAsync(
+				"tcpdump",
+				[
+					"-r",
+					pcapFile,
+					"--count",
+					"tcp[tcpflags] & tcp-syn != 0 and tcp[tcpflags] & tcp-ack == 0",
+				],
+				{
 					encoding: "utf8",
-				}).catch(() => ({ stdout: "0 packets" })),
-				execFileAsync("tcpdump", ["-r", pcapFile, "--count", "tcp"], {
+				},
+			).catch(() => ({ stdout: "0 packets" })),
+			// Try tshark for proper QUIC Initial packet detection, fall back to heuristic
+			execFileAsync(
+				"tshark",
+				[
+					"-r",
+					pcapFile,
+					"-Y",
+					"quic.long.packet_type == 0",
+					"-T",
+					"fields",
+					"-e",
+					"frame.number",
+				],
+				{
 					encoding: "utf8",
-				}).catch(() => ({ stdout: "0 packets" })),
-				execFileAsync("tcpdump", ["-r", pcapFile, "--count", "udp"], {
+				},
+			)
+				.then((result) => ({
+					stdout:
+						result.stdout.trim().split("\n").length + " packets",
+				}))
+				.catch(() =>
+					// Fall back to counting large UDP packets as a heuristic
+					execFileAsync(
+						"tcpdump",
+						[
+							"-r",
+							pcapFile,
+							"--count",
+							"-n",
+							"udp and greater 1200",
+						],
+						{
+							encoding: "utf8",
+						},
+					).catch(() => ({ stdout: "0 packets" })),
+				),
+			// Use tshark to detect DNS queries specifically
+			execFileAsync(
+				"tshark",
+				[
+					"-r",
+					pcapFile,
+					"-Y",
+					"dns.flags.response == 0",
+					"-T",
+					"fields",
+					"-e",
+					"frame.number",
+				],
+				{
 					encoding: "utf8",
-				}).catch(() => ({ stdout: "0 packets" })),
-				execFileAsync("capinfos", ["-M", pcapFile], {
-					encoding: "utf8",
-				}).catch(() => ({ stdout: "" })),
-			]);
+				},
+			)
+				.then((result) => {
+					const lines = result.stdout.trim();
+					return {
+						stdout: lines
+							? lines.split("\n").length + " packets"
+							: "0 packets",
+					};
+				})
+				.catch(() =>
+					// Fall back to tcpdump if tshark fails
+					execFileAsync(
+						"tcpdump",
+						["-r", pcapFile, "--count", "udp port 53"],
+						{
+							encoding: "utf8",
+						},
+					).catch(() => ({ stdout: "0 packets" })),
+				),
+			// Use tshark to detect DNS responses]);
 
 		const total = parseInt(totalResult.stdout.split(" ")[0]) || 0;
 		const tcp = parseInt(tcpResult.stdout.split(" ")[0]) || 0;
@@ -66,10 +167,34 @@ async function extractPcapStats(filename) {
 		const bytesMatch = bytesResult.stdout.match(/^Data size:\s+(\d+)/m);
 		const bytes = bytesMatch ? parseInt(bytesMatch[1]) : 0;
 
-		return { filename, total, tcp, udp, bytes };
+		const tcpSyn = parseInt(tcpSynResult.stdout.split(" ")[0]) || 0;
+		const quicInitialCount =
+			parseInt(quicInitialResult.stdout.split(" ")[0]) || 0;
+
+		// For QUIC: if tshark worked, we have accurate Initial packet count
+		// Otherwise quicInitialCount is from the tcpdump heuristic (large packets)
+		// Heuristic: estimate ~1 connection per 20 large UDP packets
+		const quicConnections =
+			udp > 0 && quicInitialCount > 10
+				? Math.max(1, Math.round(quicInitialCount / 20))
+				: quicInitialCount;
+
+		const connections = tcp > 0 ? tcpSyn : udp > 0 ? quicConnections : 0;
+
+		const dns = parseInt(dnsResult.stdout.split(" ")[0]) || 0;
+
+		return { filename, total, tcp, udp, bytes, connections, dns };
 	} catch (err) {
-		console.error(`Error processing ${pcapFile}:`, err.message);
-		return { filename, total: 0, tcp: 0, udp: 0, bytes: 0 };
+		console.error(`Error reading ${pcapFile}:`, err.message);
+		return {
+			filename,
+			total: 0,
+			tcp: 0,
+			udp: 0,
+			bytes: 0,
+			connections: 0,
+			dns: 0,
+		};
 	}
 }
 
@@ -740,14 +865,14 @@ async function main() {
 		})
 		.join("\n");
 
-	await generateChart("throughput", {
-		output: "throughput.png",
+	await generateChart("throughput_google", {
+		output: "throughput_google.png",
 		title: "Throughput: Requests per Second (Google Target)",
 		xlabel: "Number of Requests",
 		ylabel: "Requests/Second",
-		dataFile: "throughput_data.txt",
+		dataFile: "throughput_google_data.txt",
 		data: throughputData,
-		plot: `plot 'charts/throughput_data.txt' using 2:xtic(1) title 'native', \\
+		plot: `plot 'charts/throughput_google_data.txt' using 2:xtic(1) title 'native', \\
      '' using 3 title 'node-fetch', \\
      '' using 4 title 'Fáith-TCP', \\
      '' using 5 title 'Fáith-QUIC (Cubic)', \\
@@ -757,6 +882,202 @@ async function main() {
      '' using ($0):4:(sprintf("%.1f",$4)) with labels center offset 0,1 font ",8" notitle, \\
      '' using ($0+0.2):5:(sprintf("%.1f",$5)) with labels center offset 0,1 font ",8" notitle, \\
      '' using ($0+0.4):6:(sprintf("%.1f",$6)) with labels center offset 0,1 font ",8" notitle`,
+	});
+
+	// Chart 12: Throughput (local)
+	const throughputLocalData = [1, 10, 100]
+		.map((hits) => {
+			const native =
+				hits /
+				(getAvgDuration(
+					(e) =>
+						e.impl === "native" &&
+						e.target === "local" &&
+						e.http3 === false &&
+						e.hits === hits,
+				) /
+					1000);
+			const nodefetch =
+				hits /
+				(getAvgDuration(
+					(e) =>
+						e.impl === "node-fetch" &&
+						e.target === "local" &&
+						e.http3 === false &&
+						e.hits === hits,
+				) /
+					1000);
+			const faith =
+				hits /
+				(getAvgDuration(
+					(e) =>
+						e.impl === "faith" &&
+						e.target === "local" &&
+						e.http3 === false &&
+						e.hits === hits,
+				) /
+					1000);
+			return `${hits}\t${native}\t${nodefetch}\t${faith}`;
+		})
+		.join("\n");
+
+	await generateChart("throughput_local", {
+		output: "throughput_local.png",
+		title: "Throughput: Requests per Second (Local Target)",
+		xlabel: "Number of Requests",
+		ylabel: "Requests/Second",
+		dataFile: "throughput_local_data.txt",
+		data: throughputLocalData,
+		plot: `plot 'charts/throughput_local_data.txt' using 2:xtic(1) title 'native', \\
+     '' using 3 title 'node-fetch', \\
+     '' using 4 title 'Fáith', \\
+     '' using ($0-0.27):2:(sprintf("%.1f",$2)) with labels center offset 0,1 font ",8" notitle, \\
+     '' using ($0):3:(sprintf("%.1f",$3)) with labels center offset 0,1 font ",8" notitle, \\
+     '' using ($0+0.27):4:(sprintf("%.1f",$4)) with labels center offset 0,1 font ",8" notitle`,
+	});
+
+	// Chart 13: Connections per request
+	const connectionsPerReqData = [1, 10, 100]
+		.map((hits) => {
+			const nativeEntries = entries.filter(
+				(e) =>
+					e.impl === "native" &&
+					e.target === "local" &&
+					e.hits === hits &&
+					e.http3 === false,
+			);
+			const nativeConns = nativeEntries
+				.map((e) => packetStatsMap.get(e.filename)?.connections || 0)
+				.reduce((sum, val) => sum + val, 0);
+			const native = nativeConns / nativeEntries.length;
+
+			const nodefetchEntries = entries.filter(
+				(e) =>
+					e.impl === "node-fetch" &&
+					e.target === "local" &&
+					e.hits === hits &&
+					e.http3 === false,
+			);
+			const nodefetchConns = nodefetchEntries
+				.map((e) => packetStatsMap.get(e.filename)?.connections || 0)
+				.reduce((sum, val) => sum + val, 0);
+			const nodefetch = nodefetchConns / nodefetchEntries.length;
+
+			const faithTcpEntries = entries.filter(
+				(e) =>
+					e.impl === "faith" &&
+					e.target === "local" &&
+					e.hits === hits &&
+					e.http3 === false,
+			);
+			const faithTcpConns = faithTcpEntries
+				.map((e) => packetStatsMap.get(e.filename)?.connections || 0)
+				.reduce((sum, val) => sum + val, 0);
+			const faithTcp = faithTcpConns / faithTcpEntries.length;
+
+			const faithQuicEntries = entries.filter(
+				(e) =>
+					e.impl === "faith" &&
+					e.target === "google" &&
+					e.hits === hits &&
+					e.http3 !== false,
+			);
+			const faithQuicConns = faithQuicEntries
+				.map((e) => packetStatsMap.get(e.filename)?.connections || 0)
+				.reduce((sum, val) => sum + val, 0);
+			const faithQuic = faithQuicConns / faithQuicEntries.length;
+
+			return `${hits}\t${native}\t${nodefetch}\t${faithTcp}\t${faithQuic}`;
+		})
+		.join("\n");
+
+	await generateChart("connections_per_request", {
+		output: "connections_per_request.png",
+		title: "Connection Reuse: Total Connections",
+		xlabel: "Number of Requests",
+		ylabel: "Total Connections",
+		dataFile: "connections_per_request_data.txt",
+		data: connectionsPerReqData,
+		plot: `plot 'charts/connections_per_request_data.txt' using 2:xtic(1) title 'native', \\
+     '' using 3 title 'node-fetch', \\
+     '' using 4 title 'Fáith-TCP', \\
+     '' using 5 title 'Fáith-QUIC', \\
+     '' using ($0-0.33):2:(sprintf("%.2f",$2)) with labels center offset 0,1 font ",8" notitle, \\
+     '' using ($0-0.11):3:(sprintf("%.2f",$3)) with labels center offset 0,1 font ",8" notitle, \\
+     '' using ($0+0.11):4:(sprintf("%.2f",$4)) with labels center offset 0,1 font ",8" notitle, \\
+     '' using ($0+0.33):5:(sprintf("%.2f",$5)) with labels center offset 0,1 font ",8" notitle`,
+	});
+
+	// Chart 14: DNS requests
+	const dnsData = [1, 10, 100]
+		.map((hits) => {
+			const nativeEntries = entries.filter(
+				(e) =>
+					e.impl === "native" &&
+					e.target === "local" &&
+					e.hits === hits &&
+					e.http3 === false,
+			);
+			const nativeDns = nativeEntries
+				.map((e) => packetStatsMap.get(e.filename)?.dns || 0)
+				.reduce((sum, val) => sum + val, 0);
+			const native = nativeDns / nativeEntries.length;
+
+			const nodefetchEntries = entries.filter(
+				(e) =>
+					e.impl === "node-fetch" &&
+					e.target === "local" &&
+					e.hits === hits &&
+					e.http3 === false,
+			);
+			const nodefetchDns = nodefetchEntries
+				.map((e) => packetStatsMap.get(e.filename)?.dns || 0)
+				.reduce((sum, val) => sum + val, 0);
+			const nodefetch = nodefetchDns / nodefetchEntries.length;
+
+			const faithTcpEntries = entries.filter(
+				(e) =>
+					e.impl === "faith" &&
+					e.target === "local" &&
+					e.hits === hits &&
+					e.http3 === false,
+			);
+			const faithTcpDns = faithTcpEntries
+				.map((e) => packetStatsMap.get(e.filename)?.dns || 0)
+				.reduce((sum, val) => sum + val, 0);
+			const faithTcp = faithTcpDns / faithTcpEntries.length;
+
+			const faithQuicEntries = entries.filter(
+				(e) =>
+					e.impl === "faith" &&
+					e.target === "google" &&
+					e.hits === hits &&
+					e.http3 !== false,
+			);
+			const faithQuicDns = faithQuicEntries
+				.map((e) => packetStatsMap.get(e.filename)?.dns || 0)
+				.reduce((sum, val) => sum + val, 0);
+			const faithQuic = faithQuicDns / faithQuicEntries.length;
+
+			return `${hits}\t${native}\t${nodefetch}\t${faithTcp}\t${faithQuic}`;
+		})
+		.join("\n");
+
+	await generateChart("dns_requests", {
+		output: "dns_requests.png",
+		title: "DNS Resolution: Total DNS Queries",
+		xlabel: "Number of Requests",
+		ylabel: "DNS Queries",
+		dataFile: "dns_requests_data.txt",
+		data: dnsData,
+		plot: `plot 'charts/dns_requests_data.txt' using 2:xtic(1) title 'native', \\
+     '' using 3 title 'node-fetch', \\
+     '' using 4 title 'Fáith-TCP', \\
+     '' using 5 title 'Fáith-QUIC', \\
+     '' using ($0-0.33):2:(sprintf("%.1f",$2)) with labels center offset 0,1 font ",8" notitle, \\
+     '' using ($0-0.11):3:(sprintf("%.1f",$3)) with labels center offset 0,1 font ",8" notitle, \\
+     '' using ($0+0.11):4:(sprintf("%.1f",$4)) with labels center offset 0,1 font ",8" notitle, \\
+     '' using ($0+0.33):5:(sprintf("%.1f",$5)) with labels center offset 0,1 font ",8" notitle`,
 	});
 
 	// Generate summary report
@@ -848,9 +1169,10 @@ async function main() {
 
 	// Save packet stats
 	const packetStatsTxt = [
-		"# filename total_packets tcp_packets udp_packets total_bytes",
+		"# filename total_packets tcp_packets udp_packets total_bytes connections dns_queries",
 		...packetStats.map(
-			(s) => `${s.filename} ${s.total} ${s.tcp} ${s.udp} ${s.bytes}`,
+			(s) =>
+				`${s.filename} ${s.total} ${s.tcp} ${s.udp} ${s.bytes} ${s.connections} ${s.dns}`,
 		),
 	].join("\n");
 	await writeFile(`${OUTPUT_DIR}/packet_stats.txt`, packetStatsTxt);
