@@ -306,6 +306,36 @@ ${typeof config.plot === "function" ? config.plot(dataPath) : config.plot}
 	} catch (err) {
 		console.error(`✗ Failed to generate ${output}:`, err.message);
 	}
+
+	// Generate zero-baseline variant
+	const zeroOutput = `${name}_zero.png`;
+	const gnuplotScriptZero = `set terminal png size 1200,800 font "sans,10" enhanced
+set output 'charts/${zeroOutput}'
+set title '${config.title} (Y-axis from zero)'
+set xlabel '${config.xlabel}'
+set ylabel '${config.ylabel}'
+set yrange [0:*]
+set grid ytics
+set key outside right top
+set style data histograms
+set style histogram clustered gap 1
+set style fill solid 0.8 border -1
+set boxwidth 0.9
+set offset 0,0,graph 0.15,0
+${config.xtics || 'set xtics ("1" 0, "10" 1, "100" 2)'}
+${config.extra || ""}
+
+${typeof config.plot === "function" ? config.plot(dataPath) : config.plot}
+`;
+
+	await writeFile(`${OUTPUT_DIR}/${name}_zero.gnuplot`, gnuplotScriptZero);
+
+	try {
+		await execFileAsync("gnuplot", [`${OUTPUT_DIR}/${name}_zero.gnuplot`]);
+		console.log(`✓ Generated: ${zeroOutput}`);
+	} catch (err) {
+		console.error(`✗ Failed to generate ${zeroOutput}:`, err.message);
+	}
 }
 
 async function main() {
