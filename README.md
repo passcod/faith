@@ -635,6 +635,9 @@ In some networks, BBR can lead to pathological degradation of overall network co
 flooding the network by up to **100 times** more retransmissions. This is fixed in BBRv2 and BBRv3,
 but Fáith (or rather its underlying QUIC library quinn, [does not implement those yet][2]).
 
+Note that this only controls the "upload" congestion window (the server controls the "download"
+side), so this setting only makes a difference for upload-heavy (large bodies) applications.
+
 [2]: https://github.com/quinn-rs/quinn/issues/1254
 
 Default: `cubic`. Accepted values: `cubic`, `bbr1`.

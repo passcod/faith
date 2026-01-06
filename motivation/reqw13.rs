@@ -23,13 +23,19 @@ async fn main() {
 	let hits = std::env::var("HITS").unwrap();
 	let hits: usize = hits.parse().unwrap();
 
+	let http3 = std::env::var("HTTP3").is_ok();
+
 	let client = reqwest::Client::builder()
 		.http3_prior_knowledge()
 		.build()
 		.unwrap();
 
 	for n in 0..hits {
-		let req = client.request(Default::default(), &target).version(reqwest::Version::HTTP_3);
+		let mut req = client.request(Default::default(), &target);
+		if http3 {
+			req = req.version(reqwest::Version::HTTP_3);
+		}
+
 		match req.send().await {
 			Err(err) => {
 				println!("{n}: {err:?}");
