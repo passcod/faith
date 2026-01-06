@@ -810,7 +810,15 @@ async function main() {
 					e.hits === 100 &&
 					e.seq === seq,
 			);
-			return `${seq}\t${native}\t${nodefetch}`;
+			const faith = getAvgDuration(
+				(e) =>
+					e.impl === "faith" &&
+					e.target === "cloudflare-100k" &&
+					e.http3 === false &&
+					e.hits === 100 &&
+					e.seq === seq,
+			);
+			return `${seq}\t${native}\t${nodefetch}\t${faith}`;
 		})
 		.join("\n");
 
@@ -824,8 +832,10 @@ async function main() {
 			dataPath,
 		) => `plot '${dataPath}' using 2:xtic(1) title 'native', \\
      '' using 3 title 'node-fetch', \\
-     '' using ($0-0.2):2:(sprintf("%.0f",$2)) with labels center offset 0,1 font ",8" notitle, \\
-     '' using ($0+0.2):3:(sprintf("%.0f",$3)) with labels center offset 0,1 font ",8" notitle`,
+     '' using 4 title 'Fáith', \\
+     '' using ($0-0.27):2:(sprintf("%.0f",$2)) with labels center offset 0,1 font ",8" notitle, \\
+     '' using ($0):3:(sprintf("%.0f",$3)) with labels center offset 0,1 font ",8" notitle, \\
+     '' using ($0+0.27):4:(sprintf("%.0f",$4)) with labels center offset 0,1 font ",8" notitle`,
 	});
 
 	// Throughput by parallelism (cloudflare, HITS=100, varying SEQ)
@@ -847,6 +857,14 @@ async function main() {
 					e.hits === 100 &&
 					e.seq === seq,
 			);
+			const faithDuration = getAvgDuration(
+				(e) =>
+					e.impl === "faith" &&
+					e.target === "cloudflare-100k" &&
+					e.http3 === false &&
+					e.hits === 100 &&
+					e.seq === seq,
+			);
 			const nativeThroughput =
 				nativeDuration > 0
 					? (100 / (nativeDuration / 1000)).toFixed(1)
@@ -855,7 +873,11 @@ async function main() {
 				nodefetchDuration > 0
 					? (100 / (nodefetchDuration / 1000)).toFixed(1)
 					: 0;
-			return `${seq}\t${nativeThroughput}\t${nodefetchThroughput}`;
+			const faithThroughput =
+				faithDuration > 0
+					? (100 / (faithDuration / 1000)).toFixed(1)
+					: 0;
+			return `${seq}\t${nativeThroughput}\t${nodefetchThroughput}\t${faithThroughput}`;
 		})
 		.join("\n");
 
@@ -869,8 +891,10 @@ async function main() {
 			dataPath,
 		) => `plot '${dataPath}' using 2:xtic(1) title 'native', \\
      '' using 3 title 'node-fetch', \\
-     '' using ($0-0.2):2:(sprintf("%.1f",$2)) with labels center offset 0,1 font ",8" notitle, \\
-     '' using ($0+0.2):3:(sprintf("%.1f",$3)) with labels center offset 0,1 font ",8" notitle`,
+     '' using 4 title 'Fáith', \\
+     '' using ($0-0.27):2:(sprintf("%.1f",$2)) with labels center offset 0,1 font ",8" notitle, \\
+     '' using ($0):3:(sprintf("%.1f",$3)) with labels center offset 0,1 font ",8" notitle, \\
+     '' using ($0+0.27):4:(sprintf("%.1f",$4)) with labels center offset 0,1 font ",8" notitle`,
 	});
 
 	// Google performance
