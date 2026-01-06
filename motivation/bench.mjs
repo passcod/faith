@@ -59,7 +59,7 @@ for (const { name: target, url } of targets) {
 					try {
 						execFileSync(
 							"./netrace.sh",
-							[`${filename}.pcap`, ...cmd],
+							[`data/${filename}.pcap`, ...cmd],
 							{
 								env: {
 									...process.env,

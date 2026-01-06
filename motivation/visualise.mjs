@@ -1,0 +1,800 @@
+#!/usr/bin/env node
+
+import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { cpus } from "node:os";
+
+const execFileAsync = promisify(execFile);
+
+const OUTPUT_DIR = "charts";
+const DATA_FILE = "bench-data.json";
+
+// Helper to run commands in parallel
+async function parallel(items, fn, concurrency = cpus().length) {
+	const results = [];
+	const queue = [...items];
+	const workers = [];
+
+	for (let i = 0; i < concurrency; i++) {
+		workers.push(
+			(async () => {
+				while (queue.length > 0) {
+					const item = queue.shift();
+					if (item !== undefined) {
+						results.push(await fn(item));
+					}
+				}
+			})(),
+		);
+	}
+
+	await Promise.all(workers);
+	return results;
+}
+
+// Extract packet stats from a pcap file
+async function extractPcapStats(filename) {
+	const pcapFile = `data/${filename}.pcap`;
+
+	if (!existsSync(pcapFile)) {
+		return { filename, total: 0, tcp: 0, udp: 0, bytes: 0 };
+	}
+
+	try {
+		const [totalResult, tcpResult, udpResult, bytesResult] =
+			await Promise.all([
+				execFileAsync("tcpdump", ["-r", pcapFile, "--count"], {
+					encoding: "utf8",
+				}).catch(() => ({ stdout: "0 packets" })),
+				execFileAsync("tcpdump", ["-r", pcapFile, "--count", "tcp"], {
+					encoding: "utf8",
+				}).catch(() => ({ stdout: "0 packets" })),
+				execFileAsync("tcpdump", ["-r", pcapFile, "--count", "udp"], {
+					encoding: "utf8",
+				}).catch(() => ({ stdout: "0 packets" })),
+				execFileAsync("capinfos", ["-M", pcapFile], {
+					encoding: "utf8",
+				}).catch(() => ({ stdout: "" })),
+			]);
+
+		const total = parseInt(totalResult.stdout.split(" ")[0]) || 0;
+		const tcp = parseInt(tcpResult.stdout.split(" ")[0]) || 0;
+		const udp = parseInt(udpResult.stdout.split(" ")[0]) || 0;
+
+		const bytesMatch = bytesResult.stdout.match(/^Data size:\s+(\d+)/m);
+		const bytes = bytesMatch ? parseInt(bytesMatch[1]) : 0;
+
+		return { filename, total, tcp, udp, bytes };
+	} catch (err) {
+		console.error(`Error processing ${pcapFile}:`, err.message);
+		return { filename, total: 0, tcp: 0, udp: 0, bytes: 0 };
+	}
+}
+
+// Calculate statistics for a group of durations
+function calculateStats(durations) {
+	if (durations.length === 0)
+		return { mean: 0, median: 0, min: 0, max: 0, stddev: 0 };
+
+	const sorted = [...durations].sort((a, b) => a - b);
+	const sum = sorted.reduce((a, b) => a + b, 0);
+	const mean = sum / sorted.length;
+
+	const median =
+		sorted.length % 2 === 0
+			? (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2
+			: sorted[Math.floor(sorted.length / 2)];
+
+	const variance =
+		sorted.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) /
+		sorted.length;
+	const stddev = Math.sqrt(variance);
+
+	return {
+		mean,
+		median,
+		min: sorted[0],
+		max: sorted[sorted.length - 1],
+		stddev,
+	};
+}
+
+// Generate a gnuplot script and data file
+async function generateChart(name, config) {
+	const gnuplotScript = `set terminal png size 1200,800 font "sans,10" enhanced
+set output 'charts/${config.output}'
+set title '${config.title}'
+set xlabel '${config.xlabel}'
+set ylabel '${config.ylabel}'
+set grid ytics
+set key outside right top
+set style data histograms
+set style histogram clustered gap 1
+set style fill solid 0.8 border -1
+set boxwidth 0.9
+set offset 0,0,graph 0.15,0
+${config.xtics || 'set xtics ("1" 0, "10" 1, "100" 2)'}
+${config.extra || ""}
+
+${config.plot}
+`;
+
+	await writeFile(`${OUTPUT_DIR}/${name}.gnuplot`, gnuplotScript);
+	await writeFile(`${OUTPUT_DIR}/${config.dataFile}`, config.data);
+
+	try {
+		await execFileAsync("gnuplot", [`${OUTPUT_DIR}/${name}.gnuplot`]);
+		console.log(`✓ Generated: ${config.output}`);
+	} catch (err) {
+		console.error(`✗ Failed to generate ${config.output}:`, err.message);
+	}
+}
+
+async function main() {
+	console.log("Reading benchmark data...");
+
+	if (!existsSync(DATA_FILE)) {
+		console.error(`Error: ${DATA_FILE} not found`);
+		process.exit(1);
+	}
+
+	const rawData = await readFile(DATA_FILE, "utf8");
+	const benchData = JSON.parse(rawData);
+	const entries = Object.values(benchData);
+
+	await mkdir(OUTPUT_DIR, { recursive: true });
+
+	// Extract packet statistics in parallel
+	console.log("Extracting packet counts from pcap files...");
+	const filenames = entries.map((e) => e.filename);
+	const packetStats = await parallel(filenames, extractPcapStats);
+	const packetStatsMap = new Map(packetStats.map((s) => [s.filename, s]));
+
+	// Helper to group and aggregate data
+	function groupBy(entries, keyFn, valueFn) {
+		const groups = new Map();
+		for (const entry of entries) {
+			const key = keyFn(entry);
+			if (!groups.has(key)) groups.set(key, []);
+			groups.get(key).push(valueFn ? valueFn(entry) : entry);
+		}
+		return groups;
+	}
+
+	// Helper to get average duration for a filter
+	function getAvgDuration(filter) {
+		const filtered = entries.filter(filter);
+		if (filtered.length === 0) return 0;
+		return (
+			filtered.reduce((sum, e) => sum + e.duration, 0) / filtered.length
+		);
+	}
+
+	// Helper to get overhead (x10/x100 minus x1 baseline)
+	function calculateOverhead(impl, target, http3, hits) {
+		const x1 = getAvgDuration(
+			(e) =>
+				e.impl === impl &&
+				e.target === target &&
+				e.http3 === http3 &&
+				e.hits === 1,
+		);
+		const xN = getAvgDuration(
+			(e) =>
+				e.impl === impl &&
+				e.target === target &&
+				e.http3 === http3 &&
+				e.hits === hits,
+		);
+		return x1 > 0 ? xN - x1 : 0;
+	}
+
+	console.log("Generating performance comparison charts...");
+
+	// Chart 1: Local performance
+	const localData = [1, 10, 100]
+		.map((hits) => {
+			const native = getAvgDuration(
+				(e) =>
+					e.impl === "native" &&
+					e.target === "local" &&
+					e.http3 === false &&
+					e.hits === hits,
+			);
+			const nodefetch = getAvgDuration(
+				(e) =>
+					e.impl === "node-fetch" &&
+					e.target === "local" &&
+					e.http3 === false &&
+					e.hits === hits,
+			);
+			const faith = getAvgDuration(
+				(e) =>
+					e.impl === "faith" &&
+					e.target === "local" &&
+					e.http3 === false &&
+					e.hits === hits,
+			);
+			return `${hits}\t${native}\t${nodefetch}\t${faith}`;
+		})
+		.join("\n");
+
+	await generateChart("performance_local", {
+		output: "performance_by_impl_local.png",
+		title: "Performance Comparison (Local Target)",
+		xlabel: "Number of Requests",
+		ylabel: "Duration (ms)",
+		dataFile: "local_tcp_data.txt",
+		data: localData,
+		plot: `plot 'charts/local_tcp_data.txt' using 2:xtic(1) title 'native', \\
+     '' using 3 title 'node-fetch', \\
+     '' using 4 title 'Fáith', \\
+     '' using ($0-0.27):2:(sprintf("%.0f",$2)) with labels center offset 0,1 font ",8" notitle, \\
+     '' using ($0):3:(sprintf("%.0f",$3)) with labels center offset 0,1 font ",8" notitle, \\
+     '' using ($0+0.27):4:(sprintf("%.0f",$4)) with labels center offset 0,1 font ",8" notitle`,
+	});
+
+	// Chart 2: Local overhead
+	const localOverheadData = [10, 100]
+		.map((hits) => {
+			const native = calculateOverhead("native", "local", false, hits);
+			const nodefetch = calculateOverhead(
+				"node-fetch",
+				"local",
+				false,
+				hits,
+			);
+			const faith = calculateOverhead("faith", "local", false, hits);
+			return `${hits}\t${native}\t${nodefetch}\t${faith}`;
+		})
+		.join("\n");
+
+	await generateChart("performance_overhead_local", {
+		output: "performance_overhead_local.png",
+		title: "Request Overhead (Local Target - minus x1 baseline)",
+		xlabel: "Number of Requests",
+		ylabel: "Overhead Duration (ms)",
+		dataFile: "local_tcp_overhead_data.txt",
+		data: localOverheadData,
+		xtics: 'set xtics ("10" 0, "100" 1)',
+		plot: `plot 'charts/local_tcp_overhead_data.txt' using 2:xtic(1) title 'native', \\
+     '' using 3 title 'node-fetch', \\
+     '' using 4 title 'Fáith', \\
+     '' using ($0-0.27):2:(sprintf("%.0f",$2)) with labels center offset 0,1 font ",8" notitle, \\
+     '' using ($0):3:(sprintf("%.0f",$3)) with labels center offset 0,1 font ",8" notitle, \\
+     '' using ($0+0.27):4:(sprintf("%.0f",$4)) with labels center offset 0,1 font ",8" notitle`,
+	});
+
+	// Chart 3: Google performance
+	const googleData = [1, 10, 100]
+		.map((hits) => {
+			const native = getAvgDuration(
+				(e) =>
+					e.impl === "native" &&
+					e.target === "google" &&
+					e.http3 === false &&
+					e.hits === hits,
+			);
+			const nodefetch = getAvgDuration(
+				(e) =>
+					e.impl === "node-fetch" &&
+					e.target === "google" &&
+					e.http3 === false &&
+					e.hits === hits,
+			);
+			const faith = getAvgDuration(
+				(e) =>
+					e.impl === "faith" &&
+					e.target === "google" &&
+					e.http3 === false &&
+					e.hits === hits,
+			);
+			return `${hits}\t${native}\t${nodefetch}\t${faith}`;
+		})
+		.join("\n");
+
+	await generateChart("performance_google", {
+		output: "performance_by_impl_google.png",
+		title: "Performance Comparison (Google Target - TCP)",
+		xlabel: "Number of Requests",
+		ylabel: "Duration (ms)",
+		dataFile: "google_tcp_data.txt",
+		data: googleData,
+		plot: `plot 'charts/google_tcp_data.txt' using 2:xtic(1) title 'native', \\
+     '' using 3 title 'node-fetch', \\
+     '' using 4 title 'Fáith', \\
+     '' using ($0-0.27):2:(sprintf("%.0f",$2)) with labels center offset 0,1 font ",8" notitle, \\
+     '' using ($0):3:(sprintf("%.0f",$3)) with labels center offset 0,1 font ",8" notitle, \\
+     '' using ($0+0.27):4:(sprintf("%.0f",$4)) with labels center offset 0,1 font ",8" notitle`,
+	});
+
+	// Chart 4: Google overhead
+	const googleOverheadData = [10, 100]
+		.map((hits) => {
+			const native = calculateOverhead("native", "google", false, hits);
+			const nodefetch = calculateOverhead(
+				"node-fetch",
+				"google",
+				false,
+				hits,
+			);
+			const faith = calculateOverhead("faith", "google", false, hits);
+			return `${hits}\t${native}\t${nodefetch}\t${faith}`;
+		})
+		.join("\n");
+
+	await generateChart("performance_overhead_google", {
+		output: "performance_overhead_google.png",
+		title: "Request Overhead (Google Target - TCP, minus x1 baseline)",
+		xlabel: "Number of Requests",
+		ylabel: "Overhead Duration (ms)",
+		dataFile: "google_tcp_overhead_data.txt",
+		data: googleOverheadData,
+		xtics: 'set xtics ("10" 0, "100" 1)',
+		plot: `plot 'charts/google_tcp_overhead_data.txt' using 2:xtic(1) title 'native', \\
+     '' using 3 title 'node-fetch', \\
+     '' using 4 title 'Fáith', \\
+     '' using ($0-0.27):2:(sprintf("%.0f",$2)) with labels center offset 0,1 font ",8" notitle, \\
+     '' using ($0):3:(sprintf("%.0f",$3)) with labels center offset 0,1 font ",8" notitle, \\
+     '' using ($0+0.27):4:(sprintf("%.0f",$4)) with labels center offset 0,1 font ",8" notitle`,
+	});
+
+	// Chart 5: Protocol comparison
+	const protocolData = [1, 10, 100]
+		.map((hits) => {
+			const tcp = getAvgDuration(
+				(e) =>
+					e.impl === "faith" &&
+					e.target === "google" &&
+					e.http3 === false &&
+					e.hits === hits,
+			);
+			const cubic = getAvgDuration(
+				(e) =>
+					e.impl === "faith" &&
+					e.target === "google" &&
+					e.http3 === "cubic" &&
+					e.hits === hits,
+			);
+			const bbr = getAvgDuration(
+				(e) =>
+					e.impl === "faith" &&
+					e.target === "google" &&
+					e.http3 === "bbr" &&
+					e.hits === hits,
+			);
+			return `${hits}\t${tcp}\t${cubic}\t${bbr}`;
+		})
+		.join("\n");
+
+	await generateChart("protocol_comparison", {
+		output: "faith_tcp_vs_quic.png",
+		title: "Fáith: TCP vs QUIC (Google Target)",
+		xlabel: "Number of Requests",
+		ylabel: "Duration (ms)",
+		dataFile: "faith_protocol_data.txt",
+		data: protocolData,
+		plot: `plot 'charts/faith_protocol_data.txt' using 2:xtic(1) title 'TCP', \\
+     '' using 3 title 'QUIC (Cubic)', \\
+     '' using 4 title 'QUIC (BBR)', \\
+     '' using ($0-0.27):2:(sprintf("%.0f",$2)) with labels center offset 0,1 font ",8" notitle, \\
+     '' using ($0):3:(sprintf("%.0f",$3)) with labels center offset 0,1 font ",8" notitle, \\
+     '' using ($0+0.27):4:(sprintf("%.0f",$4)) with labels center offset 0,1 font ",8" notitle`,
+	});
+
+	// Chart 6: Protocol overhead
+	const protocolOverheadData = [10, 100]
+		.map((hits) => {
+			const tcp = calculateOverhead("faith", "google", false, hits);
+			const cubic = calculateOverhead("faith", "google", "cubic", hits);
+			const bbr = calculateOverhead("faith", "google", "bbr", hits);
+			return `${hits}\t${tcp}\t${cubic}\t${bbr}`;
+		})
+		.join("\n");
+
+	await generateChart("protocol_overhead", {
+		output: "faith_protocol_overhead.png",
+		title: "Fáith Protocol Overhead (Google Target - minus x1 baseline)",
+		xlabel: "Number of Requests",
+		ylabel: "Overhead Duration (ms)",
+		dataFile: "faith_protocol_overhead_data.txt",
+		data: protocolOverheadData,
+		xtics: 'set xtics ("10" 0, "100" 1)',
+		plot: `plot 'charts/faith_protocol_overhead_data.txt' using 2:xtic(1) title 'TCP', \\
+     '' using 3 title 'QUIC (Cubic)', \\
+     '' using 4 title 'QUIC (BBR)', \\
+     '' using ($0-0.27):2:(sprintf("%.0f",$2)) with labels center offset 0,1 font ",8" notitle, \\
+     '' using ($0):3:(sprintf("%.0f",$3)) with labels center offset 0,1 font ",8" notitle, \\
+     '' using ($0+0.27):4:(sprintf("%.0f",$4)) with labels center offset 0,1 font ",8" notitle`,
+	});
+
+	// Chart 7: Variance (box plot)
+	const varianceEntries = entries.filter(
+		(e) => e.target === "google" && e.hits === 10,
+	);
+	const varianceGroups = groupBy(
+		varianceEntries,
+		(e) => `${e.impl}-${e.http3 || "tcp"}`,
+		(e) => e.duration,
+	);
+
+	const varianceData = Array.from(varianceGroups.entries())
+		.map(([key, durations]) => {
+			const sorted = [...durations].sort((a, b) => a - b);
+			const q1 = sorted[Math.floor(sorted.length * 0.25)];
+			const median = sorted[Math.floor(sorted.length * 0.5)];
+			const q3 = sorted[Math.floor(sorted.length * 0.75)];
+			const min = sorted[0];
+			const max = sorted[sorted.length - 1];
+			// Get the implementation and protocol from the first entry in the group
+			const entry = varianceEntries.find(
+				(e) => `${e.impl}-${e.http3 || "tcp"}` === key,
+			);
+			const label = entry.http3
+				? `${entry.impl}-QUIC-${entry.http3}`
+				: `${entry.impl}-TCP`;
+			return `${min}\t${q1}\t${median}\t${q3}\t${max}\t${label}`;
+		})
+		.join("\n");
+
+	await generateChart("variance", {
+		output: "performance_variance.png",
+		title: "Performance Variance (Google, 10 requests)",
+		xlabel: "",
+		ylabel: "Duration (ms)",
+		dataFile: "variance_data.txt",
+		data: varianceData,
+		xtics: "",
+		extra: "set offsets 0.5, 0.5, 0, 0\nset style fill solid 0.5\nset boxwidth 0.5\nset xtics rotate by -45\nset key off",
+		plot: `plot 'charts/variance_data.txt' using 0:2:1:5:4:xtic(6) with candlesticks whiskerbars lw 2 title 'Min/Max', \\
+     '' using 0:3:3:3:3 with candlesticks lw 2 lt -1 notitle`,
+	});
+
+	// Chart 8: Packet efficiency
+	const packetEffData = [1, 10, 100]
+		.map((hits) => {
+			const native =
+				entries
+					.filter(
+						(e) =>
+							e.impl === "native" &&
+							e.target === "local" &&
+							e.hits === hits &&
+							e.http3 === false,
+					)
+					.map((e) => packetStatsMap.get(e.filename)?.total || 0)
+					.reduce((sum, val) => sum + val, 0) /
+				(10 * hits);
+			const nodefetch =
+				entries
+					.filter(
+						(e) =>
+							e.impl === "node-fetch" &&
+							e.target === "local" &&
+							e.hits === hits &&
+							e.http3 === false,
+					)
+					.map((e) => packetStatsMap.get(e.filename)?.total || 0)
+					.reduce((sum, val) => sum + val, 0) /
+				(10 * hits);
+			const faithTcp =
+				entries
+					.filter(
+						(e) =>
+							e.impl === "faith" &&
+							e.target === "local" &&
+							e.hits === hits &&
+							e.http3 === false,
+					)
+					.map((e) => packetStatsMap.get(e.filename)?.total || 0)
+					.reduce((sum, val) => sum + val, 0) /
+				(10 * hits);
+			const faithQuic =
+				entries
+					.filter(
+						(e) =>
+							e.impl === "faith" &&
+							e.target === "google" &&
+							e.hits === hits &&
+							e.http3 !== false,
+					)
+					.map((e) => packetStatsMap.get(e.filename)?.total || 0)
+					.reduce((sum, val) => sum + val, 0) /
+				(20 * hits);
+			return `${hits}\t${native}\t${nodefetch}\t${faithTcp}\t${faithQuic}`;
+		})
+		.join("\n");
+
+	await generateChart("packet_efficiency", {
+		output: "packet_efficiency.png",
+		title: "Network Efficiency: Packets per Request",
+		xlabel: "Number of Requests",
+		ylabel: "Average Packets per Request",
+		dataFile: "packet_efficiency_data.txt",
+		data: packetEffData,
+		plot: `plot 'charts/packet_efficiency_data.txt' using 2:xtic(1) title 'native', \\
+     '' using 3 title 'node-fetch', \\
+     '' using 4 title 'Fáith-TCP', \\
+     '' using 5 title 'Fáith-QUIC', \\
+     '' using ($0-0.33):2:(sprintf("%.1f",$2)) with labels center offset 0,1 font ",8" notitle, \\
+     '' using ($0-0.11):3:(sprintf("%.1f",$3)) with labels center offset 0,1 font ",8" notitle, \\
+     '' using ($0+0.11):4:(sprintf("%.1f",$4)) with labels center offset 0,1 font ",8" notitle, \\
+     '' using ($0+0.33):5:(sprintf("%.1f",$5)) with labels center offset 0,1 font ",8" notitle`,
+	});
+
+	// Chart 9: Bytes per request
+	const bytesPerReqData = [1, 10, 100]
+		.map((hits) => {
+			const native =
+				entries
+					.filter(
+						(e) =>
+							e.impl === "native" &&
+							e.target === "local" &&
+							e.hits === hits &&
+							e.http3 === false,
+					)
+					.map((e) => packetStatsMap.get(e.filename)?.bytes || 0)
+					.reduce((sum, val) => sum + val, 0) /
+				(10 * hits);
+			const nodefetch =
+				entries
+					.filter(
+						(e) =>
+							e.impl === "node-fetch" &&
+							e.target === "local" &&
+							e.hits === hits &&
+							e.http3 === false,
+					)
+					.map((e) => packetStatsMap.get(e.filename)?.bytes || 0)
+					.reduce((sum, val) => sum + val, 0) /
+				(10 * hits);
+			const faithTcp =
+				entries
+					.filter(
+						(e) =>
+							e.impl === "faith" &&
+							e.target === "local" &&
+							e.hits === hits &&
+							e.http3 === false,
+					)
+					.map((e) => packetStatsMap.get(e.filename)?.bytes || 0)
+					.reduce((sum, val) => sum + val, 0) /
+				(10 * hits);
+			const faithQuic =
+				entries
+					.filter(
+						(e) =>
+							e.impl === "faith" &&
+							e.target === "google" &&
+							e.hits === hits &&
+							e.http3 !== false,
+					)
+					.map((e) => packetStatsMap.get(e.filename)?.bytes || 0)
+					.reduce((sum, val) => sum + val, 0) /
+				(20 * hits);
+			return `${hits}\t${native}\t${nodefetch}\t${faithTcp}\t${faithQuic}`;
+		})
+		.join("\n");
+
+	await generateChart("bytes_per_request", {
+		output: "bytes_per_request.png",
+		title: "Data Efficiency: Bytes per Request",
+		xlabel: "Number of Requests",
+		ylabel: "Average Bytes per Request",
+		dataFile: "bytes_per_request_data.txt",
+		data: bytesPerReqData,
+		plot: `plot 'charts/bytes_per_request_data.txt' using 2:xtic(1) title 'native', \\
+     '' using 3 title 'node-fetch', \\
+     '' using 4 title 'Fáith-TCP', \\
+     '' using 5 title 'Fáith-QUIC', \\
+     '' using ($0-0.33):2:(sprintf("%.1f",$2)) with labels center offset 0,1 font ",8" notitle, \\
+     '' using ($0-0.11):3:(sprintf("%.1f",$3)) with labels center offset 0,1 font ",8" notitle, \\
+     '' using ($0+0.11):4:(sprintf("%.1f",$4)) with labels center offset 0,1 font ",8" notitle, \\
+     '' using ($0+0.33):5:(sprintf("%.1f",$5)) with labels center offset 0,1 font ",8" notitle`,
+	});
+
+	// Chart 10: Throughput
+	const throughputData = [1, 10, 100]
+		.map((hits) => {
+			const native =
+				hits /
+				(getAvgDuration(
+					(e) =>
+						e.impl === "native" &&
+						e.target === "google" &&
+						e.http3 === false &&
+						e.hits === hits,
+				) /
+					1000);
+			const nodefetch =
+				hits /
+				(getAvgDuration(
+					(e) =>
+						e.impl === "node-fetch" &&
+						e.target === "google" &&
+						e.http3 === false &&
+						e.hits === hits,
+				) /
+					1000);
+			const faithTcp =
+				hits /
+				(getAvgDuration(
+					(e) =>
+						e.impl === "faith" &&
+						e.target === "google" &&
+						e.http3 === false &&
+						e.hits === hits,
+				) /
+					1000);
+			const faithCubic =
+				hits /
+				(getAvgDuration(
+					(e) =>
+						e.impl === "faith" &&
+						e.target === "google" &&
+						e.http3 === "cubic" &&
+						e.hits === hits,
+				) /
+					1000);
+			const faithBbr =
+				hits /
+				(getAvgDuration(
+					(e) =>
+						e.impl === "faith" &&
+						e.target === "google" &&
+						e.http3 === "bbr" &&
+						e.hits === hits,
+				) /
+					1000);
+			return `${hits}\t${native}\t${nodefetch}\t${faithTcp}\t${faithCubic}\t${faithBbr}`;
+		})
+		.join("\n");
+
+	await generateChart("throughput", {
+		output: "throughput.png",
+		title: "Throughput: Requests per Second (Google Target)",
+		xlabel: "Number of Requests",
+		ylabel: "Requests/Second",
+		dataFile: "throughput_data.txt",
+		data: throughputData,
+		plot: `plot 'charts/throughput_data.txt' using 2:xtic(1) title 'native', \\
+     '' using 3 title 'node-fetch', \\
+     '' using 4 title 'Fáith-TCP', \\
+     '' using 5 title 'Fáith-QUIC (Cubic)', \\
+     '' using 6 title 'Fáith-QUIC (BBR)', \\
+     '' using ($0-0.4):2:(sprintf("%.1f",$2)) with labels center offset 0,1 font ",8" notitle, \\
+     '' using ($0-0.2):3:(sprintf("%.1f",$3)) with labels center offset 0,1 font ",8" notitle, \\
+     '' using ($0):4:(sprintf("%.1f",$4)) with labels center offset 0,1 font ",8" notitle, \\
+     '' using ($0+0.2):5:(sprintf("%.1f",$5)) with labels center offset 0,1 font ",8" notitle, \\
+     '' using ($0+0.4):6:(sprintf("%.1f",$6)) with labels center offset 0,1 font ",8" notitle`,
+	});
+
+	// Generate summary report
+	console.log("\n=== BENCHMARK SUMMARY ===\n");
+
+	const scenarios = [
+		{
+			label: "Local 1 request",
+			filter: (e) => e.target === "local" && e.hits === 1,
+		},
+		{
+			label: "Local 100 requests",
+			filter: (e) => e.target === "local" && e.hits === 100,
+		},
+		{
+			label: "Google 1 request (TCP)",
+			filter: (e) =>
+				e.target === "google" && e.hits === 1 && e.http3 === false,
+		},
+		{
+			label: "Google 100 requests (TCP)",
+			filter: (e) =>
+				e.target === "google" && e.hits === 100 && e.http3 === false,
+		},
+	];
+
+	console.log("Top performers by scenario:\n");
+	for (const { label, filter } of scenarios) {
+		const byImpl = groupBy(
+			entries.filter(filter),
+			(e) => e.impl,
+			(e) => e.duration,
+		);
+		const results = Array.from(byImpl.entries())
+			.map(([impl, durations]) => ({
+				impl,
+				mean: calculateStats(durations).mean,
+			}))
+			.sort((a, b) => a.mean - b.mean);
+		if (results.length > 0) {
+			console.log(`${label}:`);
+			console.log(
+				`  ${results[0].impl}: ${Math.round(results[0].mean)} ms`,
+			);
+		}
+	}
+
+	const faithQuic = groupBy(
+		entries.filter(
+			(e) =>
+				e.impl === "faith" &&
+				e.target === "google" &&
+				e.hits === 100 &&
+				e.http3,
+		),
+		(e) => e.http3,
+		(e) => e.duration,
+	);
+	const faithQuicResults = Array.from(faithQuic.entries())
+		.map(([proto, durations]) => ({
+			proto,
+			mean: calculateStats(durations).mean,
+		}))
+		.sort((a, b) => a.mean - b.mean);
+	if (faithQuicResults.length > 0) {
+		console.log("\nFaith QUIC best performer (Google, 100 requests):");
+		console.log(
+			`  QUIC (${faithQuicResults[0].mean}): ${Math.round(faithQuicResults[0].proto)} ms`,
+		);
+	}
+
+	console.log("\n=== STATISTICAL SUMMARY ===\n");
+	console.log(
+		"Mean durations by implementation (Google, 10 requests, TCP):\n",
+	);
+	const google10 = groupBy(
+		entries.filter(
+			(e) => e.target === "google" && e.hits === 10 && e.http3 === false,
+		),
+		(e) => e.impl,
+		(e) => e.duration,
+	);
+	for (const [impl, durations] of google10) {
+		const stats = calculateStats(durations);
+		console.log(
+			`  ${impl}: ${Math.round(stats.mean)} ms ± ${Math.round(stats.stddev)} ms`,
+		);
+	}
+
+	// Save packet stats
+	const packetStatsTxt = [
+		"# filename total_packets tcp_packets udp_packets total_bytes",
+		...packetStats.map(
+			(s) => `${s.filename} ${s.total} ${s.tcp} ${s.udp} ${s.bytes}`,
+		),
+	].join("\n");
+	await writeFile(`${OUTPUT_DIR}/packet_stats.txt`, packetStatsTxt);
+
+	// Save summary statistics
+	const allStats = Array.from(
+		groupBy(
+			entries,
+			(e) => `${e.impl}-${e.target}-x${e.hits}-${e.http3 || "tcp"}`,
+			(e) => e,
+		),
+	).map(([key, items]) => {
+		const durations = items.map((e) => e.duration);
+		return {
+			key,
+			...items[0],
+			count: items.length,
+			...calculateStats(durations),
+		};
+	});
+	await writeFile(
+		`${OUTPUT_DIR}/stats.json`,
+		JSON.stringify(allStats, null, 2),
+	);
+
+	console.log(`\nPacket statistics saved to ${OUTPUT_DIR}/packet_stats.txt`);
+	console.log(`Statistics saved to ${OUTPUT_DIR}/stats.json`);
+	console.log("\nDone!");
+}
+
+main().catch((err) => {
+	console.error("Error:", err);
+	process.exit(1);
+});
