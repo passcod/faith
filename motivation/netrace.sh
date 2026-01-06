@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -e
+set -e -o pipefail
 
 PCAP_FILE="${1:-network-trace.pcap}"
 IMAGE="${PODMAN_IMAGE:-working}"
@@ -35,7 +35,10 @@ sudo podman exec "$CONTAINER_ID" tcpdump --immediate-mode -KU -i eth0 -w /tmp/tc
 
 TCPDUMP_PID=$!
 
+set +e
 sudo podman exec "$CONTAINER_ID" $COMMAND
+COMMAND_EXIT_CODE=$?
+set -e
 
 if [ -n "$TCPDUMP_PID" ]; then
   kill $TCPDUMP_PID 2>/dev/null || true
@@ -60,3 +63,5 @@ if sudo podman exec "$CONTAINER_ID" test -f /tmp/sslkeylog.txt 2>/dev/null; then
 fi
 
 tcpdump --count -r "$PCAP_FILE"
+
+exit $COMMAND_EXIT_CODE
