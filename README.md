@@ -746,6 +746,8 @@ security implications: it's vulnerable to replay attacks and has weaker forward 
 really only be used for static assets or to squeeze out the last drop of performance for endpoints
 that are replay-safe.
 
+This is only really useful with HTTP/3.
+
 Default: false.
 
 #### `AgentOptions.tls.identity: string | Buffer`
