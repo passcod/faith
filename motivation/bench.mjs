@@ -5,21 +5,17 @@ import { readFile, writeFile } from "node:fs/promises";
 import { performance } from "node:perf_hooks";
 
 const targets = [
-	{ name: "local", url: "http://10.88.0.30:8080" },
-	{ name: "google", url: "https://www.google.com/" },
+	// { name: "local", url: "http://10.88.0.30:8080" },
+	// { name: "google", url: "https://www.google.com/" },
 	{
 		name: "cloudflare-100k",
 		url: "https://speed.cloudflare.com/__down?bytes=100000",
 	},
-	// {
-	// 	name: "ubuntu-apt-45M",
-	// 	url: "https://archive.ubuntu.com/ubuntu/dists/jammy/Contents-amd64.gz",
-	// },
 ];
 const hitses = [1, 10, 100];
 const h3 = [false, "cubic", "bbr"];
 const impl = [
-	{ name: "native", cmd: ["node", "native-fetch.js"] },
+	// { name: "native", cmd: ["node", "native-fetch.js"] },
 	{ name: "node-fetch", cmd: ["node", "node-fetch.js"] },
 	{ name: "faith", cmd: ["node", "faith.mjs"] },
 ];
@@ -47,7 +43,7 @@ for (const { name: target, url } of targets) {
 			if (
 				http3 &&
 				(target === "local" ||
-					url.startsWith("https://speed.cloudflare.com") ||
+					target === "cloudflare-100k" ||
 					name === "native" ||
 					name === "node-fetch")
 			)
@@ -95,13 +91,17 @@ for (const { name: target, url } of targets) {
 							console.log(`${filename} ERR: ${err}`);
 						}
 					}
+
+					await writeFile(
+						"bench-data.json",
+						JSON.stringify(
+							Object.fromEntries(data.entries()),
+							null,
+							2,
+						),
+					);
 				}
 			}
-
-			await writeFile(
-				"bench-data.json",
-				JSON.stringify(Object.fromEntries(data.entries()), null, 2),
-			);
 		}
 	}
 }
