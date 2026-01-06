@@ -6,8 +6,8 @@ import { performance } from "node:perf_hooks";
 
 const targets = [
 	{ name: "google", url: "https://www.google.com/" },
-	// { name: "google-redirect", url: "https://google.com/" },
-	// { name: "local", url: "http://10.88.0.30:8080" },
+	{ name: "google-redirect", url: "https://google.com/" },
+	{ name: "local", url: "http://10.88.0.30:8080" },
 ];
 const hitses = [1, 10, 100];
 const h3 = [false, "cubic", "bbr"];
