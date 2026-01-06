@@ -531,6 +531,348 @@ async function main() {
      '' using 0:2:(sprintf("%.1f",$2)) with labels center offset 0,1 font ",8" notitle`,
 	});
 
+	// Parallelism impact (local, HITS=100, varying SEQ)
+	const parallelismLocalData = [1, 10, 25, 50]
+		.map((seq) => {
+			const native = getAvgDuration(
+				(e) =>
+					e.impl === "native" &&
+					e.target === "local" &&
+					e.http3 === false &&
+					e.hits === 100 &&
+					e.seq === seq,
+			);
+			const nodefetch = getAvgDuration(
+				(e) =>
+					e.impl === "node-fetch" &&
+					e.target === "local" &&
+					e.http3 === false &&
+					e.hits === 100 &&
+					e.seq === seq,
+			);
+			const faith = getAvgDuration(
+				(e) =>
+					e.impl === "faith" &&
+					e.target === "local" &&
+					e.http3 === false &&
+					e.hits === 100 &&
+					e.seq === seq,
+			);
+			return `${seq}\t${native}\t${nodefetch}\t${faith}`;
+		})
+		.join("\n");
+
+	await generateChart("parallelism_local", {
+		title: "Parallelism Impact: Local Target (100 requests)",
+		xlabel: "Parallel Requests (SEQ)",
+		ylabel: "Duration (ms)",
+		data: parallelismLocalData,
+		xtics: 'set xtics ("1" 0, "10" 1, "25" 2, "50" 3)',
+		plot: (
+			dataPath,
+		) => `plot '${dataPath}' using 2:xtic(1) title 'native', \\
+     '' using 3 title 'node-fetch', \\
+     '' using 4 title 'Fáith', \\
+     '' using ($0-0.27):2:(sprintf("%.0f",$2)) with labels center offset 0,1 font ",8" notitle, \\
+     '' using ($0):3:(sprintf("%.0f",$3)) with labels center offset 0,1 font ",8" notitle, \\
+     '' using ($0+0.27):4:(sprintf("%.0f",$4)) with labels center offset 0,1 font ",8" notitle`,
+	});
+
+	// Throughput by parallelism (local, HITS=100, varying SEQ)
+	const throughputParallelismLocalData = [1, 10, 25, 50]
+		.map((seq) => {
+			const nativeDuration = getAvgDuration(
+				(e) =>
+					e.impl === "native" &&
+					e.target === "local" &&
+					e.http3 === false &&
+					e.hits === 100 &&
+					e.seq === seq,
+			);
+			const nodefetchDuration = getAvgDuration(
+				(e) =>
+					e.impl === "node-fetch" &&
+					e.target === "local" &&
+					e.http3 === false &&
+					e.hits === 100 &&
+					e.seq === seq,
+			);
+			const faithDuration = getAvgDuration(
+				(e) =>
+					e.impl === "faith" &&
+					e.target === "local" &&
+					e.http3 === false &&
+					e.hits === 100 &&
+					e.seq === seq,
+			);
+			const nativeThroughput =
+				nativeDuration > 0
+					? (100 / (nativeDuration / 1000)).toFixed(1)
+					: 0;
+			const nodefetchThroughput =
+				nodefetchDuration > 0
+					? (100 / (nodefetchDuration / 1000)).toFixed(1)
+					: 0;
+			const faithThroughput =
+				faithDuration > 0
+					? (100 / (faithDuration / 1000)).toFixed(1)
+					: 0;
+			return `${seq}\t${nativeThroughput}\t${nodefetchThroughput}\t${faithThroughput}`;
+		})
+		.join("\n");
+
+	await generateChart("throughput_parallelism_local", {
+		title: "Throughput by Parallelism: Local Target (100 requests)",
+		xlabel: "Parallel Requests (SEQ)",
+		ylabel: "Requests/Second",
+		data: throughputParallelismLocalData,
+		xtics: 'set xtics ("1" 0, "10" 1, "25" 2, "50" 3)',
+		plot: (
+			dataPath,
+		) => `plot '${dataPath}' using 2:xtic(1) title 'native', \\
+     '' using 3 title 'node-fetch', \\
+     '' using 4 title 'Fáith', \\
+     '' using ($0-0.27):2:(sprintf("%.1f",$2)) with labels center offset 0,1 font ",8" notitle, \\
+     '' using ($0):3:(sprintf("%.1f",$3)) with labels center offset 0,1 font ",8" notitle, \\
+     '' using ($0+0.27):4:(sprintf("%.1f",$4)) with labels center offset 0,1 font ",8" notitle`,
+	});
+
+	// Parallelism impact (google, HITS=100, varying SEQ)
+	const parallelismGoogleData = [1, 10, 25, 50]
+		.map((seq) => {
+			const native = getAvgDuration(
+				(e) =>
+					e.impl === "native" &&
+					e.target === "google" &&
+					e.http3 === false &&
+					e.hits === 100 &&
+					e.seq === seq,
+			);
+			const nodefetch = getAvgDuration(
+				(e) =>
+					e.impl === "node-fetch" &&
+					e.target === "google" &&
+					e.http3 === false &&
+					e.hits === 100 &&
+					e.seq === seq,
+			);
+			const faithTcp = getAvgDuration(
+				(e) =>
+					e.impl === "faith" &&
+					e.target === "google" &&
+					e.http3 === false &&
+					e.hits === 100 &&
+					e.seq === seq,
+			);
+			const faithQuicCubic = getAvgDuration(
+				(e) =>
+					e.impl === "faith" &&
+					e.target === "google" &&
+					e.http3 === "cubic" &&
+					e.hits === 100 &&
+					e.seq === seq,
+			);
+			const faithQuicBbr = getAvgDuration(
+				(e) =>
+					e.impl === "faith" &&
+					e.target === "google" &&
+					e.http3 === "bbr" &&
+					e.hits === 100 &&
+					e.seq === seq,
+			);
+			return `${seq}\t${native}\t${nodefetch}\t${faithTcp}\t${faithQuicCubic}\t${faithQuicBbr}`;
+		})
+		.join("\n");
+
+	await generateChart("parallelism_google", {
+		title: "Parallelism Impact: Google Target (100 requests)",
+		xlabel: "Parallel Requests (SEQ)",
+		ylabel: "Duration (ms)",
+		data: parallelismGoogleData,
+		xtics: 'set xtics ("1" 0, "10" 1, "25" 2, "50" 3)',
+		plot: (
+			dataPath,
+		) => `plot '${dataPath}' using 2:xtic(1) title 'native', \\
+     '' using 3 title 'node-fetch', \\
+     '' using 4 title 'Fáith-TCP', \\
+     '' using 5 title 'Fáith-QUIC-Cubic', \\
+     '' using 6 title 'Fáith-QUIC-BBR', \\
+     '' using ($0-0.4):2:(sprintf("%.0f",$2)) with labels center offset 0,1 font ",8" notitle, \\
+     '' using ($0-0.2):3:(sprintf("%.0f",$3)) with labels center offset 0,1 font ",8" notitle, \\
+     '' using ($0):4:(sprintf("%.0f",$4)) with labels center offset 0,1 font ",8" notitle, \\
+     '' using ($0+0.2):5:(sprintf("%.0f",$5)) with labels center offset 0,1 font ",8" notitle, \\
+     '' using ($0+0.4):6:(sprintf("%.0f",$6)) with labels center offset 0,1 font ",8" notitle`,
+	});
+
+	// Throughput by parallelism (google, HITS=100, varying SEQ)
+	const throughputParallelismGoogleData = [1, 10, 25, 50]
+		.map((seq) => {
+			const nativeDuration = getAvgDuration(
+				(e) =>
+					e.impl === "native" &&
+					e.target === "google" &&
+					e.http3 === false &&
+					e.hits === 100 &&
+					e.seq === seq,
+			);
+			const nodefetchDuration = getAvgDuration(
+				(e) =>
+					e.impl === "node-fetch" &&
+					e.target === "google" &&
+					e.http3 === false &&
+					e.hits === 100 &&
+					e.seq === seq,
+			);
+			const faithTcpDuration = getAvgDuration(
+				(e) =>
+					e.impl === "faith" &&
+					e.target === "google" &&
+					e.http3 === false &&
+					e.hits === 100 &&
+					e.seq === seq,
+			);
+			const faithQuicCubicDuration = getAvgDuration(
+				(e) =>
+					e.impl === "faith" &&
+					e.target === "google" &&
+					e.http3 === "cubic" &&
+					e.hits === 100 &&
+					e.seq === seq,
+			);
+			const faithQuicBbrDuration = getAvgDuration(
+				(e) =>
+					e.impl === "faith" &&
+					e.target === "google" &&
+					e.http3 === "bbr" &&
+					e.hits === 100 &&
+					e.seq === seq,
+			);
+			const nativeThroughput =
+				nativeDuration > 0
+					? (100 / (nativeDuration / 1000)).toFixed(1)
+					: 0;
+			const nodefetchThroughput =
+				nodefetchDuration > 0
+					? (100 / (nodefetchDuration / 1000)).toFixed(1)
+					: 0;
+			const faithTcpThroughput =
+				faithTcpDuration > 0
+					? (100 / (faithTcpDuration / 1000)).toFixed(1)
+					: 0;
+			const faithQuicCubicThroughput =
+				faithQuicCubicDuration > 0
+					? (100 / (faithQuicCubicDuration / 1000)).toFixed(1)
+					: 0;
+			const faithQuicBbrThroughput =
+				faithQuicBbrDuration > 0
+					? (100 / (faithQuicBbrDuration / 1000)).toFixed(1)
+					: 0;
+			return `${seq}\t${nativeThroughput}\t${nodefetchThroughput}\t${faithTcpThroughput}\t${faithQuicCubicThroughput}\t${faithQuicBbrThroughput}`;
+		})
+		.join("\n");
+
+	await generateChart("throughput_parallelism_google", {
+		title: "Throughput by Parallelism: Google Target (100 requests)",
+		xlabel: "Parallel Requests (SEQ)",
+		ylabel: "Requests/Second",
+		data: throughputParallelismGoogleData,
+		xtics: 'set xtics ("1" 0, "10" 1, "25" 2, "50" 3)',
+		plot: (
+			dataPath,
+		) => `plot '${dataPath}' using 2:xtic(1) title 'native', \\
+     '' using 3 title 'node-fetch', \\
+     '' using 4 title 'Fáith-TCP', \\
+     '' using 5 title 'Fáith-QUIC-Cubic', \\
+     '' using 6 title 'Fáith-QUIC-BBR', \\
+     '' using ($0-0.4):2:(sprintf("%.1f",$2)) with labels center offset 0,1 font ",8" notitle, \\
+     '' using ($0-0.2):3:(sprintf("%.1f",$3)) with labels center offset 0,1 font ",8" notitle, \\
+     '' using ($0):4:(sprintf("%.1f",$4)) with labels center offset 0,1 font ",8" notitle, \\
+     '' using ($0+0.2):5:(sprintf("%.1f",$5)) with labels center offset 0,1 font ",8" notitle, \\
+     '' using ($0+0.4):6:(sprintf("%.1f",$6)) with labels center offset 0,1 font ",8" notitle`,
+	});
+
+	// Parallelism impact (cloudflare, HITS=100, varying SEQ)
+	const parallelismCloudflareData = [1, 10, 25, 50]
+		.map((seq) => {
+			const native = getAvgDuration(
+				(e) =>
+					e.impl === "native" &&
+					e.target === "cloudflare-100k" &&
+					e.http3 === false &&
+					e.hits === 100 &&
+					e.seq === seq,
+			);
+			const nodefetch = getAvgDuration(
+				(e) =>
+					e.impl === "node-fetch" &&
+					e.target === "cloudflare-100k" &&
+					e.http3 === false &&
+					e.hits === 100 &&
+					e.seq === seq,
+			);
+			return `${seq}\t${native}\t${nodefetch}`;
+		})
+		.join("\n");
+
+	await generateChart("parallelism_cloudflare", {
+		title: "Parallelism Impact: Cloudflare Target (100 requests)",
+		xlabel: "Parallel Requests (SEQ)",
+		ylabel: "Duration (ms)",
+		data: parallelismCloudflareData,
+		xtics: 'set xtics ("1" 0, "10" 1, "25" 2, "50" 3)',
+		plot: (
+			dataPath,
+		) => `plot '${dataPath}' using 2:xtic(1) title 'native', \\
+     '' using 3 title 'node-fetch', \\
+     '' using ($0-0.2):2:(sprintf("%.0f",$2)) with labels center offset 0,1 font ",8" notitle, \\
+     '' using ($0+0.2):3:(sprintf("%.0f",$3)) with labels center offset 0,1 font ",8" notitle`,
+	});
+
+	// Throughput by parallelism (cloudflare, HITS=100, varying SEQ)
+	const throughputParallelismCloudflareData = [1, 10, 25, 50]
+		.map((seq) => {
+			const nativeDuration = getAvgDuration(
+				(e) =>
+					e.impl === "native" &&
+					e.target === "cloudflare-100k" &&
+					e.http3 === false &&
+					e.hits === 100 &&
+					e.seq === seq,
+			);
+			const nodefetchDuration = getAvgDuration(
+				(e) =>
+					e.impl === "node-fetch" &&
+					e.target === "cloudflare-100k" &&
+					e.http3 === false &&
+					e.hits === 100 &&
+					e.seq === seq,
+			);
+			const nativeThroughput =
+				nativeDuration > 0
+					? (100 / (nativeDuration / 1000)).toFixed(1)
+					: 0;
+			const nodefetchThroughput =
+				nodefetchDuration > 0
+					? (100 / (nodefetchDuration / 1000)).toFixed(1)
+					: 0;
+			return `${seq}\t${nativeThroughput}\t${nodefetchThroughput}`;
+		})
+		.join("\n");
+
+	await generateChart("throughput_parallelism_cloudflare", {
+		title: "Throughput by Parallelism: Cloudflare Target (100 requests)",
+		xlabel: "Parallel Requests (SEQ)",
+		ylabel: "Requests/Second",
+		data: throughputParallelismCloudflareData,
+		xtics: 'set xtics ("1" 0, "10" 1, "25" 2, "50" 3)',
+		plot: (
+			dataPath,
+		) => `plot '${dataPath}' using 2:xtic(1) title 'native', \\
+     '' using 3 title 'node-fetch', \\
+     '' using ($0-0.2):2:(sprintf("%.1f",$2)) with labels center offset 0,1 font ",8" notitle, \\
+     '' using ($0+0.2):3:(sprintf("%.1f",$3)) with labels center offset 0,1 font ",8" notitle`,
+	});
+
 	// Google performance
 	const googleData = [1, 10, 100]
 		.map((hits) => {
