@@ -5,8 +5,8 @@ import { readFile, writeFile } from "node:fs/promises";
 import { performance } from "node:perf_hooks";
 
 const targets = [
-	// { name: "local", url: "http://10.88.0.30:8080" },
-	// { name: "google", url: "https://www.google.com/" },
+	{ name: "local", url: "http://10.88.0.30:8080" },
+	{ name: "google", url: "https://www.google.com/" },
 	{
 		name: "cloudflare-100k",
 		url: "https://speed.cloudflare.com/__down?bytes=100000",
@@ -15,7 +15,7 @@ const targets = [
 const hitses = [1, 10, 100];
 const h3 = [false, "cubic", "bbr"];
 const impl = [
-	// { name: "native", cmd: ["node", "native-fetch.js"] },
+	{ name: "native", cmd: ["node", "native-fetch.js"] },
 	{ name: "node-fetch", cmd: ["node", "node-fetch.js"] },
 	{ name: "faith", cmd: ["node", "faith.mjs"] },
 ];
@@ -62,7 +62,7 @@ for (const { name: target, url } of targets) {
 								...process.env,
 								TARGET: url,
 								HITS: hits.toString(),
-								HTTP3: http3,
+								HTTP3: http3 || "",
 							};
 							if (seq !== undefined) {
 								env.SEQ = seq.toString();
