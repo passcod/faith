@@ -44,8 +44,14 @@ try {
 for (const { name: target, url } of targets) {
 	for (const { name, cmd } of impl) {
 		for (const http3 of h3) {
-			if (http3 && target === "local") continue;
-			if (http3 && (name === "native" || name === "node-fetch")) continue;
+			if (
+				http3 &&
+				(target === "local" ||
+					url.startsWith("https://speed.cloudflare.com") ||
+					name === "native" ||
+					name === "node-fetch")
+			)
+				continue;
 
 			for (const hits of hitses) {
 				const seqValues = hits === 100 ? [1, 10, 25, 50] : [undefined];
