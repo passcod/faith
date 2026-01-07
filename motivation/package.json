@@ -1,13 +1,13 @@
 {
-  "name": "motivation",
-  "version": "1.0.0",
-  "description": "",
-  "license": "Apache-2.0 OR MIT",
-  "author": "Félix Saparelli <felix@passcod.name> (https://passcod.name/)",
-  "type": "module",
-  "main": "index.js",
-  "dependencies": {
-    "@passcod/faith": "^0.2.1",
-    "node-fetch": "^3.3.2"
-  }
+	"name": "motivation",
+	"version": "1.0.0",
+	"description": "",
+	"license": "Apache-2.0 OR MIT",
+	"author": "Félix Saparelli <felix@passcod.name> (https://passcod.name/)",
+	"type": "module",
+	"main": "index.js",
+	"dependencies": {
+		"@passcod/faith": "^0.2.2",
+		"node-fetch": "^3.3.2"
+	}
 }

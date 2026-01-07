@@ -15,6 +15,14 @@ Fáith tries to bring a Node.js fetch that is closer to the browser's fetch, not
 transparent support for HTTP/2 and HTTP/3, IPv6 and IPv4 using the "Happy Eyeballs" algorithm, a
 DNS cache, an optional cookie jar, and your choice of two HTTP caches.
 
+### 📐 Is it faster?
+
+Not really. The advantages Fáith has over native Node.js `fetch()` and node-fetch is the extra
+features: HTTP/2 and HTTP/3, sane IPv6 support, and the pooling and caching. Comparing raw
+performance, though, native `fetch()` either beats or matches Fáith in most metrics. There's
+data and charts in the `motivation/charts` folder, this is regenerated manually almost every
+time there's a new release.
+
 ## Installation
 
 ```bash
