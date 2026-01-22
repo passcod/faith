@@ -1,6 +1,6 @@
 set terminal png size 1200,800 font "sans,10" enhanced
 set output 'charts/throughput_local.png'
-set title 'Throughput: Requests per Second (Local Target)'
+set title 'Throughput: Requests per Second (Local Target) (higher is better)'
 set xlabel 'Number of Requests'
 set ylabel 'Requests/Second'
 set grid ytics

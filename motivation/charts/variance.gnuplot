@@ -1,6 +1,6 @@
 set terminal png size 1200,800 font "sans,10" enhanced
 set output 'charts/variance.png'
-set title 'Performance Variance (Google, 10 requests)'
+set title 'Performance Variance (Google, 10 requests) (lower is better)'
 set xlabel ''
 set ylabel 'Duration (ms)'
 set grid ytics

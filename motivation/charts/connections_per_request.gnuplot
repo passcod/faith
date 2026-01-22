@@ -1,6 +1,6 @@
 set terminal png size 1200,800 font "sans,10" enhanced
 set output 'charts/connections_per_request.png'
-set title 'Connection Reuse: Total Connections'
+set title 'Connection Reuse: Total Connections (lower is better)'
 set xlabel 'Number of Requests'
 set ylabel 'Total Connections'
 set grid ytics

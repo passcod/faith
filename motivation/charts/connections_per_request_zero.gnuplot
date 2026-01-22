@@ -1,6 +1,6 @@
 set terminal png size 1200,800 font "sans,10" enhanced
 set output 'charts/connections_per_request_zero.png'
-set title 'Connection Reuse: Total Connections (Y-axis from zero)'
+set title 'Connection Reuse: Total Connections (lower is better) (Y-axis from zero)'
 set xlabel 'Number of Requests'
 set ylabel 'Total Connections'
 set yrange [0:*]

@@ -1,6 +1,6 @@
 set terminal png size 1200,800 font "sans,10" enhanced
 set output 'charts/bytes_per_request.png'
-set title 'Data Efficiency: Bytes per Request'
+set title 'Data Efficiency: Bytes per Request (lower is better)'
 set xlabel 'Number of Requests'
 set ylabel 'Average Bytes per Request'
 set grid ytics

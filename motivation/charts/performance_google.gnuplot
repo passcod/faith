@@ -1,6 +1,6 @@
 set terminal png size 1200,800 font "sans,10" enhanced
 set output 'charts/performance_google.png'
-set title 'Performance Comparison (Google Target - TCP)'
+set title 'Performance Comparison (Google Target - TCP) (lower is better)'
 set xlabel 'Number of Requests'
 set ylabel 'Duration (ms)'
 set grid ytics

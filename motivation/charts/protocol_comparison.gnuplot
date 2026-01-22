@@ -1,6 +1,6 @@
 set terminal png size 1200,800 font "sans,10" enhanced
 set output 'charts/protocol_comparison.png'
-set title 'Fáith: TCP vs QUIC (Google Target)'
+set title 'Fáith: TCP vs QUIC (Google Target) (lower is better)'
 set xlabel 'Number of Requests'
 set ylabel 'Duration (ms)'
 set grid ytics

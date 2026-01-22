@@ -1,6 +1,6 @@
 set terminal png size 1200,800 font "sans,10" enhanced
 set output 'charts/throughput_all_targets.png'
-set title 'Fáith Throughput Across All Targets (100 requests)'
+set title 'Fáith Throughput Across All Targets (100 requests) (higher is better)'
 set xlabel 'Target'
 set ylabel 'Requests/Second'
 set grid ytics

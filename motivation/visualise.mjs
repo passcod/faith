@@ -289,15 +289,43 @@ function removeOutliers(durations) {
 	return durations.filter((d) => d >= lowerBound && d <= upperBound);
 }
 
+// Helper to add "better" direction to titles
+function addBetterDirection(title, ylabel) {
+	let direction = "";
+
+	if (ylabel.includes("Duration") || ylabel.includes("Overhead")) {
+		direction = " (lower is better)";
+	} else if (
+		ylabel.includes("Requests/Second") ||
+		ylabel.includes("Throughput")
+	) {
+		direction = " (higher is better)";
+	} else if (ylabel.includes("Packets") && ylabel.includes("Request")) {
+		direction = " (lower is better)";
+	} else if (ylabel.includes("Bytes") && ylabel.includes("Request")) {
+		direction = " (lower is better)";
+	} else if (ylabel.includes("Bytes") && ylabel.includes("Packet")) {
+		direction = " (higher is better)";
+	} else if (ylabel.includes("Connections")) {
+		direction = " (lower is better)";
+	} else if (ylabel.includes("DNS")) {
+		direction = " (lower is better)";
+	}
+
+	return title + direction;
+}
+
 // Generate a gnuplot script and data file
 async function generateChart(name, config) {
 	const output = `${name}.png`;
 	const dataFile = `${name}_data.txt`;
 	const dataPath = `charts/${dataFile}`;
 
+	const enhancedTitle = addBetterDirection(config.title, config.ylabel);
+
 	const gnuplotScript = `set terminal png size 1200,800 font "sans,10" enhanced
 set output 'charts/${output}'
-set title '${config.title}'
+set title '${enhancedTitle}'
 set xlabel '${config.xlabel}'
 set ylabel '${config.ylabel}'
 set grid ytics
@@ -327,7 +355,7 @@ ${typeof config.plot === "function" ? config.plot(dataPath) : config.plot}
 	const zeroOutput = `${name}_zero.png`;
 	const gnuplotScriptZero = `set terminal png size 1200,800 font "sans,10" enhanced
 set output 'charts/${zeroOutput}'
-set title '${config.title} (Y-axis from zero)'
+set title '${enhancedTitle} (Y-axis from zero)'
 set xlabel '${config.xlabel}'
 set ylabel '${config.ylabel}'
 set yrange [0:*]

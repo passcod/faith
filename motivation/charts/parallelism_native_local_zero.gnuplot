@@ -1,6 +1,6 @@
 set terminal png size 1200,800 font "sans,10" enhanced
 set output 'charts/parallelism_native_local_zero.png'
-set title 'Parallelism Impact: native (Local Target, 100 requests) (Y-axis from zero)'
+set title 'Parallelism Impact: native (Local Target, 100 requests) (lower is better) (Y-axis from zero)'
 set xlabel 'Parallel Requests (SEQ)'
 set ylabel 'Duration (ms)'
 set yrange [0:*]

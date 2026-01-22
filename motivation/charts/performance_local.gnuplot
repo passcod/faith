@@ -1,6 +1,6 @@
 set terminal png size 1200,800 font "sans,10" enhanced
 set output 'charts/performance_local.png'
-set title 'Performance Comparison (Local Target)'
+set title 'Performance Comparison (Local Target) (lower is better)'
 set xlabel 'Number of Requests'
 set ylabel 'Duration (ms)'
 set grid ytics

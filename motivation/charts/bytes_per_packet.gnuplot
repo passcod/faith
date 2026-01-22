@@ -1,6 +1,6 @@
 set terminal png size 1200,800 font "sans,10" enhanced
 set output 'charts/bytes_per_packet.png'
-set title 'Network Efficiency: Average Bytes per Packet'
+set title 'Network Efficiency: Average Bytes per Packet (higher is better)'
 set xlabel 'Number of Requests'
 set ylabel 'Bytes per Packet'
 set grid ytics

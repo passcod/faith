@@ -1,6 +1,6 @@
 set terminal png size 1200,800 font "sans,10" enhanced
 set output 'charts/throughput_parallelism_google_zero.png'
-set title 'Throughput by Parallelism: Google Target (100 requests) (Y-axis from zero)'
+set title 'Throughput by Parallelism: Google Target (100 requests) (higher is better) (Y-axis from zero)'
 set xlabel 'Parallel Requests (SEQ)'
 set ylabel 'Requests/Second'
 set yrange [0:*]

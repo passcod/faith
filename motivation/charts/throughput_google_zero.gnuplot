@@ -1,6 +1,6 @@
 set terminal png size 1200,800 font "sans,10" enhanced
 set output 'charts/throughput_google_zero.png'
-set title 'Throughput: Requests per Second (Google Target) (Y-axis from zero)'
+set title 'Throughput: Requests per Second (Google Target) (higher is better) (Y-axis from zero)'
 set xlabel 'Number of Requests'
 set ylabel 'Requests/Second'
 set yrange [0:*]

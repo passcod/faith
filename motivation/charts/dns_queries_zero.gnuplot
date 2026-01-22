@@ -1,6 +1,6 @@
 set terminal png size 1200,800 font "sans,10" enhanced
 set output 'charts/dns_queries_zero.png'
-set title 'DNS Resolution: DNS Queries (Y-axis from zero)'
+set title 'DNS Resolution: DNS Queries (lower is better) (Y-axis from zero)'
 set xlabel 'Number of Requests'
 set ylabel 'DNS Queries'
 set yrange [0:*]

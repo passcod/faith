@@ -1,6 +1,6 @@
 set terminal png size 1200,800 font "sans,10" enhanced
 set output 'charts/impl_comparison_local.png'
-set title 'Implementation Comparison: local (100 requests, TCP)'
+set title 'Implementation Comparison: local (100 requests, TCP) (lower is better)'
 set xlabel 'Implementation'
 set ylabel 'Duration (ms)'
 set grid ytics

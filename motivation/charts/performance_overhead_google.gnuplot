@@ -1,6 +1,6 @@
 set terminal png size 1200,800 font "sans,10" enhanced
 set output 'charts/performance_overhead_google.png'
-set title 'Request Overhead (Google Target - TCP, minus x1 baseline)'
+set title 'Request Overhead (Google Target - TCP, minus x1 baseline) (lower is better)'
 set xlabel 'Number of Requests'
 set ylabel 'Overhead Duration (ms)'
 set grid ytics

@@ -1,6 +1,6 @@
 set terminal png size 1200,800 font "sans,10" enhanced
 set output 'charts/dns_queries.png'
-set title 'DNS Resolution: DNS Queries'
+set title 'DNS Resolution: DNS Queries (lower is better)'
 set xlabel 'Number of Requests'
 set ylabel 'DNS Queries'
 set grid ytics

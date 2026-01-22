@@ -1,6 +1,6 @@
 set terminal png size 1200,800 font "sans,10" enhanced
 set output 'charts/impl_comparison_cloudflare_100k_zero.png'
-set title 'Implementation Comparison: cloudflare-100k (100 requests, TCP) (Y-axis from zero)'
+set title 'Implementation Comparison: cloudflare-100k (100 requests, TCP) (lower is better) (Y-axis from zero)'
 set xlabel 'Implementation'
 set ylabel 'Duration (ms)'
 set yrange [0:*]

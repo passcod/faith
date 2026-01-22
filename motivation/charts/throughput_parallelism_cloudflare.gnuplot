@@ -1,6 +1,6 @@
 set terminal png size 1200,800 font "sans,10" enhanced
 set output 'charts/throughput_parallelism_cloudflare.png'
-set title 'Throughput by Parallelism: Cloudflare Target (100 requests)'
+set title 'Throughput by Parallelism: Cloudflare Target (100 requests) (higher is better)'
 set xlabel 'Parallel Requests (SEQ)'
 set ylabel 'Requests/Second'
 set grid ytics

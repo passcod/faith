@@ -1,6 +1,6 @@
 set terminal png size 1200,800 font "sans,10" enhanced
 set output 'charts/cross_target_faith.png'
-set title 'Fáith Performance Across Targets (100 requests, TCP)'
+set title 'Fáith Performance Across Targets (100 requests, TCP) (lower is better)'
 set xlabel 'Target'
 set ylabel 'Duration (ms)'
 set grid ytics
