@@ -1,10 +1,12 @@
 #!/bin/bash
 
-set -e -o pipefail
+set -euo pipefail
 
 PCAP_FILE="${1:-network-trace.pcap}"
 IMAGE="${PODMAN_IMAGE:-working}"
 COMMAND="${@:2}"
+HTTP3="${HTTP3:-false}"
+SEQ="${SEQ:-1}"
 
 KEYLOG_FILE="${PCAP_FILE%.pcap}.keylog"
 TEMP_PCAP="/tmp/netrace_$$.pcap"
@@ -26,7 +28,7 @@ if ! sudo podman image inspect "$IMAGE" > /dev/null; then
   exit 1
 fi
 
-CONTAINER_ID=$(sudo podman create -it --privileged --cap-add=NET_ADMIN --network podman-ipv6 -e TARGET="$TARGET" -e HITS="$HITS" -e HTTP3="$HTTP3" -e SEQ="$SEQ" -e SSLKEYLOGFILE="/tmp/sslkeylog.txt" --entrypoint /bin/sh "$IMAGE" -c "while true; do sleep 1; done" 2>/dev/null)
+CONTAINER_ID=$(sudo podman create -it --privileged --cap-add=NET_ADMIN -e TARGET="$TARGET" -e HITS="$HITS" -e HTTP3="$HTTP3" -e SEQ="$SEQ" -e SSLKEYLOGFILE="/tmp/sslkeylog.txt" --entrypoint /bin/sh "$IMAGE" -c "while true; do sleep 1; done" 2>/dev/null)
 
 sudo podman start "$CONTAINER_ID" > /dev/null 2>&1
 
