@@ -1,3 +1,6 @@
 cloudflare-100k	29.2
-google	4.2
-local	70.6
+google	6.8
+local	70.8
+tamanu-k8	0.8
+tamanu-ka	7.9
+tamanu-og	8.0

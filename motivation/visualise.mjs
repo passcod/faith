@@ -273,6 +273,22 @@ function calculateStats(durations) {
 	};
 }
 
+// Remove outliers using IQR method
+function removeOutliers(durations) {
+	if (durations.length < 4) return durations;
+
+	const sorted = [...durations].sort((a, b) => a - b);
+	const q1Index = Math.floor(sorted.length * 0.25);
+	const q3Index = Math.floor(sorted.length * 0.75);
+	const q1 = sorted[q1Index];
+	const q3 = sorted[q3Index];
+	const iqr = q3 - q1;
+	const lowerBound = q1 - 1.5 * iqr;
+	const upperBound = q3 + 1.5 * iqr;
+
+	return durations.filter((d) => d >= lowerBound && d <= upperBound);
+}
+
 // Generate a gnuplot script and data file
 async function generateChart(name, config) {
 	const output = `${name}.png`;
@@ -369,13 +385,14 @@ async function main() {
 		return groups;
 	}
 
-	// Helper to get average duration for a filter
+	// Helper to get average duration for a filter (with outlier removal)
 	function getAvgDuration(filter) {
 		const filtered = entries.filter(filter);
 		if (filtered.length === 0) return 0;
-		return (
-			filtered.reduce((sum, e) => sum + e.duration, 0) / filtered.length
-		);
+		const durations = filtered.map((e) => e.duration);
+		const cleaned = removeOutliers(durations);
+		if (cleaned.length === 0) return 0;
+		return cleaned.reduce((sum, d) => sum + d, 0) / cleaned.length;
 	}
 
 	// Helper to get overhead (x10/x100 minus x1 baseline)

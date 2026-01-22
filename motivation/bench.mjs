@@ -7,6 +7,9 @@ import { performance } from "node:perf_hooks";
 const targets = [
 	{ name: "local", url: "http://10.88.0.30:8080" },
 	{ name: "google", url: "https://www.google.com/" },
+	{ name: "tamanu-og", url: "https://central.demo.tamanu.app/" },
+	{ name: "tamanu-ka", url: "https://central.fsm-demo.tamanu.app/" },
+	{ name: "tamanu-k8", url: "https://central.main.cd.tamanu.app/" },
 	{
 		name: "cloudflare-100k",
 		url: "https://speed.cloudflare.com/__down?bytes=100000",
