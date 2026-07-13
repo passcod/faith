@@ -16,12 +16,12 @@ futures = "0.3.31"
 moka = { version = "0.12", features = ["sync"] }
 http = "1.4.0"
 http-body-util = "0.1.3"
-http-cache-reqwest = { version = "0.16.0", features = ["manager-cacache", "manager-moka"] }
+http-cache-reqwest = { version = "1.0.0-alpha.6", features = ["manager-cacache", "manager-moka"] }
 hyper-util = { version = "0.1", features = ["client-legacy", "tokio"] }
 libc = "0.2.179"
 napi = { version = "3.7.0", features = ["napi9", "serde-json", "tokio_rt", "web_stream"] }
 napi-derive = "3.4.0"
-reqwest = { version = "0.12.28", default-features = false, features = [
+reqwest = { version = "0.13.4", default-features = false, features = [
     "brotli",
     "cookies",
     "deflate",
@@ -29,13 +29,12 @@ reqwest = { version = "0.12.28", default-features = false, features = [
     "hickory-dns",
     "http2",
     "json",
-    "rustls-tls-native-roots-no-provider",
-    "rustls-tls-webpki-roots",
+    "rustls",
     "stream",
     "system-proxy",
     "zstd",
 ] }
-reqwest-middleware = { version = "0.4.2", features = ["http2", "rustls-tls"] }
+reqwest-middleware = { version = "0.5.2", features = ["http2", "rustls"] }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
 ssri = "9.2.0"
@@ -44,9 +43,6 @@ strum = { version = "0.27.2", features = ["derive"] }
 tokio = { version = "1.48.0", features = ["full"] }
 tokio-stream = "0.1.16"
 tokio-util = { version = "0.7.10", features = ["io"] }
-
-[replace]
-"reqwest:0.12.28" = { git = "https://github.com/passcod/reqwest", branch = "v0.12-h3alpn" }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 netlink-packet-core = "0.7.0"
