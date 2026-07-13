@@ -2,8 +2,12 @@ const { url } = require("./helpers.js");
 const test = require("tape");
 const { fetch } = require("../wrapper.js");
 
-// Helper to get cookies from response (go-httpbin returns cookies at root level)
+// Helper to get cookies from a /cookies response. go-httpbin v2.19+ nests
+// them under a "cookies" key; older versions returned them at the root.
 function getCookies(data) {
+	if (data.cookies && typeof data.cookies === "object") {
+		return data.cookies;
+	}
 	// If data has typical httpbin fields, cookies are not at root level
 	if (data.headers || data.url || data.method) {
 		return {};
