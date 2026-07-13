@@ -17,11 +17,8 @@ DNS cache, an optional cookie jar, and your choice of two HTTP caches.
 
 ### 📐 Is it faster?
 
-The honest pitch is features first: HTTP/2 and HTTP/3, sane IPv6 support, and the pooling and
-caching. An earlier exploratory benchmark suite (see the `motivation/` folder in git history)
-suggested native `fetch()` beats or matches Fáith on raw performance, but its methodology
-conflated harness overhead with request timing, so those results are not conclusive. A
-redesigned benchmark suite is in the works; results will be published here once collected.
+Depends how you measure it. undici is impossible to beat for its core usecase: HTTP/1.1 keep-alive
+requests. However, faith can do a lot more than that...
 
 ## Installation
 
