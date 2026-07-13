@@ -5,7 +5,10 @@ use std::sync::{
 
 use http_cache_reqwest::CacheMode;
 use hyper_util::client::legacy::connect::HttpInfo;
-use napi::bindgen_prelude::AbortSignal;
+use napi::{
+	Env,
+	bindgen_prelude::{AbortSignal, PromiseRaw},
+};
 use napi_derive::napi;
 use reqwest::{Method, StatusCode};
 use reqwest::{
@@ -15,7 +18,7 @@ use reqwest::{
 use tokio::sync::{Mutex, mpsc};
 
 use crate::{
-	async_task::{Async, FaithAsyncResult},
+	async_task::faith_promise,
 	body::{Body, BodyHolder},
 	error::{FaithError, FaithErrorKind},
 	options::{CredentialsOption, FaithOptions, FaithOptionsAndBody},
@@ -24,25 +27,26 @@ use crate::{
 };
 
 #[napi]
-pub fn faith_fetch(
+pub fn faith_fetch<'env>(
+	env: &'env Env,
 	url: String,
 	options: FaithOptionsAndBody,
 	signal: Option<AbortSignal>,
 	stream_body: Option<&StreamBody>,
-) -> Async<FaithResponse> {
+) -> Result<PromiseRaw<'env, FaithResponse>, napi::Error> {
 	let (options, agent, body) = FaithOptions::extract(options);
 	let (s, abort) = mpsc::channel(8);
-	if let Some(signal) = &signal {
+	let has_signal = signal.is_some();
+	if let Some(signal) = signal {
 		signal.on_abort(move || {
 			let _ = s.try_send(());
 		});
 	}
-	let has_signal = signal.is_some();
 
 	// Get the stream body receiver if provided
 	let stream_receiver = stream_body.map(|sb| sb.receiver.clone());
 
-	FaithAsyncResult::with_signal(signal, async move || {
+	faith_promise(env, async move {
 		let mut abort = abort;
 		let method = options
 			.method

@@ -23,7 +23,7 @@ use tokio::{sync::RwLock, task::yield_now};
 
 use crate::{
 	agent::InnerAgentStats,
-	async_task::{Async, FaithAsyncResult, Value},
+	async_task::{Value, faith_promise},
 	body::{Body, BodyHolder, DynStream, drain_body_inner},
 	error::{FaithError, FaithErrorKind},
 	integrity::verify_integrity,
@@ -348,11 +348,11 @@ impl FaithResponse {
 	///
 	/// Returns a promise that resolves when the body has been fully discarded.
 	#[napi]
-	pub fn discard(&self) -> Async<()> {
+	pub fn discard<'env>(&self, env: &'env Env) -> Result<PromiseRaw<'env, ()>, napi::Error> {
 		let body = self.body.body.clone();
 		let drained_flag = self.body.drained.clone();
 		let is_multiplexed = self.body.is_multiplexed();
-		FaithAsyncResult::run(async move || {
+		faith_promise(env, async move {
 			// For HTTP/2 and HTTP/3, connections are multiplexed - dropping a body
 			// stream doesn't prevent connection reuse, so no need to drain.
 			if is_multiplexed {
@@ -389,9 +389,9 @@ impl FaithResponse {
 	///
 	/// In Fáith, this returns a Node.js `Buffer`, which can be used as (and is a subclass of) a `Uint8Array`.
 	#[napi]
-	pub fn bytes(&self) -> Async<Buffer> {
-		let this = Clone::clone(&*self);
-		FaithAsyncResult::run(async move || {
+	pub fn bytes<'env>(&self, env: &'env Env) -> Result<PromiseRaw<'env, Buffer>, napi::Error> {
+		let this = Clone::clone(self);
+		faith_promise(env, async move {
 			this.check_stream_disturbed()?;
 			this.gather_contiguous().await
 		})
@@ -401,9 +401,9 @@ impl FaithResponse {
 	/// completion. It returns a promise that resolves with a `String`. The response is always decoded
 	/// using UTF-8.
 	#[napi]
-	pub fn text(&self) -> Async<String> {
-		let this = Clone::clone(&*self);
-		FaithAsyncResult::run(async move || {
+	pub fn text<'env>(&self, env: &'env Env) -> Result<PromiseRaw<'env, String>, napi::Error> {
+		let this = Clone::clone(self);
+		faith_promise(env, async move {
 			this.check_stream_disturbed()?;
 			let bytes = this.gather_contiguous().await?;
 			String::from_utf8(bytes.to_vec())
@@ -422,9 +422,9 @@ impl FaithResponse {
 	/// and then parses that as JSON. This can use up to double the amount of memory. If you need more
 	/// efficient access, consider handling the response body as a stream.
 	#[napi]
-	pub fn json(&self) -> Async<Value> {
-		let this = Clone::clone(&*self);
-		FaithAsyncResult::run(async move || {
+	pub fn json<'env>(&self, env: &'env Env) -> Result<PromiseRaw<'env, Value>, napi::Error> {
+		let this = Clone::clone(self);
+		faith_promise(env, async move {
 			this.check_stream_disturbed()?;
 			let bytes = this.gather_contiguous().await?;
 			let value = serde_json::from_slice(&bytes)
