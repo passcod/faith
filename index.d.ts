@@ -178,8 +178,9 @@ body(): ReadableStream<Buffer> | null
  * can be reused for subsequent requests. If you don't call this and don't consume
  * the body, the connection may be held open until the response is garbage collected.
  *
- * For HTTP/2 and HTTP/3, this is a no-op since multiplexed connections don't need
- * draining - the connection can be reused immediately for other streams.
+ * For HTTP/1, the remaining body is read and thrown away so the connection can go back
+ * to the pool. For HTTP/2 and HTTP/3, the body is dropped instead, which cancels the
+ * stream (RST_STREAM / STOP_SENDING) without affecting the multiplexed connection.
  *
  * Returns a promise that resolves when the body has been fully discarded.
  */
@@ -194,7 +195,8 @@ bytes(): Promise<Buffer>
 /**
  * The `text()` method of the `Response` interface takes a `Response` stream and reads it to
  * completion. It returns a promise that resolves with a `String`. The response is always decoded
- * using UTF-8.
+ * using UTF-8; as per spec, invalid UTF-8 sequences are replaced with U+FFFD rather than
+ * causing an error.
  */
 text(): Promise<string>
 /**
@@ -658,7 +660,6 @@ export const FAITH_VERSION: string
  * - JS `SyntaxError`:
  *   - `JsonParse` — JSON parse error for `response.json()`
  *   - `PemParse` — PEM parse error for `AgentOptions.tls.identity`
- *   - `Utf8Parse` — UTF8 decoding error for `response.text()`
  * - JS `TypeError`:
  *   - `InvalidHeader` — invalid header name or value
  *   - `InvalidMethod` — invalid HTTP method
@@ -696,8 +697,7 @@ export declare const enum FaithErrorKind {
   ResponseAlreadyDisturbed = 'ResponseAlreadyDisturbed',
   ResponseBodyNotAvailable = 'ResponseBodyNotAvailable',
   RuntimeThread = 'RuntimeThread',
-  Timeout = 'Timeout',
-  Utf8Parse = 'Utf8Parse'
+  Timeout = 'Timeout'
 }
 
 export declare function faithFetch(url: string, options: FaithOptionsAndBody, signal?: AbortSignal | undefined | null, streamBody?: StreamBody | undefined | null): Promise<FaithResponse>

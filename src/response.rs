@@ -343,8 +343,9 @@ impl FaithResponse {
 	/// can be reused for subsequent requests. If you don't call this and don't consume
 	/// the body, the connection may be held open until the response is garbage collected.
 	///
-	/// For HTTP/2 and HTTP/3, this is a no-op since multiplexed connections don't need
-	/// draining - the connection can be reused immediately for other streams.
+	/// For HTTP/1, the remaining body is read and thrown away so the connection can go back
+	/// to the pool. For HTTP/2 and HTTP/3, the body is dropped instead, which cancels the
+	/// stream (RST_STREAM / STOP_SENDING) without affecting the multiplexed connection.
 	///
 	/// Returns a promise that resolves when the body has been fully discarded.
 	#[napi]
@@ -353,23 +354,24 @@ impl FaithResponse {
 		let drained_flag = self.body.drained.clone();
 		let is_multiplexed = self.body.is_multiplexed();
 		faith_promise(env, async move {
-			// For HTTP/2 and HTTP/3, connections are multiplexed - dropping a body
-			// stream doesn't prevent connection reuse, so no need to drain.
-			if is_multiplexed {
-				drained_flag.store(true, Ordering::SeqCst);
-				return Ok(());
-			}
-
 			if let Some(arc) = body {
-				drain_body_inner(arc).await;
-				drained_flag.store(true, Ordering::SeqCst);
+				if is_multiplexed {
+					// Multiplexed connections don't need draining for reuse; dropping
+					// the body cancels the stream and frees its resources right away
+					// instead of waiting for garbage collection.
+					let mut guard = arc.lock().await;
+					*guard = Body::Consumed;
+				} else {
+					drain_body_inner(arc).await;
+				}
 			}
+			drained_flag.store(true, Ordering::SeqCst);
 			Ok(())
 		})
 	}
 
 	/// gather() and then copy into one contiguous buffer
-	async fn gather_contiguous(&self) -> Result<Buffer, FaithError> {
+	async fn gather_contiguous(&self) -> Result<Vec<u8>, FaithError> {
 		let body = self.gather().await?;
 		let length = body.iter().map(|chunk| chunk.len()).sum();
 		let mut bytes = Vec::with_capacity(length);
@@ -381,7 +383,7 @@ impl FaithResponse {
 			verify_integrity(&bytes, integrity)?;
 		}
 
-		Ok(bytes.into())
+		Ok(bytes)
 	}
 
 	/// The `bytes()` method of the `Response` interface takes a `Response` stream and reads it to
@@ -393,21 +395,22 @@ impl FaithResponse {
 		let this = Clone::clone(self);
 		faith_promise(env, async move {
 			this.check_stream_disturbed()?;
-			this.gather_contiguous().await
+			this.gather_contiguous().await.map(Buffer::from)
 		})
 	}
 
 	/// The `text()` method of the `Response` interface takes a `Response` stream and reads it to
 	/// completion. It returns a promise that resolves with a `String`. The response is always decoded
-	/// using UTF-8.
+	/// using UTF-8; as per spec, invalid UTF-8 sequences are replaced with U+FFFD rather than
+	/// causing an error.
 	#[napi]
 	pub fn text<'env>(&self, env: &'env Env) -> Result<PromiseRaw<'env, String>, napi::Error> {
 		let this = Clone::clone(self);
 		faith_promise(env, async move {
 			this.check_stream_disturbed()?;
 			let bytes = this.gather_contiguous().await?;
-			String::from_utf8(bytes.to_vec())
-				.map_err(|e| FaithError::new(FaithErrorKind::Utf8Parse, Some(e.to_string())).into())
+			Ok(String::from_utf8(bytes)
+				.unwrap_or_else(|e| String::from_utf8_lossy(e.as_bytes()).into_owned()))
 		})
 	}
 
