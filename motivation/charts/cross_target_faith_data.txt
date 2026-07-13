@@ -1,6 +1,0 @@
-cloudflare-100k	3425
-google	14643
-local	1412
-tamanu-k8	126049
-tamanu-ka	12582
-tamanu-og	12569
