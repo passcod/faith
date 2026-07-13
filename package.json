@@ -64,6 +64,7 @@
 	"devDependencies": {
 		"@napi-rs/cli": "^3.5.0",
 		"@types/node": "^24.10.1",
+		"node-fetch": "^3.3.2",
 		"tape": "^5.9.0"
 	},
 	"engines": {
