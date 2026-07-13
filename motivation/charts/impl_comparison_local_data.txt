@@ -1,3 +1,0 @@
-native	1407
-node-fetch	1347
-faith	1412

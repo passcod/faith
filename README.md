@@ -17,11 +17,11 @@ DNS cache, an optional cookie jar, and your choice of two HTTP caches.
 
 ### 📐 Is it faster?
 
-Not really. The advantages Fáith has over native Node.js `fetch()` and node-fetch is the extra
-features: HTTP/2 and HTTP/3, sane IPv6 support, and the pooling and caching. Comparing raw
-performance, though, native `fetch()` either beats or matches Fáith in most metrics. There's
-data and charts in the `motivation/charts` folder, this is regenerated manually almost every
-time there's a new release.
+The honest pitch is features first: HTTP/2 and HTTP/3, sane IPv6 support, and the pooling and
+caching. An earlier exploratory benchmark suite (see the `motivation/` folder in git history)
+suggested native `fetch()` beats or matches Fáith on raw performance, but its methodology
+conflated harness overhead with request timing, so those results are not conclusive. A
+redesigned benchmark suite is in the works; results will be published here once collected.
 
 ## Installation
 
