@@ -4,7 +4,6 @@ env:
   APP_NAME: faith
   MACOSX_DEPLOYMENT_TARGET: "10.13"
   CARGO_INCREMENTAL: "1"
-  CFLAGS_aarch64_unknown_linux_gnu: "-D__ARM_ARCH=8"
 on:
   pull_request:
   push:
@@ -48,10 +47,16 @@ jobs:
             build: npm run build -- --target aarch64-apple-darwin
           - host: ubuntu-latest
             target: aarch64-unknown-linux-gnu
-            build: npm run build -- --target aarch64-unknown-linux-gnu --use-napi-cross
+            # zig instead of napi-cross: the napi-cross gcc/sysroot is too old
+            # to compile aws-lc (rustls' default crypto provider since
+            # reqwest 0.13): no stdatomic.h, no AT_HWCAP2, no armv8.4-a.
+            # cargo-zigbuild is invoked directly rather than via `napi build -x`
+            # because the napi CLI can't pass a glibc version suffix; we target
+            # a glibc 2.35 floor. RUSTFLAGS for the same reason as musl below.
+            build: RUSTFLAGS="--cfg reqwest_unstable" cargo zigbuild --target aarch64-unknown-linux-gnu.2.35 --release && cp target/aarch64-unknown-linux-gnu/release/libfaith.so faith.linux-arm64-gnu.node
           - host: ubuntu-latest
             target: armv7-unknown-linux-gnueabihf
-            build: npm run build -- --target armv7-unknown-linux-gnueabihf --use-napi-cross
+            build: RUSTFLAGS="--cfg reqwest_unstable" cargo zigbuild --target armv7-unknown-linux-gnueabihf.2.35 --release && cp target/armv7-unknown-linux-gnueabihf/release/libfaith.so faith.linux-arm-gnueabihf.node
           - host: ubuntu-latest
             target: aarch64-linux-android
             build: npm run build -- --target aarch64-linux-android
@@ -82,12 +87,12 @@ jobs:
         with:
           key: ${{ matrix.settings.target }}
       - uses: mlugg/setup-zig@v2
-        if: ${{ contains(matrix.settings.target, 'musl') }}
+        if: ${{ contains(matrix.settings.build, ' -x') || contains(matrix.settings.build, 'zigbuild') }}
         with:
           version: 0.14.1
       - name: Install cargo-zigbuild
         uses: taiki-e/install-action@v2
-        if: ${{ contains(matrix.settings.target, 'musl') }}
+        if: ${{ contains(matrix.settings.build, ' -x') || contains(matrix.settings.build, 'zigbuild') }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
         with:
