@@ -55,11 +55,32 @@ untimed pass so it can't perturb latency numbers.
 ```bash
 npm run build          # release build of the addon first
 node bench/run.mjs                     # quick suite: h1+h2, 1k/64k, c1/c16
-node bench/run.mjs --suite full        # full matrix, cold+warm, node-fetch
+node bench/run.mjs --suite full        # full matrix incl. h3, cold+warm
+node bench/run.mjs --suite features    # fáith vs fáith across feature knobs
 node bench/run.mjs --protos h1 --sizes 65536 --conc 64 --samples 1000
+node bench/run.mjs --protos h3         # HTTP/3 (fáith only; see below)
 node bench/run.mjs --consume discard --protos h2   # fáith-only discard path
 node bench/run.mjs --delay 20          # +20ms server-side response delay
 ```
+
+### HTTP/3
+
+Node has no HTTP/3 server, so h3 scenarios are served by
+`examples/h3-server.rs` (quinn + h3, the same stack fáith consumes through
+reqwest), which the harness builds with cargo on first use and spawns per
+scenario. It serves the same routes with byte-identical payloads. On
+IPv4-only hosts the fáith agent is given `localAddress: "0.0.0.0"`, since the
+QUIC endpoint otherwise binds the IPv6 wildcard.
+
+### Feature comparisons (`--suite features`)
+
+fáith against itself, one knob per row, grouped: HTTP versions (h1/h1s/h2/h3,
+same workload), DNS (hickory + cache vs system resolver, in cold mode so
+resolution is on the measured path), IPv4 vs IPv6 loopback, HTTP cache (none
+vs memory vs disk store, on a cacheable route where warm requests are all
+hits), and cookie jar off/on. Cross-implementation comparisons deliberately
+don't apply here — these rows answer "what does enabling this feature cost
+(or save) me", not "who is faster".
 
 Raw per-scenario records (with full summaries) are appended as NDJSON under
 `bench/results/`. `node-fetch` scenarios run only if it is installed

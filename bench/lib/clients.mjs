@@ -2,22 +2,29 @@
  * Implementation adapters. Every adapter exposes the same shape so the runner
  * measures identical work for each implementation:
  *
- *   makeContext()          fresh client state (agent/pool); called per scenario,
- *                          or per request in cold mode
- *   request(ctx, url)      issue a GET, resolve when response HEADERS are in;
- *                          returns { drain() } resolving when the BODY is done
- *   protocols              which of h1/h1s/h2 the impl supports
+ *   makeContext(server, variant)   fresh client state (agent/pool); called per
+ *                                  scenario, or per request in cold mode.
+ *                                  `variant` may carry agentOptions overrides
+ *                                  (fáith only) and a prepare(agent, server)
+ *                                  hook.
+ *   request(ctx, url, consume)     issue a GET, resolve when response HEADERS
+ *                                  are in; returns { status, drain() }
+ *                                  resolving when the BODY is done
+ *   protocols                      which of h1/h1s/h2/h3 the impl supports
  */
 
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { ipv6Available } from "./servers.mjs";
+
 const require = createRequire(import.meta.url);
 const rootDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "../..");
 
 export async function loadImpls({ ca }) {
 	const impls = new Map();
+	const hasV6 = await ipv6Available();
 
 	// Node's built-in fetch (undici). HTTP/1.1 only. Trusting the bench cert
 	// requires NODE_EXTRA_CA_CERTS, which the runner sets before re-exec.
@@ -41,11 +48,28 @@ export async function loadImpls({ ca }) {
 	const faith = require(path.join(rootDir, "wrapper.js"));
 	impls.set("faith", {
 		name: "faith",
-		protocols: ["h1", "h1s", "h2"],
-		makeContext: () =>
-			new faith.Agent({
-				tls: { extraRoots: [ca.toString()] },
-			}),
+		protocols: ["h1", "h1s", "h2", "h3"],
+		makeContext: (server, variant = {}) => {
+			const overrides = variant.agentOptions ?? {};
+			const options = {
+				...overrides,
+				tls: { extraRoots: [ca.toString()], ...overrides.tls },
+			};
+			if (server?.proto === "h3") {
+				// Hint h3 so the first request already goes over QUIC, and
+				// bind IPv4 where the default IPv6 QUIC socket can't exist.
+				options.http3 = {
+					hints: [{ host: server.host, port: server.port }],
+					...overrides.http3,
+				};
+				if (!hasV6 && !options.localAddress) {
+					options.localAddress = "0.0.0.0";
+				}
+			}
+			const agent = new faith.Agent(options);
+			variant.prepare?.(agent, server);
+			return agent;
+		},
 		request: async (agent, url, consume) => {
 			const response = await faith.fetch(url, { agent });
 			return {
@@ -61,7 +85,7 @@ export async function loadImpls({ ca }) {
 
 	// node-fetch, if installed. HTTP/1.1 only.
 	try {
-		const { default: nodeFetch, Agent: _unused } = await import("node-fetch");
+		const { default: nodeFetch } = await import("node-fetch");
 		const https = await import("node:https");
 		const http = await import("node:http");
 		impls.set("node-fetch", {
