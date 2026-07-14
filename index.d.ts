@@ -183,20 +183,20 @@ body(): ReadableStream<Buffer> | null
  *
  * Returns a promise that resolves when the body has been fully discarded.
  */
-discard(): Async<undefined>
+discard(): Promise<undefined>
 /**
  * The `bytes()` method of the `Response` interface takes a `Response` stream and reads it to
  * completion. It returns a promise that resolves with a `Uint8Array`.
  *
  * In Fáith, this returns a Node.js `Buffer`, which can be used as (and is a subclass of) a `Uint8Array`.
  */
-bytes(): Async<Buffer>
+bytes(): Promise<Buffer>
 /**
  * The `text()` method of the `Response` interface takes a `Response` stream and reads it to
  * completion. It returns a promise that resolves with a `String`. The response is always decoded
  * using UTF-8.
  */
-text(): Async<string>
+text(): Promise<string>
 /**
  * The `json()` method of the `Response` interface takes a `Response` stream and reads it to
  * completion. It returns a promise which resolves with the result of parsing the body text as
@@ -209,7 +209,7 @@ text(): Async<string>
  * and then parses that as JSON. This can use up to double the amount of memory. If you need more
  * efficient access, consider handling the response body as a stream.
  */
-json(): Async<any>
+json(): Promise<any>
 /**
  * The `trailers()` read-only property of the `Response` interface returns a promise that
  * resolves to either `null` or a `Headers` structure that contains the HTTP/2 or /3 trailing
@@ -700,7 +700,7 @@ export declare const enum FaithErrorKind {
   Utf8Parse = 'Utf8Parse'
 }
 
-export declare function faithFetch(url: string, options: FaithOptionsAndBody, signal?: AbortSignal | undefined | null, streamBody?: StreamBody | undefined | null): Async<FaithResponse>
+export declare function faithFetch(url: string, options: FaithOptionsAndBody, signal?: AbortSignal | undefined | null, streamBody?: StreamBody | undefined | null): Promise<FaithResponse>
 
 export interface FaithOptionsAndBody {
   agent: Agent
