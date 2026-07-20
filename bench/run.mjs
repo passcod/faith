@@ -12,21 +12,25 @@
  *  - event-loop delay is recorded while the scenario runs
  *
  * Usage:
- *   node bench/run.mjs [--suite quick|full]
- *     [--impls native,faith,node-fetch] [--protos h1,h1s,h2]
+ *   node bench/run.mjs [--suite quick|full|features]
+ *     [--impls native,faith,node-fetch] [--protos h1,h1s,h2,h3]
  *     [--sizes 0,1024,65536,1048576] [--conc 1,16,64] [--modes warm,cold]
  *     [--consume bytes|text|discard] [--samples 200] [--warmup 50]
  *     [--delay 0] [--out bench/results]
+ *
+ * The `features` suite benchmarks fáith against itself across its feature
+ * set: HTTP versions, DNS resolvers, IPv4/IPv6, HTTP caching, cookies.
  */
 
 import { spawnSync } from "node:child_process";
-import { mkdirSync, createWriteStream } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, createWriteStream } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { monitorEventLoopDelay, performance } from "node:perf_hooks";
 import { fileURLToPath } from "node:url";
 
 import { loadImpls } from "./lib/clients.mjs";
-import { ensureCert, startServer } from "./lib/servers.mjs";
+import { ensureCert, ipv6Available, startServer } from "./lib/servers.mjs";
 import { fmtMs, summarise } from "./lib/stats.mjs";
 
 const args = process.argv.slice(2);
@@ -44,23 +48,41 @@ const suite = flag("suite", "quick");
 const defaults =
 	suite === "full"
 		? {
-				impls: ["native", "faith", "node-fetch"],
-				protos: ["h1", "h1s", "h2"],
+				impls: [
+					"native",
+					"undici",
+					"http2",
+					"got",
+					"node-fetch",
+					"libcurl",
+					"faith",
+				],
+				protos: ["h1", "h1s", "h2", "h3"],
 				sizes: [0, 1024, 65536, 1048576],
 				conc: [1, 16, 64],
 				modes: ["warm", "cold"],
 				samples: 500,
 				warmup: 100,
 			}
-		: {
-				impls: ["native", "faith"],
-				protos: ["h1", "h2"],
-				sizes: [1024, 65536],
-				conc: [1, 16],
-				modes: ["warm"],
-				samples: 200,
-				warmup: 50,
-			};
+		: suite === "features"
+			? {
+					impls: ["faith"],
+					protos: [], // driven by the variant list instead
+					sizes: [1024, 65536],
+					conc: [1, 16],
+					modes: ["warm"],
+					samples: 200,
+					warmup: 50,
+				}
+			: {
+					impls: ["native", "faith"],
+					protos: ["h1", "h2"],
+					sizes: [1024, 65536],
+					conc: [1, 16],
+					modes: ["warm"],
+					samples: 200,
+					warmup: 50,
+				};
 
 const impls = listFlag("impls", defaults.impls);
 const protos = listFlag("protos", defaults.protos);
@@ -80,7 +102,7 @@ const outDir = flag(
 // can only be configured through the environment; re-exec once with it set.
 const { caPath, ca } = ensureCert();
 if (
-	protos.some((p) => p !== "h1") &&
+	(protos.some((p) => p !== "h1") || suite === "features") &&
 	process.env.NODE_EXTRA_CA_CERTS !== caPath &&
 	!process.env.FAITH_BENCH_REEXEC
 ) {
@@ -104,6 +126,7 @@ const implementations = await loadImpls({ ca });
 
 function scenarioKey(s) {
 	return [
+		s.variantName,
 		s.impl,
 		s.proto,
 		`${s.size}B`,
@@ -117,14 +140,20 @@ function scenarioKey(s) {
 }
 
 async function runScenario(impl, server, scenario) {
-	const routeBase = scenario.mode === "cold" && scenario.proto !== "h2"
-		? "/close"
-		: "";
+	// Connection: close only exists on h1; multiplexed protocols go cold via
+	// a fresh agent per request instead.
+	const routeClose =
+		scenario.mode === "cold" && ["h1", "h1s"].includes(scenario.proto)
+			? "/close"
+			: "";
+	const routeCache = scenario.route ?? "";
 	const routeDelay = delayMs > 0 ? `/delay/${delayMs}` : "";
-	const url = `${server.url}${routeBase}${routeDelay}/payload/${scenario.size}`;
+	const base = new URL(server.url);
+	if (scenario.urlHost) base.hostname = scenario.urlHost;
+	const url = `${base.origin}${routeClose}${routeCache}${routeDelay}/payload/${scenario.size}`;
 
 	const freshContextPerRequest = scenario.mode === "cold";
-	let context = impl.makeContext();
+	let context = impl.makeContext(server, scenario.variant);
 
 	const ttfbs = [];
 	const totals = [];
@@ -139,7 +168,9 @@ async function runScenario(impl, server, scenario) {
 	const worker = async () => {
 		while (issued < total) {
 			const n = issued++;
-			const ctx = freshContextPerRequest ? impl.makeContext() : context;
+			const ctx = freshContextPerRequest
+				? impl.makeContext(server, scenario.variant)
+				: context;
 			const start = performance.now();
 			try {
 				const res = await impl.request(ctx, url, scenario.consume);
@@ -156,6 +187,8 @@ async function runScenario(impl, server, scenario) {
 				if (failures === 1) {
 					console.error(`  first failure: ${err.message ?? err}`);
 				}
+			} finally {
+				if (freshContextPerRequest) await impl.closeContext?.(ctx);
 			}
 		}
 	};
@@ -169,8 +202,11 @@ async function runScenario(impl, server, scenario) {
 	loopDelay.disable();
 	const wallMs = performance.now() - wallStart;
 
+	if (!freshContextPerRequest) await impl.closeContext?.(context);
+
 	const record = {
 		...scenario,
+		variant: undefined, // not serialisable (may contain functions)
 		delayMs,
 		samples: totals.length,
 		failures,
@@ -185,52 +221,180 @@ async function runScenario(impl, server, scenario) {
 	return record;
 }
 
-console.log(`suite=${suite} consume=${consume} samples=${samples} warmup=${warmup}`);
-console.log(
-	"scenario".padEnd(38) +
-		"ttfb p50/p99".padStart(16) +
-		"total p50/p99".padStart(18) +
-		"rps".padStart(9) +
-		"loop p99".padStart(10),
-);
+function printHeader() {
+	console.log(
+		`suite=${suite} consume=${consume} samples=${samples} warmup=${warmup}`,
+	);
+	console.log(
+		"scenario".padEnd(44) +
+			"ttfb p50/p99".padStart(16) +
+			"total p50/p99".padStart(18) +
+			"rps".padStart(9) +
+			"loop p99".padStart(10),
+	);
+}
 
-for (const proto of protos) {
-	const server = await startServer(proto);
-	try {
-		for (const implName of impls) {
-			const impl = implementations.get(implName);
-			if (!impl) continue; // e.g. node-fetch not installed
-			if (!impl.protocols.includes(proto)) continue;
-			if (consume === "discard" && implName !== "faith") continue;
+function printResult(scenario, r) {
+	console.log(
+		scenarioKey(scenario).padEnd(44) +
+			`${fmtMs(r.ttfb.p50)}/${fmtMs(r.ttfb.p99)}`.padStart(16) +
+			`${fmtMs(r.total.p50)}/${fmtMs(r.total.p99)}`.padStart(18) +
+			r.rps.toFixed(0).padStart(9) +
+			`${fmtMs(r.loopDelayP99Ms)}ms`.padStart(10) +
+			(r.failures ? `  FAILURES=${r.failures}` : ""),
+	);
+}
 
-			for (const size of sizes) {
-				for (const concurrency of concurrencies) {
-					for (const mode of modes) {
-						const scenario = {
-							impl: implName,
-							proto,
-							size,
-							concurrency,
-							mode,
-							consume,
-						};
-						const r = await runScenario(impl, server, scenario);
-						const line =
-							scenarioKey(scenario).padEnd(38) +
-							`${fmtMs(r.ttfb.p50)}/${fmtMs(r.ttfb.p99)}`.padStart(16) +
-							`${fmtMs(r.total.p50)}/${fmtMs(r.total.p99)}`.padStart(18) +
-							r.rps.toFixed(0).padStart(9) +
-							`${fmtMs(r.loopDelayP99Ms)}ms`.padStart(10) +
-							(r.failures ? `  FAILURES=${r.failures}` : "");
-						console.log(line);
+async function runMatrix() {
+	for (const proto of protos) {
+		const server = await startServer(proto);
+		try {
+			for (const implName of impls) {
+				const impl = implementations.get(implName);
+				if (!impl) continue; // e.g. node-fetch not installed
+				if (!impl.protocols.includes(proto)) continue;
+				if (consume === "discard" && implName !== "faith") continue;
+
+				for (const size of sizes) {
+					for (const concurrency of concurrencies) {
+						for (const mode of modes) {
+							const scenario = {
+								impl: implName,
+								proto,
+								size,
+								concurrency,
+								mode,
+								consume,
+							};
+							printResult(
+								scenario,
+								await runScenario(impl, server, scenario),
+							);
+						}
 					}
 				}
 			}
+		} finally {
+			await server.close();
+		}
+	}
+}
+
+/**
+ * fáith-vs-fáith feature comparisons. Variants sharing a `group` are meant to
+ * be read against each other; each row differs from its group's baseline by
+ * exactly one feature knob.
+ */
+async function runFeatures() {
+	const hasV6 = await ipv6Available();
+	const cacheDir = mkdtempSync(path.join(os.tmpdir(), "faith-bench-cache-"));
+
+	const variants = [
+		// HTTP versions, same workload
+		{ name: "proto:h1", proto: "h1" },
+		{ name: "proto:h1s", proto: "h1s" },
+		{ name: "proto:h2", proto: "h2" },
+		{ name: "proto:h3", proto: "h3" },
+
+		// DNS: hickory (fáith default, with its cache) vs the system resolver.
+		// Cold mode so resolution is actually on the measured path; the server
+		// is reached via the `localhost` name rather than an IP literal.
+		{
+			name: "dns:hickory",
+			proto: "h1",
+			urlHost: "localhost",
+			mode: "cold",
+		},
+		{
+			name: "dns:system",
+			proto: "h1",
+			urlHost: "localhost",
+			mode: "cold",
+			agentOptions: { dns: { system: true } },
+		},
+
+		// Address family (loopback; measures the stack, not routing)
+		{ name: "ip:v4", proto: "h1" },
+		...(hasV6
+			? [{ name: "ip:v6", proto: "h1", serverHost: "::1" }]
+			: []),
+
+		// HTTP cache: same cacheable route, no cache vs memory vs disk store.
+		// After warmup every cached request is a hit, so these rows measure
+		// hit latency against actually fetching from the (local) server.
+		{ name: "cache:none", proto: "h1", route: "/cc/3600" },
+		{
+			name: "cache:memory",
+			proto: "h1",
+			route: "/cc/3600",
+			agentOptions: { cache: { store: "memory" } },
+		},
+		{
+			name: "cache:disk",
+			proto: "h1",
+			route: "/cc/3600",
+			agentOptions: { cache: { store: "disk", path: cacheDir } },
+		},
+
+		// Cookie jar off vs on (jar holds one cookie for the origin)
+		{ name: "cookies:off", proto: "h1" },
+		{
+			name: "cookies:on",
+			proto: "h1",
+			agentOptions: { cookies: true },
+			prepare: (agent, server) =>
+				agent.addCookie(`${server.url}/`, "bench=1"),
+		},
+	];
+
+	const impl = implementations.get("faith");
+	try {
+		for (const variant of variants) {
+			const server = await startServer(
+				variant.proto,
+				variant.serverHost ?? "127.0.0.1",
+			);
+			try {
+				for (const size of sizes) {
+					for (const concurrency of concurrencies) {
+						const scenario = {
+							impl: "faith",
+							variantName: variant.name,
+							proto: variant.proto,
+							size,
+							concurrency,
+							mode: variant.mode ?? "warm",
+							consume,
+							route: variant.route,
+							urlHost: variant.urlHost,
+							variant,
+						};
+						printResult(
+							scenario,
+							await runScenario(impl, server, scenario),
+						);
+					}
+				}
+			} finally {
+				await server.close();
+			}
 		}
 	} finally {
-		await server.close();
+		rmSync(cacheDir, { recursive: true, force: true });
 	}
+}
+
+printHeader();
+if (suite === "features") {
+	await runFeatures();
+} else {
+	await runMatrix();
 }
 
 out.end();
 console.log(`\nraw samples: ${outPath}`);
+
+// Some clients (node:http2 sessions, got's http2-wrapper cache, libcurl
+// handles) keep the event loop alive past the last request; exit cleanly once
+// results are flushed.
+out.on("finish", () => process.exit(0));
