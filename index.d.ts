@@ -418,6 +418,18 @@ export interface AgentOptions {
   headers?: Array<Header>
   /** Settings related to HTTP/3. This is a nested object. */
   http3?: AgentHttp3Options
+  /**
+   * Bind outgoing sockets to this local IP address before connecting.
+   *
+   * This also selects the address family of the HTTP/3 (QUIC) socket. By default that
+   * socket binds the IPv6 wildcard (`[::]`), which fails on hosts without usable IPv6 —
+   * there, HTTP/3 silently falls back to TCP. Fáith detects that case automatically and
+   * binds `0.0.0.0` instead, so you normally don't need to set this; provide it only to
+   * force a specific source address. Throws if the value does not parse as an IP address.
+   *
+   * Default: unset (IPv6 wildcard for QUIC where available, else `0.0.0.0`).
+   */
+  localAddress?: string
   /** Settings related to the connection pool. This is a nested object. */
   pool?: AgentPoolOptions
   /** Determines the behavior in case the server replies with a redirect status. */
