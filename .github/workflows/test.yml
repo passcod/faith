@@ -33,6 +33,7 @@ jobs:
           - 20
           - 22
           - 24
+          - 26
     name: stable - ${{ matrix.host }} - node@${{ matrix.nodejs }}
     runs-on: ${{ matrix.host }}
     steps:
