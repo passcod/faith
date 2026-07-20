@@ -56,15 +56,13 @@ pub const USER_AGENT: &str = concat!(
 	env!("REQWEST_VERSION")
 );
 
-/// Whether this host can bind the IPv6 wildcard (`[::]`), i.e. has usable IPv6.
+/// Whether this host can bind the IPv6 wildcard (`[::]`).
 ///
-/// This is the exact operation reqwest performs when creating the HTTP/3 (QUIC)
-/// endpoint with no local address, so it precisely predicts whether the default
-/// QUIC bind will succeed. The result is memoised for the life of the process:
-/// IPv6 reachability can in principle change at runtime (an interface going up or
-/// down), but we accept that staleness — re-probing on every agent construction
-/// isn't worth it, and the fallback it selects (`0.0.0.0`) stays functional either
-/// way. Callers that need to react to such a change can set `localAddress` explicitly.
+/// This is tested using the exact operation reqwest performs when creating the QUIC
+/// endpoint with no explicit local address, so it predicts whether the default
+/// QUIC bind will succeed. The result is memoised for the life of the process; while
+/// IPv6 bindability can in principle change at runtime, this is considered an
+/// acceptable tradeoff for performance and simplicity.
 fn ipv6_wildcard_bindable() -> bool {
 	use std::sync::OnceLock;
 	static BINDABLE: OnceLock<bool> = OnceLock::new();
