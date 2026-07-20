@@ -507,6 +507,16 @@ export interface AgentTlsOptions {
    * Default: false.
    */
   required?: boolean
+  /**
+   * Additional PEM-formatted root certificates to trust, on top of the platform's
+   * trust store. Each entry may be a PEM bundle containing multiple certificates.
+   *
+   * This is mainly useful for connecting to servers with self-signed or private-CA
+   * certificates, such as internal services or local test servers. This is one of the
+   * few options that will cause the `Agent` constructor to throw if the input is in
+   * the wrong format.
+   */
+  extraRoots?: Array<Buffer | string>
 }
 
 /**
