@@ -48,7 +48,15 @@ const suite = flag("suite", "quick");
 const defaults =
 	suite === "full"
 		? {
-				impls: ["native", "faith", "node-fetch"],
+				impls: [
+					"native",
+					"undici",
+					"http2",
+					"got",
+					"node-fetch",
+					"libcurl",
+					"faith",
+				],
 				protos: ["h1", "h1s", "h2", "h3"],
 				sizes: [0, 1024, 65536, 1048576],
 				conc: [1, 16, 64],
@@ -179,6 +187,8 @@ async function runScenario(impl, server, scenario) {
 				if (failures === 1) {
 					console.error(`  first failure: ${err.message ?? err}`);
 				}
+			} finally {
+				if (freshContextPerRequest) await impl.closeContext?.(ctx);
 			}
 		}
 	};
@@ -191,6 +201,8 @@ async function runScenario(impl, server, scenario) {
 	);
 	loopDelay.disable();
 	const wallMs = performance.now() - wallStart;
+
+	if (!freshContextPerRequest) await impl.closeContext?.(context);
 
 	const record = {
 		...scenario,
@@ -381,3 +393,8 @@ if (suite === "features") {
 
 out.end();
 console.log(`\nraw samples: ${outPath}`);
+
+// Some clients (node:http2 sessions, got's http2-wrapper cache, libcurl
+// handles) keep the event loop alive past the last request; exit cleanly once
+// results are flushed.
+out.on("finish", () => process.exit(0));

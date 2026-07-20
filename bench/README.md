@@ -1,10 +1,8 @@
 # fáith benchmarks
 
-This suite replaces the earlier exploratory `motivation/` benchmarks, whose
-timing numbers included podman container setup, packet capture, tshark
-filtering, and Node process startup in every sample — swamping the requests
-being measured. Those numbers could not answer whether fáith itself was fast
-or slow.
+An in-process HTTP benchmark harness for fáith and comparable clients, built
+so that request timing is what's actually measured — not process startup,
+packet capture, or harness overhead.
 
 ## Questions this suite answers
 
@@ -50,6 +48,36 @@ Packet-level behaviour (connection counts, DNS queries, negotiated protocol)
 is deliberately **not** measured here; when needed, capture it in a separate
 untimed pass so it can't perturb latency numbers.
 
+## Implementations
+
+Nearly every JS HTTP client sits on one of three transport stacks, so benching
+two wrappers over the same stack mostly measures wrapper overhead. The set is
+picked to have at most one representative per (stack, API-style):
+
+| impl | stack | protocols | notes |
+|------|-------|-----------|-------|
+| `native` | undici (spec fetch) | h1, h1s | Node's built-in `fetch()` |
+| `undici` | undici (raw) | h1, h1s | `undici.request()` — the stack's ceiling, no WHATWG-stream tax |
+| `http2` | node core | h2 | `node:http2` client — the only builtin h2, raw-core baseline |
+| `got` | node core / http2-wrapper | h1, h1s, h2 | the popular JS client that actually speaks h2 |
+| `node-fetch` | node core | h1, h1s | spec-shaped wrapper over core |
+| `libcurl` | native (libcurl) | h1, h1s, h2 | via `node-libcurl`; fáith's native-bindings cousin |
+| `faith` | native (reqwest/hyper) | h1, h1s, h2, h3 | this project |
+
+Clients popular but not included — axios, ky, ofetch, superagent, needle —
+are all wrappers over the undici or node-core stacks already represented, with
+nothing new at the transport level.
+
+Two caveats:
+- **libcurl** runs with peer verification disabled. Its `node-libcurl` prebuilt
+  statically links its own OpenSSL with a baked CA path and ignores `CAINFO`,
+  `CURL_CA_BUNDLE`, and `SSL_CERT_FILE`, so the private-CA bench cert can't be
+  trusted portably. The full TLS handshake and record crypto still run; only
+  the (per-connection, keep-alive-amortized) chain check is skipped.
+- **libcurl** (via `curly`) buffers the whole body before resolving, so its
+  ttfb equals total. Every other client resolves at response headers, giving a
+  true time-to-headers.
+
 ## Running
 
 ```bash
@@ -83,8 +111,11 @@ don't apply here — these rows answer "what does enabling this feature cost
 (or save) me", not "who is faster".
 
 Raw per-scenario records (with full summaries) are appended as NDJSON under
-`bench/results/`. `node-fetch` scenarios run only if it is installed
-(`npm i -D node-fetch`).
+`bench/results/`. The pure-JS comparison clients are dev dependencies, pulled
+in by `npm install`. node-libcurl is a native addon and an
+`optionalDependency`: it builds and participates on most platforms, but if its
+addon can't build the harness skips only the libcurl rows (with a note) rather
+than failing.
 
 TLS scenarios use a generated self-signed certificate; the runner re-execs
 itself with `NODE_EXTRA_CA_CERTS` so native fetch trusts it, and passes the
@@ -101,10 +132,9 @@ sudo ip link add veth0 type veth peer name veth1 netns bench
 sudo ip netns exec bench tc qdisc add dev veth1 root netem delay 20ms loss 1%
 ```
 
-Loss × HTTP/3 is the headline scenario HTTP/3 exists for; the local suite
-can't cover h3 (Node has no h3 server), so point `--protos h3` runs at an
-external server you control (Caddy with `experimental_http3`, nginx-quic)
-once an `--h3-url` mode is added.
+Loss × HTTP/3 is the headline scenario HTTP/3 exists for, and the local h3
+server (`examples/h3-server.rs`) runs inside the namespace like any other, so
+`--protos h3` under `netem loss` is the experiment to reach for.
 
 ## Interpreting
 

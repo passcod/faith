@@ -18,7 +18,8 @@ DNS cache, an optional cookie jar, and your choice of two HTTP caches.
 ### 📐 Is it faster?
 
 Depends how you measure it. undici is impossible to beat for its core usecase: HTTP/1.1 keep-alive
-requests. However, faith can do a lot more than that...
+requests. However, faith can do a lot more than that, and holds its own on concurrency and on
+HTTP/2 and HTTP/3. The benchmark suite lives in `bench/`; see its README to run it yourself.
 
 ## Installation
 

@@ -64,8 +64,13 @@
 	"devDependencies": {
 		"@napi-rs/cli": "^3.5.0",
 		"@types/node": "^24.10.1",
+		"got": "^15.1.0",
 		"node-fetch": "^3.3.2",
-		"tape": "^5.9.0"
+		"tape": "^5.9.0",
+		"undici": "^8.7.0"
+	},
+	"optionalDependencies": {
+		"node-libcurl": "^5.1.2"
 	},
 	"engines": {
 		"node": ">= 20"
