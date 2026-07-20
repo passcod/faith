@@ -17,7 +17,7 @@ use http_cache_reqwest::{
 use napi::{Either, Env, bindgen_prelude::Buffer};
 use napi_derive::napi;
 use reqwest::{
-	Client, Identity, Url,
+	Certificate, Client, Identity, Url,
 	cookie::{CookieStore, Jar},
 	header::{HeaderMap, HeaderName, HeaderValue},
 	redirect::Policy,
@@ -308,6 +308,14 @@ pub struct AgentTlsOptions {
 	///
 	/// Default: false.
 	pub required: Option<bool>,
+	/// Additional PEM-formatted root certificates to trust, on top of the platform's
+	/// trust store. Each entry may be a PEM bundle containing multiple certificates.
+	///
+	/// This is mainly useful for connecting to servers with self-signed or private-CA
+	/// certificates, such as internal services or local test servers. This is one of the
+	/// few options that will cause the `Agent` constructor to throw if the input is in
+	/// the wrong format.
+	pub extra_roots: Option<Vec<Either<Buffer, String>>>,
 }
 
 impl Debug for AgentTlsOptions {
@@ -316,6 +324,7 @@ impl Debug for AgentTlsOptions {
 			.field("early_data", &self.early_data)
 			.field("identity", &"[sensitive]")
 			.field("required", &self.required)
+			.field("extra_roots", &self.extra_roots.as_ref().map(|r| r.len()))
 			.finish()
 	}
 }
@@ -329,6 +338,15 @@ impl Clone for AgentTlsOptions {
 				Either::B(string) => Either::B(string.clone()),
 			}),
 			required: self.required.clone(),
+			extra_roots: self.extra_roots.as_ref().map(|roots| {
+				roots
+					.iter()
+					.map(|either| match either {
+						Either::A(buf) => Either::A(Buffer::from(buf.as_ref())),
+						Either::B(string) => Either::B(string.clone()),
+					})
+					.collect()
+			}),
 		}
 	}
 }
@@ -583,6 +601,19 @@ impl Agent {
 
 			if let Some(https_only) = tls.required {
 				client = client.https_only(https_only);
+			}
+
+			if let Some(extra_roots) = tls.extra_roots {
+				for pem in &extra_roots {
+					let bytes = match pem {
+						Either::A(buf) => buf.as_ref(),
+						Either::B(string) => string.as_bytes(),
+					};
+					let certs = Certificate::from_pem_bundle(bytes).map_err(|err| {
+						FaithError::new(FaithErrorKind::PemParse, Some(err.to_string()))
+					})?;
+					client = client.tls_certs_merge(certs);
+				}
 			}
 		}
 
