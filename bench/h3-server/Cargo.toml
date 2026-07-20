@@ -1,0 +1,24 @@
+# Standalone HTTP/3 static server for the benchmark suite. Kept as its own
+# crate (not a faith example / dev-dependency) so faith's own manifest and
+# lockfile aren't polluted with the quinn/h3 stack. The bench harness builds
+# this on demand; it is never part of the published package.
+[package]
+name = "h3-server"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[[bin]]
+name = "h3-server"
+path = "src/main.rs"
+
+[dependencies]
+# versions matched to what reqwest's http3 support already pulls in
+bytes = "1.9"
+h3 = "0.0.8"
+h3-quinn = "0.0.10"
+http = "1.4"
+quinn = "0.11.9"
+rustls = "0.23"
+rustls-pemfile = "2"
+tokio = { version = "1.48", features = ["rt-multi-thread", "macros", "net", "time", "io-util", "sync"] }

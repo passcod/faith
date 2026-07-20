@@ -1,8 +1,7 @@
 # fáith benchmarks
 
 An in-process HTTP benchmark harness for fáith and comparable clients, built
-so that request timing is what's actually measured — not process startup,
-packet capture, or harness overhead.
+so that request timing is what's actually measured.
 
 ## Questions this suite answers
 
@@ -80,8 +79,15 @@ Two caveats:
 
 ## Running
 
+The benchmark harness and its comparison clients are a **separate package**
+(`bench/package.json`) so they never touch fáith's own dependencies or
+published artifact. Build the addon once at the repo root, install the bench
+deps once inside `bench/`, then run from the root:
+
 ```bash
-npm run build          # release build of the addon first
+npm run build              # release build of the addon (repo root)
+npm install --prefix bench # comparison clients (undici, got, node-fetch, node-libcurl)
+
 node bench/run.mjs                     # quick suite: h1+h2, 1k/64k, c1/c16
 node bench/run.mjs --suite full        # full matrix incl. h3, cold+warm
 node bench/run.mjs --suite features    # fáith vs fáith across feature knobs
@@ -93,12 +99,13 @@ node bench/run.mjs --delay 20          # +20ms server-side response delay
 
 ### HTTP/3
 
-Node has no HTTP/3 server, so h3 scenarios are served by
-`examples/h3-server.rs` (quinn + h3, the same stack fáith consumes through
+Node has no HTTP/3 server, so h3 scenarios are served by the standalone
+`bench/h3-server` crate (quinn + h3, the same stack fáith consumes through
 reqwest), which the harness builds with cargo on first use and spawns per
 scenario. It serves the same routes with byte-identical payloads. On
-IPv4-only hosts the fáith agent is given `localAddress: "0.0.0.0"`, since the
-QUIC endpoint otherwise binds the IPv6 wildcard.
+IPv4-only hosts the fáith agent binds `0.0.0.0` for QUIC automatically (the
+QUIC endpoint otherwise binds the IPv6 wildcard and can't be constructed
+there); no manual `localAddress` is needed.
 
 ### Feature comparisons (`--suite features`)
 
@@ -111,11 +118,11 @@ don't apply here — these rows answer "what does enabling this feature cost
 (or save) me", not "who is faster".
 
 Raw per-scenario records (with full summaries) are appended as NDJSON under
-`bench/results/`. The pure-JS comparison clients are dev dependencies, pulled
-in by `npm install`. node-libcurl is a native addon and an
-`optionalDependency`: it builds and participates on most platforms, but if its
-addon can't build the harness skips only the libcurl rows (with a note) rather
-than failing.
+`bench/results/`. The pure-JS comparison clients live in `bench/package.json`
+and are pulled in by `npm install --prefix bench`. node-libcurl is a native
+addon and an `optionalDependency` there: it builds and participates on most
+platforms, but if its addon can't build the harness skips only the libcurl
+rows (with a note) rather than failing.
 
 TLS scenarios use a generated self-signed certificate; the runner re-execs
 itself with `NODE_EXTRA_CA_CERTS` so native fetch trusts it, and passes the
@@ -133,7 +140,7 @@ sudo ip netns exec bench tc qdisc add dev veth1 root netem delay 20ms loss 1%
 ```
 
 Loss × HTTP/3 is the headline scenario HTTP/3 exists for, and the local h3
-server (`examples/h3-server.rs`) runs inside the namespace like any other, so
+server (`bench/h3-server`) runs inside the namespace like any other, so
 `--protos h3` under `netem loss` is the experiment to reach for.
 
 ## Interpreting

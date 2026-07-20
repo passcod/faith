@@ -1,1 +1,4 @@
 results/
+node_modules/
+package-lock.json
+h3-server/target/

@@ -13,7 +13,7 @@
  *   h1   plain HTTP/1.1
  *   h1s  HTTP/1.1 over TLS (self-signed, see ensureCert)
  *   h2   HTTP/2 over TLS (allowHTTP1: false so it's a pure h2 measurement)
- *   h3   HTTP/3, served by the Rust examples/h3-server.rs (Node has no h3
+ *   h3   HTTP/3, served by the Rust bench/h3-server (Node has no h3
  *        server); built with cargo on first use
  */
 
@@ -35,7 +35,7 @@ function payload(bytes) {
 	if (!buf) {
 		// Deterministic but incompressible-ish content so compression and
 		// caching layers can't skew transfer size between runs. Keep in sync
-		// with the same generator in examples/h3-server.rs.
+		// with the same generator in bench/h3-server.
 		buf = Buffer.alloc(bytes);
 		let seed = 0x2545f491;
 		for (let i = 0; i < bytes; i++) {
@@ -236,15 +236,15 @@ export async function startServer(proto, host = "127.0.0.1") {
 let h3Built = false;
 async function startH3Server(host) {
 	const { certPath, keyPath } = ensureCert();
+	const h3Dir = path.join(rootDir, "bench/h3-server");
 	if (!h3Built) {
 		// quiet on success, loud on failure
-		execFileSync("cargo", ["build", "--release", "--example", "h3-server"], {
-			cwd: rootDir,
+		execFileSync("cargo", ["build", "--release", "--manifest-path", path.join(h3Dir, "Cargo.toml")], {
 			stdio: ["ignore", "ignore", "inherit"],
 		});
 		h3Built = true;
 	}
-	const bin = path.join(rootDir, "target/release/examples/h3-server");
+	const bin = path.join(h3Dir, "target/release/h3-server");
 	const proc = spawn(
 		bin,
 		["--cert", certPath, "--key", keyPath, "--port", "0", "--host", host],
