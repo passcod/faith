@@ -23,17 +23,26 @@ const ERROR_CODES = native.errorCodes().reduce((acc, code) => {
 class Response {
 	/** @type {import('./index').FaithResponse} */
 	#nativeResponse;
+	/** @type {Headers | undefined} */
+	#headers;
 
 	constructor(nativeResponse) {
 		this.#nativeResponse = nativeResponse;
+	}
 
-		const nativeProto = Object.getPrototypeOf(this.#nativeResponse);
-		const descriptors = Object.getOwnPropertyDescriptors(nativeProto);
-
+	// Mirror the native class's getters onto this prototype, once at class
+	// definition time rather than per instance. The getter functions are
+	// declared inside the class body so they can access #nativeResponse.
+	static {
+		const descriptors = Object.getOwnPropertyDescriptors(
+			native.FaithResponse.prototype,
+		);
 		for (const [key, descriptor] of Object.entries(descriptors)) {
-			if (descriptor.get) {
-				Object.defineProperty(this, key, {
-					get: () => this.#nativeResponse[key],
+			if (descriptor.get && !(key in Response.prototype)) {
+				Object.defineProperty(Response.prototype, key, {
+					get() {
+						return this.#nativeResponse[key];
+					},
 					enumerable: true,
 					configurable: true,
 				});
@@ -42,14 +51,17 @@ class Response {
 	}
 
 	get headers() {
-		const headers = new Headers();
-		const headerPairs = this.#nativeResponse.headers();
-		if (Array.isArray(headerPairs)) {
-			for (const [name, value] of headerPairs) {
-				headers.append(name, value);
+		if (!this.#headers) {
+			const headers = new Headers();
+			const headerPairs = this.#nativeResponse.headers();
+			if (Array.isArray(headerPairs)) {
+				for (const [name, value] of headerPairs) {
+					headers.append(name, value);
+				}
 			}
+			this.#headers = headers;
 		}
-		return headers;
+		return this.#headers;
 	}
 
 	get trailers() {
@@ -93,7 +105,13 @@ class Response {
 	 */
 	async arrayBuffer() {
 		const buffer = await this.#nativeResponse.bytes();
-		return buffer.buffer;
+		// Slice out exactly this view's bytes: Buffers can be views into a
+		// larger shared ArrayBuffer, so returning .buffer directly could leak
+		// unrelated memory and have the wrong byteLength.
+		return buffer.buffer.slice(
+			buffer.byteOffset,
+			buffer.byteOffset + buffer.byteLength,
+		);
 	}
 
 	/**

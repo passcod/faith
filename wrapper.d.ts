@@ -42,7 +42,6 @@ export const ERROR_CODES: {
 	readonly ResponseBodyNotAvailable: "ResponseBodyNotAvailable";
 	readonly RuntimeThread: "RuntimeThread";
 	readonly Timeout: "Timeout";
-	readonly Utf8Parse: "Utf8Parse";
 };
 
 export interface FetchOptions {

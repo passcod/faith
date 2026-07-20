@@ -20,7 +20,6 @@ use strum::{EnumIter, IntoEnumIterator};
 /// - JS `SyntaxError`:
 ///   - `JsonParse` — JSON parse error for `response.json()`
 ///   - `PemParse` — PEM parse error for `AgentOptions.tls.identity`
-///   - `Utf8Parse` — UTF8 decoding error for `response.text()`
 /// - JS `TypeError`:
 ///   - `InvalidHeader` — invalid header name or value
 ///   - `InvalidMethod` — invalid HTTP method
@@ -60,7 +59,6 @@ pub enum FaithErrorKind {
 	ResponseBodyNotAvailable,
 	RuntimeThread,
 	Timeout,
-	Utf8Parse,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -91,7 +89,6 @@ impl FaithErrorKind {
 			Self::ResponseBodyNotAvailable => "response body not available",
 			Self::RuntimeThread => "internal tokio runtime thread error",
 			Self::Timeout => "timed out",
-			Self::Utf8Parse => "invalid utf-8 in response body",
 		}
 	}
 
@@ -105,8 +102,7 @@ impl FaithErrorKind {
 			Self::AddressParse
 			| Self::InvalidIntegrity
 			| Self::JsonParse
-			| Self::PemParse
-			| Self::Utf8Parse => JsErrorType::SyntaxError,
+			| Self::PemParse => JsErrorType::SyntaxError,
 			Self::InvalidHeader
 			| Self::InvalidMethod
 			| Self::InvalidUrl
