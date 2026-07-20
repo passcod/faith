@@ -1,6 +1,6 @@
 use std::{
 	fmt::Debug,
-	net::{IpAddr, SocketAddr, SocketAddrV4, SocketAddrV6},
+	net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6, UdpSocket},
 	str::FromStr as _,
 	sync::{
 		Arc,
@@ -55,6 +55,23 @@ pub const USER_AGENT: &str = concat!(
 	" reqwest/",
 	env!("REQWEST_VERSION")
 );
+
+/// Whether this host can bind the IPv6 wildcard (`[::]`), i.e. has usable IPv6.
+///
+/// This is the exact operation reqwest performs when creating the HTTP/3 (QUIC)
+/// endpoint with no local address, so it precisely predicts whether the default
+/// QUIC bind will succeed. The result is memoised for the life of the process:
+/// IPv6 reachability can in principle change at runtime (an interface going up or
+/// down), but we accept that staleness — re-probing on every agent construction
+/// isn't worth it, and the fallback it selects (`0.0.0.0`) stays functional either
+/// way. Callers that need to react to such a change can set `localAddress` explicitly.
+fn ipv6_wildcard_bindable() -> bool {
+	use std::sync::OnceLock;
+	static BINDABLE: OnceLock<bool> = OnceLock::new();
+	*BINDABLE.get_or_init(|| {
+		UdpSocket::bind(SocketAddr::new(IpAddr::V6(Ipv6Addr::UNSPECIFIED), 0)).is_ok()
+	})
+}
 
 #[napi(string_enum)]
 #[derive(Debug, Clone, Copy)]
@@ -375,6 +392,16 @@ pub struct AgentOptions {
 	pub headers: Option<Vec<Header>>,
 	/// Settings related to HTTP/3. This is a nested object.
 	pub http3: Option<AgentHttp3Options>,
+	/// Bind outgoing sockets to this local IP address before connecting.
+	///
+	/// This also selects the address family of the HTTP/3 (QUIC) socket. By default that
+	/// socket binds the IPv6 wildcard (`[::]`), which fails on hosts without usable IPv6 —
+	/// there, HTTP/3 silently falls back to TCP. Fáith detects that case automatically and
+	/// binds `0.0.0.0` instead, so you normally don't need to set this; provide it only to
+	/// force a specific source address. Throws if the value does not parse as an IP address.
+	///
+	/// Default: unset (IPv6 wildcard for QUIC where available, else `0.0.0.0`).
+	pub local_address: Option<String>,
 	/// Settings related to the connection pool. This is a nested object.
 	pub pool: Option<AgentPoolOptions>,
 	/// Determines the behavior in case the server replies with a redirect status.
@@ -454,6 +481,25 @@ impl Agent {
 			.tls_info(true)
 			.tls_sslkeylogfile(true)
 			.user_agent(options.user_agent.as_deref().unwrap_or(USER_AGENT));
+
+		// Local bind address. An explicit value is honoured as-is. Otherwise, on hosts
+		// without usable IPv6, bind 0.0.0.0: reqwest binds the QUIC (HTTP/3) socket to the
+		// IPv6 wildcard `[::]` by default, which fails to construct on IPv4-only hosts and
+		// makes HTTP/3 silently fall back to TCP. Binding 0.0.0.0 there costs nothing (such
+		// a host can't use IPv6 for TCP either) and keeps HTTP/3 working.
+		let local_address = match &options.local_address {
+			Some(addr) => Some(IpAddr::from_str(addr).map_err(|err| {
+				FaithError::new(
+					FaithErrorKind::AddressParse,
+					Some(format!("{addr:?}: {err}")),
+				)
+			})?),
+			None if !ipv6_wildcard_bindable() => Some(IpAddr::V4(Ipv4Addr::UNSPECIFIED)),
+			None => None,
+		};
+		if let Some(ip) = local_address {
+			client = client.local_address(ip);
+		}
 
 		let cookie_jar = if options.cookies.unwrap_or(false) {
 			let jar = Arc::new(Jar::default());
