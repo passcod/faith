@@ -17,9 +17,18 @@ DNS cache, an optional cookie jar, and your choice of two HTTP caches.
 
 ### 📐 Is it faster?
 
-Depends how you measure it. undici is impossible to beat for its core usecase: HTTP/1.1 keep-alive
-requests. However, faith can do a lot more than that, and holds its own on concurrency and on
-HTTP/2 and HTTP/3. The benchmark suite lives in `bench/`; see its README to run it yourself.
+Yes, except if you create one `Agent` for every new request. This is something that we deliberately
+do not optimise for, and you do need to go out of your way to use it like that. Additionally, fáith
+does have the real cost of not being built-in, and being a native module, not pure JS: so you can't
+use it outside of Node.js and in constrained environments.
+
+[![charts of concurrency vs throughput, with fáith handily beating all of the competition](./bench/concurrency-throughput.svg)](./bench/concurrency-throughput.svg)
+
+[![charts of latency vs payload size, with fáith consistently performing better or equivalent](./bench/latency-vs-size.svg)](./bench/latency-vs-size.svg)
+
+[![charts of latency spread by implementation, with fáith being faster and less variable](./bench/latency-by-impl.svg)](./bench/latency-by-impl.svg)
+
+[![the relative costs of enabling various fáith features](./bench/features-rps.svg)](./bench/features-rps.svg)
 
 ## Installation
 
