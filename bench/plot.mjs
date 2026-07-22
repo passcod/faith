@@ -115,34 +115,48 @@ const TERMINAL =
 const SVG_HEAD = (w, h, outPath) =>
 	`${TERMINAL(w, h)}\nset output ${gpstr(outPath)}\n`;
 
+function hexToInt(hex) {
+	return Number.parseInt(hex.replace("#", ""), 16);
+}
+
 /**
- * Multiplot of grouped-bar panels. `panels` is [{title, categories, series}]
- * where series is [{label, color, values: number[] aligned to categories}].
+ * Multiplot of bar panels, one box per category coloured individually (so the
+ * colour always means "which category", never "which metric"). `panels` is
+ * [{title, bars}] where bars is [{label, value, color, high?}]; when `high` is
+ * set it's drawn as a whisker rising from `value` (so p50 box, p99 whisker).
  */
 function barMultiplot({ outPath, suptitle, ylabel, panels, cols }) {
 	const rows = Math.ceil(panels.length / cols);
 	let s = SVG_HEAD(480 * cols, 340 * rows, outPath);
 	s += `set multiplot layout ${rows},${cols} title ${gpstr(suptitle)} font "sans,15"\n`;
-	s += `set style data histograms\nset style histogram clustered gap 1\n`;
-	s += `set style fill solid 0.85 border -1\nset boxwidth 0.9\n`;
-	s += `set grid ytics\nset yrange [0:*]\nset key outside top right font "sans,9"\n`;
-	s += `set xtics rotate by -35 font "sans,9"\n`;
+	s += `set style fill solid 0.85 border -1\nset boxwidth 0.68\n`;
+	s += `set grid ytics\nset yrange [0:*]\nunset key\n`;
 	panels.forEach((p, pi) => {
-		const dn = `$bar${pi}`;
-		s += `${dn} << EOD\n`;
-		p.categories.forEach((cat, ci) => {
-			s += `${gpstr(cat)} ${p.series.map((se) => (Number.isFinite(se.values[ci]) ? se.values[ci] : "NaN")).join(" ")}\n`;
+		const box = `$box${pi}`;
+		s += `${box} << EOD\n`;
+		p.bars.forEach((b, i) => {
+			s += `${i + 1} ${Number.isFinite(b.value) ? b.value : "NaN"} ${hexToInt(b.color)}\n`;
 		});
 		s += `EOD\n`;
+		const hasWhisker = p.bars.some((b) => Number.isFinite(b.high));
+		if (hasWhisker) {
+			s += `$whisk${pi} << EOD\n`;
+			p.bars.forEach((b, i) => {
+				const v = Number.isFinite(b.value) ? b.value : "NaN";
+				const h = Number.isFinite(b.high) ? b.high : v;
+				s += `${i + 1} ${v} ${v} ${h}\n`;
+			});
+			s += `EOD\n`;
+		}
+		const xtics = p.bars.map((b, i) => `${gpstr(b.label)} ${i + 1}`).join(", ");
 		s += `set title ${gpstr(p.title)} font "sans,12"\n`;
 		s += `set ylabel ${gpstr(ylabel)} font "sans,10"\n`;
-		const plots = p.series
-			.map(
-				(se, si) =>
-					`${si === 0 ? dn : "''"} using ${si + 2}${si === 0 ? ":xtic(1)" : ""} title ${gpstr(se.label)} lc rgb ${gpstr(se.color)}`,
-			)
-			.join(", ");
-		s += `plot ${plots}\n`;
+		s += `set xtics (${xtics}) rotate by -35 font "sans,9"\nset xrange [0.5:${p.bars.length + 0.5}]\n`;
+		let plot = `plot ${box} using 1:2:3 with boxes lc rgb variable notitle`;
+		if (hasWhisker) {
+			plot += `, $whisk${pi} using 1:2:3:4 with yerrorbars lc rgb "#333333" lw 1.3 pt 0 notitle`;
+		}
+		s += `${plot}\n`;
 	});
 	s += `unset multiplot\nunset output\n`;
 	return gnuplot(s, outPath);
@@ -222,17 +236,16 @@ function plotMatrix(records, outDir) {
 			};
 			return {
 				title: `${proto} — ${humanSize(size)}, c${conc}, ${mode}`,
-				categories: cats,
-				series: [
-					{ label: "p50", color: "#4e79a7", values: cats.map((im) => pick(im, "p50")) },
-					{ label: "p99", color: "#e15759", values: cats.map((im) => pick(im, "p99")) },
-				],
+				bars: cats.map((im, i) => ({
+					label: im, color: implColor(im, i),
+					value: pick(im, "p50"), high: pick(im, "p99"),
+				})),
 			};
-		}).filter((p) => p.categories.length);
+		}).filter((p) => p.bars.length);
 		if (panels.length) {
 			written.push(barMultiplot({
 				outPath: path.join(outDir, `latency-by-impl.${FORMAT}`),
-				suptitle: `Response latency by implementation (ms, lower is better)`,
+				suptitle: `Response latency by implementation — bar = p50, whisker → p99 (ms, lower is better)`,
 				ylabel: "ms",
 				panels, cols,
 			}));
@@ -294,10 +307,9 @@ function plotMatrix(records, outDir) {
 			};
 			return {
 				title: `${proto} — ${humanSize(size)}, c${conc}, ${mode}`,
-				categories: cats,
-				series: [{ label: "loop delay p99", color: "#59a14f", values: cats.map(pick) }],
+				bars: cats.map((im, i) => ({ label: im, color: implColor(im, i), value: pick(im) })),
 			};
-		}).filter((p) => p.categories.length);
+		}).filter((p) => p.bars.length);
 		if (panels.length) {
 			written.push(barMultiplot({
 				outPath: path.join(outDir, `loop-delay.${FORMAT}`),
@@ -330,13 +342,15 @@ function plotFeatures(records, outDir) {
 			const variants = rs
 				.filter((r) => (r.variantName ?? "").startsWith(`${g}:`))
 				.sort(bySpec([]));
-			const cats = variants.map((r) => r.variantName.slice(g.length + 1));
 			return {
 				title: g,
-				categories: cats,
-				series: [{ label: ylabel, color: "#e15759", values: variants.map(metric) }],
+				bars: variants.map((r, i) => ({
+					label: r.variantName.slice(g.length + 1),
+					color: FALLBACK_COLORS[i % FALLBACK_COLORS.length],
+					value: metric(r),
+				})),
 			};
-		}).filter((p) => p.categories.length);
+		}).filter((p) => p.bars.length);
 		if (panels.length) {
 			written.push(barMultiplot({
 				outPath: path.join(outDir, `${outName}.${FORMAT}`),
