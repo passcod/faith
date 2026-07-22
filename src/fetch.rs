@@ -68,6 +68,8 @@ pub fn faith_fetch<'env>(
 
 		let mut request = agent
 			.client
+			.as_ref()
+			.ok_or(FaithErrorKind::Closed)?
 			.request(method, parsed_url.clone())
 			.with_extension(CacheMode::from(options.cache));
 
