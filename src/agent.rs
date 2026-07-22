@@ -453,7 +453,10 @@ pub struct AgentStats {
 #[napi]
 #[derive(Debug, Clone)]
 pub struct Agent {
-	pub(crate) client: ClientWithMiddleware,
+	/// `None` once [`Agent::close`] has been called. The heavy resources
+	/// (connection pool, DNS resolver, background tasks) live inside this
+	/// client, so dropping it is what actually releases them.
+	pub(crate) client: Option<ClientWithMiddleware>,
 	pub(crate) cookie_jar: Option<Arc<Jar>>,
 	pub(crate) stats: Arc<InnerAgentStats>,
 	pub(crate) conn_tracker: Arc<ConnectionTracker>,
@@ -757,7 +760,7 @@ impl Agent {
 		}
 
 		Ok(Self {
-			client: client.build(),
+			client: Some(client.build()),
 			cookie_jar,
 			stats: Default::default(),
 			conn_tracker: ConnectionTracker::new(conn_timeout),
@@ -774,6 +777,25 @@ impl Agent {
 			Self::new()
 		}
 		.map_err(|err| err.into_js_error(&env))?)
+	}
+
+	/// Close the agent, releasing its connection pool, DNS resolver, and any
+	/// background tasks it owns, rather than waiting for the garbage collector
+	/// to drop it. This is worth doing when you create many short-lived agents;
+	/// a single long-lived agent can just be left to the GC.
+	///
+	/// Requests already in flight run to completion. Any new request on a closed
+	/// agent throws a `Closed` error. Calling `close()` more than once is a
+	/// no-op. The cookie store, if any, remains readable via `getCookie`.
+	#[napi]
+	pub fn close(&mut self) {
+		// Dropping the client releases the reqwest connection pool and the
+		// Hickory resolver task; the alt-svc cache goes with it.
+		self.client = None;
+		#[cfg(feature = "http3")]
+		{
+			self.alt_svc_cache = None;
+		}
 	}
 
 	/// Add a cookie into the agent.

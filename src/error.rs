@@ -21,6 +21,7 @@ use strum::{EnumIter, IntoEnumIterator};
 ///   - `JsonParse` — JSON parse error for `response.json()`
 ///   - `PemParse` — PEM parse error for `AgentOptions.tls.identity`
 /// - JS `TypeError`:
+///   - `Closed` — a request was made on an agent that has been closed
 ///   - `InvalidHeader` — invalid header name or value
 ///   - `InvalidMethod` — invalid HTTP method
 ///   - `InvalidUrl` — invalid URL string
@@ -45,6 +46,7 @@ pub enum FaithErrorKind {
 	Aborted,
 	AddressParse,
 	BodyStream,
+	Closed,
 	Config,
 	IntegrityMismatch,
 	InvalidHeader,
@@ -75,6 +77,7 @@ impl FaithErrorKind {
 			Self::Aborted => "the request was aborted",
 			Self::AddressParse => "invalid IP address and/or port",
 			Self::BodyStream => "internal response body stream copy error",
+			Self::Closed => "the agent has been closed",
 			Self::Config => "invalid agent configuration",
 			Self::IntegrityMismatch => "resource integrity check failed",
 			Self::InvalidHeader => "invalid header name or value",
@@ -103,7 +106,8 @@ impl FaithErrorKind {
 			| Self::InvalidIntegrity
 			| Self::JsonParse
 			| Self::PemParse => JsErrorType::SyntaxError,
-			Self::InvalidHeader
+			Self::Closed
+			| Self::InvalidHeader
 			| Self::InvalidMethod
 			| Self::InvalidUrl
 			| Self::ResponseAlreadyDisturbed

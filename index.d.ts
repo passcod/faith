@@ -20,6 +20,17 @@
 export declare class Agent {
   constructor(options?: AgentOptions | undefined | null)
   /**
+   * Close the agent, releasing its connection pool, DNS resolver, and any
+   * background tasks it owns, rather than waiting for the garbage collector
+   * to drop it. This is worth doing when you create many short-lived agents;
+   * a single long-lived agent can just be left to the GC.
+   *
+   * Requests already in flight run to completion. Any new request on a closed
+   * agent throws a `Closed` error. Calling `close()` more than once is a
+   * no-op. The cookie store, if any, remains readable via `getCookie`.
+   */
+  close(): void
+  /**
    * Add a cookie into the agent.
    *
    * Does nothing if:
@@ -683,6 +694,7 @@ export const FAITH_VERSION: string
  *   - `JsonParse` — JSON parse error for `response.json()`
  *   - `PemParse` — PEM parse error for `AgentOptions.tls.identity`
  * - JS `TypeError`:
+ *   - `Closed` — a request was made on an agent that has been closed
  *   - `InvalidHeader` — invalid header name or value
  *   - `InvalidMethod` — invalid HTTP method
  *   - `InvalidUrl` — invalid URL string
@@ -706,6 +718,7 @@ export declare const enum FaithErrorKind {
   Aborted = 'Aborted',
   AddressParse = 'AddressParse',
   BodyStream = 'BodyStream',
+  Closed = 'Closed',
   Config = 'Config',
   IntegrityMismatch = 'IntegrityMismatch',
   InvalidHeader = 'InvalidHeader',

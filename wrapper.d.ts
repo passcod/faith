@@ -28,6 +28,7 @@ export const ERROR_CODES: {
 	readonly Aborted: "Aborted";
 	readonly AddressParse: "AddressParse";
 	readonly BodyStream: "BodyStream";
+	readonly Closed: "Closed";
 	readonly Config: "Config";
 	readonly IntegrityMismatch: "IntegrityMismatch";
 	readonly InvalidHeader: "InvalidHeader";
