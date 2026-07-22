@@ -12,7 +12,7 @@
  *  - event-loop delay is recorded while the scenario runs
  *
  * Usage:
- *   node bench/run.mjs [--suite quick|full|features]
+ *   node bench/run.mjs [--suite quick|full|extended|features]
  *     [--impls native,faith,node-fetch] [--protos h1,h1s,h2,h3]
  *     [--sizes 0,1024,65536,1048576] [--conc 1,16,64] [--modes warm,cold]
  *     [--consume bytes|text|discard] [--samples 200] [--warmup 50]
@@ -64,7 +64,28 @@ const defaults =
 				samples: 500,
 				warmup: 100,
 			}
-		: suite === "features"
+		: suite === "extended"
+			? {
+					// A concurrency sweep: same clients as `full` but many more
+					// concurrency points, so the throughput-vs-concurrency curve
+					// has real shape. Warm only, fewer sizes, to keep it tractable.
+					impls: [
+						"native",
+						"undici",
+						"http2",
+						"got",
+						"node-fetch",
+						"libcurl",
+						"faith",
+					],
+					protos: ["h1", "h1s", "h2", "h3"],
+					sizes: [1024, 65536],
+					conc: [1, 4, 8, 16, 24, 32, 48, 64, 128],
+					modes: ["warm"],
+					samples: 300,
+					warmup: 60,
+				}
+			: suite === "features"
 			? {
 					impls: ["faith"],
 					protos: [], // driven by the variant list instead
@@ -153,56 +174,75 @@ async function runScenario(impl, server, scenario) {
 	const url = `${base.origin}${routeClose}${routeCache}${routeDelay}/payload/${scenario.size}`;
 
 	const freshContextPerRequest = scenario.mode === "cold";
-	let context = impl.makeContext(server, scenario.variant);
+	// Warm shares one context; cold builds one per request (below).
+	const sharedContext = freshContextPerRequest
+		? null
+		: impl.makeContext(server, scenario.variant);
 
 	const ttfbs = [];
 	const totals = [];
-	const total = warmup + samples;
-	let issued = 0;
 	let failures = 0;
 
 	// 1ms resolution: reported delays include the ~1ms timer quantum, which is
 	// constant across implementations and so cancels out in comparisons.
 	const loopDelay = monitorEventLoopDelay({ resolution: 1 });
 
-	const worker = async () => {
-		while (issued < total) {
-			const n = issued++;
-			const ctx = freshContextPerRequest
-				? impl.makeContext(server, scenario.variant)
-				: context;
-			const start = performance.now();
-			try {
-				const res = await impl.request(ctx, url, scenario.consume);
-				const ttfb = performance.now() - start;
-				await res.drain();
-				const totalMs = performance.now() - start;
-				if (res.status !== 200) throw new Error(`status ${res.status}`);
-				if (n >= warmup) {
-					ttfbs.push(ttfb);
-					totals.push(totalMs);
-				}
-			} catch (err) {
-				failures += 1;
-				if (failures === 1) {
-					console.error(`  first failure: ${err.message ?? err}`);
-				}
-			} finally {
-				if (freshContextPerRequest) await impl.closeContext?.(ctx);
+	// One request. In cold mode, context construction is part of the measured
+	// work — the whole point is "first request on a fresh client" — so it goes
+	// inside the timed window; teardown does not. In warm mode the shared
+	// context is reused and neither cost is per-request.
+	const doRequest = async (record) => {
+		let ctx = sharedContext;
+		const start = performance.now();
+		try {
+			if (freshContextPerRequest) {
+				ctx = impl.makeContext(server, scenario.variant);
 			}
+			const res = await impl.request(ctx, url, scenario.consume);
+			const ttfb = performance.now() - start;
+			await res.drain();
+			const totalMs = performance.now() - start;
+			if (res.status !== 200) throw new Error(`status ${res.status}`);
+			if (record) {
+				ttfbs.push(ttfb);
+				totals.push(totalMs);
+			}
+		} catch (err) {
+			failures += 1;
+			if (failures === 1) {
+				console.error(`  first failure: ${err.message ?? err}`);
+			}
+		} finally {
+			if (freshContextPerRequest && ctx) await impl.closeContext?.(ctx);
 		}
 	};
 
-	// Closed loop: `concurrency` workers each run requests back to back.
+	// Closed loop: `concurrency` workers each run requests back to back. Warmup
+	// runs first, untimed and unrecorded, so it can't inflate wallMs (and thus
+	// deflate rps) or leak into the latency distributions.
+	const runPhase = async (count, record) => {
+		let issued = 0;
+		const worker = async () => {
+			while (true) {
+				const n = issued++;
+				if (n >= count) break;
+				await doRequest(record);
+			}
+		};
+		await Promise.all(
+			Array.from({ length: scenario.concurrency }, () => worker()),
+		);
+	};
+
+	await runPhase(warmup, false);
+
 	const wallStart = performance.now();
 	loopDelay.enable();
-	await Promise.all(
-		Array.from({ length: scenario.concurrency }, () => worker()),
-	);
+	await runPhase(samples, true);
 	loopDelay.disable();
 	const wallMs = performance.now() - wallStart;
 
-	if (!freshContextPerRequest) await impl.closeContext?.(context);
+	if (!freshContextPerRequest) await impl.closeContext?.(sharedContext);
 
 	const record = {
 		...scenario,
