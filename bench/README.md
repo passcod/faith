@@ -24,24 +24,34 @@ so that request timing is what's actually measured.
   deterministic bodies of exact sizes over h1, h1 + TLS, and h2 (TLS,
   `allowHTTP1: false`). The network is not the variable; if you want RTT and
   loss as variables, use `tc netem` (below).
-- **Warmup + distributions.** The first `--warmup` requests per scenario are
-  discarded. p50/p90/p99/mean/stddev are reported; never a single total.
+- **Warmup is a separate, untimed phase.** The first `--warmup` requests per
+  scenario run before the clock starts — they aren't recorded *and* they don't
+  count toward the wall time rps is derived from. (Folding warmup into the
+  timed loop, as an earlier version did, silently deflated every rps.)
+  p50/p90/p99/mean/stddev are reported; never a single total.
 - **Phase split.** Time-to-headers (ttfb) and body drain are recorded
   separately per request, so protocol/connection effects and body-transfer
   effects don't get conflated.
 - **Identical work.** All implementations consume the body the same way
   (`bytes()` by default). `--consume discard` exercises fáith's
   drop-without-copy path and is fáith-only, reported as its own scenario.
-- **Cold vs warm.** Warm shares one agent/pool per scenario. Cold forces a
-  fresh connection per request: the server sends `Connection: close` (h1),
-  and each request gets a fresh agent (h2, fáith), so cold h2 numbers include
-  agent construction — read them as "first request on a new client".
+- **Cold vs warm.** Warm shares one client for the whole scenario. Cold means
+  "first request on a fresh client": a fresh client is built *per request*, and
+  because building it is part of what cold measures, that construction is
+  **inside** the timed window (teardown is not) — so cold latency and cold rps
+  agree, both including setup. Note the clients aren't symmetric here: `native`
+  reuses the global undici agent and only forces `Connection: close`; `undici`
+  and `faith` build and then free a client each request (`faith` via the
+  `Agent.close()` added for exactly this — otherwise fresh agents pile up until
+  GC and poison the run). Read cold as an intra-client warm-vs-cold delta, not
+  a cross-client race — and expect it to argue loudly for reusing one agent.
 - **Event-loop health.** `monitorEventLoopDelay` runs during each scenario;
   p99 loop delay shows how much an implementation blocks JavaScript while
   moving bytes. This is a first-class result, not a curiosity: it's the
   metric where offloading I/O to another thread should show up.
 - **Closed loop.** `--conc N` runs N workers issuing requests back to back.
-  Throughput (rps) is derived from wall time of the measured window.
+  Throughput (rps) = sampled requests ÷ wall time of the (warmup-excluded)
+  measured window.
 
 Packet-level behaviour (connection counts, DNS queries, negotiated protocol)
 is deliberately **not** measured here; when needed, capture it in a separate
@@ -90,6 +100,7 @@ npm install --prefix bench # comparison clients (undici, got, node-fetch, node-l
 
 node bench/run.mjs                     # quick suite: h1+h2, 1k/64k, c1/c16
 node bench/run.mjs --suite full        # full matrix incl. h3, cold+warm
+node bench/run.mjs --suite concurrency  # concurrency sweep: c1…c128, warm, for the throughput curve
 node bench/run.mjs --suite features    # fáith vs fáith across feature knobs
 node bench/run.mjs --protos h1 --sizes 65536 --conc 64 --samples 1000
 node bench/run.mjs --protos h3         # HTTP/3 (fáith only; see below)

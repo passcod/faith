@@ -366,8 +366,11 @@ test("Agent timeout.read applies per read operation", async (t) => {
 test("Agent timeout with mixed success and timeout", async (t) => {
 	t.plan(5);
 
+	// 5s total: enough headroom that a fast request never trips it even on a
+	// slow/loaded CI runner (a cold /get there can take a couple of seconds),
+	// while the slow requests (10s delays) are still comfortably past it.
 	const agent = new Agent({
-		timeout: { total: 2000 },
+		timeout: { total: 5000 },
 	});
 
 	const response1 = await faithFetch(url("/get"), { agent });
@@ -384,7 +387,7 @@ test("Agent timeout with mixed success and timeout", async (t) => {
 	t.ok(response2.ok, "Another fast request should succeed");
 
 	try {
-		await faithFetch(url("/delay/5"), { agent });
+		await faithFetch(url("/delay/10"), { agent });
 		t.fail("Another slow request should timeout");
 	} catch (err) {
 		t.pass("Another slow request should throw timeout error");

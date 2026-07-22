@@ -279,6 +279,10 @@ export async function loadImpls({ ca }) {
 				},
 			};
 		},
+		// Free the pool/resolver deterministically in cold mode instead of
+		// waiting for GC; otherwise fresh-per-request agents pile up. Optional
+		// chaining so an older addon without close() still runs.
+		closeContext: (agent) => agent.close?.(),
 	});
 
 	return impls;
