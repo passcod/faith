@@ -100,7 +100,7 @@ npm install --prefix bench # comparison clients (undici, got, node-fetch, node-l
 
 node bench/run.mjs                     # quick suite: h1+h2, 1k/64k, c1/c16
 node bench/run.mjs --suite full        # full matrix incl. h3, cold+warm
-node bench/run.mjs --suite extended    # concurrency sweep: c1…c128, warm, for the throughput curve
+node bench/run.mjs --suite concurrency  # concurrency sweep: c1…c128, warm, for the throughput curve
 node bench/run.mjs --suite features    # fáith vs fáith across feature knobs
 node bench/run.mjs --protos h1 --sizes 65536 --conc 64 --samples 1000
 node bench/run.mjs --protos h3         # HTTP/3 (fáith only; see below)

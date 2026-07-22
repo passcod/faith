@@ -12,7 +12,7 @@
  *  - event-loop delay is recorded while the scenario runs
  *
  * Usage:
- *   node bench/run.mjs [--suite quick|full|extended|features]
+ *   node bench/run.mjs [--suite quick|full|concurrency|features]
  *     [--impls native,faith,node-fetch] [--protos h1,h1s,h2,h3]
  *     [--sizes 0,1024,65536,1048576] [--conc 1,16,64] [--modes warm,cold]
  *     [--consume bytes|text|discard] [--samples 200] [--warmup 50]
@@ -64,7 +64,7 @@ const defaults =
 				samples: 500,
 				warmup: 100,
 			}
-		: suite === "extended"
+		: suite === "concurrency"
 			? {
 					// A concurrency sweep: same clients as `full` but many more
 					// concurrency points, so the throughput-vs-concurrency curve
