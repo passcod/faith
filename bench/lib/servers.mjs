@@ -199,7 +199,18 @@ export async function startServer(proto, host = "127.0.0.1") {
 	} else if (proto === "h2") {
 		const { key, cert } = ensureCert();
 		server = http2.createSecureServer(
-			{ key, cert, allowHTTP1: false },
+			{
+				key,
+				cert,
+				allowHTTP1: false,
+				// Benchmarks deliberately push many concurrent large streams. The
+				// default 10 MB session memory and stream cap trip nghttp2's
+				// ENHANCE_YOUR_CALM guard (GOAWAY), which then wedges in-flight
+				// requests. We own this server, so lift the limits clear of the
+				// workload rather than measure the DoS guard.
+				maxSessionMemory: 1024,
+				settings: { maxConcurrentStreams: 4096 },
+			},
 			onRequest,
 		);
 		scheme = "https";

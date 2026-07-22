@@ -86,7 +86,12 @@ export async function loadImpls({ ca }) {
 		name: "http2",
 		protocols: ["h2"],
 		makeContext: (server) => {
-			const session = http2.connect(server.url, { ca });
+			// Match the server's raised limits so the client session doesn't hit
+			// its own 10 MB memory cap under concurrent large streams.
+			const session = http2.connect(server.url, {
+				ca,
+				maxSessionMemory: 1024,
+			});
 			session.on("error", () => {}); // avoid crashing on teardown races
 			const ready = new Promise((resolve, reject) => {
 				session.once("connect", resolve);

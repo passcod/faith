@@ -145,6 +145,20 @@ const out = createWriteStream(outPath);
 
 const implementations = await loadImpls({ ca });
 
+/** Reject if `promise` hasn't settled within `ms`, so a wedged request can't
+ * hang the run. Clears its timer either way so it never keeps the loop alive. */
+function withTimeout(promise, ms, label) {
+	let timer;
+	const guard = new Promise((_, reject) => {
+		timer = setTimeout(
+			() => reject(new Error(`${label} exceeded ${ms}ms (stuck?)`)),
+			ms,
+		);
+		timer.unref?.();
+	});
+	return Promise.race([promise, guard]).finally(() => clearTimeout(timer));
+}
+
 function scenarioKey(s) {
 	return [
 		s.variantName,
@@ -182,6 +196,14 @@ async function runScenario(impl, server, scenario) {
 	const ttfbs = [];
 	const totals = [];
 	let failures = 0;
+	// A request that neither resolves nor rejects (e.g. a wedged HTTP/2 session
+	// after a GOAWAY) would otherwise hang the whole run. Bound every request,
+	// and bail out of a scenario that is clearly broken instead of grinding
+	// through it. The watchdog is generous so real work (large cold transfers,
+	// server `--delay`) never trips it.
+	const requestTimeoutMs = Math.max(30_000, delayMs * 3 + 10_000);
+	let consecutiveFailures = 0;
+	let aborted = false;
 
 	// 1ms resolution: reported delays include the ~1ms timer quantum, which is
 	// constant across implementations and so cancels out in comparisons.
@@ -198,19 +220,28 @@ async function runScenario(impl, server, scenario) {
 			if (freshContextPerRequest) {
 				ctx = impl.makeContext(server, scenario.variant);
 			}
-			const res = await impl.request(ctx, url, scenario.consume);
+			const res = await withTimeout(
+				impl.request(ctx, url, scenario.consume),
+				requestTimeoutMs,
+				"request",
+			);
 			const ttfb = performance.now() - start;
-			await res.drain();
+			await withTimeout(res.drain(), requestTimeoutMs, "drain");
 			const totalMs = performance.now() - start;
 			if (res.status !== 200) throw new Error(`status ${res.status}`);
 			if (record) {
 				ttfbs.push(ttfb);
 				totals.push(totalMs);
 			}
+			consecutiveFailures = 0;
 		} catch (err) {
 			failures += 1;
+			consecutiveFailures += 1;
 			if (failures === 1) {
 				console.error(`  first failure: ${err.message ?? err}`);
+			}
+			if (consecutiveFailures >= 15) {
+				aborted = true; // scenario is broken; stop rather than hang/grind
 			}
 		} finally {
 			if (freshContextPerRequest && ctx) await impl.closeContext?.(ctx);
@@ -223,7 +254,7 @@ async function runScenario(impl, server, scenario) {
 	const runPhase = async (count, record) => {
 		let issued = 0;
 		const worker = async () => {
-			while (true) {
+			while (!aborted) {
 				const n = issued++;
 				if (n >= count) break;
 				await doRequest(record);
