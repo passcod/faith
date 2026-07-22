@@ -1,6 +1,6 @@
 {
 	"name": "@passcod/faith",
-	"version": "0.2.2",
+	"version": "0.2.3",
 	"description": "fáith: a Rust-powered fetch",
 	"repository": "https://github.com/passcod/faith",
 	"author": {
