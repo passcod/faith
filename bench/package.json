@@ -5,7 +5,8 @@
 	"description": "Benchmark harness and comparison clients for fáith. Not part of the published package.",
 	"type": "module",
 	"scripts": {
-		"bench": "node run.mjs"
+		"bench": "node run.mjs",
+		"plot": "node plot.mjs"
 	},
 	"dependencies": {
 		"got": "^15.1.0",

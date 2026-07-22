@@ -97,6 +97,34 @@ node bench/run.mjs --consume discard --protos h2   # fáith-only discard path
 node bench/run.mjs --delay 20          # +20ms server-side response delay
 ```
 
+### Charts
+
+`bench/plot.mjs` turns a results file into a handful of gnuplot charts —
+useful for the full and features suites, which emit far more rows than a
+table can show. It needs gnuplot on `PATH` (`apt install gnuplot-nox`, `brew
+install gnuplot`, …) and nothing else — no bench deps required.
+
+```bash
+node bench/plot.mjs                       # newest results file → SVGs in results/plots/
+node bench/plot.mjs --format png          # PNG instead of SVG
+node bench/plot.mjs --in results/bench-….ndjson --out /tmp/plots
+node bench/plot.mjs --size 65536 --conc 64 --mode warm   # pick which slice to chart
+```
+
+It auto-detects the suite. A **matrix** run (quick/full) yields one panel per
+HTTP version of:
+
+- `latency-by-impl` — grouped total p50/p99 bars per implementation
+- `throughput` — requests/s vs concurrency, a line per implementation
+- `latency-vs-size` — total p50 vs payload size, a line per implementation
+- `loop-delay` — event-loop-delay p99 per implementation
+
+A **features** run yields one panel per feature group (versions, DNS, address
+family, cache, cookies) of total p50 and throughput. Charts collapse the
+full multi-dimensional matrix to one slice — the payload size / concurrency /
+mode chosen automatically (largest concurrency, a mid payload size, warm) and
+overridable with `--size`/`--conc`/`--mode`; the chosen slice is printed.
+
 ### HTTP/3
 
 Node has no HTTP/3 server, so h3 scenarios are served by the standalone
