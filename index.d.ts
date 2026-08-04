@@ -431,12 +431,8 @@ export interface AgentHttp3Options {
    * is in milliseconds to match the `timeout` settings, because useful values
    * are sub-second.
    *
-   * With no cache store configured, this is effectively time to response
-   * headers. But the Alt-Svc middleware sits outside the HTTP cache
-   * middleware, so when `cache.store` is set, the same attempt also covers
-   * downloading the full response body and writing it to the cache — the
-   * budget then needs to fit the slowest cacheable response, not just the
-   * handshake.
+   * This bounds the wait for response headers, not the response body, so a slow
+   * body is unaffected.
    *
    * The default is high, but not unconditionally inert: `maxIdleTimeout` is
    * configurable up to 120 seconds, and above 60 seconds this deadline becomes
@@ -448,11 +444,9 @@ export interface AgentHttp3Options {
    * On expiry the request is retried over TCP, which means it is re-sent: a
    * timeout often means the server is still processing, so a slow
    * non-idempotent request (a POST, say) can end up delivered twice. Lowering
-   * this value trades that double-submission risk, plus the body/cache-write
-   * budget above, for faster recovery when a UDP path breaks. Anyone setting
-   * it low should confirm their slowest legitimate response — including body
-   * transfer and cache write, if a cache store is configured — fits well
-   * inside the budget.
+   * this value trades that double-submission risk for faster recovery when a
+   * UDP path breaks. Anyone setting it low should confirm their slowest
+   * legitimate time to response headers fits well inside the budget.
    *
    * Set to 0 to disable, so an HTTP/3 attempt is bounded only by the QUIC idle
    * timeout and the request's own timeout.
@@ -476,7 +470,7 @@ export interface AgentHttp3Options {
    *
    * Setting this to `true` upgrades anyway, by rewriting the request's port to
    * the advertised one. That gets HTTP/3 working today against servers you
-   * control, at the cost of four deviations you should be aware of:
+   * control, at the cost of three deviations you should be aware of:
    *
    * - The request's `Host`/`:authority` carries the advertised port instead of
    *   the origin's, which [RFC 7838](https://www.rfc-editor.org/rfc/rfc7838)
@@ -485,9 +479,6 @@ export interface AgentHttp3Options {
    * - `response.url` reports the port actually connected to.
    * - `redirected` ignores port differences, since the rewritten port would
    *   otherwise look like a redirect on every request.
-   * - If a cache store is configured, HTTP/3 and TCP responses cache under
-   *   different keys, so the same resource can be stored twice — and neither can
-   *   hit the other's entry, which lowers the hit rate for those origins.
    *
    * TLS is unaffected: certificates are still validated against the origin's
    * hostname. Only the port changes.

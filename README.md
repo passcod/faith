@@ -719,8 +719,7 @@ How long to wait for an HTTP/3 attempt before giving up and falling back to lowe
 in milliseconds. Note that this is only for pathological cases where a link is being blackholed,
 and usually servers that don't actually support HTTP/3 will respond negatively much faster.
 
-With no cache store configured, this is measured as the time to response headers; with caching, it
-is measured as the time to full response body being stored in the cache.
+This is measured as the time to response headers, so a slow response body is unaffected.
 
 Set to 0 to disable.
 
@@ -740,7 +739,7 @@ advertises `h3=":8443"` for an origin served on `:443`, Fáith doesn't upgrade a
 guessing that `:443` also speaks HTTP/3.
 
 Setting this to `true` upgrades anyway, by rewriting the request's port to the advertised one. That
-gets HTTP/3 working today against servers you control, with four consequences to be aware of:
+gets HTTP/3 working today against servers you control, with three consequences to be aware of:
 
 - The request's `Host`/`:authority` carries the advertised port rather than the origin's, which
   [RFC 7838](https://www.rfc-editor.org/rfc/rfc7838) forbids. Servers that route on authority may
@@ -748,9 +747,6 @@ gets HTTP/3 working today against servers you control, with four consequences to
 - `response.url` reports the port actually connected to.
 - `redirected` ignores port differences, since a rewritten port would otherwise look like a redirect
   on every request. A genuine redirect differing only in port is therefore missed.
-- If a cache store is configured, HTTP/3 and TCP responses cache under different keys, so the same
-  resource can end up stored twice — and neither can hit the other's entry, which lowers the cache
-  hit rate for those origins.
 
 TLS is unaffected either way: certificates are still validated against the origin's hostname, and
 only the port changes.

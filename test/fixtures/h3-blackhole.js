@@ -84,8 +84,11 @@ async function findFreePort() {
  *
  * `altSvc` overrides the Alt-Svc header Caddy would emit for itself, so a test can
  * advertise an endpoint that isn't Caddy — a port with nothing listening, say.
+ *
+ * `cacheControl` adds a Cache-Control header, so responses become storable by an
+ * agent configured with a cache store.
  */
-async function startCaddy({ port, dir, altSvc }) {
+async function startCaddy({ port, dir, altSvc, cacheControl }) {
 	const { certPath, keyPath } = ensureCert();
 	const caddyfile = `{
 	auto_https off
@@ -97,7 +100,7 @@ async function startCaddy({ port, dir, altSvc }) {
 
 https://localhost:${port} {
 	tls ${certPath} ${keyPath}
-${altSvc ? `\theader Alt-Svc \`${altSvc}\`\n` : ""}	respond "hello-from-caddy"
+${altSvc ? `\theader Alt-Svc \`${altSvc}\`\n` : ""}${cacheControl ? `\theader Cache-Control \`${cacheControl}\`\n` : ""}	respond "hello-from-caddy"
 }
 `;
 	const configPath = path.join(dir, `Caddyfile.${port}`);
