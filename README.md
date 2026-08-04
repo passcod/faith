@@ -706,6 +706,23 @@ Set to 0 to disable, so that only real HTTP/3 errors demote an origin.
 
 Default: 3.
 
+#### `AgentOptions.http3.upgradeAttemptTimeout: number`
+
+How long to wait for HTTP/3 response headers before giving up on the HTTP/3 attempt and retrying
+the request over TCP, in **milliseconds**. Note the unit: the other `upgrade*` settings are in
+seconds, but this one matches the `timeout` settings, because useful values here are sub-second.
+
+This bounds only the wait for response headers, not the response body, so slow bodies are
+unaffected. The default is deliberately high enough that it never trips in normal operation —
+HTTP/3's own idle timeout (`maxIdleTimeout`, 30 seconds by default) fires first and reports a
+proper error. Lower it if you want faster recovery when a UDP path breaks: a value of a few
+hundred milliseconds makes a broken HTTP/3 path fall back to TCP within the first request, rather
+than after `upgradeCancelStrikes` cancelled ones.
+
+Set to 0 to disable.
+
+Default: 60000 (60 seconds).
+
 ### `AgentOptions.pool: object`
 
 Settings related to the connection pool. This is a nested object.

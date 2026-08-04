@@ -303,20 +303,28 @@ impl Drop for H3AttemptGuard {
 pub struct AltSvcMiddleware {
 	cache: Arc<AltSvcCache>,
 	enabled: bool,
+	/// Ceiling on how long an HTTP/3 attempt may take to produce response
+	/// headers before it is treated as failed and retried over TCP.
+	attempt_timeout: Option<Duration>,
 }
 
 impl std::fmt::Debug for AltSvcMiddleware {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		f.debug_struct("AltSvcMiddleware")
 			.field("enabled", &self.enabled)
+			.field("attempt_timeout", &self.attempt_timeout)
 			.field("cache", &self.cache)
 			.finish()
 	}
 }
 
 impl AltSvcMiddleware {
-	pub fn new(cache: Arc<AltSvcCache>, enabled: bool) -> Self {
-		Self { cache, enabled }
+	pub fn new(cache: Arc<AltSvcCache>, enabled: bool, attempt_timeout: Option<Duration>) -> Self {
+		Self {
+			cache,
+			enabled,
+			attempt_timeout,
+		}
 	}
 
 	#[allow(dead_code)]
@@ -346,13 +354,21 @@ impl Middleware for AltSvcMiddleware {
 				*req.version_mut() = http::Version::HTTP_3;
 
 				let mut guard = H3AttemptGuard::new(Arc::clone(&self.cache), url.clone());
-				let result = next.clone().run(req, extensions).await;
-				// Reached on success and on error alike; only a mid-flight drop
-				// skips it and leaves the guard armed.
+				// `None` means the attempt ran out of time. Bound in its own
+				// statement so the mutable borrow of `extensions` ends here,
+				// leaving the fallback below free to use it.
+				let outcome = match self.attempt_timeout {
+					Some(limit) => tokio::time::timeout(limit, next.clone().run(req, extensions))
+						.await
+						.ok(),
+					None => Some(next.clone().run(req, extensions).await),
+				};
+				// Reached on success, error and expiry alike; only a mid-flight
+				// drop skips it and leaves the guard armed.
 				guard.disarm();
 
-				match result {
-					Ok(response) => {
+				match outcome {
+					Some(Ok(response)) => {
 						if response.version() == http::Version::HTTP_3 {
 							self.cache.confirm_h3(&url);
 						}
@@ -367,8 +383,11 @@ impl Middleware for AltSvcMiddleware {
 
 						Ok(response)
 					}
-					Err(_) => {
-						// HTTP/3 failed, record the failure and retry with HTTP/2 (or /1)
+					// An expired deadline is as good as an error: HTTP/3 did not
+					// deliver. Taking the fallback branch directly avoids having
+					// to synthesise a reqwest_middleware::Error, which would mean
+					// adding anyhow as a dependency.
+					Some(Err(_)) | None => {
 						self.cache.record_h3_failure(&url);
 
 						// Use the cloned request (which still has default HTTP version)

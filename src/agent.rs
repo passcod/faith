@@ -239,6 +239,24 @@ pub struct AgentHttp3Options {
 	///
 	/// Default: 3.
 	pub upgrade_cancel_strikes: Option<u32>,
+	/// How long to wait for HTTP/3 response headers before giving up on the HTTP/3
+	/// attempt and retrying the request over TCP, in **milliseconds**.
+	///
+	/// Note the unit: the other `upgrade*` settings are in seconds, but this one is
+	/// in milliseconds to match the `timeout` settings, because useful values are
+	/// sub-second.
+	///
+	/// This only bounds the wait for response headers, not the response body, so a
+	/// slow body is unaffected. The default is deliberately high enough never to
+	/// trip in normal operation: HTTP/3's own idle timeout (`maxIdleTimeout`,
+	/// default 30 seconds) fires first and reports a proper error. Lower it if you
+	/// want faster recovery when a UDP path breaks.
+	///
+	/// Set to 0 to disable, so an HTTP/3 attempt is bounded only by the QUIC idle
+	/// timeout and the request's own timeout.
+	///
+	/// Default: 60000 (60 seconds).
+	pub upgrade_attempt_timeout: Option<u32>,
 	/// Maximum number of origins to track in the Alt-Svc cache.
 	///
 	/// Default: 10000.
@@ -713,6 +731,13 @@ impl Agent {
 			let cancel_strikes = http3_opts
 				.and_then(|o| o.upgrade_cancel_strikes)
 				.unwrap_or(3);
+			let attempt_timeout = match http3_opts
+				.and_then(|o| o.upgrade_attempt_timeout)
+				.unwrap_or(60_000)
+			{
+				0 => None,
+				millis => Some(Duration::from_millis(millis.into())),
+			};
 
 			let cache = Arc::new(AltSvcCache::new(
 				advertised_ttl,
@@ -729,7 +754,11 @@ impl Agent {
 				}
 			}
 
-			client = client.with(AltSvcMiddleware::new(cache.clone(), enabled));
+			client = client.with(AltSvcMiddleware::new(
+				cache.clone(),
+				enabled,
+				attempt_timeout,
+			));
 
 			Some(cache)
 		};
