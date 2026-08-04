@@ -225,6 +225,66 @@ pub struct AgentHttp3Options {
 	///
 	/// Default: 300 (5 minutes).
 	pub upgrade_failed_ttl: Option<u32>,
+	/// How many consecutive cancelled HTTP/3 attempts, within a 60-second window,
+	/// demote an origin back to TCP.
+	///
+	/// Fáith normally learns that HTTP/3 is broken from a failed attempt. A request
+	/// cancelled via `AbortSignal` never produces that signal, so without this an
+	/// origin whose UDP path breaks keeps being retried over HTTP/3 for as long as
+	/// the Alt-Svc entry lives. Cancellations are treated as weak evidence: only a
+	/// sustained run of them demotes the origin, and any successful HTTP/3 response
+	/// resets the count.
+	///
+	/// Strikes must land within about a minute of each other to count towards a
+	/// run. A retry loop whose backoff exceeds that window never accumulates one,
+	/// so callers with a long backoff should set this to 1 for immediate demotion
+	/// on the first cancelled attempt.
+	///
+	/// Any successful HTTP/3 response clears the count, which also means a
+	/// partial fault where small responses succeed and large ones hang (an MTU
+	/// blackhole, for instance) keeps clearing the evidence before a run can
+	/// build up. `upgradeAttemptTimeout` is the mechanism that catches that case,
+	/// not strikes.
+	///
+	/// Set to 0 to disable, so only real HTTP/3 errors demote an origin.
+	///
+	/// Default: 3.
+	pub upgrade_cancel_strikes: Option<u32>,
+	/// Ceiling on how long an HTTP/3 attempt may take to resolve before it is
+	/// given up on and the request is retried over TCP, in **milliseconds**.
+	///
+	/// Note the unit: the other `upgrade*` settings are in seconds, but this one
+	/// is in milliseconds to match the `timeout` settings, because useful values
+	/// are sub-second.
+	///
+	/// With no cache store configured, this is effectively time to response
+	/// headers. But the Alt-Svc middleware sits outside the HTTP cache
+	/// middleware, so when `cache.store` is set, the same attempt also covers
+	/// downloading the full response body and writing it to the cache — the
+	/// budget then needs to fit the slowest cacheable response, not just the
+	/// handshake.
+	///
+	/// The default is high, but not unconditionally inert: `maxIdleTimeout` is
+	/// configurable up to 120 seconds, and above 60 seconds this deadline becomes
+	/// the effective ceiling. Even below that, "QUIC's own idle timeout fires
+	/// first" only holds while the connection is idle — a transfer still running
+	/// past this deadline keeps the connection active, so no idle timeout is
+	/// coming to end it.
+	///
+	/// On expiry the request is retried over TCP, which means it is re-sent: a
+	/// timeout often means the server is still processing, so a slow
+	/// non-idempotent request (a POST, say) can end up delivered twice. Lowering
+	/// this value trades that double-submission risk, plus the body/cache-write
+	/// budget above, for faster recovery when a UDP path breaks. Anyone setting
+	/// it low should confirm their slowest legitimate response — including body
+	/// transfer and cache write, if a cache store is configured — fits well
+	/// inside the budget.
+	///
+	/// Set to 0 to disable, so an HTTP/3 attempt is bounded only by the QUIC idle
+	/// timeout and the request's own timeout.
+	///
+	/// Default: 60000 (60 seconds).
+	pub upgrade_attempt_timeout: Option<u32>,
 	/// Maximum number of origins to track in the Alt-Svc cache.
 	///
 	/// Default: 10000.
@@ -696,12 +756,24 @@ impl Agent {
 				.and_then(|o| o.upgrade_cache_capacity)
 				.unwrap_or(10_000)
 				.into();
+			let cancel_strikes = http3_opts
+				.and_then(|o| o.upgrade_cancel_strikes)
+				.unwrap_or(3);
+			let attempt_timeout = match http3_opts
+				.and_then(|o| o.upgrade_attempt_timeout)
+				.unwrap_or(60_000)
+			{
+				0 => None,
+				millis => Some(Duration::from_millis(millis.into())),
+			};
 
 			let cache = Arc::new(AltSvcCache::new(
 				advertised_ttl,
 				confirmed_ttl,
 				failed_ttl,
 				capacity,
+				cancel_strikes,
+				Duration::from_secs(60),
 			));
 
 			if let Some(hints) = http3_opts.and_then(|o| o.hints.as_ref()) {
@@ -710,7 +782,11 @@ impl Agent {
 				}
 			}
 
-			client = client.with(AltSvcMiddleware::new(cache.clone(), enabled));
+			client = client.with(AltSvcMiddleware::new(
+				cache.clone(),
+				enabled,
+				attempt_timeout,
+			));
 
 			Some(cache)
 		};

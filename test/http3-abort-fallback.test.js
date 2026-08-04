@@ -121,3 +121,96 @@ test("HTTP/3: a cancelled h3 attempt falls back to TCP", async (t) => {
 		t.end();
 	}
 });
+
+test("HTTP/3: upgradeAttemptTimeout falls back without any cancellation", async (t) => {
+	if (!SUPPORTED) {
+		t.pass(`skipped on ${process.platform} (linux-only harness)`);
+		t.end();
+		return;
+	}
+	if (!caddyAvailable()) {
+		if (process.env.CI) {
+			t.fail("caddy is not on PATH but CI is set; the install step must provide it");
+			t.end();
+			return;
+		}
+		t.pass("skipped: caddy not on PATH (install it to run this test locally)");
+		t.end();
+		return;
+	}
+
+	const { Agent } = require("../index.js");
+	const { fetch } = require("../wrapper.js");
+	const { ca } = ensureCert();
+
+	const front = await findFreePort();
+	const back = await findFreePort();
+	const caddy = await startCaddy({ port: back, dir: os.tmpdir() });
+	const tcp = await startTcpProxy({ listenPort: front, upstreamPort: back });
+	const relay = await startUdpRelay({ listenPort: front, upstreamPort: back });
+
+	const agent = new Agent({
+		tls: { extraRoots: [ca] },
+		http3: {
+			hints: [{ host: "localhost", port: front }],
+			// Low enough to prove the deadline fires well before quinn's 30s idle
+			// timeout, but with enough headroom for the warm-up QUIC handshake on a
+			// slow runner (~90ms locally). The warm-up loop runs under this same
+			// deadline, and a slow handshake there would otherwise demote the
+			// origin into the 300s failed cache, which is unrecoverable within
+			// this test.
+			upgradeAttemptTimeout: 3000,
+			// Isolate the deadline: strikes must play no part in this fallback.
+			upgradeCancelStrikes: 0,
+		},
+		dns: { overrides: [{ domain: "localhost", addresses: ["127.0.0.1"] }] },
+	});
+	const url = `https://localhost:${front}/`;
+
+	const attempt = async (opts) => {
+		try {
+			const res = await fetch(url, { agent, ...opts });
+			await res.text();
+			return { ok: true, version: res.version };
+		} catch (err) {
+			return { ok: false, code: err.code };
+		}
+	};
+
+	try {
+		let warm;
+		for (let i = 0; i < 3; i++) warm = await attempt({ timeout: 10000 });
+		t.equal(
+			warm.version,
+			"HTTP/3.0",
+			"precondition: the origin is confirmed as HTTP/3 through the relay",
+		);
+
+		relay.blackhole();
+
+		// Patient caller: no timeout, no signal. The middleware's own deadline is
+		// the only thing that can end this attempt before quinn's ~30s idle
+		// timeout, so the elapsed time is what proves which mechanism fired. A
+		// caller-side `timeout` would trigger the pre-existing Err -> fallback
+		// path by itself and make this test pass with the feature removed.
+		const t0 = Date.now();
+		const first = await attempt({});
+		const elapsed = Date.now() - t0;
+
+		t.ok(first.ok, "the very first request after the break already falls back");
+		t.equal(first.version, "HTTP/2.0", "the fallback used TCP");
+		t.ok(
+			elapsed >= 2500,
+			`the attempt waited for the deadline rather than failing fast (took ${elapsed}ms)`,
+		);
+		t.ok(
+			elapsed < 10000,
+			`fallback was driven by upgradeAttemptTimeout, not the 30s QUIC idle timeout (took ${elapsed}ms; a slow runner could also cause this)`,
+		);
+	} finally {
+		relay.close();
+		await tcp.close();
+		caddy.close();
+		t.end();
+	}
+});
