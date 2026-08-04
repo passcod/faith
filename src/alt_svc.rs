@@ -180,10 +180,15 @@ impl AltSvcCache {
 			return;
 		};
 
+		// This is reachable from a `Drop` impl (see the guard below), which must
+		// never panic: a panic while already unwinding aborts the process. Use a
+		// saturating add so an absurd `upgrade_cancel_strikes` can't overflow.
 		let strikes = self
 			.cancellations
 			.entry(origin)
-			.and_upsert_with(|existing| existing.map_or(1, |entry| entry.into_value() + 1))
+			.and_upsert_with(|existing| {
+				existing.map_or(1, |entry| entry.into_value().saturating_add(1))
+			})
 			.into_value();
 
 		if strikes >= self.cancel_strikes {

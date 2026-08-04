@@ -155,8 +155,11 @@ test("HTTP/3: upgradeAttemptTimeout falls back without any cancellation", async 
 			hints: [{ host: "localhost", port: front }],
 			// Low enough to prove the deadline fires well before quinn's 30s idle
 			// timeout, but with enough headroom for the warm-up QUIC handshake on a
-			// loaded CI runner (~90ms locally).
-			upgradeAttemptTimeout: 1500,
+			// slow runner (~90ms locally). The warm-up loop runs under this same
+			// deadline, and a slow handshake there would otherwise demote the
+			// origin into the 300s failed cache, which is unrecoverable within
+			// this test.
+			upgradeAttemptTimeout: 3000,
 			// Isolate the deadline: strikes must play no part in this fallback.
 			upgradeCancelStrikes: 0,
 		},
@@ -197,8 +200,12 @@ test("HTTP/3: upgradeAttemptTimeout falls back without any cancellation", async 
 		t.ok(first.ok, "the very first request after the break already falls back");
 		t.equal(first.version, "HTTP/2.0", "the fallback used TCP");
 		t.ok(
-			elapsed < 5000,
-			`fallback was driven by upgradeAttemptTimeout, not the 30s QUIC idle timeout (took ${elapsed}ms)`,
+			elapsed >= 2500,
+			`the attempt waited for the deadline rather than failing fast (took ${elapsed}ms)`,
+		);
+		t.ok(
+			elapsed < 10000,
+			`fallback was driven by upgradeAttemptTimeout, not the 30s QUIC idle timeout (took ${elapsed}ms; a slow runner could also cause this)`,
 		);
 	} finally {
 		relay.close();

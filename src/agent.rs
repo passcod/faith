@@ -235,22 +235,50 @@ pub struct AgentHttp3Options {
 	/// sustained run of them demotes the origin, and any successful HTTP/3 response
 	/// resets the count.
 	///
+	/// Strikes must land within about a minute of each other to count towards a
+	/// run. A retry loop whose backoff exceeds that window never accumulates one,
+	/// so callers with a long backoff should set this to 1 for immediate demotion
+	/// on the first cancelled attempt.
+	///
+	/// Any successful HTTP/3 response clears the count, which also means a
+	/// partial fault where small responses succeed and large ones hang (an MTU
+	/// blackhole, for instance) keeps clearing the evidence before a run can
+	/// build up. `upgradeAttemptTimeout` is the mechanism that catches that case,
+	/// not strikes.
+	///
 	/// Set to 0 to disable, so only real HTTP/3 errors demote an origin.
 	///
 	/// Default: 3.
 	pub upgrade_cancel_strikes: Option<u32>,
-	/// How long to wait for HTTP/3 response headers before giving up on the HTTP/3
-	/// attempt and retrying the request over TCP, in **milliseconds**.
+	/// Ceiling on how long an HTTP/3 attempt may take to resolve before it is
+	/// given up on and the request is retried over TCP, in **milliseconds**.
 	///
-	/// Note the unit: the other `upgrade*` settings are in seconds, but this one is
-	/// in milliseconds to match the `timeout` settings, because useful values are
-	/// sub-second.
+	/// Note the unit: the other `upgrade*` settings are in seconds, but this one
+	/// is in milliseconds to match the `timeout` settings, because useful values
+	/// are sub-second.
 	///
-	/// This only bounds the wait for response headers, not the response body, so a
-	/// slow body is unaffected. The default is deliberately high enough never to
-	/// trip in normal operation: HTTP/3's own idle timeout (`maxIdleTimeout`,
-	/// default 30 seconds) fires first and reports a proper error. Lower it if you
-	/// want faster recovery when a UDP path breaks.
+	/// With no cache store configured, this is effectively time to response
+	/// headers. But the Alt-Svc middleware sits outside the HTTP cache
+	/// middleware, so when `cache.store` is set, the same attempt also covers
+	/// downloading the full response body and writing it to the cache — the
+	/// budget then needs to fit the slowest cacheable response, not just the
+	/// handshake.
+	///
+	/// The default is high, but not unconditionally inert: `maxIdleTimeout` is
+	/// configurable up to 120 seconds, and above 60 seconds this deadline becomes
+	/// the effective ceiling. Even below that, "QUIC's own idle timeout fires
+	/// first" only holds while the connection is idle — a transfer still running
+	/// past this deadline keeps the connection active, so no idle timeout is
+	/// coming to end it.
+	///
+	/// On expiry the request is retried over TCP, which means it is re-sent: a
+	/// timeout often means the server is still processing, so a slow
+	/// non-idempotent request (a POST, say) can end up delivered twice. Lowering
+	/// this value trades that double-submission risk, plus the body/cache-write
+	/// budget above, for faster recovery when a UDP path breaks. Anyone setting
+	/// it low should confirm their slowest legitimate response — including body
+	/// transfer and cache write, if a cache store is configured — fits well
+	/// inside the budget.
 	///
 	/// Set to 0 to disable, so an HTTP/3 attempt is bounded only by the QUIC idle
 	/// timeout and the request's own timeout.

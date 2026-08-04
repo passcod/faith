@@ -67,7 +67,7 @@ The 60-second window matters as much as the count. Pure consecutive counting wou
 
 The window is measured **from the previous strike, not from the first**: moka's `time_to_live` runs from the last write, and an upsert is a write, so each strike refreshes the entry. Three strikes therefore demote only if each lands within 60s of the one before it — a sustained incident rather than a fixed bucket. Two strikes followed by 60s of quiet decay to zero.
 
-Because the guarded await resolves at *response headers*, an armed drop always means no h3 response arrived. Body-phase aborts happen later in `fetch.rs` and never reach the guard, so they cannot produce false strikes. This falls out of the placement and needs no extra logic.
+Because the guarded await resolves at *response headers*, an armed drop always means no h3 response arrived — when no cache store is configured. With `cache.store` set, the HTTP cache middleware buffers the full body inside that same guarded future (it sits inside `AltSvcMiddleware`, not outside it), so a body-phase abort can also reach the guard and record a strike in that configuration.
 
 ### 2. Attempt deadline (secondary)
 
