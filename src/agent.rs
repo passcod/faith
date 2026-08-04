@@ -310,7 +310,8 @@ pub struct AgentHttp3Options {
 	/// - `redirected` ignores port differences, since the rewritten port would
 	///   otherwise look like a redirect on every request.
 	/// - If a cache store is configured, HTTP/3 and TCP responses cache under
-	///   different keys, so the same resource can be stored twice.
+	///   different keys, so the same resource can be stored twice — and neither can
+	///   hit the other's entry, which lowers the hit rate for those origins.
 	///
 	/// TLS is unaffected: certificates are still validated against the origin's
 	/// hostname. Only the port changes.

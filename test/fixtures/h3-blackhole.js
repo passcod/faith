@@ -79,8 +79,13 @@ async function findFreePort() {
 	throw new Error("could not find a port free for both TCP and UDP");
 }
 
-/** Spawn Caddy serving https://localhost:<port> over h1/h2/h3. */
-async function startCaddy({ port, dir }) {
+/**
+ * Spawn Caddy serving https://localhost:<port> over h1/h2/h3.
+ *
+ * `altSvc` overrides the Alt-Svc header Caddy would emit for itself, so a test can
+ * advertise an endpoint that isn't Caddy — a port with nothing listening, say.
+ */
+async function startCaddy({ port, dir, altSvc }) {
 	const { certPath, keyPath } = ensureCert();
 	const caddyfile = `{
 	auto_https off
@@ -92,7 +97,7 @@ async function startCaddy({ port, dir }) {
 
 https://localhost:${port} {
 	tls ${certPath} ${keyPath}
-	respond "hello-from-caddy"
+${altSvc ? `\theader Alt-Svc \`${altSvc}\`\n` : ""}	respond "hello-from-caddy"
 }
 `;
 	const configPath = path.join(dir, `Caddyfile.${port}`);
@@ -113,6 +118,10 @@ https://localhost:${port} {
 				resolve();
 			} else if (proc.exitCode !== null || Date.now() > deadline) {
 				clearInterval(tick);
+				// Kill before rejecting: the caller never gets a handle to close, and a
+				// surviving child with piped stdio keeps node alive, so a config error
+				// would surface as a hung test run rather than a failure.
+				proc.kill();
 				reject(new Error(`caddy failed to start:\n${log}`));
 			}
 		}, 100);
@@ -123,20 +132,39 @@ https://localhost:${port} {
 
 /** TCP passthrough, always healthy — this is the path the client should fall back to. */
 async function startTcpProxy({ listenPort, upstreamPort }) {
+	const live = new Set();
 	const server = net.createServer((client) => {
 		const up = net.connect(upstreamPort, "127.0.0.1");
+		live.add(client);
+		live.add(up);
 		client.pipe(up);
 		up.pipe(client);
-		const bye = () => { client.destroy(); up.destroy(); };
+		const bye = () => {
+			live.delete(client);
+			live.delete(up);
+			client.destroy();
+			up.destroy();
+		};
 		client.on("error", bye);
 		up.on("error", bye);
+		client.on("close", bye);
+		up.on("close", bye);
 	});
 	await new Promise((resolve, reject) => {
 		server.once("error", reject);
 		server.listen(listenPort, "127.0.0.1", resolve);
 	});
 	return {
-		close: () => new Promise((r) => { server.close(r); }),
+		close: () =>
+			new Promise((resolve) => {
+				// Tear the sockets down rather than waiting on them. The agent under test
+				// keeps its connection pooled, so a bare server.close() never settles and
+				// the calling test hangs in its `finally` instead of finishing.
+				for (const socket of live) socket.destroy();
+				live.clear();
+				server.close(resolve);
+				setTimeout(resolve, 500).unref();
+			}),
 	};
 }
 

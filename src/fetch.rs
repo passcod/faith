@@ -143,13 +143,19 @@ pub fn faith_fetch<'env>(
 		let empty = status_code == StatusCode::NO_CONTENT || is_head;
 
 		let response_url = response.url().clone();
-		let redirected = if agent.h3_follow_advertised_port {
-			// With `http3.upgradeFollowAdvertisedPort` on, an HTTP/3 attempt rewrites
-			// the request's port to the advertised one, so the response URL's port
-			// reflects which endpoint answered rather than any redirect. Compare with
-			// ports normalised away, or every such request would report `redirected`.
-			// The cost is that a genuine redirect differing only in port is missed,
-			// which is indistinguishable from a rewrite while this is enabled.
+		let version = response.version();
+
+		// With `http3.upgradeFollowAdvertisedPort` on, an HTTP/3 attempt rewrites the
+		// request's port to the advertised one, so the response URL's port reflects
+		// which endpoint answered rather than any redirect. Compare with ports
+		// normalised away, or every such request would report `redirected`.
+		//
+		// Only HTTP/3 responses can have been rewritten — reqwest routes
+		// `Version::HTTP_3` exclusively to the h3 client with no silent downgrade, and
+		// the TCP fallback re-runs the untouched clone. Restricting the normalisation
+		// to those keeps exact comparison, and so port-only redirect detection, for
+		// every other response.
+		let redirected = if agent.h3_follow_advertised_port && version == http::Version::HTTP_3 {
 			let without_port = |url: &reqwest::Url| {
 				let mut url = url.clone();
 				let _ = url.set_port(None);
@@ -159,8 +165,6 @@ pub fn faith_fetch<'env>(
 		} else {
 			parsed_url != response_url
 		};
-
-		let version = response.version();
 
 		// Track connection for TCP stats (if we can get both local and remote addr)
 		if let Some(http_info) = response.extensions().get::<HttpInfo>() {

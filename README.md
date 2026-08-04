@@ -402,6 +402,12 @@ response is the result of a request you made which was redirected.*
 *Note that by the time you read this property, the redirect will already have happened, and you
 cannot prevent it by aborting the fetch at this point.*
 
+One caveat specific to Fáith: with the agent's
+[`http3.upgradeFollowAdvertisedPort`](#agentoptionshttp3upgradefollowadvertisedport-bool) enabled,
+HTTP/3 responses compare URLs ignoring the port, because the port was rewritten to the advertised
+one and would otherwise register as a redirect. A genuine redirect differing only in port therefore
+reads as `false` on those responses.
+
 ### `Response.status: number`
 
 *The `status` read-only property of the `Response` interface contains the HTTP status codes of the
@@ -743,7 +749,8 @@ gets HTTP/3 working today against servers you control, with four consequences to
 - `redirected` ignores port differences, since a rewritten port would otherwise look like a redirect
   on every request. A genuine redirect differing only in port is therefore missed.
 - If a cache store is configured, HTTP/3 and TCP responses cache under different keys, so the same
-  resource can end up stored twice.
+  resource can end up stored twice — and neither can hit the other's entry, which lowers the cache
+  hit rate for those origins.
 
 TLS is unaffected either way: certificates are still validated against the origin's hostname, and
 only the port changes.

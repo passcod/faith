@@ -119,6 +119,12 @@ get peer(): { address?: string; certificate?: Buffer }
  *
  * Note that by the time you read this property, the redirect will already have happened, and you
  * cannot prevent it by aborting the fetch at this point.
+ *
+ * One caveat specific to Fáith: with the agent's `http3.upgradeFollowAdvertisedPort`
+ * enabled, HTTP/3 responses compare URLs ignoring the port, because the port
+ * was rewritten to the advertised one and would otherwise register as a
+ * redirect. A genuine redirect differing only in port therefore reads as
+ * `false` on those responses.
  */
 get redirected(): boolean
 /**
@@ -480,7 +486,8 @@ export interface AgentHttp3Options {
    * - `redirected` ignores port differences, since the rewritten port would
    *   otherwise look like a redirect on every request.
    * - If a cache store is configured, HTTP/3 and TCP responses cache under
-   *   different keys, so the same resource can be stored twice.
+   *   different keys, so the same resource can be stored twice — and neither can
+   *   hit the other's entry, which lowers the hit rate for those origins.
    *
    * TLS is unaffected: certificates are still validated against the origin's
    * hostname. Only the port changes.

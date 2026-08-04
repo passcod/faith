@@ -14,6 +14,16 @@ pub struct AltSvcEntry {
 	pub expires: Instant,
 }
 
+/// An HTTP/3 alternative parsed out of an `Alt-Svc` header.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AltSvcAdvertisement {
+	/// Host the alternative is on. Empty when the header omitted it, which per
+	/// RFC 7838 means the same host as the origin.
+	pub host: String,
+	pub port: u16,
+	pub max_age: Option<Duration>,
+}
+
 #[derive(Clone)]
 pub struct AltSvcCache {
 	advertised: Cache<String, AltSvcEntry>,
@@ -80,10 +90,20 @@ impl AltSvcCache {
 		Some(format!("{}://{}:{}", url.scheme(), host, port))
 	}
 
-	pub fn record_alt_svc(&self, url: &reqwest::Url, h3_port: u16, max_age: Option<Duration>) {
+	pub fn record_alt_svc(&self, url: &reqwest::Url, advertisement: &AltSvcAdvertisement) {
 		let Some(origin) = Self::origin_key(url) else {
 			return;
 		};
+
+		// An alternative on a *different host* can never be honoured: reqwest derives
+		// the HTTP/3 connect target from the request's authority, and rewriting the
+		// host would also change which certificate is accepted. Unlike a differing
+		// port — which `follow_advertised_port` can act on — there is nothing to
+		// gate behind an option, so don't record it at all. RFC 7838 uses an empty
+		// host to mean "the same host as the origin".
+		if !advertisement.host.is_empty() && Some(advertisement.host.as_str()) != url.host_str() {
+			return;
+		}
 
 		if self.failed.contains_key(&origin) {
 			return;
@@ -93,9 +113,9 @@ impl AltSvcCache {
 			return;
 		}
 
-		let ttl = max_age.unwrap_or(self.advertised_ttl);
+		let ttl = advertisement.max_age.unwrap_or(self.advertised_ttl);
 		let entry = AltSvcEntry {
-			port: h3_port,
+			port: advertisement.port,
 			expires: Instant::now() + ttl,
 		};
 
@@ -161,20 +181,21 @@ impl AltSvcCache {
 		None
 	}
 
-	pub fn confirm_h3(&self, url: &reqwest::Url) {
+	/// Record that HTTP/3 worked for this origin, on the port it connected to.
+	///
+	/// `port` must be the port the successful attempt actually used. Recovering it
+	/// from the caches instead would be unsound: a concurrent failure that cleared
+	/// them leaves nothing to read, and falling back to the origin's own port would
+	/// confirm HTTP/3 on a port the server never advertised — for `confirmed_ttl`,
+	/// and invisibly, since the concurrent failure's `failed` entry masks it until
+	/// that expires.
+	pub fn confirm_h3(&self, url: &reqwest::Url, port: u16) {
 		let Some(origin) = Self::origin_key(url) else {
 			return;
 		};
 
-		let port = if let Some(entry) = self.advertised.get(&origin) {
-			self.advertised.invalidate(&origin);
-			entry.port
-		} else if let Some(entry) = self.confirmed.get(&origin) {
-			entry.port
-		} else {
-			url.port_or_known_default().unwrap_or(443)
-		};
-
+		// Promoted out of `advertised`; it has served its purpose.
+		self.advertised.invalidate(&origin);
 		// A working h3 response is proof of health; forget any strikes.
 		self.cancellations.invalidate(&origin);
 
@@ -235,7 +256,7 @@ impl AltSvcCache {
 	}
 }
 
-pub fn parse_alt_svc_header(value: &str) -> Option<(u16, Option<Duration>)> {
+pub fn parse_alt_svc_header(value: &str) -> Option<AltSvcAdvertisement> {
 	if value == "clear" {
 		return None;
 	}
@@ -247,6 +268,7 @@ pub fn parse_alt_svc_header(value: &str) -> Option<(u16, Option<Duration>)> {
 		}
 
 		let mut protocol_id: Option<&str> = None;
+		let mut host: Option<&str> = None;
 		let mut port: Option<u16> = None;
 		let mut max_age: Option<Duration> = None;
 
@@ -271,7 +293,12 @@ pub fn parse_alt_svc_header(value: &str) -> Option<(u16, Option<Duration>)> {
 				}
 				_ if key.starts_with("h3") => {
 					protocol_id = Some(key);
-					if let Some((_, port_str)) = value.split_once(':') {
+					// The alt-authority is `[host]:port`, where an omitted host means
+					// the origin's own. Keep the host: acting on an advertisement for
+					// a different host would be the same unsupported inference as
+					// acting on one for a different port.
+					if let Some((alt_host, port_str)) = value.rsplit_once(':') {
+						host = Some(alt_host.trim_matches(|c| c == '[' || c == ']'));
 						if let Ok(p) = port_str.parse::<u16>() {
 							port = Some(p);
 						}
@@ -282,7 +309,11 @@ pub fn parse_alt_svc_header(value: &str) -> Option<(u16, Option<Duration>)> {
 		}
 
 		if protocol_id.is_some() && port.is_some() {
-			return Some((port.unwrap(), max_age));
+			return Some(AltSvcAdvertisement {
+				host: host.unwrap_or_default().to_owned(),
+				port: port.unwrap(),
+				max_age,
+			});
 		}
 	}
 
@@ -412,13 +443,13 @@ impl Middleware for AltSvcMiddleware {
 				match outcome {
 					Some(Ok(response)) => {
 						if response.version() == http::Version::HTTP_3 {
-							self.cache.confirm_h3(&url);
+							self.cache.confirm_h3(&url, h3_port);
 						}
 
 						if let Some(alt_svc) = response.headers().get("alt-svc") {
 							if let Ok(value) = alt_svc.to_str() {
-								if let Some((port, max_age)) = parse_alt_svc_header(value) {
-									self.cache.record_alt_svc(&url, port, max_age);
+								if let Some(advertisement) = parse_alt_svc_header(value) {
+									self.cache.record_alt_svc(&url, &advertisement);
 								}
 							}
 						}
@@ -447,8 +478,8 @@ impl Middleware for AltSvcMiddleware {
 			if let Ok(ref response) = result {
 				if let Some(alt_svc) = response.headers().get("alt-svc") {
 					if let Ok(value) = alt_svc.to_str() {
-						if let Some((port, max_age)) = parse_alt_svc_header(value) {
-							self.cache.record_alt_svc(&url, port, max_age);
+						if let Some(advertisement) = parse_alt_svc_header(value) {
+							self.cache.record_alt_svc(&url, &advertisement);
 						}
 					}
 				}
@@ -466,31 +497,124 @@ mod tests {
 	#[test]
 	fn test_parse_alt_svc_simple() {
 		let result = parse_alt_svc_header(r#"h3=":443"; ma=86400"#);
-		assert_eq!(result, Some((443, Some(Duration::from_secs(86400)))));
+		assert_eq!(result, Some(ad(443, Some(Duration::from_secs(86400)))));
 	}
 
 	#[test]
 	fn test_parse_alt_svc_no_max_age() {
 		let result = parse_alt_svc_header(r#"h3=":443""#);
-		assert_eq!(result, Some((443, None)));
+		assert_eq!(result, Some(ad(443, None)));
 	}
 
 	#[test]
 	fn test_parse_alt_svc_different_port() {
 		let result = parse_alt_svc_header(r#"h3=":8443"; ma=3600"#);
-		assert_eq!(result, Some((8443, Some(Duration::from_secs(3600)))));
+		assert_eq!(result, Some(ad(8443, Some(Duration::from_secs(3600)))));
 	}
 
 	#[test]
 	fn test_parse_alt_svc_multiple_protocols() {
 		let result = parse_alt_svc_header(r#"h2=":443", h3=":443"; ma=86400"#);
-		assert_eq!(result, Some((443, Some(Duration::from_secs(86400)))));
+		assert_eq!(result, Some(ad(443, Some(Duration::from_secs(86400)))));
 	}
 
 	#[test]
 	fn test_parse_alt_svc_h3_variant() {
 		let result = parse_alt_svc_header(r#"h3-29=":443"; ma=86400"#);
-		assert_eq!(result, Some((443, Some(Duration::from_secs(86400)))));
+		assert_eq!(result, Some(ad(443, Some(Duration::from_secs(86400)))));
+	}
+
+	#[test]
+	fn test_parse_alt_svc_keeps_the_host() {
+		let result = parse_alt_svc_header(r#"h3="cdn.example.net:443"; ma=3600"#);
+		assert_eq!(
+			result,
+			Some(AltSvcAdvertisement {
+				host: "cdn.example.net".to_string(),
+				port: 443,
+				max_age: Some(Duration::from_secs(3600)),
+			}),
+			"the alt-authority's host must survive parsing, or a different-host \
+			 advertisement looks same-host once the port matches"
+		);
+	}
+
+	#[test]
+	fn test_parse_alt_svc_ipv6_host() {
+		let result = parse_alt_svc_header(r#"h3="[2001:db8::1]:8443""#);
+		assert_eq!(
+			result,
+			Some(AltSvcAdvertisement {
+				host: "2001:db8::1".to_string(),
+				port: 8443,
+				max_age: None,
+			}),
+			"splitting on the last colon keeps a bracketed IPv6 literal intact"
+		);
+	}
+
+	#[test]
+	fn test_alt_svc_on_another_host_is_not_recorded() {
+		let cache = test_cache();
+		let url = reqwest::Url::parse("https://example.com/path").unwrap();
+
+		cache.record_alt_svc(
+			&url,
+			&AltSvcAdvertisement {
+				host: "cdn.example.net".to_string(),
+				port: 443,
+				max_age: None,
+			},
+		);
+
+		assert!(
+			cache.should_use_h3(&url).is_none(),
+			"h3 on another host says nothing about this one, and the port matching is \
+			 coincidental"
+		);
+	}
+
+	#[test]
+	fn test_alt_svc_naming_our_own_host_is_recorded() {
+		let cache = test_cache();
+		let url = reqwest::Url::parse("https://example.com/path").unwrap();
+
+		cache.record_alt_svc(
+			&url,
+			&AltSvcAdvertisement {
+				host: "example.com".to_string(),
+				port: 443,
+				max_age: None,
+			},
+		);
+
+		assert_eq!(
+			cache.should_use_h3(&url),
+			Some(443),
+			"spelling out the origin's own host is equivalent to omitting it"
+		);
+	}
+
+	#[test]
+	fn test_confirm_h3_uses_the_port_it_was_given() {
+		// A concurrent failure can clear both caches between the attempt starting and
+		// confirming. `confirm_h3` must not fall back to the origin's port then, or it
+		// would confirm h3 on a port nobody advertised.
+		let cache = test_cache_with(3, Duration::from_secs(60), true);
+		let url = reqwest::Url::parse("https://example.com/path").unwrap();
+
+		cache.record_alt_svc(&url, &ad(8443, None));
+		cache.record_h3_failure(&url);
+		cache.confirm_h3(&url, 8443);
+
+		let entry = cache
+			.confirmed
+			.get(&"https://example.com:443".to_string())
+			.expect("the successful attempt is confirmed");
+		assert_eq!(
+			entry.port, 8443,
+			"confirmed on the port actually connected to, not the origin's"
+		);
 	}
 
 	#[test]
@@ -503,6 +627,15 @@ mod tests {
 	fn test_parse_alt_svc_no_h3() {
 		let result = parse_alt_svc_header(r#"h2=":443"; ma=86400"#);
 		assert_eq!(result, None);
+	}
+
+	/// A same-host advertisement, the common case.
+	fn ad(port: u16, max_age: Option<Duration>) -> AltSvcAdvertisement {
+		AltSvcAdvertisement {
+			host: String::new(),
+			port,
+			max_age,
+		}
 	}
 
 	fn test_cache() -> AltSvcCache {
@@ -530,7 +663,7 @@ mod tests {
 		let cache = test_cache();
 		let url = reqwest::Url::parse("https://example.com/path").unwrap();
 
-		cache.record_alt_svc(&url, 443, None);
+		cache.record_alt_svc(&url, &ad(443, None));
 
 		assert_eq!(
 			cache.should_use_h3(&url),
@@ -544,7 +677,7 @@ mod tests {
 		let cache = test_cache();
 		let url = reqwest::Url::parse("https://example.com/path").unwrap();
 
-		cache.record_alt_svc(&url, 8443, None);
+		cache.record_alt_svc(&url, &ad(8443, None));
 
 		assert!(
 			cache.should_use_h3(&url).is_none(),
@@ -557,7 +690,7 @@ mod tests {
 		let cache = test_cache();
 		let url = reqwest::Url::parse("https://example.com/path").unwrap();
 
-		cache.record_alt_svc(&url, 8443, None);
+		cache.record_alt_svc(&url, &ad(8443, None));
 
 		let entry = cache
 			.advertised
@@ -574,7 +707,7 @@ mod tests {
 		let cache = test_cache_with(3, Duration::from_secs(60), true);
 		let url = reqwest::Url::parse("https://example.com/path").unwrap();
 
-		cache.record_alt_svc(&url, 8443, None);
+		cache.record_alt_svc(&url, &ad(8443, None));
 
 		assert_eq!(
 			cache.should_use_h3(&url),
@@ -590,10 +723,10 @@ mod tests {
 
 		assert!(cache.should_use_h3(&url).is_none());
 
-		cache.record_alt_svc(&url, 443, Some(Duration::from_secs(3600)));
+		cache.record_alt_svc(&url, &ad(443, Some(Duration::from_secs(3600))));
 		assert_eq!(cache.should_use_h3(&url), Some(443));
 
-		cache.confirm_h3(&url);
+		cache.confirm_h3(&url, 443);
 		assert_eq!(cache.should_use_h3(&url), Some(443));
 		assert!(
 			!cache
@@ -612,13 +745,13 @@ mod tests {
 		let cache = test_cache();
 		let url = reqwest::Url::parse("https://example.com/path").unwrap();
 
-		cache.record_alt_svc(&url, 443, None);
+		cache.record_alt_svc(&url, &ad(443, None));
 		assert!(cache.should_use_h3(&url).is_some());
 
 		cache.record_h3_failure(&url);
 		assert!(cache.should_use_h3(&url).is_none());
 
-		cache.record_alt_svc(&url, 443, None);
+		cache.record_alt_svc(&url, &ad(443, None));
 		assert!(cache.should_use_h3(&url).is_none());
 	}
 
@@ -635,7 +768,7 @@ mod tests {
 	fn test_cancellation_below_threshold_keeps_h3() {
 		let cache = test_cache();
 		let url = reqwest::Url::parse("https://example.com/path").unwrap();
-		cache.record_alt_svc(&url, 443, None);
+		cache.record_alt_svc(&url, &ad(443, None));
 
 		cache.record_h3_cancellation(&url);
 		cache.record_h3_cancellation(&url);
@@ -651,7 +784,7 @@ mod tests {
 	fn test_cancellation_at_threshold_demotes() {
 		let cache = test_cache();
 		let url = reqwest::Url::parse("https://example.com/path").unwrap();
-		cache.record_alt_svc(&url, 443, None);
+		cache.record_alt_svc(&url, &ad(443, None));
 
 		for _ in 0..3 {
 			cache.record_h3_cancellation(&url);
@@ -673,11 +806,11 @@ mod tests {
 	fn test_cancellation_reset_by_h3_success() {
 		let cache = test_cache();
 		let url = reqwest::Url::parse("https://example.com/path").unwrap();
-		cache.record_alt_svc(&url, 443, None);
+		cache.record_alt_svc(&url, &ad(443, None));
 
 		cache.record_h3_cancellation(&url);
 		cache.record_h3_cancellation(&url);
-		cache.confirm_h3(&url);
+		cache.confirm_h3(&url, 443);
 		cache.record_h3_cancellation(&url);
 		cache.record_h3_cancellation(&url);
 
@@ -692,7 +825,7 @@ mod tests {
 	fn test_cancellation_disabled_by_zero() {
 		let cache = test_cache_with(0, Duration::from_secs(60), false);
 		let url = reqwest::Url::parse("https://example.com/path").unwrap();
-		cache.record_alt_svc(&url, 443, None);
+		cache.record_alt_svc(&url, &ad(443, None));
 
 		for _ in 0..5 {
 			cache.record_h3_cancellation(&url);
@@ -709,7 +842,7 @@ mod tests {
 	fn test_cancellation_strikes_decay() {
 		let cache = test_cache_with(3, Duration::from_millis(50), false);
 		let url = reqwest::Url::parse("https://example.com/path").unwrap();
-		cache.record_alt_svc(&url, 443, None);
+		cache.record_alt_svc(&url, &ad(443, None));
 
 		cache.record_h3_cancellation(&url);
 		cache.record_h3_cancellation(&url);

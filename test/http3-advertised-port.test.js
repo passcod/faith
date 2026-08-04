@@ -49,11 +49,11 @@ function guard(t) {
 	return true;
 }
 
-async function harness(http3Options) {
+async function harness(http3Options, { altSvc } = {}) {
 	const { ca } = ensureCert();
 	const front = await findFreePort();
 	const back = await findFreePort();
-	const caddy = await startCaddy({ port: back, dir: os.tmpdir() });
+	const caddy = await startCaddy({ port: back, dir: os.tmpdir(), altSvc });
 	const tcp = await startTcpProxy({ listenPort: front, upstreamPort: back });
 
 	const { Agent } = require("../index.js");
@@ -121,6 +121,11 @@ test("HTTP/3: upgradeFollowAdvertisedPort connects to the advertised port", asyn
 		const first = await fetch(h.url, { agent: h.agent, timeout: 10000 });
 		await first.text();
 		t.equal(first.version, "HTTP/2.0", "the first request is TCP and learns the advertisement");
+		t.equal(
+			first.headers.get("alt-svc"),
+			`h3=":${h.back}"; ma=2592000`,
+			`precondition: the advertised port :${h.back} differs from the origin's :${h.front}`,
+		);
 
 		const res = await fetch(h.url, { agent: h.agent, timeout: 10000 });
 		await res.text();
@@ -135,6 +140,65 @@ test("HTTP/3: upgradeFollowAdvertisedPort connects to the advertised port", asyn
 			res.redirected,
 			"a rewritten port is not a redirect, even though the URL's port changed",
 		);
+	} finally {
+		await h.close();
+		t.end();
+	}
+});
+
+test("HTTP/3: the TCP fallback keeps the origin port, not the rewritten one", async (t) => {
+	if (!guard(t)) return;
+
+	const { fetch } = require("../wrapper.js");
+
+	// Advertise a port with nothing listening on it. The h3 attempt must therefore
+	// fail, and the fallback can only succeed if it kept the origin's URL. This is
+	// what pins the ordering inside the middleware: the request is cloned *before*
+	// its port is rewritten, so the clone still targets the origin. Move the rewrite
+	// above the clone and this test fails outright — the other tests here can't
+	// catch that, because Caddy serves TCP on the advertised port too.
+	const dead = await findFreePort();
+	const h = await harness(
+		{ upgradeFollowAdvertisedPort: true },
+		{ altSvc: `h3=":${dead}"` },
+	);
+
+	try {
+		const first = await fetch(h.url, { agent: h.agent, timeout: 10000 });
+		await first.text();
+		t.equal(
+			first.headers.get("alt-svc"),
+			`h3=":${dead}"`,
+			`precondition: h3 is advertised on :${dead}, where nothing is listening`,
+		);
+
+		// Catch rather than throw, so breaking the ordering fails with an explanation
+		// instead of a bare connect error from deep inside reqwest.
+		let res;
+		let failure;
+		try {
+			res = await fetch(h.url, { agent: h.agent, timeout: 10000 });
+		} catch (err) {
+			failure = err;
+		}
+		t.ok(
+			res,
+			failure
+				? `expected a TCP fallback to the origin; the request failed instead, which \
+means the fallback used the rewritten port (${failure.message})`
+				: "the request still succeeds, by falling back to TCP",
+		);
+		if (!res) return;
+
+		const body = await res.text();
+		t.equal(res.version, "HTTP/2.0", "the fallback used TCP");
+		t.equal(body, "hello-from-caddy", "and reached the real server");
+		t.equal(
+			new URL(res.url).port,
+			String(h.front),
+			"the fallback targeted the origin port, so the clone predates the rewrite",
+		);
+		t.notOk(res.redirected, "and it isn't reported as a redirect");
 	} finally {
 		await h.close();
 		t.end();
