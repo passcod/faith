@@ -180,7 +180,7 @@ Rust unit tests extending `mod tests` in `alt_svc.rs`:
 JS tests on the harness added in PR #23:
 
 - `test/http3-abort-fallback.test.js` flips from failing to passing. This is the acceptance criterion.
-- a new test for the deadline: `upgradeAttemptTimeout: 500`, blackhole UDP, assert the **first** request already falls back with no strikes involved.
+- a new test for the deadline: a low `upgradeAttemptTimeout` (1500ms, leaving headroom for the warm-up QUIC handshake on a loaded CI runner) with `upgradeCancelStrikes: 0`, blackhole UDP, assert the **first** request already falls back with no strikes involved.
 
 Covering the two mechanisms independently matters: otherwise a bug in one could be masked by the other.
 
@@ -190,5 +190,5 @@ Regression check: the full JS suite plus `cargo test`.
 
 1. With UDP blackholed and a caller cancelling via `AbortSignal`, a retry loop falls back to TCP within `upgrade_cancel_strikes + 1` attempts.
 2. An origin whose h3 works normally is never demoted by interleaved caller aborts.
-3. `upgradeAttemptTimeout: 500` causes fallback on the first attempt.
+3. A low `upgradeAttemptTimeout` causes fallback on the first attempt, with `upgradeCancelStrikes: 0` proving strikes played no part.
 4. Default behaviour for healthy origins is unchanged: h3 is still preferred and confirmed.
