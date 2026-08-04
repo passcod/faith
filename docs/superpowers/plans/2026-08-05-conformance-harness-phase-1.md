@@ -983,7 +983,7 @@ const DIMENSIONS = [
 
 - [ ] **Step 4: Update the expected matrix**
 
-Replace `test/conformance/expected-matrix.json` entirely. Cells are ordered server-major, matching the loop order in `planCells`:
+Replace `test/conformance/expected-matrix.json` entirely. Order does not matter — the runner sorts both sides before comparing — but keeping it server-major reads naturally:
 
 ```json
 {
