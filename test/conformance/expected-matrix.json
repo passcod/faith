@@ -1,0 +1,6 @@
+{
+	"cells": [
+		{ "server": "controllable-h1", "dimension": "trailers", "status": "run" },
+		{ "server": "controllable-h2", "dimension": "trailers", "status": "run" }
+	]
+}

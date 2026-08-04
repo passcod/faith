@@ -4,3 +4,5 @@ node_modules
 
 # subagent-driven-development scratch (ledger, briefs, review packages)
 .superpowers/
+
+test/conformance/matrix.json
