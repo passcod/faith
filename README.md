@@ -693,49 +693,28 @@ These four settings allow tweaking the HTTP/3 advertisement/knowledge cache beha
 
 #### `AgentOptions.http3.upgradeCancelStrikes: number`
 
-Fáith learns that HTTP/3 is broken from a failed attempt. A request cancelled via `AbortSignal`
-never produces that signal — the attempt is abandoned before it can fail — so a cancelled attempt
-would otherwise teach Fáith nothing, and an origin whose UDP path has broken would keep being
-retried over HTTP/3 for as long as its Alt-Svc entry lives.
-
-Cancellations are therefore counted as weak evidence: this many of them in a row, each within a
-minute of the last, demote the origin to TCP for `upgradeFailedTtl`. Any successful HTTP/3 response
-resets the count, so aborting healthy requests doesn't accumulate.
+When an HTTP/3 connection becomes unviable midway through, or when it's cancelled via
+`AbortSignal`, Fáith will initially retry using HTTP/3. However, it could be that the HTTP/3 path
+has now broken transiently or permanently. This setting defines how many strikes it takes for
+Fáith to downgrade to HTTP/2 (or lower, as available) instead of getting stuck on HTTP/3 for as
+long as that origin's `Alt-Svc` entry lives (or forever, for hinted origins).
 
 Strikes must land within about a minute of each other to count towards a run. A retry loop whose
 backoff exceeds that window never accumulates one, so callers with a long backoff should set this
 to 1 for immediate demotion on the first cancelled attempt.
 
-Any successful HTTP/3 response clearing the count also means a partial fault where small responses
-succeed and large ones hang (an MTU blackhole, for instance) keeps clearing the evidence before a
-run can build up. `upgradeAttemptTimeout` is the mechanism that catches that case, not strikes.
-
-Set to 0 to disable, so that only real HTTP/3 errors demote an origin.
+Set to 0 to disable, so that only real HTTP/3 errors demote an origin (not recommended).
 
 Default: 3.
 
 #### `AgentOptions.http3.upgradeAttemptTimeout: number`
 
-Ceiling on how long an HTTP/3 attempt may take to resolve before it is given up on and the request
-is retried over TCP, in **milliseconds**. Note the unit: the other `upgrade*` settings are in
-seconds, but this one matches the `timeout` settings, because useful values here are sub-second.
+How long to wait for an HTTP/3 attempt before giving up and falling back to lower versions (TCP),
+in milliseconds. Note that this is only for pathological cases where a link is being blackholed,
+and usually servers that don't actually support HTTP/3 will respond negatively much faster.
 
-With no cache store configured, this is effectively time to response headers. But `AltSvcMiddleware`
-sits outside the HTTP cache middleware, so when `cache.store` is set, the same attempt also covers
-downloading the full response body and writing it to the cache — the budget then needs to fit the
-slowest cacheable response, not just the handshake.
-
-The default is high, but not unconditionally inert: `maxIdleTimeout` is configurable up to 120
-seconds, and above 60 seconds this deadline becomes the effective ceiling. Even below that, "QUIC's
-own idle timeout fires first" only holds while the connection is idle — a transfer still running
-past this deadline keeps the connection active, so no idle timeout is coming to end it.
-
-On expiry the request is retried over TCP, which means it is re-sent: a timeout often means the
-server is still processing, so a slow non-idempotent request (a POST, say) can end up delivered
-twice. Lowering this value trades that double-submission risk, plus the body/cache-write budget
-above, for faster recovery when a UDP path breaks. Anyone setting it low should confirm their
-slowest legitimate response — including body transfer and cache write, if a cache store is
-configured — fits well inside the budget.
+With no cache store configured, this is measured as the time to response headers; with caching, it
+is measured as the time to full response body being stored in the cache.
 
 Set to 0 to disable.
 
