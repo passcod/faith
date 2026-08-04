@@ -122,6 +122,12 @@ impl FaithResponse {
 	///
 	/// Note that by the time you read this property, the redirect will already have happened, and you
 	/// cannot prevent it by aborting the fetch at this point.
+	///
+	/// One caveat specific to Fáith: with the agent's `http3.upgradeFollowAdvertisedPort`
+	/// enabled, HTTP/3 responses compare URLs ignoring the port, because the port
+	/// was rewritten to the advertised one and would otherwise register as a
+	/// redirect. A genuine redirect differing only in port therefore reads as
+	/// `false` on those responses.
 	#[napi(getter)]
 	pub fn redirected(&self) -> bool {
 		self.redirected
