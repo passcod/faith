@@ -7,6 +7,8 @@
  */
 
 const { CAPABILITIES: C } = require("../capabilities.js");
+const { PAYLOAD, TRAILER_NAME, TRAILER_VALUE } = require("../servers/controllable-routes.js");
+const { fetch } = require("../../../wrapper.js");
 
 module.exports = {
 	name: "trailers",
@@ -21,13 +23,13 @@ module.exports = {
 		// body chunk. Awaiting trailers before draining the body therefore spins
 		// forever rather than erroring.
 		const body = await res.text();
-		t.equal(body, "conformance-payload", "body arrives ahead of the trailers");
+		t.equal(body, PAYLOAD, "body arrives ahead of the trailers");
 
 		const trailers = await res.trailers;
 		t.ok(trailers, "trailers are exposed once the body is consumed");
 		t.equal(
-			trailers && trailers.get("x-conformance-checksum"),
-			"abc123",
+			trailers && trailers.get(TRAILER_NAME),
+			TRAILER_VALUE,
 			"and carry the value the server sent",
 		);
 	},
@@ -39,15 +41,15 @@ module.exports = {
 		const res = await fetchWith(agent, `${url}/trailers/omitted`);
 		await res.text();
 		const trailers = await res.trailers;
-		const value = trailers && trailers.get("x-conformance-checksum");
-		t.notOk(
-			value,
-			"a declared-but-unsent trailer is absent, not fabricated from the Trailer header",
+		t.equal(
+			trailers,
+			null,
+			"no trailers arrived at all -- not a fabricated entry with an empty value, \
+which a falsy-value check would have accepted",
 		);
 	},
 };
 
 function fetchWith(agent, target) {
-	const { fetch } = require("../../../wrapper.js");
 	return fetch(target, { agent, timeout: 10000 });
 }
