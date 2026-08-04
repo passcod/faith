@@ -148,7 +148,7 @@ module.exports = {
 - [ ] **Step 4: Verify the HTTP/3 tests still pass unchanged**
 
 Run: `npx tape test/http3-abort-fallback.test.js test/http3-advertised-port.test.js test/http3-cache-ordering.test.js`
-Expected: PASS, 21 assertions total (3 + 13 + 5). No test file was edited, so any failure means the extraction changed behaviour.
+Expected: PASS, 26 assertions total (8 + 13 + 5). No test file was edited, so any failure means the extraction changed behaviour.
 
 - [ ] **Step 5: Commit**
 
@@ -1034,7 +1034,7 @@ jj bookmark set claude/conformance-matrix -r @-
 
 - [ ] `npm run test:conformance` passes, with exactly one skipped cell (`controllable-h2 / framing`).
 - [ ] `HTTPBIN_URL=http://localhost:8888 npm run test:only` passes with an unchanged count.
-- [ ] `npx tape test/http3-abort-fallback.test.js test/http3-advertised-port.test.js test/http3-cache-ordering.test.js` passes 21/21 — Task 1's extraction did not change behaviour.
+- [ ] `npx tape test/http3-abort-fallback.test.js test/http3-advertised-port.test.js test/http3-cache-ordering.test.js` passes 26/26 — Task 1's extraction did not change behaviour.
 - [ ] `test/conformance/matrix.json` is git-ignored and not committed.
 - [ ] `src/` is untouched: `jj diff --stat` lists no file under `src/`.
 - [ ] No `.test.js` file was added under `test/conformance/` — the harness must not be picked up by the main suite's glob.
