@@ -259,6 +259,46 @@ pub fn parse_alt_svc_header(value: &str) -> Option<(u16, Option<Duration>)> {
 	None
 }
 
+/// Records a cancellation if the HTTP/3 attempt it guards is dropped before
+/// producing an outcome.
+///
+/// [`AltSvcMiddleware`] can only learn that HTTP/3 is broken from the attempt's
+/// return value, and a cancelled request never produces one: `faith_fetch`
+/// races `send()` against the abort signal in a `select!`, which drops the
+/// losing future. Without this guard nothing ever demotes the origin, so a
+/// caller whose deadline is shorter than the network's own failure detection
+/// re-attempts HTTP/3 over a dead path on every retry, indefinitely.
+struct H3AttemptGuard {
+	cache: Arc<AltSvcCache>,
+	url: reqwest::Url,
+	armed: bool,
+}
+
+impl H3AttemptGuard {
+	fn new(cache: Arc<AltSvcCache>, url: reqwest::Url) -> Self {
+		Self {
+			cache,
+			url,
+			armed: true,
+		}
+	}
+
+	/// The attempt produced an outcome, so it speaks for itself.
+	fn disarm(&mut self) {
+		self.armed = false;
+	}
+}
+
+impl Drop for H3AttemptGuard {
+	fn drop(&mut self) {
+		// Must stay infallible: this can run while unwinding, where a panic
+		// would abort the process. moka's sync cache does not panic on insert.
+		if self.armed {
+			self.cache.record_h3_cancellation(&self.url);
+		}
+	}
+}
+
 #[derive(Clone)]
 pub struct AltSvcMiddleware {
 	cache: Arc<AltSvcCache>,
@@ -305,7 +345,11 @@ impl Middleware for AltSvcMiddleware {
 			if let Some(req_clone) = req.try_clone() {
 				*req.version_mut() = http::Version::HTTP_3;
 
+				let mut guard = H3AttemptGuard::new(Arc::clone(&self.cache), url.clone());
 				let result = next.clone().run(req, extensions).await;
+				// Reached on success and on error alike; only a mid-flight drop
+				// skips it and leaves the guard armed.
+				guard.disarm();
 
 				match result {
 					Ok(response) => {

@@ -691,6 +691,21 @@ advertisements (essentially, hints pre-populate the Alt-Svc advertisements cache
 
 These four settings allow tweaking the HTTP/3 advertisement/knowledge cache behaviour.
 
+#### `AgentOptions.http3.upgradeCancelStrikes: number`
+
+Fáith learns that HTTP/3 is broken from a failed attempt. A request cancelled via `AbortSignal`
+never produces that signal — the attempt is abandoned before it can fail — so a cancelled attempt
+would otherwise teach Fáith nothing, and an origin whose UDP path has broken would keep being
+retried over HTTP/3 for as long as its Alt-Svc entry lives.
+
+Cancellations are therefore counted as weak evidence: this many of them in a row, each within a
+minute of the last, demote the origin to TCP for `upgradeFailedTtl`. Any successful HTTP/3 response
+resets the count, so aborting healthy requests doesn't accumulate.
+
+Set to 0 to disable, so that only real HTTP/3 errors demote an origin.
+
+Default: 3.
+
 ### `AgentOptions.pool: object`
 
 Settings related to the connection pool. This is a nested object.

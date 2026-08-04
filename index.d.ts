@@ -391,6 +391,22 @@ export interface AgentHttp3Options {
    */
   upgradeFailedTtl?: number
   /**
+   * How many consecutive cancelled HTTP/3 attempts, within a 60-second window,
+   * demote an origin back to TCP.
+   *
+   * Fáith normally learns that HTTP/3 is broken from a failed attempt. A request
+   * cancelled via `AbortSignal` never produces that signal, so without this an
+   * origin whose UDP path breaks keeps being retried over HTTP/3 for as long as
+   * the Alt-Svc entry lives. Cancellations are treated as weak evidence: only a
+   * sustained run of them demotes the origin, and any successful HTTP/3 response
+   * resets the count.
+   *
+   * Set to 0 to disable, so only real HTTP/3 errors demote an origin.
+   *
+   * Default: 3.
+   */
+  upgradeCancelStrikes?: number
+  /**
    * Maximum number of origins to track in the Alt-Svc cache.
    *
    * Default: 10000.

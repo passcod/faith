@@ -225,6 +225,20 @@ pub struct AgentHttp3Options {
 	///
 	/// Default: 300 (5 minutes).
 	pub upgrade_failed_ttl: Option<u32>,
+	/// How many consecutive cancelled HTTP/3 attempts, within a 60-second window,
+	/// demote an origin back to TCP.
+	///
+	/// Fáith normally learns that HTTP/3 is broken from a failed attempt. A request
+	/// cancelled via `AbortSignal` never produces that signal, so without this an
+	/// origin whose UDP path breaks keeps being retried over HTTP/3 for as long as
+	/// the Alt-Svc entry lives. Cancellations are treated as weak evidence: only a
+	/// sustained run of them demotes the origin, and any successful HTTP/3 response
+	/// resets the count.
+	///
+	/// Set to 0 to disable, so only real HTTP/3 errors demote an origin.
+	///
+	/// Default: 3.
+	pub upgrade_cancel_strikes: Option<u32>,
 	/// Maximum number of origins to track in the Alt-Svc cache.
 	///
 	/// Default: 10000.
@@ -696,13 +710,16 @@ impl Agent {
 				.and_then(|o| o.upgrade_cache_capacity)
 				.unwrap_or(10_000)
 				.into();
+			let cancel_strikes = http3_opts
+				.and_then(|o| o.upgrade_cancel_strikes)
+				.unwrap_or(3);
 
 			let cache = Arc::new(AltSvcCache::new(
 				advertised_ttl,
 				confirmed_ttl,
 				failed_ttl,
 				capacity,
-				3,
+				cancel_strikes,
 				Duration::from_secs(60),
 			));
 
