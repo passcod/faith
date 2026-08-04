@@ -90,6 +90,13 @@ async function findFreePort() {
  */
 async function startCaddy({ port, dir, altSvc, cacheControl }) {
 	const { certPath, keyPath } = ensureCert();
+	// Backtick-quoted, because these values contain the double quotes Caddy would
+	// otherwise treat as the end of the token.
+	const directives = [`tls ${certPath} ${keyPath}`];
+	if (altSvc) directives.push(`header Alt-Svc \`${altSvc}\``);
+	if (cacheControl) directives.push(`header Cache-Control \`${cacheControl}\``);
+	directives.push(`respond "hello-from-caddy"`);
+
 	const caddyfile = `{
 	auto_https off
 	admin off
@@ -99,8 +106,7 @@ async function startCaddy({ port, dir, altSvc, cacheControl }) {
 }
 
 https://localhost:${port} {
-	tls ${certPath} ${keyPath}
-${altSvc ? `\theader Alt-Svc \`${altSvc}\`\n` : ""}${cacheControl ? `\theader Cache-Control \`${cacheControl}\`\n` : ""}	respond "hello-from-caddy"
+${directives.map((d) => `\t${d}`).join("\n")}
 }
 `;
 	const configPath = path.join(dir, `Caddyfile.${port}`);

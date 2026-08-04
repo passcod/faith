@@ -709,6 +709,12 @@ Strikes must land within about a minute of each other to count towards a run. A 
 backoff exceeds that window never accumulates one, so callers with a long backoff should set this
 to 1 for immediate demotion on the first cancelled attempt.
 
+One fault neither this nor `upgradeAttemptTimeout` catches: a path that carries small datagrams but
+drops full-size ones, such as an MTU blackhole. Response headers still arrive, so the attempt
+resolves and both mechanisms count it a success; the transfer then stalls partway through the body,
+where neither is watching. `maxIdleTimeout` or the request's own timeout is what ends such a
+request, and the origin stays on HTTP/3.
+
 Set to 0 to disable, so that only real HTTP/3 errors demote an origin (not recommended).
 
 Default: 3.

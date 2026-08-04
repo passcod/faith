@@ -73,20 +73,26 @@ test("HTTP/3: cache hits do not reset cancellation strikes", async (t) => {
 		try {
 			const res = await fetch(`${base}${path}`, { agent, ...opts });
 			await res.text();
-			return { ok: true, version: res.version };
+			// http-cache sets x-cache when cache_status_headers is on, which it is by
+			// default. Without checking it, "served again" can't be told from "fetched
+			// again", and this test would pass while exercising nothing.
+			return { ok: true, version: res.version, cache: res.headers.get("x-cache") };
 		} catch (err) {
 			return { ok: false, code: err.code };
 		}
 	};
 
 	try {
-		// Warm up: confirm HTTP/3 for the origin, and populate the cache for /cached.
-		let warm;
-		for (let i = 0; i < 2; i++) warm = await attempt("/cached", { timeout: 10000 });
-		t.equal(warm.version, "HTTP/3.0", "precondition: the origin is confirmed as HTTP/3");
+		// One live exchange over HTTP/3, which is also what populates the cache.
+		const live = await attempt("/cached", { timeout: 10000 });
+		t.equal(live.version, "HTTP/3.0", "precondition: a live exchange upgrades to HTTP/3");
 
 		const cachedAgain = await attempt("/cached", { timeout: 10000 });
-		t.ok(cachedAgain.ok, "precondition: /cached is served again (from the cache)");
+		t.equal(
+			cachedAgain.cache,
+			"HIT",
+			"precondition: /cached is now served from the cache rather than the network",
+		);
 
 		// Break only the UDP path. Caddy's TCP listener stays healthy throughout.
 		relay.blackhole();
@@ -95,10 +101,17 @@ test("HTTP/3: cache hits do not reset cancellation strikes", async (t) => {
 		// must go to the network. Four rounds is comfortably past the default strike
 		// threshold of 3, so a working demotion happens well inside the loop.
 		const cancelled = [];
+		const hits = [];
 		for (let i = 0; i < 4; i++) {
-			await attempt("/cached", { timeout: 10000 });
+			hits.push((await attempt("/cached", { timeout: 10000 })).cache);
 			cancelled.push(await attempt(`/live-${i}`, { signal: AbortSignal.timeout(1200) }));
 		}
+		t.deepEqual(
+			hits,
+			["HIT", "HIT", "HIT", "HIT"],
+			"every interleaved /cached really was a cache hit, so they had the chance to \
+reset the strikes",
+		);
 
 		const recovered = cancelled.filter((r) => r.ok);
 		t.ok(

@@ -412,11 +412,12 @@ export interface AgentHttp3Options {
    * so callers with a long backoff should set this to 1 for immediate demotion
    * on the first cancelled attempt.
    *
-   * Any successful HTTP/3 response clears the count, which also means a
-   * partial fault where small responses succeed and large ones hang (an MTU
-   * blackhole, for instance) keeps clearing the evidence before a run can
-   * build up. `upgradeAttemptTimeout` is the mechanism that catches that case,
-   * not strikes.
+   * One fault neither this nor `upgradeAttemptTimeout` catches: a path that
+   * carries small datagrams but drops full-size ones (an MTU blackhole, say).
+   * Response headers still arrive, so the attempt resolves and every mechanism
+   * here counts it a success — the transfer then stalls partway through the
+   * body, where nothing is watching. `maxIdleTimeout` or the request's own
+   * timeout is what ends such a request, and the origin stays on HTTP/3.
    *
    * Set to 0 to disable, so only real HTTP/3 errors demote an origin.
    *
