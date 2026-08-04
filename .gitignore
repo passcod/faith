@@ -1,3 +1,6 @@
 /target
 node_modules
 *.node
+
+# subagent-driven-development scratch (ledger, briefs, review packages)
+.superpowers/

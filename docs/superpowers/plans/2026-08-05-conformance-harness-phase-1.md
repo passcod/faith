@@ -16,7 +16,7 @@
 - Indentation in this repo is **tabs**, in both Rust and JS. Match the surrounding style.
 - **Do not modify any existing test file's assertions.** Task 1 refactors a fixture that three HTTP/3 test files import; those tests must keep passing unchanged.
 - **Do not modify `src/`.** Phase 1 is test infrastructure only. If a dimension appears to reveal a faith bug, report it rather than fixing it here.
-- Linux-only by design. Do not add platform guards beyond what Task 3 specifies.
+- No platform guards. Phase 1 spawns no external binaries and needs none; the `process.platform === "linux"` guards in the HTTP/3 tests exist because those spawn Caddy, which is not this phase's situation.
 - `caddy` is on PATH and go-httpbin runs on `http://localhost:8888` in this environment; neither is needed by phase 1, but the existing suite needs httpbin.
 - **`npm run build` is NOT needed** — phase 1 touches no Rust. The prebuilt `faith.linux-x64-gnu.node` in the workspace is current.
 
