@@ -101,7 +101,14 @@ impl AltSvcCache {
 		// port — which `follow_advertised_port` can act on — there is nothing to
 		// gate behind an option, so don't record it at all. RFC 7838 uses an empty
 		// host to mean "the same host as the origin".
-		if !advertisement.host.is_empty() && Some(advertisement.host.as_str()) != url.host_str() {
+		//
+		// Compared case-insensitively because host names are, and a server naming its
+		// own host in a different case is still naming its own host.
+		if !advertisement.host.is_empty()
+			&& !url
+				.host_str()
+				.is_some_and(|origin_host| origin_host.eq_ignore_ascii_case(&advertisement.host))
+		{
 			return;
 		}
 
@@ -297,8 +304,13 @@ pub fn parse_alt_svc_header(value: &str) -> Option<AltSvcAdvertisement> {
 					// the origin's own. Keep the host: acting on an advertisement for
 					// a different host would be the same unsupported inference as
 					// acting on one for a different port.
+					//
+					// Split on the *last* colon so a bracketed IPv6 literal survives,
+					// and keep it exactly as written — brackets included. That is the
+					// form `Url::host_str` also returns for IPv6, so comparing the two
+					// needs no normalising on either side.
 					if let Some((alt_host, port_str)) = value.rsplit_once(':') {
-						host = Some(alt_host.trim_matches(|c| c == '[' || c == ']'));
+						host = Some(alt_host);
 						if let Ok(p) = port_str.parse::<u16>() {
 							port = Some(p);
 						}
@@ -545,11 +557,55 @@ mod tests {
 		assert_eq!(
 			result,
 			Some(AltSvcAdvertisement {
-				host: "2001:db8::1".to_string(),
+				// Brackets kept: this is the form `Url::host_str` returns too, so the
+				// two compare directly.
+				host: "[2001:db8::1]".to_string(),
 				port: 8443,
 				max_age: None,
 			}),
 			"splitting on the last colon keeps a bracketed IPv6 literal intact"
+		);
+	}
+
+	#[test]
+	fn test_ipv6_origin_accepts_its_own_host_spelled_out() {
+		let cache = test_cache();
+		let url = reqwest::Url::parse("https://[2001:db8::1]/path").unwrap();
+
+		cache.record_alt_svc(
+			&url,
+			&AltSvcAdvertisement {
+				host: "[2001:db8::1]".to_string(),
+				port: 443,
+				max_age: None,
+			},
+		);
+
+		assert_eq!(
+			cache.should_use_h3(&url),
+			Some(443),
+			"an IPv6 origin naming its own address is the same host, brackets and all"
+		);
+	}
+
+	#[test]
+	fn test_host_comparison_ignores_case() {
+		let cache = test_cache();
+		let url = reqwest::Url::parse("https://example.com/path").unwrap();
+
+		cache.record_alt_svc(
+			&url,
+			&AltSvcAdvertisement {
+				host: "ExAmPlE.CoM".to_string(),
+				port: 443,
+				max_age: None,
+			},
+		);
+
+		assert_eq!(
+			cache.should_use_h3(&url),
+			Some(443),
+			"host names are case-insensitive, so this still names the origin's own host"
 		);
 	}
 
