@@ -632,11 +632,21 @@ test("HTTP/3: upgradeAttemptTimeout falls back without any cancellation", async 
 
 		relay.blackhole();
 
-		// Patient caller, no abort signal: the middleware's own deadline is the
-		// only thing that can end this attempt.
-		const first = await attempt({ timeout: 15000 });
+		// Patient caller: no timeout, no signal. The middleware's own deadline is
+		// the only thing that can end this attempt before quinn's ~30s idle
+		// timeout, so the elapsed time is what proves which mechanism fired. A
+		// caller-side `timeout` would trigger the pre-existing Err -> fallback
+		// path by itself and make this test pass with the feature removed.
+		const t0 = Date.now();
+		const first = await attempt({});
+		const elapsed = Date.now() - t0;
+
 		t.ok(first.ok, "the very first request after the break already falls back");
 		t.equal(first.version, "HTTP/2.0", "the fallback used TCP");
+		t.ok(
+			elapsed < 5000,
+			`fallback was driven by upgradeAttemptTimeout, not the 30s QUIC idle timeout (took ${elapsed}ms)`,
+		);
 	} finally {
 		relay.close();
 		await tcp.close();
@@ -650,7 +660,7 @@ test("HTTP/3: upgradeAttemptTimeout falls back without any cancellation", async 
 
 Run: `npm run build && npx tape test/http3-abort-fallback.test.js`
 
-Expected: the first test passes 3/3; the new test FAILS. `upgradeAttemptTimeout` is not a real option yet, so the h3 attempt hangs until quinn's 30s idle timeout, which exceeds the caller's 15s `timeout` — so `first.ok` is false.
+Expected: the first test passes 3/3; the new test FAILS. `upgradeAttemptTimeout` is not a real option yet, so the h3 attempt hangs all the way to quinn's ~30s idle timeout before falling back — the fallback still eventually succeeds (`first.ok` is true), but it takes ~30s, so the `elapsed < 5000` assertion fails. (A caller-side `timeout` here would trigger the pre-existing `Err -> fallback` path by itself and mask the missing feature, which is why the test uses a patient caller instead.)
 
 - [ ] **Step 3: Add the field to the middleware**
 
@@ -791,7 +801,7 @@ And pass it when registering the middleware, replacing the existing `client.with
 
 Run: `npm run build && npx tape test/http3-abort-fallback.test.js`
 
-Expected: PASS, 6/6 across both tests.
+Expected: PASS, 7/7 across both tests (3 from the first test, 4 from the second, including the elapsed-time assertion).
 
 - [ ] **Step 7: Document it in the README**
 
@@ -854,5 +864,5 @@ jj new
 
 1. With UDP blackholed and a caller cancelling via `AbortSignal`, a retry loop falls back to TCP within `upgrade_cancel_strikes + 1` attempts.
 2. An origin whose h3 works normally is never demoted by interleaved caller aborts.
-3. A low `upgradeAttemptTimeout` (1500ms in the test) causes fallback on the first attempt, with `upgradeCancelStrikes: 0` proving strikes played no part.
+3. A low `upgradeAttemptTimeout` (1500ms in the test) causes fallback on the first attempt, well within quinn's ~30s idle timeout, with `upgradeCancelStrikes: 0` proving strikes played no part and a patient caller (no `timeout`, no `signal`) proving the pre-existing caller-timeout fallback path played no part either.
 4. Default behaviour for healthy origins is unchanged: h3 is still preferred and confirmed.

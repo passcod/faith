@@ -185,11 +185,21 @@ test("HTTP/3: upgradeAttemptTimeout falls back without any cancellation", async 
 
 		relay.blackhole();
 
-		// Patient caller, no abort signal: the middleware's own deadline is the
-		// only thing that can end this attempt.
-		const first = await attempt({ timeout: 15000 });
+		// Patient caller: no timeout, no signal. The middleware's own deadline is
+		// the only thing that can end this attempt before quinn's ~30s idle
+		// timeout, so the elapsed time is what proves which mechanism fired. A
+		// caller-side `timeout` would trigger the pre-existing Err -> fallback
+		// path by itself and make this test pass with the feature removed.
+		const t0 = Date.now();
+		const first = await attempt({});
+		const elapsed = Date.now() - t0;
+
 		t.ok(first.ok, "the very first request after the break already falls back");
 		t.equal(first.version, "HTTP/2.0", "the fallback used TCP");
+		t.ok(
+			elapsed < 5000,
+			`fallback was driven by upgradeAttemptTimeout, not the 30s QUIC idle timeout (took ${elapsed}ms)`,
+		);
 	} finally {
 		relay.close();
 		await tcp.close();
