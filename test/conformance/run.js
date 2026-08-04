@@ -25,11 +25,17 @@ const DIMENSIONS = [require("./dimensions/trailers.js")];
 const EXPECTED = require("./expected-matrix.json");
 
 function planCells() {
+	// Each dimension's requirements are static, so validating them once here
+	// -- rather than once per server inside the nested loop below -- avoids
+	// re-checking the same data redundantly.
+	for (const dimension of DIMENSIONS) {
+		assertKnownCapabilities(dimension.requires, `dimension ${dimension.name}`);
+	}
+
 	const cells = [];
 	for (const server of SERVERS) {
 		assertKnownCapabilities(server.capabilities, `server ${server.name}`);
 		for (const dimension of DIMENSIONS) {
-			assertKnownCapabilities(dimension.requires, `dimension ${dimension.name}`);
 			const missing = dimension.requires.filter((c) => !server.capabilities.has(c));
 			cells.push({
 				server: server.name,
@@ -49,13 +55,22 @@ async function main() {
 	const out = path.join(__dirname, "matrix.json");
 	writeFileSync(out, `${JSON.stringify({ cells }, null, "\t")}\n`);
 
+	// Sort both sides: the guard is about which cells exist and their status, not
+	// the order SERVERS and DIMENSIONS happen to be declared in. Comparing
+	// declaration order would make alphabetising a list, or inserting a dimension
+	// rather than appending one, fail indistinguishably from a real regression.
+	const byCell = (a, b) =>
+		a.server.localeCompare(b.server) || a.dimension.localeCompare(b.dimension);
+
 	test("conformance: realised matrix matches the expected one", (t) => {
 		// A cell silently disappearing -- because a capability declaration
 		// changed, or a server stopped starting -- looks identical to a clean run
 		// unless the shape itself is asserted.
 		t.deepEqual(
-			cells.map(({ server, dimension, status }) => ({ server, dimension, status })),
-			EXPECTED.cells,
+			cells
+				.map(({ server, dimension, status }) => ({ server, dimension, status }))
+				.sort(byCell),
+			[...EXPECTED.cells].sort(byCell),
 			"no cell appeared or vanished unnoticed",
 		);
 		t.end();
