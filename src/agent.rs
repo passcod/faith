@@ -702,6 +702,8 @@ impl Agent {
 				confirmed_ttl,
 				failed_ttl,
 				capacity,
+				3,
+				Duration::from_secs(60),
 			));
 
 			if let Some(hints) = http3_opts.and_then(|o| o.hints.as_ref()) {
