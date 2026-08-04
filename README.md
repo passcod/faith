@@ -720,6 +720,36 @@ Set to 0 to disable.
 
 Default: 60000 (60 seconds).
 
+#### `AgentOptions.http3.upgradeFollowAdvertisedPort: bool`
+
+Connect to the port a server advertises HTTP/3 on, even when that differs from the origin's own
+port. **This is not standards-compliant**, which is why it's off by default.
+
+An `Alt-Svc` advertisement names a network endpoint for the origin; it doesn't claim that the
+origin's *own* port speaks HTTP/3. Honouring one correctly therefore means connecting to that
+endpoint while still sending the origin's authority, and reqwest can't express that: it derives the
+HTTP/3 connect target from the request URI's authority. The upstream issue for this is
+[reqwest#1138](https://github.com/seanmonstar/reqwest/issues/1138). So by default, when a server
+advertises `h3=":8443"` for an origin served on `:443`, Fáith doesn't upgrade at all, rather than
+guessing that `:443` also speaks HTTP/3.
+
+Setting this to `true` upgrades anyway, by rewriting the request's port to the advertised one. That
+gets HTTP/3 working today against servers you control, with four consequences to be aware of:
+
+- The request's `Host`/`:authority` carries the advertised port rather than the origin's, which
+  [RFC 7838](https://www.rfc-editor.org/rfc/rfc7838) forbids. Servers that route on authority may
+  misroute or reject the request; servers that ignore it are unaffected.
+- `response.url` reports the port actually connected to.
+- `redirected` ignores port differences, since a rewritten port would otherwise look like a redirect
+  on every request. A genuine redirect differing only in port is therefore missed.
+- If a cache store is configured, HTTP/3 and TCP responses cache under different keys, so the same
+  resource can end up stored twice.
+
+TLS is unaffected either way: certificates are still validated against the origin's hostname, and
+only the port changes.
+
+Default: `false`.
+
 ### `AgentOptions.pool: object`
 
 Settings related to the connection pool. This is a nested object.

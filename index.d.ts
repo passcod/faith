@@ -455,6 +455,40 @@ export interface AgentHttp3Options {
    */
   upgradeAttemptTimeout?: number
   /**
+   * Connect to the port a server advertises HTTP/3 on, even when it differs from
+   * the origin's own port. **This is not standards-compliant**; it is off by
+   * default.
+   *
+   * An `Alt-Svc` advertisement names a network endpoint for the origin, so
+   * honouring one correctly means connecting to that endpoint while still
+   * sending the *origin's* authority. reqwest cannot express that — it derives
+   * the HTTP/3 connect target from the request URI's authority (tracked
+   * upstream as [reqwest#1138](https://github.com/seanmonstar/reqwest/issues/1138)).
+   * So by default Fáith does not upgrade at all when the advertised port
+   * differs, rather than guessing that the origin's own port also speaks
+   * HTTP/3.
+   *
+   * Setting this to `true` upgrades anyway, by rewriting the request's port to
+   * the advertised one. That gets HTTP/3 working today against servers you
+   * control, at the cost of four deviations you should be aware of:
+   *
+   * - The request's `Host`/`:authority` carries the advertised port instead of
+   *   the origin's, which [RFC 7838](https://www.rfc-editor.org/rfc/rfc7838)
+   *   forbids. Servers that route on authority may misroute or reject; servers
+   *   that ignore it are unaffected.
+   * - `response.url` reports the port actually connected to.
+   * - `redirected` ignores port differences, since the rewritten port would
+   *   otherwise look like a redirect on every request.
+   * - If a cache store is configured, HTTP/3 and TCP responses cache under
+   *   different keys, so the same resource can be stored twice.
+   *
+   * TLS is unaffected: certificates are still validated against the origin's
+   * hostname. Only the port changes.
+   *
+   * Default: `false`.
+   */
+  upgradeFollowAdvertisedPort?: boolean
+  /**
    * Maximum number of origins to track in the Alt-Svc cache.
    *
    * Default: 10000.

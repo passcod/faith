@@ -26,6 +26,7 @@ pub struct AltSvcCache {
 	advertised_ttl: Duration,
 	confirmed_ttl: Duration,
 	cancel_strikes: u32,
+	follow_advertised_port: bool,
 }
 
 impl std::fmt::Debug for AltSvcCache {
@@ -47,6 +48,7 @@ impl AltSvcCache {
 		capacity: u64,
 		cancel_strikes: u32,
 		strike_window: Duration,
+		follow_advertised_port: bool,
 	) -> Self {
 		Self {
 			advertised: Cache::builder()
@@ -68,6 +70,7 @@ impl AltSvcCache {
 			advertised_ttl,
 			confirmed_ttl,
 			cancel_strikes,
+			follow_advertised_port,
 		}
 	}
 
@@ -114,6 +117,28 @@ impl AltSvcCache {
 		self.advertised.insert(origin, entry);
 	}
 
+	/// Whether an entry advertising `entry_port` can be acted on for this URL.
+	///
+	/// An Alt-Svc advertisement names a network endpoint for the origin; it is not
+	/// a claim that the origin's *own* port speaks HTTP/3. So when the advertised
+	/// port differs, upgrading the request on the origin port is an inference the
+	/// advertisement does not support.
+	///
+	/// Honouring the advertised port properly means connecting to one port while
+	/// still sending the origin's authority, which reqwest cannot express: it
+	/// derives the HTTP/3 connect target from the request URI's authority (see
+	/// <https://github.com/seanmonstar/reqwest/issues/1138>). `follow_advertised_port`
+	/// opts into doing it anyway by rewriting the request's port, which is not
+	/// standards-compliant — the request then carries the alternative's authority
+	/// rather than the origin's.
+	fn port_actionable(&self, url: &reqwest::Url, entry_port: u16) -> bool {
+		self.follow_advertised_port || Some(entry_port) == url.port_or_known_default()
+	}
+
+	/// The port to attempt HTTP/3 on, or `None` to leave the request on TCP.
+	///
+	/// A returned port that differs from the URL's own means the caller opted into
+	/// `follow_advertised_port` and the request must be rewritten to target it.
 	pub fn should_use_h3(&self, url: &reqwest::Url) -> Option<u16> {
 		let origin = Self::origin_key(url)?;
 
@@ -122,13 +147,13 @@ impl AltSvcCache {
 		}
 
 		if let Some(entry) = self.confirmed.get(&origin) {
-			if entry.expires > Instant::now() {
+			if entry.expires > Instant::now() && self.port_actionable(url, entry.port) {
 				return Some(entry.port);
 			}
 		}
 
 		if let Some(entry) = self.advertised.get(&origin) {
-			if entry.expires > Instant::now() {
+			if entry.expires > Instant::now() && self.port_actionable(url, entry.port) {
 				return Some(entry.port);
 			}
 		}
@@ -351,12 +376,24 @@ impl Middleware for AltSvcMiddleware {
 		}
 
 		let url = req.url().clone();
-		let trying_h3 = self.cache.should_use_h3(&url).is_some();
 
-		if trying_h3 {
+		if let Some(h3_port) = self.cache.should_use_h3(&url) {
 			// Clone the request before attempting HTTP/3 so we can retry with TCP if it fails
 			if let Some(req_clone) = req.try_clone() {
 				*req.version_mut() = http::Version::HTTP_3;
+
+				// A port differing from the origin's only comes back when
+				// `follow_advertised_port` is set — `should_use_h3` filters
+				// mismatches out otherwise. Rewriting the URL is the only way to
+				// make reqwest connect elsewhere, and it MUST happen after the
+				// clone above so the TCP fallback still targets the origin.
+				//
+				// Every cache operation below keeps using `url`, the origin, so
+				// confirmations, failures and strikes stay keyed on the origin
+				// rather than on the alternative endpoint.
+				if Some(h3_port) != url.port_or_known_default() {
+					let _ = req.url_mut().set_port(Some(h3_port));
+				}
 
 				let mut guard = H3AttemptGuard::new(Arc::clone(&self.cache), url.clone());
 				// `None` means the attempt ran out of time. Bound in its own
@@ -469,10 +506,14 @@ mod tests {
 	}
 
 	fn test_cache() -> AltSvcCache {
-		test_cache_with(3, Duration::from_secs(60))
+		test_cache_with(3, Duration::from_secs(60), false)
 	}
 
-	fn test_cache_with(cancel_strikes: u32, strike_window: Duration) -> AltSvcCache {
+	fn test_cache_with(
+		cancel_strikes: u32,
+		strike_window: Duration,
+		follow_advertised_port: bool,
+	) -> AltSvcCache {
 		AltSvcCache::new(
 			Duration::from_secs(86400),
 			Duration::from_secs(86400),
@@ -480,7 +521,66 @@ mod tests {
 			10_000,
 			cancel_strikes,
 			strike_window,
+			follow_advertised_port,
 		)
+	}
+
+	#[test]
+	fn test_advertised_port_matching_origin_upgrades() {
+		let cache = test_cache();
+		let url = reqwest::Url::parse("https://example.com/path").unwrap();
+
+		cache.record_alt_svc(&url, 443, None);
+
+		assert_eq!(
+			cache.should_use_h3(&url),
+			Some(443),
+			"an advertisement for the origin's own port is actionable"
+		);
+	}
+
+	#[test]
+	fn test_advertised_port_mismatch_does_not_upgrade() {
+		let cache = test_cache();
+		let url = reqwest::Url::parse("https://example.com/path").unwrap();
+
+		cache.record_alt_svc(&url, 8443, None);
+
+		assert!(
+			cache.should_use_h3(&url).is_none(),
+			"h3 advertised on :8443 says nothing about :443, so don't upgrade"
+		);
+	}
+
+	#[test]
+	fn test_advertised_port_mismatch_is_still_recorded() {
+		let cache = test_cache();
+		let url = reqwest::Url::parse("https://example.com/path").unwrap();
+
+		cache.record_alt_svc(&url, 8443, None);
+
+		let entry = cache
+			.advertised
+			.get(&"https://example.com:443".to_string())
+			.expect("the advertisement is kept even though it isn't actionable");
+		assert_eq!(
+			entry.port, 8443,
+			"keeping it means the port is available if reqwest ever lets us honour it"
+		);
+	}
+
+	#[test]
+	fn test_advertised_port_mismatch_upgrades_when_following() {
+		let cache = test_cache_with(3, Duration::from_secs(60), true);
+		let url = reqwest::Url::parse("https://example.com/path").unwrap();
+
+		cache.record_alt_svc(&url, 8443, None);
+
+		assert_eq!(
+			cache.should_use_h3(&url),
+			Some(8443),
+			"opting in returns the advertised port so the request can be rewritten"
+		);
 	}
 
 	#[test]
@@ -590,7 +690,7 @@ mod tests {
 
 	#[test]
 	fn test_cancellation_disabled_by_zero() {
-		let cache = test_cache_with(0, Duration::from_secs(60));
+		let cache = test_cache_with(0, Duration::from_secs(60), false);
 		let url = reqwest::Url::parse("https://example.com/path").unwrap();
 		cache.record_alt_svc(&url, 443, None);
 
@@ -607,7 +707,7 @@ mod tests {
 
 	#[test]
 	fn test_cancellation_strikes_decay() {
-		let cache = test_cache_with(3, Duration::from_millis(50));
+		let cache = test_cache_with(3, Duration::from_millis(50), false);
 		let url = reqwest::Url::parse("https://example.com/path").unwrap();
 		cache.record_alt_svc(&url, 443, None);
 

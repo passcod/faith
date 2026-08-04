@@ -143,7 +143,22 @@ pub fn faith_fetch<'env>(
 		let empty = status_code == StatusCode::NO_CONTENT || is_head;
 
 		let response_url = response.url().clone();
-		let redirected = parsed_url != response_url;
+		let redirected = if agent.h3_follow_advertised_port {
+			// With `http3.upgradeFollowAdvertisedPort` on, an HTTP/3 attempt rewrites
+			// the request's port to the advertised one, so the response URL's port
+			// reflects which endpoint answered rather than any redirect. Compare with
+			// ports normalised away, or every such request would report `redirected`.
+			// The cost is that a genuine redirect differing only in port is missed,
+			// which is indistinguishable from a rewrite while this is enabled.
+			let without_port = |url: &reqwest::Url| {
+				let mut url = url.clone();
+				let _ = url.set_port(None);
+				url
+			};
+			without_port(&parsed_url) != without_port(&response_url)
+		} else {
+			parsed_url != response_url
+		};
 
 		let version = response.version();
 
