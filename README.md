@@ -691,6 +691,35 @@ advertisements (essentially, hints pre-populate the Alt-Svc advertisements cache
 
 These four settings allow tweaking the HTTP/3 advertisement/knowledge cache behaviour.
 
+#### `AgentOptions.http3.upgradeCancelStrikes: number`
+
+When an HTTP/3 connection becomes unviable midway through, or when it's cancelled via
+`AbortSignal`, Fáith will initially retry using HTTP/3. However, it could be that the HTTP/3 path
+has now broken transiently or permanently. This setting defines how many strikes it takes for
+Fáith to downgrade to HTTP/2 (or lower, as available) instead of getting stuck on HTTP/3 for as
+long as that origin's `Alt-Svc` entry lives (or forever, for hinted origins).
+
+Strikes must land within about a minute of each other to count towards a run. A retry loop whose
+backoff exceeds that window never accumulates one, so callers with a long backoff should set this
+to 1 for immediate demotion on the first cancelled attempt.
+
+Set to 0 to disable, so that only real HTTP/3 errors demote an origin (not recommended).
+
+Default: 3.
+
+#### `AgentOptions.http3.upgradeAttemptTimeout: number`
+
+How long to wait for an HTTP/3 attempt before giving up and falling back to lower versions (TCP),
+in milliseconds. Note that this is only for pathological cases where a link is being blackholed,
+and usually servers that don't actually support HTTP/3 will respond negatively much faster.
+
+With no cache store configured, this is measured as the time to response headers; with caching, it
+is measured as the time to full response body being stored in the cache.
+
+Set to 0 to disable.
+
+Default: 60000 (60 seconds).
+
 ### `AgentOptions.pool: object`
 
 Settings related to the connection pool. This is a nested object.

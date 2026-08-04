@@ -55,6 +55,17 @@ jobs:
           go run github.com/mccutchen/go-httpbin/v2/cmd/go-httpbin@v2.23.1 -host 127.0.0.1 -port 8888 &
           sleep 10
         shell: bash
+      - name: Install Caddy
+        # The HTTP/3 tests need a real h3 server; Caddy is what downstream runs.
+        # Linux only: those tests drive a userspace UDP relay and the behaviour
+        # they cover is client-side, so there's nothing to gain from paying for
+        # it across the whole OS x Node matrix. Pinned for the same reason as
+        # httpbin above.
+        if: runner.os == 'Linux'
+        run: |
+          go install github.com/caddyserver/caddy/v2/cmd/caddy@v2.11.4
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+        shell: bash
       - run: npm run test
         env:
           HTTPBIN_URL: http://localhost:8888
