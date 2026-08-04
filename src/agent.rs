@@ -240,11 +240,12 @@ pub struct AgentHttp3Options {
 	/// so callers with a long backoff should set this to 1 for immediate demotion
 	/// on the first cancelled attempt.
 	///
-	/// Any successful HTTP/3 response clears the count, which also means a
-	/// partial fault where small responses succeed and large ones hang (an MTU
-	/// blackhole, for instance) keeps clearing the evidence before a run can
-	/// build up. `upgradeAttemptTimeout` is the mechanism that catches that case,
-	/// not strikes.
+	/// One fault neither this nor `upgradeAttemptTimeout` catches: a path that
+	/// carries small datagrams but drops full-size ones (an MTU blackhole, say).
+	/// Response headers still arrive, so the attempt resolves and every mechanism
+	/// here counts it a success — the transfer then stalls partway through the
+	/// body, where nothing is watching. `maxIdleTimeout` or the request's own
+	/// timeout is what ends such a request, and the origin stays on HTTP/3.
 	///
 	/// Set to 0 to disable, so only real HTTP/3 errors demote an origin.
 	///
@@ -257,12 +258,8 @@ pub struct AgentHttp3Options {
 	/// is in milliseconds to match the `timeout` settings, because useful values
 	/// are sub-second.
 	///
-	/// With no cache store configured, this is effectively time to response
-	/// headers. But the Alt-Svc middleware sits outside the HTTP cache
-	/// middleware, so when `cache.store` is set, the same attempt also covers
-	/// downloading the full response body and writing it to the cache — the
-	/// budget then needs to fit the slowest cacheable response, not just the
-	/// handshake.
+	/// This bounds the wait for response headers, not the response body, so a slow
+	/// body is unaffected.
 	///
 	/// The default is high, but not unconditionally inert: `maxIdleTimeout` is
 	/// configurable up to 120 seconds, and above 60 seconds this deadline becomes
@@ -274,11 +271,9 @@ pub struct AgentHttp3Options {
 	/// On expiry the request is retried over TCP, which means it is re-sent: a
 	/// timeout often means the server is still processing, so a slow
 	/// non-idempotent request (a POST, say) can end up delivered twice. Lowering
-	/// this value trades that double-submission risk, plus the body/cache-write
-	/// budget above, for faster recovery when a UDP path breaks. Anyone setting
-	/// it low should confirm their slowest legitimate response — including body
-	/// transfer and cache write, if a cache store is configured — fits well
-	/// inside the budget.
+	/// this value trades that double-submission risk for faster recovery when a
+	/// UDP path breaks. Anyone setting it low should confirm their slowest
+	/// legitimate time to response headers fits well inside the budget.
 	///
 	/// Set to 0 to disable, so an HTTP/3 attempt is bounded only by the QUIC idle
 	/// timeout and the request's own timeout.
@@ -300,7 +295,7 @@ pub struct AgentHttp3Options {
 	///
 	/// Setting this to `true` upgrades anyway, by rewriting the request's port to
 	/// the advertised one. That gets HTTP/3 working today against servers you
-	/// control, at the cost of four deviations you should be aware of:
+	/// control, at the cost of three deviations you should be aware of:
 	///
 	/// - The request's `Host`/`:authority` carries the advertised port instead of
 	///   the origin's, which [RFC 7838](https://www.rfc-editor.org/rfc/rfc7838)
@@ -309,9 +304,6 @@ pub struct AgentHttp3Options {
 	/// - `response.url` reports the port actually connected to.
 	/// - `redirected` ignores port differences, since the rewritten port would
 	///   otherwise look like a redirect on every request.
-	/// - If a cache store is configured, HTTP/3 and TCP responses cache under
-	///   different keys, so the same resource can be stored twice — and neither can
-	///   hit the other's entry, which lowers the hit rate for those origins.
 	///
 	/// TLS is unaffected: certificates are still validated against the origin's
 	/// hostname. Only the port changes.
@@ -777,7 +769,7 @@ impl Agent {
 		let h3_follow_advertised_port = false;
 
 		#[cfg(feature = "http3")]
-		let alt_svc_cache = {
+		let (alt_svc_cache, alt_svc_middleware) = {
 			let http3_opts = options.http3.as_ref();
 			let enabled = http3_opts.and_then(|o| o.upgrade_enabled).unwrap_or(true);
 
@@ -830,13 +822,10 @@ impl Agent {
 				}
 			}
 
-			client = client.with(AltSvcMiddleware::new(
-				cache.clone(),
-				enabled,
-				attempt_timeout,
-			));
+			let middleware = AltSvcMiddleware::new(cache.clone(), enabled, attempt_timeout);
 
-			Some(cache)
+			// Registered below rather than here — see the note at the registration.
+			(Some(cache), middleware)
 		};
 
 		if let Some(cache) = options.cache
@@ -881,6 +870,30 @@ impl Agent {
 					}));
 				}
 			}
+		}
+
+		// Registered *after* the HTTP cache, so the Alt-Svc layer sits inside it:
+		// `reqwest-middleware` runs the first-registered middleware outermost. Being
+		// inside matters three times over.
+		//
+		// A cache hit is served without calling inward, so it never reaches this
+		// layer. From outside, it would: `http-cache` rebuilds a cached response with
+		// the *stored* HTTP version, so a response cached from an HTTP/3 exchange
+		// replays as HTTP/3 and would be taken for a live one — confirming HTTP/3,
+		// clearing cancellation strikes and refreshing the confirmed TTL on evidence
+		// that never touched the network.
+		//
+		// The cache middleware also buffers the whole response body inside its own
+		// call inward. From outside, the HTTP/3 attempt guarded here would span that
+		// buffering, so a cancellation during body download would count as a strike,
+		// and `upgradeAttemptTimeout` would bound body transfer rather than the wait
+		// for response headers.
+		//
+		// And cache keys are computed before this layer runs, so an advertised-port
+		// rewrite cannot split HTTP/3 and TCP responses across separate entries.
+		#[cfg(feature = "http3")]
+		{
+			client = client.with(alt_svc_middleware);
 		}
 
 		Ok(Self {
