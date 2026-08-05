@@ -20,7 +20,11 @@ const { controllableH1, controllableH2 } = require("./servers/controllable.js");
 const { Agent } = require("../../index.js");
 
 const SERVERS = [controllableH1, controllableH2];
-const DIMENSIONS = [require("./dimensions/trailers.js")];
+const DIMENSIONS = [
+	require("./dimensions/trailers.js"),
+	require("./dimensions/framing.js"),
+	require("./dimensions/encoding.js"),
+];
 
 const EXPECTED = require("./expected-matrix.json");
 
