@@ -21,6 +21,9 @@ const { CAPABILITIES: C } = require("../capabilities.js");
 const { ensureCert, findFreePort, waitForPort } = require("../../fixtures/net.js");
 const { buildStaticTree } = require("./static-tree.js");
 
+/** The largest request header nginx will accept, in bytes. */
+const HEADER_LIMIT = 1024;
+
 /**
  * How this nginx spells "enable HTTP/2".
  *
@@ -82,6 +85,10 @@ http {
 	types { }
 	default_type text/plain;
 
+	# A request-header ceiling, so this row covers the header-limits dimension. nginx
+	# answers an oversized header with 494, which it maps to 400 on the wire.
+	large_client_header_buffers 4 ${HEADER_LIMIT/1024}k;
+
 	server {
 		listen ${port} ssl${style.listenSuffix};
 		${style.directive}
@@ -98,9 +105,9 @@ http {
 		location = /encoding/gzip {
 			gzip on;
 			gzip_types text/plain;
-			# The default minimum is 20 bytes and the payload is 19, so without this
-			# nginx serves it uncompressed and the encoding dimension asserts nothing
-			# about gzip at all.
+			# Explicit, so the contract's body size and nginx's default minimum are not
+			# quietly load-bearing on each other: below the minimum nginx serves plain
+			# bytes, and the encoding dimension would be asserting nothing about gzip.
 			gzip_min_length 1;
 		}
 
@@ -127,8 +134,10 @@ const nginx = {
 		C.GZIP,
 		C.CONTENT_LENGTH,
 		C.CONDITIONAL,
+		C.HEADER_LIMITS,
 		C.SCRIPTABLE,
 	]),
+	headerLimit: HEADER_LIMIT,
 
 	available() {
 		try {
@@ -207,4 +216,4 @@ const nginx = {
 	},
 };
 
-module.exports = { nginx, buildConf, http2Style, parseHttp2Style };
+module.exports = { nginx, buildConf, http2Style, parseHttp2Style, HEADER_LIMIT };

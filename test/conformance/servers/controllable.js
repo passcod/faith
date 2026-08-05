@@ -15,7 +15,7 @@ const https = require("node:https");
 
 const { ensureCert, findFreePort } = require("../../fixtures/net.js");
 const { CAPABILITIES: C } = require("../capabilities.js");
-const { handle } = require("./controllable-routes.js");
+const { handle, state } = require("./controllable-routes.js");
 
 /** Destroy live sockets rather than waiting on them. */
 function makeCloser(server, sockets) {
@@ -61,8 +61,21 @@ function track(server, sockets) {
 	});
 }
 
+/**
+ * Node enforces both of these itself, so the scriptable origin covers the two
+ * connection-lifecycle dimensions rather than leaving them to one Apache row each.
+ *
+ * `maxRequestsPerSocket` is the HTTP/1 keepalive limit -- Node answers the request
+ * that hits it with `Connection: close` -- and `maxHeaderSize` is a whole-header-block
+ * ceiling, comfortably above the couple of hundred bytes faith sends by default.
+ */
+const KEEPALIVE_LIMIT = 2;
+const HEADER_LIMIT = 1024;
+
 const controllableH1 = {
 	name: "controllable-h1",
+	keepaliveLimit: KEEPALIVE_LIMIT,
+	headerLimit: HEADER_LIMIT,
 	// The protocol every cell on this row is expected to negotiate. Asserted per
 	// cell by the runner, because nothing in the dimensions is version-specific:
 	// without it, an h2 row that fell back to HTTP/1.1 would still pass.
@@ -75,6 +88,8 @@ const controllableH1 = {
 		C.CHUNKED,
 		C.CONTENT_LENGTH,
 		C.CONDITIONAL,
+		C.KEEPALIVE_LIMIT,
+		C.HEADER_LIMITS,
 		C.SCRIPTABLE,
 	]),
 	async start() {
@@ -86,9 +101,13 @@ const controllableH1 = {
 				key: readFileSync(keyPath),
 				cert: readFileSync(certPath),
 				ALPNProtocols: ["http/1.1"],
+				maxHeaderSize: HEADER_LIMIT,
 			},
 			handle,
 		);
+		// Node closes the connection on the request that reaches this count, which is
+		// what the keepalive dimension asks the client to survive.
+		server.maxRequestsPerSocket = KEEPALIVE_LIMIT;
 		track(server, sockets);
 		await listen(server, port, this.name);
 		return {
@@ -109,6 +128,9 @@ const controllableH2 = {
 		C.GZIP,
 		C.CONTENT_LENGTH,
 		C.CONDITIONAL,
+		// Node's h2 server can be told exactly when to send a GOAWAY, which is why the
+		// goaway dimension lives on this row rather than on a configured server.
+		C.GOAWAY,
 		C.SCRIPTABLE,
 	]),
 	async start() {
@@ -123,6 +145,11 @@ const controllableH2 = {
 			},
 			handle,
 		);
+		// Counted so the goaway dimension can see that a client opened a fresh session
+		// rather than reusing the one the server retired.
+		server.on("session", () => {
+			state.sessions++;
+		});
 		track(server, sockets);
 		await listen(server, port, this.name);
 		return {

@@ -31,6 +31,24 @@
 			"reason": "lacks alpnMulti"
 		},
 		{
+			"server": "controllable-h1",
+			"dimension": "keepalive",
+			"status": "run",
+			"reason": null
+		},
+		{
+			"server": "controllable-h1",
+			"dimension": "header-limits",
+			"status": "run",
+			"reason": null
+		},
+		{
+			"server": "controllable-h1",
+			"dimension": "goaway",
+			"status": "skip",
+			"reason": "lacks goaway, h2"
+		},
+		{
 			"server": "controllable-h2",
 			"dimension": "trailers",
 			"status": "run",
@@ -61,6 +79,24 @@
 			"reason": "lacks alpnMulti"
 		},
 		{
+			"server": "controllable-h2",
+			"dimension": "keepalive",
+			"status": "skip",
+			"reason": "lacks keepaliveLimit"
+		},
+		{
+			"server": "controllable-h2",
+			"dimension": "header-limits",
+			"status": "skip",
+			"reason": "lacks headerLimits"
+		},
+		{
+			"server": "controllable-h2",
+			"dimension": "goaway",
+			"status": "run",
+			"reason": null
+		},
+		{
 			"server": "caddy",
 			"dimension": "trailers",
 			"status": "skip",
@@ -91,6 +127,24 @@
 			"reason": null
 		},
 		{
+			"server": "caddy",
+			"dimension": "keepalive",
+			"status": "skip",
+			"reason": "lacks keepaliveLimit"
+		},
+		{
+			"server": "caddy",
+			"dimension": "header-limits",
+			"status": "skip",
+			"reason": "lacks headerLimits"
+		},
+		{
+			"server": "caddy",
+			"dimension": "goaway",
+			"status": "skip",
+			"reason": "lacks goaway"
+		},
+		{
 			"server": "nginx",
 			"dimension": "trailers",
 			"status": "skip",
@@ -119,6 +173,216 @@
 			"dimension": "alpn",
 			"status": "run",
 			"reason": null
+		},
+		{
+			"server": "nginx",
+			"dimension": "keepalive",
+			"status": "skip",
+			"reason": "lacks keepaliveLimit"
+		},
+		{
+			"server": "nginx",
+			"dimension": "header-limits",
+			"status": "run",
+			"reason": null
+		},
+		{
+			"server": "nginx",
+			"dimension": "goaway",
+			"status": "skip",
+			"reason": "lacks goaway"
+		},
+		{
+			"server": "apache-h1",
+			"dimension": "trailers",
+			"status": "skip",
+			"reason": "lacks trailers"
+		},
+		{
+			"server": "apache-h1",
+			"dimension": "framing",
+			"status": "skip",
+			"reason": "lacks chunked"
+		},
+		{
+			"server": "apache-h1",
+			"dimension": "encoding",
+			"status": "run",
+			"reason": null
+		},
+		{
+			"server": "apache-h1",
+			"dimension": "conditional",
+			"status": "run",
+			"reason": null
+		},
+		{
+			"server": "apache-h1",
+			"dimension": "alpn",
+			"status": "skip",
+			"reason": "lacks alpnMulti"
+		},
+		{
+			"server": "apache-h1",
+			"dimension": "keepalive",
+			"status": "run",
+			"reason": null
+		},
+		{
+			"server": "apache-h1",
+			"dimension": "header-limits",
+			"status": "run",
+			"reason": null
+		},
+		{
+			"server": "apache-h1",
+			"dimension": "goaway",
+			"status": "skip",
+			"reason": "lacks goaway, h2"
+		},
+		{
+			"server": "apache-h2",
+			"dimension": "trailers",
+			"status": "skip",
+			"reason": "lacks trailers"
+		},
+		{
+			"server": "apache-h2",
+			"dimension": "framing",
+			"status": "skip",
+			"reason": "lacks chunked"
+		},
+		{
+			"server": "apache-h2",
+			"dimension": "encoding",
+			"status": "run",
+			"reason": null
+		},
+		{
+			"server": "apache-h2",
+			"dimension": "conditional",
+			"status": "run",
+			"reason": null
+		},
+		{
+			"server": "apache-h2",
+			"dimension": "alpn",
+			"status": "run",
+			"reason": null
+		},
+		{
+			"server": "apache-h2",
+			"dimension": "keepalive",
+			"status": "skip",
+			"reason": "lacks keepaliveLimit"
+		},
+		{
+			"server": "apache-h2",
+			"dimension": "header-limits",
+			"status": "run",
+			"reason": null
+		},
+		{
+			"server": "apache-h2",
+			"dimension": "goaway",
+			"status": "skip",
+			"reason": "lacks goaway"
+		},
+		{
+			"server": "haproxy-h1",
+			"dimension": "trailers",
+			"status": "run",
+			"reason": null
+		},
+		{
+			"server": "haproxy-h1",
+			"dimension": "framing",
+			"status": "run",
+			"reason": null
+		},
+		{
+			"server": "haproxy-h1",
+			"dimension": "encoding",
+			"status": "run",
+			"reason": null
+		},
+		{
+			"server": "haproxy-h1",
+			"dimension": "conditional",
+			"status": "run",
+			"reason": null
+		},
+		{
+			"server": "haproxy-h1",
+			"dimension": "alpn",
+			"status": "skip",
+			"reason": "lacks alpnMulti"
+		},
+		{
+			"server": "haproxy-h1",
+			"dimension": "keepalive",
+			"status": "skip",
+			"reason": "lacks keepaliveLimit"
+		},
+		{
+			"server": "haproxy-h1",
+			"dimension": "header-limits",
+			"status": "skip",
+			"reason": "lacks headerLimits"
+		},
+		{
+			"server": "haproxy-h1",
+			"dimension": "goaway",
+			"status": "skip",
+			"reason": "lacks goaway, h2"
+		},
+		{
+			"server": "haproxy-h2",
+			"dimension": "trailers",
+			"status": "run",
+			"reason": null
+		},
+		{
+			"server": "haproxy-h2",
+			"dimension": "framing",
+			"status": "skip",
+			"reason": "lacks chunked"
+		},
+		{
+			"server": "haproxy-h2",
+			"dimension": "encoding",
+			"status": "run",
+			"reason": null
+		},
+		{
+			"server": "haproxy-h2",
+			"dimension": "conditional",
+			"status": "run",
+			"reason": null
+		},
+		{
+			"server": "haproxy-h2",
+			"dimension": "alpn",
+			"status": "run",
+			"reason": null
+		},
+		{
+			"server": "haproxy-h2",
+			"dimension": "keepalive",
+			"status": "skip",
+			"reason": "lacks keepaliveLimit"
+		},
+		{
+			"server": "haproxy-h2",
+			"dimension": "header-limits",
+			"status": "skip",
+			"reason": "lacks headerLimits"
+		},
+		{
+			"server": "haproxy-h2",
+			"dimension": "goaway",
+			"status": "skip",
+			"reason": "lacks goaway"
 		}
 	]
 }

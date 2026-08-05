@@ -18,17 +18,31 @@ const { CAPABILITIES: C, assertKnownCapabilities } = require("./capabilities.js"
 const { controllableH1, controllableH2 } = require("./servers/controllable.js");
 const { caddy } = require("./servers/caddy.js");
 const { nginx } = require("./servers/nginx.js");
+const { apacheH1, apacheH2 } = require("./servers/apache.js");
+const { haproxyH1, haproxyH2 } = require("./servers/haproxy.js");
 
 const { Agent } = require("../../index.js");
 const { fetch } = require("../../wrapper.js");
 
-const SERVERS = [controllableH1, controllableH2, caddy, nginx];
+const SERVERS = [
+	controllableH1,
+	controllableH2,
+	caddy,
+	nginx,
+	apacheH1,
+	apacheH2,
+	haproxyH1,
+	haproxyH2,
+];
 const DIMENSIONS = [
 	require("./dimensions/trailers.js"),
 	require("./dimensions/framing.js"),
 	require("./dimensions/encoding.js"),
 	require("./dimensions/conditional.js"),
 	require("./dimensions/alpn.js"),
+	require("./dimensions/keepalive.js"),
+	require("./dimensions/header-limits.js"),
+	require("./dimensions/goaway.js"),
 ];
 
 const EXPECTED = require("./expected-matrix.json");
@@ -242,7 +256,10 @@ async function main() {
 					dns: { overrides: [{ domain: "localhost", addresses: ["127.0.0.1"] }] },
 					http3: { upgradeEnabled: false },
 				});
-				const ctx = { url: running.url, agent };
+				// The row is in the context because some behaviours are only assertable
+				// against the number it was configured with: how many requests before it
+				// closes a connection, how large a request header it will accept.
+				const ctx = { url: running.url, agent, server };
 
 				try {
 					// Pin the protocol. Nothing in the dimensions is HTTP/1-specific, so

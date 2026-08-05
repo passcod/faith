@@ -7,7 +7,7 @@
  */
 
 const { execFileSync } = require("node:child_process");
-const { existsSync, readFileSync, mkdirSync } = require("node:fs");
+const { existsSync, readFileSync, mkdirSync, writeFileSync } = require("node:fs");
 const dgram = require("node:dgram");
 const net = require("node:net");
 const os = require("node:os");
@@ -70,6 +70,22 @@ async function findFreePort() {
 }
 
 /**
+ * The leaf certificate and its key in one file.
+ *
+ * HAProxy's `crt` takes a single PEM containing both, unlike every other server
+ * here, which takes two paths. Written next to the pair it is built from and cached
+ * the same way.
+ */
+function ensureCombinedCert() {
+	const { ca, caPath, certPath, keyPath } = ensureCert();
+	const combinedPath = path.join(path.dirname(certPath), "combined.pem");
+	if (!existsSync(combinedPath)) {
+		writeFileSync(combinedPath, `${readFileSync(keyPath)}${readFileSync(certPath)}`);
+	}
+	return { ca, caPath, certPath, keyPath, combinedPath };
+}
+
+/**
  * Resolve once something accepts TCP on `port`.
  *
  * The configured servers -- nginx, Apache, HAProxy -- print nothing predictable
@@ -96,7 +112,22 @@ async function waitForPort({ port, host = "127.0.0.1", timeoutMs = 15_000, descr
 			socket.once("error", () => done(false));
 			socket.setTimeout(500, () => done(false));
 		});
-		if (open) return;
+		if (open) {
+			// An open port is not proof that *this* process opened it. A server that
+			// failed to bind -- because something else already had the port -- would
+			// otherwise be reported ready, and every request would go to whatever is
+			// actually listening. That happened: a proxy row talked to its own backend
+			// for a while before anyone noticed. So settle, then confirm the process is
+			// still alive.
+			await new Promise((resolve) => setTimeout(resolve, 100));
+			if (proc && proc.exitCode !== null) {
+				throw new Error(
+					`${describe} exited with ${proc.exitCode} while ${host}:${port} was open, ` +
+						`so something else is listening there${detail(diagnose)}`,
+				);
+			}
+			return;
+		}
 		if (Date.now() > deadline) {
 			throw new Error(
 				`${describe} did not accept connections on ${host}:${port} within ` +
@@ -118,4 +149,4 @@ function detail(diagnose) {
 	}
 }
 
-module.exports = { ensureCert, findFreePort, waitForPort };
+module.exports = { ensureCert, ensureCombinedCert, findFreePort, waitForPort };
