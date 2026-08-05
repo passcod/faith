@@ -38,18 +38,18 @@ whatever servers emit, fáith must correctly handle. So far, everything we've te
 
 <!-- conformance:start -->
 
-| | controllable-h1 | controllable-h2 | caddy | nginx | apache-h1 | apache-h2 | haproxy-h1 | haproxy-h2 | quiche |
+| | node-h1 | node-h2 | caddy | nginx | apache-h1 | apache-h2 | haproxy-h1 | haproxy-h2 | quiche |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | **trailers** | ● | ● | · | · | · | · | ● | ● | · |
-| **framing** | ● | · | · | · | · | · | ● | · | · |
-| **encoding** | ● | ● | ● | ● | ● | ● | ● | ● | · |
-| **conditional** | ● | ● | ● | ● | ● | ● | ● | ● | · |
-| **alpn** | · | · | ● | ● | · | ● | · | ● | · |
-| **keepalive** | ● | · | · | · | ● | · | · | · | · |
-| **header-limits** | ● | · | · | ● | ● | ● | · | · | · |
-| **goaway** | · | ● | · | · | · | · | · | · | · |
-| **h3** | · | · | ● | ● | · | · | · | · | ● |
-| **altsvc** | · | · | ● | ● | · | · | · | · | · |
+| **chunked bodies** | ● | · | · | · | · | · | ● | · | · |
+| **gzip** | ● | ● | ● | ● | ● | ● | ● | ● | · |
+| **conditional GET** | ● | ● | ● | ● | ● | ● | ● | ● | · |
+| **protocol negotiation** | · | · | ● | ● | · | ● | · | ● | · |
+| **connection reuse** | ● | · | · | · | ● | · | · | · | · |
+| **oversized headers** | ● | · | · | ● | ● | ● | · | · | · |
+| **h2 GOAWAY** | · | ● | · | · | · | · | · | · | · |
+| **HTTP/3** | · | · | ● | ● | · | · | · | · | ● |
+| **HTTP/3 upgrade** | · | · | ● | ● | · | · | · | · | · |
 
 ● covered  
 · not applicable to this server  

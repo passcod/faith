@@ -74,7 +74,7 @@ function locateModules() {
  *
  * `filter` is not optional despite nothing naming it: mod_deflate registers its
  * filter through mod_filter, and without it `SetOutputFilter DEFLATE` is accepted
- * and then does nothing, which would leave the encoding dimension asserting gzip
+ * and then does nothing, which would leave the gzip dimension asserting gzip
  * behaviour about an uncompressed body.
  *
  * mod_mime is deliberately absent. It refuses to start without a TypesConfig file
@@ -160,7 +160,7 @@ DocumentRoot "${tree}"
 	SetOutputFilter DEFLATE
 </Location>
 
-# Labels a plain file as gzip: the encoding dimension's negative case.
+# Labels a plain file as gzip: the gzip dimension's negative case.
 <Location "/encoding/mislabelled">
 	Header set Content-Encoding gzip
 </Location>
@@ -171,7 +171,7 @@ DocumentRoot "${tree}"
  * Split into HTTP/1-only and HTTP/2-preferring rows, for the same reason the Node
  * origin is: `MaxKeepAliveRequests` is an HTTP/1 keepalive limit and HTTP/2 ignores
  * it entirely -- six requests over an h2 connection to a server configured to close
- * after two all succeed on the same connection, so the keepalive dimension would
+ * after two all succeed on the same connection, so the connection-reuse dimension would
  * assert nothing there. Splitting keeps that capability on the row that actually
  * has it.
  */
@@ -180,7 +180,7 @@ function apacheRow({ name, protocols, expectVersion, capabilities }) {
 		name,
 		expectVersion,
 		capabilities: new Set(capabilities),
-		// Published so the keepalive dimension can ask for more requests than the limit
+		// Published so the connection-reuse dimension can ask for more requests than the limit
 		// without hardcoding a number that would silently stop being a limit if changed.
 		keepaliveLimit: KEEPALIVE_LIMIT,
 		headerLimit: HEADER_LIMIT,

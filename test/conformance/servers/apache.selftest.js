@@ -52,7 +52,7 @@ for (const server of [apacheH1, apacheH2]) {
 			// needs mod_filter loaded and a typed response, and short of either the route
 			// is served uncompressed while every status code still looks right.
 			const gzipped = await fetch(`${running.url}/encoding/gzip`, { agent, timeout: 10_000 });
-			t.equal(await gzipped.text(), COMPRESSIBLE, "the encoding route round-trips");
+			t.equal(await gzipped.text(), COMPRESSIBLE, "the gzip route round-trips");
 			t.equal(
 				gzipped.headers.get("content-length"),
 				null,

@@ -8,7 +8,7 @@
  *
  * No CHUNKED: a static file server knows the length and sends Content-Length. The
  * only way Caddy produces a chunked body is as a side effect of compressing on the
- * fly, which would make the framing assertions secretly about gzip. Chunked framing
+ * fly, which would make the chunked-bodies assertions secretly about gzip. Chunked framing
  * is tested on the proxy row instead, where it is the interesting case anyway.
  */
 
@@ -30,7 +30,7 @@ function directivesFor(dir) {
 		`root * "${dir}"`,
 		"@gzip path /encoding/gzip",
 		"encode @gzip gzip",
-		// Labels a plain file as gzip: the encoding dimension's negative case.
+		// Labels a plain file as gzip: the gzip dimension's negative case.
 		"@mislabelled path /encoding/mislabelled",
 		"header @mislabelled Content-Encoding gzip",
 		"file_server",
@@ -40,7 +40,7 @@ function directivesFor(dir) {
 const caddy = {
 	name: "caddy",
 	// Both http/1.1 and h2 are offered, so this asserts the client's preference
-	// rather than the server's only option -- see the alpn dimension.
+	// rather than the server's only option -- see the protocol-negotiation dimension.
 	expectVersion: "HTTP/2.0",
 	capabilities: new Set([
 		C.H1,

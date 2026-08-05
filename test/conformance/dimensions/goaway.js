@@ -7,7 +7,7 @@
  * as a failure breaks the first; one that keeps handing work to a retired connection
  * breaks the second.
  *
- * Runs only on the controllable h2 row: a server has to be told exactly when to send
+ * Runs only on the node-h2 row: a server has to be told exactly when to send
  * one, and Apache and HAProxy send theirs on their own schedule.
  */
 
@@ -22,7 +22,7 @@ async function readState(url, agent) {
 }
 
 module.exports = {
-	name: "goaway",
+	name: "h2 GOAWAY",
 	requires: [C.GOAWAY, C.H2],
 	assertions: 7,
 

@@ -8,7 +8,7 @@
  *
  * The agent gets a seeded Alt-Svc hint rather than being left to discover HTTP/3:
  * quiche-server has no TCP listener at all, so there is no response for it to learn
- * an advertisement from. Discovery is what the altsvc dimension covers.
+ * an advertisement from. Discovery is what the HTTP/3-upgrade dimension covers.
  */
 
 const { CAPABILITIES: C } = require("../capabilities.js");
@@ -16,7 +16,7 @@ const { PAYLOAD } = require("../contract.js");
 const { fetch } = require("../../../wrapper.js");
 
 module.exports = {
-	name: "h3",
+	name: "HTTP/3",
 	requires: [C.H3],
 	// No negative case: an HTTP/3 request that silently fell back to TCP fails the
 	// version assertion, and one that failed outright never reaches it.

@@ -21,14 +21,14 @@ const TRAILER_VALUE = "abc123";
 const ETAG = '"conformance-etag"';
 
 /**
- * The body of the encoding routes, kept separate from PAYLOAD and deliberately
+ * The body of the gzip routes, kept separate from PAYLOAD and deliberately
  * large.
  *
  * Every configured server refuses to compress a body below some threshold, because
  * gzip framing costs more than it saves: mod_deflate stops at 20 bytes ("Not
  * compressing very small response of 19 bytes", which is exactly PAYLOAD), and
  * Caddy's `encode` defaults to 512. Under those thresholds the server sends plain
- * bytes and the encoding dimension's assertions -- the body round-trips, no
+ * bytes and the gzip dimension's assertions -- the body round-trips, no
  * Content-Encoding survives -- all pass without a single byte having been
  * compressed.
  *

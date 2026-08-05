@@ -1,10 +1,10 @@
 /**
- * The controllable origin is test infrastructure, so it needs its own test:
+ * The Node origin is test infrastructure, so it needs its own test:
  * every dimension's verdict depends on it serving what it claims.
  */
 
 const test = require("tape");
-const { controllableH1, controllableH2 } = require("./controllable.js");
+const { nodeH1, nodeH2 } = require("./node.js");
 const { assertKnownCapabilities } = require("../capabilities.js");
 const { PAYLOAD } = require("../contract.js");
 const { assertServesContract } = require("./contract-check.js");
@@ -12,8 +12,8 @@ const { assertServesContract } = require("./contract-check.js");
 const { Agent } = require("../../../index.js");
 const { fetch } = require("../../../wrapper.js");
 
-for (const server of [controllableH1, controllableH2]) {
-	test(`controllable origin: ${server.name} serves and negotiates`, async (t) => {
+for (const server of [nodeH1, nodeH2]) {
+	test(`node origin: ${server.name} serves and negotiates`, async (t) => {
 		assertKnownCapabilities(server.capabilities, `server ${server.name}`);
 
 		const running = await server.start();

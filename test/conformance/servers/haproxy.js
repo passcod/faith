@@ -7,15 +7,15 @@
  * the origin sees. HAProxy also has its own HTTP/2 implementation, neither nghttp2
  * nor Go's.
  *
- * The backend is the controllable HTTP/1 origin rather than go-httpbin, which is what
- * #25 originally proposed: the controllable origin already serves the contract, and
+ * The backend is the Node HTTP/1 origin rather than go-httpbin, which is what
+ * #25 originally proposed: the Node origin already serves the contract, and
  * go-httpbin does not. That is also where this row's TRAILERS and CHUNKED come from --
  * the pass-through worth testing -- while the static rows can offer neither.
  *
  * Split into HTTP/1 and HTTP/2 frontends for the same reason the other rows are.
  * HTTP/2 has no chunked encoding: a proxy fronting h2 turns the origin's chunked body
  * into DATA frames, so "no Content-Length" becomes true of every response and the
- * framing dimension would pass without observing anything. Only the h1 frontend can
+ * chunked-bodies dimension would pass without observing anything. Only the h1 frontend can
  * show a chunked body surviving a hop.
  */
 
@@ -25,7 +25,7 @@ const path = require("node:path");
 
 const { CAPABILITIES: C } = require("../capabilities.js");
 const { ensureCombinedCert, findFreePort, waitForPort } = require("../../fixtures/net.js");
-const { controllableH1 } = require("./controllable.js");
+const { nodeH1 } = require("./node.js");
 
 function buildConf({ port, backendPort, combinedPath, alpn }) {
 	// mode http throughout, so HAProxy parses and reframes rather than shifting bytes:
@@ -105,7 +105,7 @@ function haproxyRow({ name, alpn, expectVersion, capabilities }) {
 			// which surfaced as "the row negotiates HTTP/2.0" failing about once in eight
 			// runs. Allocating after the origin is listening means findFreePort can see
 			// that port is taken.
-			const origin = await controllableH1.start();
+			const origin = await nodeH1.start();
 			const backendPort = Number(new URL(origin.url).port);
 			const port = await findFreePort();
 

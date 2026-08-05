@@ -30,7 +30,7 @@ const MTIME = new Date("2020-01-01T00:00:00Z");
  *
  * The encoding routes get the large body: every one of these servers refuses to
  * compress something PAYLOAD's size, and would then serve plain bytes that the
- * encoding dimension cannot tell from a compressed round-trip.
+ * gzip dimension cannot tell from a compressed round-trip.
  */
 const FILES = [
 	["hello", PAYLOAD],

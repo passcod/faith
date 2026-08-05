@@ -2,7 +2,7 @@
  * Response trailers.
  *
  * No real server in the matrix can emit trailers on demand, so this dimension
- * only ever runs against the controllable origin — which is precisely why it is
+ * only ever runs against the Node origin — which is precisely why it is
  * worth having: nothing else in faith's test suite covers trailers at all.
  */
 
@@ -21,11 +21,10 @@ module.exports = {
 	async run(t, { url, agent }) {
 		const res = await fetchWith(agent, `${url}/trailers`);
 
-		// Consume the body FIRST. faith resolves `trailers` only once the body
-		// stream completes: the native side polls a NotYet state and the value is
-		// set either by a trailers frame or by a sentinel appended after the last
-		// body chunk. Awaiting trailers before draining the body therefore spins
-		// forever rather than erroring.
+		// Consume the body FIRST. Trailers arrive after the body ends, so the promise
+		// does not resolve until the body has been read -- which is what the fetch
+		// spec's trailers proposal requires (whatwg/fetch#1940), not a faith quirk.
+		// Reversing these two lines deadlocks the cell.
 		const body = await res.text();
 		t.equal(body, PAYLOAD, "body arrives ahead of the trailers");
 

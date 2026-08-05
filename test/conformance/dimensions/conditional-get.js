@@ -14,7 +14,7 @@ const { fetch } = require("../../../wrapper.js");
 const PATH = "/conditional/etag";
 
 module.exports = {
-	name: "conditional",
+	name: "conditional GET",
 	requires: [C.CONDITIONAL],
 	// Declared so the runner catches this dimension quietly losing its coverage:
 	// tape counts a test that asserts nothing as a pass. No separate negative case:

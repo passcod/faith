@@ -1,5 +1,5 @@
 /**
- * The controllable origin: two Node listeners over the test CA, sharing route
+ * The Node origin: two listeners over the test CA, sharing route
  * handlers.
  *
  * Split into HTTP/1-only and HTTP/2-only rows deliberately. A single
@@ -15,7 +15,7 @@ const https = require("node:https");
 
 const { ensureCert, findFreePort } = require("../../fixtures/net.js");
 const { CAPABILITIES: C } = require("../capabilities.js");
-const { handle, state } = require("./controllable-routes.js");
+const { handle, state } = require("./node-routes.js");
 
 /** Destroy live sockets rather than waiting on them. */
 function makeCloser(server, sockets) {
@@ -46,7 +46,7 @@ async function listen(server, port, name) {
 	});
 	server.removeAllListeners("error");
 	server.on("error", (err) => {
-		console.error(`${name} controllable origin error:`, err);
+		console.error(`${name} Node origin error:`, err);
 	});
 }
 
@@ -72,8 +72,8 @@ function track(server, sockets) {
 const KEEPALIVE_LIMIT = 2;
 const HEADER_LIMIT = 1024;
 
-const controllableH1 = {
-	name: "controllable-h1",
+const nodeH1 = {
+	name: "node-h1",
 	keepaliveLimit: KEEPALIVE_LIMIT,
 	headerLimit: HEADER_LIMIT,
 	// The protocol every cell on this row is expected to negotiate. Asserted per
@@ -106,7 +106,7 @@ const controllableH1 = {
 			handle,
 		);
 		// Node closes the connection on the request that reaches this count, which is
-		// what the keepalive dimension asks the client to survive.
+		// what the connection-reuse dimension asks the client to survive.
 		server.maxRequestsPerSocket = KEEPALIVE_LIMIT;
 		track(server, sockets);
 		await listen(server, port, this.name);
@@ -118,8 +118,8 @@ const controllableH1 = {
 	},
 };
 
-const controllableH2 = {
-	name: "controllable-h2",
+const nodeH2 = {
+	name: "node-h2",
 	expectVersion: "HTTP/2.0",
 	capabilities: new Set([
 		C.H2,
@@ -129,7 +129,7 @@ const controllableH2 = {
 		C.CONTENT_LENGTH,
 		C.CONDITIONAL,
 		// Node's h2 server can be told exactly when to send a GOAWAY, which is why the
-		// goaway dimension lives on this row rather than on a configured server.
+		// h2-GOAWAY dimension lives on this row rather than on a configured server.
 		C.GOAWAY,
 		C.SCRIPTABLE,
 	]),
@@ -145,7 +145,7 @@ const controllableH2 = {
 			},
 			handle,
 		);
-		// Counted so the goaway dimension can see that a client opened a fresh session
+		// Counted so the h2-GOAWAY dimension can see that a client opened a fresh session
 		// rather than reusing the one the server retired.
 		server.on("session", () => {
 			state.sessions++;
@@ -160,4 +160,4 @@ const controllableH2 = {
 	},
 };
 
-module.exports = { controllableH1, controllableH2 };
+module.exports = { nodeH1, nodeH2 };

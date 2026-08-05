@@ -1,5 +1,5 @@
 /**
- * Routes for the controllable origin, shared by its HTTP/1 and HTTP/2 listeners.
+ * Routes for the Node origin, shared by its HTTP/1 and HTTP/2 listeners.
  *
  * Every route is either a correct behaviour a dimension asserts, or a
  * deliberately wrong one so that dimension's negative case can prove the
@@ -14,7 +14,7 @@ const { PAYLOAD, COMPRESSIBLE, TRAILER_NAME, TRAILER_VALUE, ETAG } = require("..
 /**
  * What the origin has done, readable by a client.
  *
- * The goaway dimension cannot otherwise tell a working GOAWAY from an absent one:
+ * The h2-GOAWAY dimension cannot otherwise tell a working GOAWAY from an absent one:
  * nothing faith exposes says which connection a request used, so "the response
  * arrived and the next request worked" is equally true of a server that sent no
  * GOAWAY at all. Counting sessions here turns that into something observable -- a

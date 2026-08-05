@@ -73,7 +73,7 @@ for (const server of [nginx]) {
 			);
 
 			// nginx writes no advertisement of its own, so on the h3 row this header is
-			// entirely the config's doing -- and it is what the altsvc dimension reads.
+			// entirely the config's doing -- and it is what the HTTP/3-upgrade dimension reads.
 			if (server.capabilities.has("altsvc")) {
 				t.ok(
 					res.headers.get("alt-svc"),

@@ -15,7 +15,7 @@ const { writeFileSync } = require("node:fs");
 const path = require("node:path");
 
 const { CAPABILITIES: C, assertKnownCapabilities } = require("./capabilities.js");
-const { controllableH1, controllableH2 } = require("./servers/controllable.js");
+const { nodeH1, nodeH2 } = require("./servers/node.js");
 const { caddy } = require("./servers/caddy.js");
 const { nginx } = require("./servers/nginx.js");
 const { apacheH1, apacheH2 } = require("./servers/apache.js");
@@ -26,8 +26,8 @@ const { Agent } = require("../../index.js");
 const { fetch } = require("../../wrapper.js");
 
 const SERVERS = [
-	controllableH1,
-	controllableH2,
+	nodeH1,
+	nodeH2,
 	caddy,
 	nginx,
 	apacheH1,
@@ -38,15 +38,15 @@ const SERVERS = [
 ];
 const DIMENSIONS = [
 	require("./dimensions/trailers.js"),
-	require("./dimensions/framing.js"),
-	require("./dimensions/encoding.js"),
-	require("./dimensions/conditional.js"),
-	require("./dimensions/alpn.js"),
-	require("./dimensions/keepalive.js"),
-	require("./dimensions/header-limits.js"),
+	require("./dimensions/chunked.js"),
+	require("./dimensions/gzip.js"),
+	require("./dimensions/conditional-get.js"),
+	require("./dimensions/negotiation.js"),
+	require("./dimensions/connection-reuse.js"),
+	require("./dimensions/oversized-headers.js"),
 	require("./dimensions/goaway.js"),
 	require("./dimensions/h3.js"),
-	require("./dimensions/altsvc.js"),
+	require("./dimensions/h3-upgrade.js"),
 ];
 
 const EXPECTED = require("./expected-matrix.json");
@@ -314,7 +314,7 @@ async function main() {
 
 				try {
 					// Pin the protocol. Nothing in the dimensions is HTTP/1-specific, so
-					// without this the row named controllable-h2 could run entirely over
+					// without this the node-h2 row could run entirely over
 					// HTTP/1.1 -- if allowHTTP1 were flipped, say -- and every assertion
 					// would still pass. This is also what makes the H1 and H2 capabilities
 					// load-bearing rather than decorative.

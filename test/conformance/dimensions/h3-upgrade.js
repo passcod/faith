@@ -21,7 +21,7 @@ const { fetch } = require("../../../wrapper.js");
 const WARMUPS = 3;
 
 module.exports = {
-	name: "altsvc",
+	name: "HTTP/3 upgrade",
 	requires: [C.ALTSVC],
 	assertions: 4,
 	negativeAssertions: 2,

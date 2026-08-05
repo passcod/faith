@@ -14,7 +14,7 @@ const { COMPRESSIBLE } = require("../contract.js");
 const { fetch } = require("../../../wrapper.js");
 
 module.exports = {
-	name: "encoding",
+	name: "gzip",
 	requires: [C.GZIP],
 	// Declared so the runner catches this dimension quietly losing its coverage:
 	// tape counts a test that asserts nothing as a pass.

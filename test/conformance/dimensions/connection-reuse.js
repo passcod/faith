@@ -27,7 +27,7 @@ const { fetch } = require("../../../wrapper.js");
 const REQUESTS = 6;
 
 module.exports = {
-	name: "keepalive",
+	name: "connection reuse",
 	requires: [C.KEEPALIVE_LIMIT],
 	// Two per request, plus the limit check and the close observation.
 	assertions: REQUESTS * 2 + 2,

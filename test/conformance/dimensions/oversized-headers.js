@@ -19,7 +19,7 @@ const { PAYLOAD } = require("../contract.js");
 const { fetch } = require("../../../wrapper.js");
 
 module.exports = {
-	name: "header-limits",
+	name: "oversized headers",
 	requires: [C.HEADER_LIMITS],
 	assertions: 5,
 

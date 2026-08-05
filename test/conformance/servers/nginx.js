@@ -95,7 +95,7 @@ http {
 	types { }
 	default_type text/plain;
 
-	# A request-header ceiling, so this row covers the header-limits dimension. nginx
+	# A request-header ceiling, so this row covers the oversized-headers dimension. nginx
 	# answers an oversized header with 494, which it maps to 400 on the wire.
 	large_client_header_buffers 4 ${HEADER_LIMIT/1024}k;
 
@@ -117,11 +117,11 @@ ${h3ServerConf(port)}		server_name localhost;
 			gzip_types text/plain;
 			# Explicit, so the contract's body size and nginx's default minimum are not
 			# quietly load-bearing on each other: below the minimum nginx serves plain
-			# bytes, and the encoding dimension would be asserting nothing about gzip.
+			# bytes, and the gzip dimension would be asserting nothing about gzip.
 			gzip_min_length 1;
 		}
 
-		# Labels a plain file as gzip: the encoding dimension's negative case.
+		# Labels a plain file as gzip: the gzip dimension's negative case.
 		location = /encoding/mislabelled {
 			add_header Content-Encoding gzip;
 		}
