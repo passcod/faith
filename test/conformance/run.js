@@ -87,9 +87,10 @@ function serialiseOutcome(cell) {
 const MATRIX_PATH = path.join(__dirname, "matrix.json");
 
 /**
- * Write the matrix out. `kind` tells a reader which one they have: `planned` is
- * written before the run so the file survives a crash, `realised` replaces it
- * once outcomes are known.
+ * Write the matrix out, once, when the outcomes are known.
+ *
+ * `kind` is stated explicitly so a consumer can assert on it rather than
+ * inferring from whether `outcome` happens to be present.
  */
 function writeMatrix(kind, cells) {
 	writeFileSync(MATRIX_PATH, `${JSON.stringify({ kind, cells }, null, "\t")}\n`);
@@ -128,12 +129,6 @@ async function main() {
 
 	const serialised = cells.map(serialiseCell);
 
-	// Write the planned matrix up front so the file exists even if the process dies
-	// mid-run, then overwrite it with the realised one from `onFinish` above. A
-	// reader can tell which it got from `kind`, so a crashed run is never mistaken
-	// for a completed one.
-	writeMatrix("planned", serialised);
-
 	// Sort both sides: the guard is about which cells exist and their status, not
 	// the order SERVERS and DIMENSIONS happen to be declared in. Comparing
 	// declaration order would make alphabetising a list, or inserting a dimension
@@ -141,7 +136,7 @@ async function main() {
 	const byCell = (a, b) =>
 		a.server.localeCompare(b.server) || a.dimension.localeCompare(b.dimension);
 
-	test("conformance: planned matrix matches the expected one", (t) => {
+	test("conformance: computed matrix matches the expected one", (t) => {
 		// A cell silently disappearing -- because a capability declaration
 		// changed, or a server stopped starting -- looks identical to a clean run
 		// unless the shape itself is asserted. The skip reason is compared too: a
