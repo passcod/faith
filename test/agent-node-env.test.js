@@ -130,12 +130,14 @@ function withProxyServers(fn) {
 }
 
 async function routeVia(url, proxyUrl, nodeUseEnvProxy) {
+	// Only the canonical uppercase spellings are set: reqwest reads proxy env
+	// case-insensitively, and on Windows process.env itself is case-insensitive,
+	// so saving/restoring both spellings would double-handle the same variable
+	// and leak it into later tests.
 	return withEnv(
 		{
 			HTTP_PROXY: proxyUrl,
-			http_proxy: proxyUrl,
 			NO_PROXY: "",
-			no_proxy: "",
 			NODE_USE_ENV_PROXY: nodeUseEnvProxy,
 		},
 		async () => {
