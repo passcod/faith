@@ -70,7 +70,34 @@ function serialiseCell({ server, dimension, status, reason }) {
 	return { server: server.name, dimension: dimension.name, status, reason };
 }
 
+/**
+ * A cell plus what actually happened to it.
+ *
+ * `status` is what the capability model decided; `outcome` is what the run did.
+ * They answer different questions -- a cell can be `run` and still `fail`, which
+ * is exactly the case a consumer must not mistake for verified.
+ */
+function serialiseOutcome(cell) {
+	return {
+		...serialiseCell(cell),
+		outcome: cell.status === "skip" ? "skipped" : cell.failed ? "fail" : "pass",
+	};
+}
+
+const MATRIX_PATH = path.join(__dirname, "matrix.json");
+
+/**
+ * Write the matrix out. `kind` tells a reader which one they have: `planned` is
+ * written before the run so the file survives a crash, `realised` replaces it
+ * once outcomes are known.
+ */
+function writeMatrix(kind, cells) {
+	writeFileSync(MATRIX_PATH, `${JSON.stringify({ kind, cells }, null, "\t")}\n`);
+}
+
 async function main() {
+	const cells = planCells();
+
 	// A per-cell timeout reports a wedged cell but does not end the run: a
 	// dimension awaiting something that never settles (faith's `trailers` spins
 	// until the body is drained) leaves a pending native future holding the event
@@ -82,6 +109,12 @@ async function main() {
 		anyFailed = true;
 	});
 	test.onFinish(() => {
+		// The realised matrix, written once the outcomes are known. The runner is the
+		// only thing that knows them, so emitting them is its job; whatever renders
+		// this into the README is a consumer and must not have to re-derive or re-run
+		// anything to find out what actually happened.
+		writeMatrix("realised", cells.map(serialiseOutcome));
+
 		if (anyFailed) {
 			// tape writes the plan and the summary counts from its own `exit` hook,
 			// but that hook returns early when the exit code is non-zero -- so
@@ -93,20 +126,13 @@ async function main() {
 		process.exit(anyFailed ? 1 : 0);
 	});
 
-	const cells = planCells();
 	const serialised = cells.map(serialiseCell);
 
-	// Structured output first, so it exists even if a cell later fails.
-	const out = path.join(__dirname, "matrix.json");
-	// The PLANNED matrix: which cells the capability model says should run. It is
-	// written before any test executes so it survives a failing run, which also
-	// means it records intent, not outcome -- a row whose server fails to start is
-	// still recorded as "run". Emitting the realised matrix, with outcomes, is
-	// deliberately left to the phase that renders this into the README.
-	writeFileSync(
-		out,
-		`${JSON.stringify({ kind: "planned", cells: serialised }, null, "\t")}\n`,
-	);
+	// Write the planned matrix up front so the file exists even if the process dies
+	// mid-run, then overwrite it with the realised one from `onFinish` above. A
+	// reader can tell which it got from `kind`, so a crashed run is never mistaken
+	// for a completed one.
+	writeMatrix("planned", serialised);
 
 	// Sort both sides: the guard is about which cells exist and their status, not
 	// the order SERVERS and DIMENSIONS happen to be declared in. Comparing
@@ -144,6 +170,12 @@ async function main() {
 			`${server.name} / ${dimension.name}`,
 			{ timeout: CELL_TIMEOUT_MS },
 			async (t) => {
+				// Record the cell's own outcome for the realised matrix. tape's
+				// onFailure is global, so it cannot say *which* cell failed.
+				t.on("result", (row) => {
+					if (row && row.ok === false) cell.failed = true;
+				});
+
 				let running;
 				try {
 					running = await server.start();
