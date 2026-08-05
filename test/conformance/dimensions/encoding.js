@@ -3,7 +3,7 @@
  */
 
 const { CAPABILITIES: C } = require("../capabilities.js");
-const { PAYLOAD } = require("../servers/controllable-routes.js");
+const { PAYLOAD } = require("../contract.js");
 const { fetch } = require("../../../wrapper.js");
 
 module.exports = {

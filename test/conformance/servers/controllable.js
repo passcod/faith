@@ -74,6 +74,7 @@ const controllableH1 = {
 		C.GZIP,
 		C.CHUNKED,
 		C.CONTENT_LENGTH,
+		C.CONDITIONAL,
 		C.SCRIPTABLE,
 	]),
 	async start() {
@@ -107,6 +108,7 @@ const controllableH2 = {
 		C.TRAILERS,
 		C.GZIP,
 		C.CONTENT_LENGTH,
+		C.CONDITIONAL,
 		C.SCRIPTABLE,
 	]),
 	async start() {

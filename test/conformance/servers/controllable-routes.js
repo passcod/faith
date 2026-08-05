@@ -9,9 +9,7 @@
 
 const zlib = require("node:zlib");
 
-const PAYLOAD = "conformance-payload";
-const TRAILER_NAME = "x-conformance-checksum";
-const TRAILER_VALUE = "abc123";
+const { PAYLOAD, TRAILER_NAME, TRAILER_VALUE, ETAG } = require("../contract.js");
 
 function handle(req, res) {
 	const url = new URL(req.url, "https://localhost");
@@ -74,6 +72,25 @@ function handle(req, res) {
 			res.end(PAYLOAD);
 			return;
 
+		// --- conditional requests ---
+		// A fixed ETag rather than one derived from the body: the dimension asserts
+		// the validator round-trips, and a stable value means a failure points at
+		// the round-trip rather than at how the ETag was computed.
+		case "/conditional/etag": {
+			res.setHeader("etag", ETAG);
+			if (req.headers["if-none-match"] === ETAG) {
+				// No Content-Length and no body: a 304 that carried either would be a
+				// different bug, and the dimension asserts the body is empty.
+				res.statusCode = 304;
+				res.end();
+				return;
+			}
+			res.setHeader("content-type", "text/plain");
+			res.setHeader("content-length", String(Buffer.byteLength(PAYLOAD)));
+			res.end(PAYLOAD);
+			return;
+		}
+
 		default:
 			res.statusCode = 404;
 			res.end("no such route");
@@ -81,4 +98,4 @@ function handle(req, res) {
 	}
 }
 
-module.exports = { handle, PAYLOAD, TRAILER_NAME, TRAILER_VALUE };
+module.exports = { handle };

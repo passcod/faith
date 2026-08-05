@@ -6,7 +6,8 @@
 const test = require("tape");
 const { controllableH1, controllableH2 } = require("./controllable.js");
 const { assertKnownCapabilities } = require("../capabilities.js");
-const { PAYLOAD } = require("./controllable-routes.js");
+const { PAYLOAD } = require("../contract.js");
+const { assertServesContract } = require("./contract-check.js");
 
 const { Agent } = require("../../../index.js");
 const { fetch } = require("../../../wrapper.js");
@@ -32,6 +33,12 @@ for (const server of [controllableH1, controllableH2]) {
 				server.expectVersion,
 				"negotiates exactly the protocol the row claims",
 			);
+
+			await assertServesContract(t, {
+				url: running.url,
+				agent,
+				capabilities: server.capabilities,
+			});
 		} finally {
 			await running.close();
 			t.end();

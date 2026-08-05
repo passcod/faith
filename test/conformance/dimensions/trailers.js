@@ -7,7 +7,7 @@
  */
 
 const { CAPABILITIES: C } = require("../capabilities.js");
-const { PAYLOAD, TRAILER_NAME, TRAILER_VALUE } = require("../servers/controllable-routes.js");
+const { PAYLOAD, TRAILER_NAME, TRAILER_VALUE } = require("../contract.js");
 const { fetch } = require("../../../wrapper.js");
 
 module.exports = {
