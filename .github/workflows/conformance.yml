@@ -1,0 +1,142 @@
+name: Conformance
+env:
+  DEBUG: napi:*
+  APP_NAME: faith
+  CARGO_INCREMENTAL: "1"
+  # Pinned for the same reason go-httpbin and Caddy are: this row's whole purpose is
+  # a specific QUIC implementation, and "whatever main is today" is not one.
+  QUICHE_TAG: "0.29.3"
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - "**/*.md"
+      - "LICENSE*"
+      - "**/*.gitignore"
+      - .editorconfig
+      - .rustfmt.toml
+      - docs/**
+  # Nightly, because these rows exercise other people's servers: a row can start
+  # failing without anything in this repository changing.
+  schedule:
+    - cron: "17 4 * * *"
+  pull_request:
+  workflow_dispatch:
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  matrix:
+    # Linux only. Every row is either an apt package or a build that expects a
+    # Unix prefix layout, and the matrix covers faith's behaviour against server
+    # implementations -- which is not an axis that varies by client OS.
+    runs-on: ubuntu-latest
+    name: conformance matrix
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - run: rustup toolchain install --profile minimal --no-self-update stable
+      - uses: Swatinem/rust-cache@v2
+      - run: npm install
+      # `npm run test:conformance` deliberately does not build, so that a local
+      # iteration on a dimension is not a Rust rebuild. This job has to.
+      - run: npm run build
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - name: Install Caddy
+        # Pinned to the same version test.yml uses, so the HTTP/3 regression tests
+        # and the Caddy row cannot disagree about what "Caddy" means.
+        run: |
+          go install github.com/caddyserver/caddy/v2/cmd/caddy@v2.11.4
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      - name: Install Apache and HAProxy
+        # Apache is `apache2` here and `httpd` on Arch, with different module
+        # directories; the row resolves both at runtime, and printing what it found
+        # makes a provisioning change visible in the log rather than as a row that
+        # mysteriously stops running.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends apache2 haproxy
+          apache2 -v
+          haproxy -v
+          ls /usr/lib/apache2/modules/mod_ssl.so
+      - name: Install nginx from nginx.org mainline
+        # Not Ubuntu's nginx: 24.04 ships 1.24, which cannot do HTTP/3 at all, and the
+        # row needs a build configured with --with-http_v3_module. nginx's own mainline
+        # packages have it.
+        #
+        # The flag is asserted here rather than left to the row, which would report
+        # itself unavailable and -- under CONFORMANCE_REQUIRE_ALL -- fail with a
+        # message about the build when the cause is this step.
+        run: |
+          curl -fsSL https://nginx.org/keys/nginx_signing.key \
+            | sudo gpg --dearmor -o /usr/share/keyrings/nginx.gpg
+          echo "deb [signed-by=/usr/share/keyrings/nginx.gpg] \
+            http://nginx.org/packages/mainline/ubuntu $(lsb_release -cs) nginx" \
+            | sudo tee /etc/apt/sources.list.d/nginx.list
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends nginx
+          nginx -v
+          nginx -V 2>&1 | tr ' ' '\n' | grep -- --with-http_v3_module
+      # Cached on the pinned tag, because nothing packages quiche-server and building
+      # it means building BoringSSL, which needs cmake and Go -- both already here --
+      # and several minutes. The binary is stripped first: unstripped it is ~150MB of
+      # debug info that would go into the cache on every miss.
+      - id: quiche-cache
+        uses: actions/cache@v4
+        with:
+          path: /tmp/quiche-server
+          key: quiche-server-${{ env.QUICHE_TAG }}-${{ runner.os }}
+      - name: Build quiche-server
+        if: steps.quiche-cache.outputs.cache-hit != 'true'
+        run: |
+          git clone --depth 1 --branch "$QUICHE_TAG" --recursive \
+            https://github.com/cloudflare/quiche.git /tmp/quiche-src
+          cargo build --release --manifest-path /tmp/quiche-src/Cargo.toml --bin quiche-server
+          strip -o /tmp/quiche-server /tmp/quiche-src/target/release/quiche-server
+      - name: Point the row at it
+        run: |
+          echo "QUICHE_SERVER=/tmp/quiche-server" >> "$GITHUB_ENV"
+          /tmp/quiche-server --help | head -3
+      - name: Run the matrix
+        run: npm run test:conformance
+        env:
+          # Every server above is provisioned, so one missing means a provisioning
+          # step broke. Without this the run would report that row as unverified and
+          # still pass, which is the coverage loss this job exists to catch.
+          CONFORMANCE_REQUIRE_ALL: "1"
+      - name: The committed table must match the matrix
+        # Regenerate and let git say whether anything moved. A failing matrix has
+        # already failed the job above, so whatever this renders is a green run.
+        run: |
+          npm run conformance:readme
+          git diff --exit-code -- README.md
+      - name: Render the matrix
+        # Always: a failing matrix is exactly when the table is worth reading, and the
+        # runner writes matrix.json on failure too. Guarded, because a selftest failure
+        # means the matrix never ran and there is nothing to render -- and a red render
+        # step on top of that hides the failure that actually matters.
+        if: always()
+        run: |
+          if [ -f test/conformance/matrix.json ]; then
+            npm run conformance:render
+          else
+            echo "no matrix.json: the run did not get as far as the matrix"
+          fi
+      - uses: actions/upload-artifact@v4
+        # The runner writes these to the runner's own disk, so uploading them is the
+        # only way they survive the job at all.
+        if: always()
+        with:
+          name: conformance-matrix
+          path: |
+            test/conformance/matrix.json
+            test/conformance/matrix.md
+          # A run that died before writing these is already failing for a better
+          # reason, and turning the missing artifact into a second failure buries it.
+          if-no-files-found: warn

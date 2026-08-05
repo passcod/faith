@@ -30,6 +30,32 @@ use it outside of Node.js and in constrained environments.
 
 [![the relative costs of enabling various fáith features](./bench/features-rps.svg)](./bench/features-rps.svg)
 
+### 🧪 Is it correct?
+
+Yes. We maintain a suite of tests across actual servers and topologies, exercising the different
+protocol features fáith will encounter in real-life usage. Few servers support the full list, but
+whatever servers emit, fáith must correctly handle. So far, everything we've tested works:
+
+<!-- conformance:start -->
+
+| | node-h1 | node-h2 | caddy | nginx | apache-h1 | apache-h2 | haproxy-h1 | haproxy-h2 | quiche |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| **trailers** | ● | ● | · | · | · | · | ● | ● | · |
+| **chunked bodies** | ● | · | · | · | · | · | ● | · | · |
+| **gzip** | ● | ● | ● | ● | ● | ● | ● | ● | · |
+| **conditional GET** | ● | ● | ● | ● | ● | ● | ● | ● | · |
+| **protocol negotiation** | · | · | ● | ● | · | ● | · | ● | · |
+| **connection reuse** | ● | · | · | · | ● | · | · | · | · |
+| **oversized headers** | ● | · | · | ● | ● | ● | · | · | · |
+| **h2 GOAWAY** | · | ● | · | · | · | · | · | · | · |
+| **HTTP/3** | · | · | ● | ● | · | · | · | · | ● |
+| **HTTP/3 upgrade** | · | · | ● | ● | · | · | · | · | · |
+
+● covered  
+· not applicable to this server  
+
+<!-- conformance:end -->
+
 ## Installation
 
 ```bash
