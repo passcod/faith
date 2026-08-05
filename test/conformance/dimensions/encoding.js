@@ -21,16 +21,33 @@ module.exports = {
 	},
 
 	async negative(t, { url, agent }) {
-		// Labelled gzip, sent as plain text. A client that really decompresses
-		// must fail; one that passes the bytes through would happily return them.
+		// Labelled gzip, sent as plain text. A client that really decompresses must
+		// fail; one that passes the bytes through would happily return them.
+		//
+		// Split the fetch from the body read, because that is what makes this
+		// discriminating. Decoding happens while streaming the body, so a
+		// mislabelled body yields perfectly good headers and fails only on read --
+		// whereas a connect, TLS or timeout failure would reject the fetch itself.
+		// Wrapping both in one try/catch would let any of those satisfy the
+		// assertion. faith's body-stream errors carry no `code` property, so this
+		// separation is the discriminator available to us, not error matching.
+		const res = await fetchWith(agent, `${url}/encoding/mislabelled`);
+		t.equal(
+			res.status,
+			200,
+			"the response itself arrives -- so a later failure is about the body, not the connection",
+		);
+
 		let failed = false;
 		try {
-			const res = await fetchWith(agent, `${url}/encoding/mislabelled`);
 			await res.text();
 		} catch {
 			failed = true;
 		}
-		t.ok(failed, "a body mislabelled as gzip is rejected rather than passed through");
+		t.ok(
+			failed,
+			"reading a body mislabelled as gzip fails rather than yielding the raw bytes",
+		);
 	},
 };
 
