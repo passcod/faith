@@ -15,7 +15,7 @@ const { mkdtempSync, mkdirSync, rmSync, writeFileSync, utimesSync } = require("n
 const os = require("node:os");
 const path = require("node:path");
 
-const { PAYLOAD } = require("../contract.js");
+const { PAYLOAD, COMPRESSIBLE } = require("../contract.js");
 
 /**
  * Fixed mtime, so Last-Modified and any ETag derived from it are the same on every
@@ -25,21 +25,27 @@ const { PAYLOAD } = require("../contract.js");
  */
 const MTIME = new Date("2020-01-01T00:00:00Z");
 
-/** Contract paths that are just a file with the payload in it. */
+/**
+ * Contract paths and what goes in each file.
+ *
+ * The encoding routes get the large body: every one of these servers refuses to
+ * compress something PAYLOAD's size, and would then serve plain bytes that the
+ * encoding dimension cannot tell from a compressed round-trip.
+ */
 const FILES = [
-	"hello",
-	"framing/length",
-	"encoding/gzip",
-	"encoding/mislabelled",
-	"conditional/etag",
+	["hello", PAYLOAD],
+	["framing/length", PAYLOAD],
+	["conditional/etag", PAYLOAD],
+	["encoding/gzip", COMPRESSIBLE],
+	["encoding/mislabelled", COMPRESSIBLE],
 ];
 
 function buildStaticTree() {
 	const dir = mkdtempSync(path.join(os.tmpdir(), "faith-conformance-"));
-	for (const rel of FILES) {
+	for (const [rel, body] of FILES) {
 		const target = path.join(dir, rel);
 		mkdirSync(path.dirname(target), { recursive: true });
-		writeFileSync(target, PAYLOAD);
+		writeFileSync(target, body);
 		utimesSync(target, MTIME, MTIME);
 	}
 	return {

@@ -21,6 +21,24 @@ const TRAILER_VALUE = "abc123";
 const ETAG = '"conformance-etag"';
 
 /**
+ * The body of the encoding routes, kept separate from PAYLOAD and deliberately
+ * large.
+ *
+ * Every configured server refuses to compress a body below some threshold, because
+ * gzip framing costs more than it saves: mod_deflate stops at 20 bytes ("Not
+ * compressing very small response of 19 bytes", which is exactly PAYLOAD), and
+ * Caddy's `encode` defaults to 512. Under those thresholds the server sends plain
+ * bytes and the encoding dimension's assertions -- the body round-trips, no
+ * Content-Encoding survives -- all pass without a single byte having been
+ * compressed.
+ *
+ * So this clears every threshold, and compresses hard enough that the encoded
+ * length is unmistakably smaller than the decoded one, which is what lets the
+ * dimension prove compression happened rather than assume it.
+ */
+const COMPRESSIBLE = `${"conformance-compressible-body\n".repeat(40)}`;
+
+/**
  * `requires` is the full set a server needs before this route is expected of it.
  *
  * The deliberately-wrong routes carry their dimension's capability as well as
@@ -49,6 +67,16 @@ const ROUTES = [
 		requires: [C.CONDITIONAL],
 		what: "carries an ETag and answers 304 to a matching If-None-Match",
 	},
+	{
+		path: "/goaway",
+		requires: [C.GOAWAY],
+		what: "answers normally, then sends an HTTP/2 GOAWAY",
+	},
+	{
+		path: "/goaway/state",
+		requires: [C.GOAWAY],
+		what: "reports how many GOAWAYs and sessions the origin has seen",
+	},
 ];
 
 /** The routes a server declaring `capabilities` is obliged to serve. */
@@ -56,4 +84,12 @@ function routesFor(capabilities) {
 	return ROUTES.filter((route) => route.requires.every((c) => capabilities.has(c)));
 }
 
-module.exports = { PAYLOAD, TRAILER_NAME, TRAILER_VALUE, ETAG, ROUTES, routesFor };
+module.exports = {
+	PAYLOAD,
+	COMPRESSIBLE,
+	TRAILER_NAME,
+	TRAILER_VALUE,
+	ETAG,
+	ROUTES,
+	routesFor,
+};

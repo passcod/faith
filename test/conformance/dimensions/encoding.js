@@ -1,9 +1,16 @@
 /**
  * Content coding: does the client actually decompress what the server labelled?
+ *
+ * The awkward part is that a server which declined to compress produces a response
+ * this dimension's obvious assertions accept: the body round-trips, and no
+ * Content-Encoding survives because none was ever sent. Every configured server
+ * declines below some size threshold -- 20 bytes for mod_deflate, 512 for Caddy --
+ * so the third assertion is the one that makes the other two mean anything. It
+ * compares what arrived on the wire against what came out of the decoder.
  */
 
 const { CAPABILITIES: C } = require("../capabilities.js");
-const { PAYLOAD } = require("../contract.js");
+const { COMPRESSIBLE } = require("../contract.js");
 const { fetch } = require("../../../wrapper.js");
 
 module.exports = {
@@ -11,16 +18,42 @@ module.exports = {
 	requires: [C.GZIP],
 	// Declared so the runner catches this dimension quietly losing its coverage:
 	// tape counts a test that asserts nothing as a pass.
-	assertions: 2,
+	assertions: 4,
 	negativeAssertions: 2,
 
 	async run(t, { url, agent }) {
 		const res = await fetchWith(agent, `${url}/encoding/gzip`);
+		// Read the wire length before the body: once the decoder runs, this header is
+		// the only trace left of what actually arrived.
+		const encodedLength = res.headers.get("content-length");
 		const body = await res.text();
-		t.equal(body, PAYLOAD, "transparently decompresses gzip");
+
+		t.equal(body, COMPRESSIBLE, "transparently decompresses gzip");
 		t.notOk(
 			res.headers.get("content-encoding"),
 			"and strips Content-Encoding once decoded, so the body matches the header",
+		);
+
+		// The control: ask for no encoding at all. A server that reports the full size
+		// here can report a size, so the encoded response arriving without one -- or
+		// with a smaller one -- is a difference the server made, not an accident of how
+		// it frames responses.
+		const plain = await fetch(`${url}/encoding/gzip`, {
+			agent,
+			timeout: 10_000,
+			headers: { "accept-encoding": "identity" },
+		});
+		const plainLength = plain.headers.get("content-length");
+		await plain.text();
+		t.equal(
+			plainLength,
+			String(Buffer.byteLength(COMPRESSIBLE)),
+			"asked for identity, the server sends the whole body and says how long it is",
+		);
+		t.ok(
+			encodedLength === null || Number(encodedLength) < Number(plainLength),
+			`so asking for gzip got something else: ${encodedLength ?? "chunked"} on the ` +
+				`wire against ${plainLength} for identity`,
 		);
 	},
 
