@@ -14,6 +14,9 @@ const CAPABILITIES = Object.freeze({
 	H3: "h3",
 	// advertises HTTP/3 via Alt-Svc on a TCP response
 	ALTSVC: "altsvc",
+	// offers both http/1.1 and h2 in ALPN, so the client's preference is what
+	// decides. A single-protocol row cannot test a preference.
+	ALPN_MULTI: "alpnMulti",
 	// can emit response trailers
 	TRAILERS: "trailers",
 	// content codings it will apply

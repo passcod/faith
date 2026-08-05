@@ -16,73 +16,11 @@
  * reproduce. A REJECT rule would produce an error and hide the bug.
  */
 
-const { execFileSync, spawn } = require("node:child_process");
-const { writeFileSync } = require("node:fs");
 const dgram = require("node:dgram");
 const net = require("node:net");
-const path = require("node:path");
 
 const { ensureCert, findFreePort } = require("./net.js");
-
-/**
- * Spawn Caddy serving https://localhost:<port> over h1/h2/h3.
- *
- * `altSvc` overrides the Alt-Svc header Caddy would emit for itself, so a test can
- * advertise an endpoint that isn't Caddy — a port with nothing listening, say.
- *
- * `cacheControl` adds a Cache-Control header, so responses become storable by an
- * agent configured with a cache store.
- */
-async function startCaddy({ port, dir, altSvc, cacheControl }) {
-	const { certPath, keyPath } = ensureCert();
-	// Backtick-quoted, because these values contain the double quotes Caddy would
-	// otherwise treat as the end of the token.
-	const directives = [`tls ${certPath} ${keyPath}`];
-	if (altSvc) directives.push(`header Alt-Svc \`${altSvc}\``);
-	if (cacheControl) directives.push(`header Cache-Control \`${cacheControl}\``);
-	directives.push(`respond "hello-from-caddy"`);
-
-	const caddyfile = `{
-	auto_https off
-	admin off
-	servers {
-		protocols h1 h2 h3
-	}
-}
-
-https://localhost:${port} {
-${directives.map((d) => `\t${d}`).join("\n")}
-}
-`;
-	const configPath = path.join(dir, `Caddyfile.${port}`);
-	writeFileSync(configPath, caddyfile);
-
-	const proc = spawn("caddy", ["run", "--config", configPath, "--adapter", "caddyfile"], {
-		stdio: ["ignore", "pipe", "pipe"],
-	});
-	let log = "";
-	proc.stdout.on("data", (c) => { log += c.toString(); });
-	proc.stderr.on("data", (c) => { log += c.toString(); });
-
-	await new Promise((resolve, reject) => {
-		const deadline = Date.now() + 20000;
-		const tick = setInterval(() => {
-			if (/serving initial configuration/.test(log)) {
-				clearInterval(tick);
-				resolve();
-			} else if (proc.exitCode !== null || Date.now() > deadline) {
-				clearInterval(tick);
-				// Kill before rejecting: the caller never gets a handle to close, and a
-				// surviving child with piped stdio keeps node alive, so a config error
-				// would surface as a hung test run rather than a failure.
-				proc.kill();
-				reject(new Error(`caddy failed to start:\n${log}`));
-			}
-		}, 100);
-	});
-
-	return { port, log: () => log, close: () => proc.kill() };
-}
+const { startCaddy, caddyAvailable } = require("./caddy.js");
 
 /** TCP passthrough, always healthy — this is the path the client should fall back to. */
 async function startTcpProxy({ listenPort, upstreamPort }) {
@@ -160,16 +98,6 @@ async function startUdpRelay({ listenPort, upstreamPort }) {
 			for (const up of upstreams.values()) up.close();
 		},
 	};
-}
-
-/** True if a `caddy` binary is on PATH. */
-function caddyAvailable() {
-	try {
-		execFileSync("caddy", ["version"], { stdio: "ignore" });
-		return true;
-	} catch {
-		return false;
-	}
 }
 
 module.exports = {

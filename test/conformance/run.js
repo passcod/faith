@@ -16,11 +16,12 @@ const path = require("node:path");
 
 const { CAPABILITIES: C, assertKnownCapabilities } = require("./capabilities.js");
 const { controllableH1, controllableH2 } = require("./servers/controllable.js");
+const { caddy } = require("./servers/caddy.js");
 
 const { Agent } = require("../../index.js");
 const { fetch } = require("../../wrapper.js");
 
-const SERVERS = [controllableH1, controllableH2];
+const SERVERS = [controllableH1, controllableH2, caddy];
 const DIMENSIONS = [
 	require("./dimensions/trailers.js"),
 	require("./dimensions/framing.js"),
@@ -35,6 +36,20 @@ const EXPECTED = require("./expected-matrix.json");
  * timeout.
  */
 const CELL_TIMEOUT_MS = 30_000;
+
+/**
+ * Whether a row whose server is not installed is a failure.
+ *
+ * Set in CI, where every server is provisioned and an absent one means the
+ * provisioning step broke -- exactly the kind of coverage loss that otherwise
+ * reads as a green run. Left unset on a dev machine, where installing five
+ * servers to work on one of them is not a reasonable price.
+ *
+ * Availability deliberately does not reach `planCells()`: the computed matrix is
+ * derived from declarations alone, so it is identical on every machine, and that
+ * is what makes comparing it against expected-matrix.json worth anything.
+ */
+const REQUIRE_ALL = Boolean(process.env.CONFORMANCE_REQUIRE_ALL);
 
 function planCells() {
 	// Each dimension's requirements are static, so validating them once here
@@ -76,11 +91,23 @@ function serialiseCell({ server, dimension, status, reason }) {
  * `status` is what the capability model decided; `outcome` is what the run did.
  * They answer different questions -- a cell can be `run` and still `fail`, which
  * is exactly the case a consumer must not mistake for verified.
+ *
+ * `unavailable` is a third answer, distinct from both: the row could have run this
+ * cell, and nothing here says whether it would have passed. Folding it into
+ * `skipped` would claim the capability model excluded it, and folding it into
+ * `pass` would claim a verification that never happened.
  */
 function serialiseOutcome(cell) {
 	return {
 		...serialiseCell(cell),
-		outcome: cell.status === "skip" ? "skipped" : cell.failed ? "fail" : "pass",
+		outcome:
+			cell.status === "skip"
+				? "skipped"
+				: cell.unavailable
+					? "unavailable"
+					: cell.failed
+						? "fail"
+						: "pass",
 	};
 }
 
@@ -99,6 +126,12 @@ function writeMatrix(kind, cells) {
 async function main() {
 	const cells = planCells();
 
+	// Probed once per server rather than once per cell: for a configured server
+	// this shells out to the binary, and the answer cannot change mid-run.
+	const available = new Map(
+		SERVERS.map((server) => [server.name, server.available ? server.available() : true]),
+	);
+
 	// A per-cell timeout reports a wedged cell but does not end the run: a
 	// dimension awaiting something that never settles (faith's `trailers` spins
 	// until the body is drained) leaves a pending native future holding the event
@@ -115,6 +148,15 @@ async function main() {
 		// this into the README is a consumer and must not have to re-derive or re-run
 		// anything to find out what actually happened.
 		writeMatrix("realised", cells.map(serialiseOutcome));
+
+		// Say out loud what did not run. A row silently absent from a green run is
+		// the failure mode this whole distinction exists to prevent, and a TAP
+		// comment survives into the CI log where someone reading it will see it.
+		const missing = [...available].filter(([, ok]) => !ok).map(([name]) => name);
+		if (missing.length > 0) {
+			console.log(`# not installed, so unverified: ${missing.join(", ")}`);
+			console.log("# set CONFORMANCE_REQUIRE_ALL=1 to make that a failure");
+		}
 
 		if (anyFailed) {
 			// tape writes the plan and the summary counts from its own `exit` hook,
@@ -170,6 +212,16 @@ async function main() {
 				t.on("result", (row) => {
 					if (row && row.ok === false) cell.failed = true;
 				});
+
+				if (!available.get(server.name)) {
+					cell.unavailable = true;
+					const why = `${server.name} is not installed`;
+					// Either way this is one assertion, so the cell is never silent: a
+					// dev sees a named pass they can read, CI sees a named failure.
+					if (REQUIRE_ALL) t.fail(`${why}, and CONFORMANCE_REQUIRE_ALL is set`);
+					else t.pass(`unavailable: ${why}`);
+					return;
+				}
 
 				let running;
 				try {

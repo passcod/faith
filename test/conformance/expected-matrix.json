@@ -1,10 +1,58 @@
 {
 	"cells": [
-		{ "server": "controllable-h1", "dimension": "trailers", "status": "run", "reason": null },
-		{ "server": "controllable-h1", "dimension": "framing", "status": "run", "reason": null },
-		{ "server": "controllable-h1", "dimension": "encoding", "status": "run", "reason": null },
-		{ "server": "controllable-h2", "dimension": "trailers", "status": "run", "reason": null },
-		{ "server": "controllable-h2", "dimension": "framing", "status": "skip", "reason": "lacks chunked" },
-		{ "server": "controllable-h2", "dimension": "encoding", "status": "run", "reason": null }
+		{
+			"server": "controllable-h1",
+			"dimension": "trailers",
+			"status": "run",
+			"reason": null
+		},
+		{
+			"server": "controllable-h1",
+			"dimension": "framing",
+			"status": "run",
+			"reason": null
+		},
+		{
+			"server": "controllable-h1",
+			"dimension": "encoding",
+			"status": "run",
+			"reason": null
+		},
+		{
+			"server": "controllable-h2",
+			"dimension": "trailers",
+			"status": "run",
+			"reason": null
+		},
+		{
+			"server": "controllable-h2",
+			"dimension": "framing",
+			"status": "skip",
+			"reason": "lacks chunked"
+		},
+		{
+			"server": "controllable-h2",
+			"dimension": "encoding",
+			"status": "run",
+			"reason": null
+		},
+		{
+			"server": "caddy",
+			"dimension": "trailers",
+			"status": "skip",
+			"reason": "lacks trailers"
+		},
+		{
+			"server": "caddy",
+			"dimension": "framing",
+			"status": "skip",
+			"reason": "lacks chunked"
+		},
+		{
+			"server": "caddy",
+			"dimension": "encoding",
+			"status": "run",
+			"reason": null
+		}
 	]
 }
