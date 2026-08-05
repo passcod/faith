@@ -89,6 +89,36 @@
 			"dimension": "alpn",
 			"status": "run",
 			"reason": null
+		},
+		{
+			"server": "nginx",
+			"dimension": "trailers",
+			"status": "skip",
+			"reason": "lacks trailers"
+		},
+		{
+			"server": "nginx",
+			"dimension": "framing",
+			"status": "skip",
+			"reason": "lacks chunked"
+		},
+		{
+			"server": "nginx",
+			"dimension": "encoding",
+			"status": "run",
+			"reason": null
+		},
+		{
+			"server": "nginx",
+			"dimension": "conditional",
+			"status": "run",
+			"reason": null
+		},
+		{
+			"server": "nginx",
+			"dimension": "alpn",
+			"status": "run",
+			"reason": null
 		}
 	]
 }

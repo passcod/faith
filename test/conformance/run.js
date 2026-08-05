@@ -17,11 +17,12 @@ const path = require("node:path");
 const { CAPABILITIES: C, assertKnownCapabilities } = require("./capabilities.js");
 const { controllableH1, controllableH2 } = require("./servers/controllable.js");
 const { caddy } = require("./servers/caddy.js");
+const { nginx } = require("./servers/nginx.js");
 
 const { Agent } = require("../../index.js");
 const { fetch } = require("../../wrapper.js");
 
-const SERVERS = [controllableH1, controllableH2, caddy];
+const SERVERS = [controllableH1, controllableH2, caddy, nginx];
 const DIMENSIONS = [
 	require("./dimensions/trailers.js"),
 	require("./dimensions/framing.js"),

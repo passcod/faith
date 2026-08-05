@@ -69,4 +69,53 @@ async function findFreePort() {
 	throw new Error("could not find a port free for both TCP and UDP");
 }
 
-module.exports = { ensureCert, findFreePort };
+/**
+ * Resolve once something accepts TCP on `port`.
+ *
+ * The configured servers -- nginx, Apache, HAProxy -- print nothing predictable
+ * to stdout when they come up, and what they do print goes to a log file inside
+ * their own prefix, so the listener accepting is the readiness signal. `diagnose`
+ * reads that log, and a server that died during startup fails immediately with its
+ * own explanation rather than after the full timeout with none.
+ */
+async function waitForPort({ port, host = "127.0.0.1", timeoutMs = 15_000, describe, proc, diagnose }) {
+	const deadline = Date.now() + timeoutMs;
+	for (;;) {
+		if (proc && proc.exitCode !== null) {
+			throw new Error(
+				`${describe} exited with ${proc.exitCode} during startup${detail(diagnose)}`,
+			);
+		}
+		const open = await new Promise((resolve) => {
+			const socket = net.connect(port, host);
+			const done = (ok) => {
+				socket.destroy();
+				resolve(ok);
+			};
+			socket.once("connect", () => done(true));
+			socket.once("error", () => done(false));
+			socket.setTimeout(500, () => done(false));
+		});
+		if (open) return;
+		if (Date.now() > deadline) {
+			throw new Error(
+				`${describe} did not accept connections on ${host}:${port} within ` +
+					`${timeoutMs}ms${detail(diagnose)}`,
+			);
+		}
+		await new Promise((resolve) => setTimeout(resolve, 50));
+	}
+}
+
+function detail(diagnose) {
+	if (!diagnose) return "";
+	try {
+		const log = diagnose();
+		return log ? `:\n${log}` : "";
+	} catch {
+		// The log is a nicety; failing to read it must not replace the real error.
+		return "";
+	}
+}
+
+module.exports = { ensureCert, findFreePort, waitForPort };
