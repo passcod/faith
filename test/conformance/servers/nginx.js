@@ -1,13 +1,20 @@
 /**
  * The nginx row.
  *
- * The most-deployed reverse proxy, and in this matrix the point is its *own* gzip
- * module and its own static-file handling -- not its HTTP/2, which is nghttp2, the
- * same implementation Node's h2 rows already exercise.
+ * The most-deployed reverse proxy, here for its own gzip module, its own static-file
+ * handling, and its own QUIC -- which is neither quiche nor quic-go, so this is a
+ * fourth HTTP/3 stack in the matrix. Not for its HTTP/2, which is nghttp2, the same
+ * implementation the Node h2 row already exercises.
  *
- * No H3: Ubuntu 24.04 ships nginx 1.24 and HTTP/3 needs 1.25+, so an apt-installed
- * nginx covers HTTP/1 and HTTP/2 only. Declaring H3 here would produce a row that
- * fails everywhere it is deployed rather than one that honestly covers less.
+ * It is also the only row whose Alt-Svc header is written by hand, because nginx
+ * advertises nothing by itself. That is closer to how most deployments look than
+ * Caddy's automatic advertisement, and it is a second, differently-produced path
+ * through the upgrade code #23 broke.
+ *
+ * HTTP/3 is a compile-time module, so this row needs a build configured with
+ * --with-http_v3_module: Ubuntu 24.04's 1.24 cannot have it at all. Rather than split
+ * into two rows -- which would duplicate eight identical TCP cells to gain two -- the
+ * whole row reports itself unavailable on a build without QUIC, and says so.
  *
  * No CHUNKED, for the same reason as Caddy: a static file server sends
  * Content-Length, and the only way it chunks is as a side effect of compressing.
@@ -25,40 +32,43 @@ const { buildStaticTree } = require("./static-tree.js");
 const HEADER_LIMIT = 1024;
 
 /**
- * How this nginx spells "enable HTTP/2".
+ * The oldest nginx this row can use: 1.25.1.
  *
- * `listen ... http2` was deprecated in 1.25.1 in favour of a standalone `http2 on`
- * directive. Both spellings are accepted by exactly one side of that boundary
- * without a warning, and picking the wrong one leaves nginx quietly serving
- * HTTP/1.1 -- which the row's version probe would report as a faith bug. So ask the
- * binary rather than assuming a distribution.
+ * Two boundaries land three weeks apart. HTTP/3 arrived in 1.25.0, and 1.25.1 added
+ * the standalone `http2` directive, deprecating the `listen ... http2` parameter.
+ * Since the row needs QUIC, only 1.25.0 itself could want the old spelling -- one
+ * release, with HTTP/3 still marked experimental -- so the minimum is 1.25.1 and the
+ * config speaks one dialect. Handling both would be a branch reachable by nothing
+ * anyone runs.
  */
-function parseHttp2Style(banner) {
+const MINIMUM = [1, 25, 1];
+
+/** The version from an `nginx -v` banner, or null if it does not look like one. */
+function parseVersion(banner) {
 	const match = /nginx\/(\d+)\.(\d+)\.(\d+)/.exec(banner);
-	// An unreadable banner takes the modern spelling: the deprecated one is the
-	// branch that will eventually be removed, so guessing forward fails on old
-	// versions -- which are the ones a version check would have caught anyway --
-	// rather than on every future one.
-	if (!match) return { directive: "http2 on;", listenSuffix: "", version: null };
-	const [major, minor, patch] = match.slice(1).map(Number);
-	const modern = major > 1 || (major === 1 && (minor > 25 || (minor === 25 && patch >= 1)));
-	return {
-		directive: modern ? "http2 on;" : "",
-		listenSuffix: modern ? "" : " http2",
-		version: `${major}.${minor}.${patch}`,
-	};
+	return match ? match.slice(1).map(Number) : null;
 }
 
-function http2Style(binary) {
-	// spawnSync, not execFileSync: `nginx -v` prints its banner to *stderr* and exits
-	// 0, and execFileSync returns only stdout -- so the banner came back empty, the
-	// parse silently fell through to the modern spelling, and nginx 1.24 rejected the
-	// config it was handed. Reading both streams is the whole point of the call.
+function newEnough(version) {
+	if (!version) return false;
+	for (const [index, floor] of MINIMUM.entries()) {
+		if (version[index] > floor) return true;
+		if (version[index] < floor) return false;
+	}
+	return true;
+}
+
+/**
+ * The version banner. spawnSync, not execFileSync: `nginx -v` prints to *stderr* and
+ * exits 0, and execFileSync returns only stdout -- so reading it that way yielded an
+ * empty string and every version looked the same.
+ */
+function versionBanner(binary) {
 	const result = spawnSync(binary, ["-v"], { encoding: "utf8" });
-	return parseHttp2Style(`${result.stdout || ""}${result.stderr || ""}`);
+	return `${result.stdout || ""}${result.stderr || ""}`;
 }
 
-function buildConf({ prefix, tree, port, certPath, keyPath, style }) {
+function buildConf({ prefix, tree, port, certPath, keyPath }) {
 	// Every writable path is inside the prefix. nginx otherwise uses its build-time
 	// locations -- /var/log/nginx, /var/lib/nginx -- which an unprivileged test run
 	// cannot write, and it fails before it ever binds the port.
@@ -90,9 +100,9 @@ http {
 	large_client_header_buffers 4 ${HEADER_LIMIT/1024}k;
 
 	server {
-		listen ${port} ssl${style.listenSuffix};
-		${style.directive}
-		server_name localhost;
+		listen ${port} ssl;
+		http2 on;
+${h3ServerConf(port)}		server_name localhost;
 
 		ssl_certificate ${certPath};
 		ssl_certificate_key ${keyPath};
@@ -123,12 +133,42 @@ http {
 `;
 }
 
+/**
+ * The QUIC half of the config.
+ *
+ * A second `listen` on the same port number, because one is UDP and the other TCP.
+ * `reuseport` is what lets nginx spread QUIC connections across workers, and may
+ * appear only once per port in a configuration -- there is a single server block
+ * here, so that is fine, and it is what nginx's own documentation uses.
+ *
+ * The Alt-Svc header is written out by hand, which is the interesting part: nginx
+ * emits no advertisement of its own, unlike Caddy. So this row exercises the upgrade
+ * path against a header someone wrote themselves, which is what most real
+ * deployments have. `always` so it is sent on error responses too, and the port is
+ * interpolated rather than left to $server_port, which is the TCP port and only
+ * happens to match.
+ */
+function h3ServerConf(port) {
+	return `		listen ${port} quic reuseport;
+		http3 on;
+		add_header Alt-Svc 'h3=":${port}"; ma=86400' always;
+`;
+}
+
+/** What this nginx was built with. `-V` prints its configure line, to stderr. */
+function buildFlags(binary) {
+	const result = spawnSync(binary, ["-V"], { encoding: "utf8" });
+	return `${result.stdout || ""}${result.stderr || ""}`;
+}
+
 const nginx = {
 	name: "nginx",
 	expectVersion: "HTTP/2.0",
 	capabilities: new Set([
 		C.H1,
 		C.H2,
+		C.H3,
+		C.ALTSVC,
 		C.ALPN_MULTI,
 		C.TLS,
 		C.GZIP,
@@ -142,10 +182,37 @@ const nginx = {
 	available() {
 		try {
 			execFileSync("nginx", ["-v"], { stdio: "ignore" });
-			return true;
 		} catch {
 			return false;
 		}
+		// Checked here rather than folded into the capability declarations, which have to
+		// stay static for the computed matrix to be identical on every machine. A binary
+		// that is too old, or built without QUIC, makes the row unavailable instead.
+		return (
+			newEnough(parseVersion(versionBanner("nginx"))) &&
+			buildFlags("nginx").includes("--with-http_v3_module")
+		);
+	},
+
+	/**
+	 * Why the row did not run, when it did not.
+	 *
+	 * "not installed" would be a lie in the common case: nginx is there, built without
+	 * QUIC. Someone chasing a missing row needs to know which, because the two fixes
+	 * have nothing to do with each other.
+	 */
+	whyUnavailable() {
+		try {
+			execFileSync("nginx", ["-v"], { stdio: "ignore" });
+		} catch {
+			return "nginx is not installed";
+		}
+		const version = parseVersion(versionBanner("nginx"));
+		if (!newEnough(version)) {
+			return `this nginx is ${version ? version.join(".") : "of an unreadable version"}, ` +
+				`and the row needs ${MINIMUM.join(".")} or newer`;
+		}
+		return "this nginx was built without --with-http_v3_module";
 	},
 
 	async start() {
@@ -153,10 +220,10 @@ const nginx = {
 		const port = await findFreePort();
 		const tree = buildStaticTree();
 		const prefix = path.join(tree.dir, "nginx");
-		// `logs/` must exist before nginx starts: it opens its compiled-in default
-		// error log relative to the prefix *before* parsing the config that redirects
-		// it, so a missing directory is an alert on every startup -- and the config's
-		// own error_log then lands in the same place anyway.
+		// `logs/` must exist before nginx starts: it opens its compiled-in default error
+		// log relative to the prefix *before* parsing the config that redirects it, so a
+		// missing directory is an alert on every startup -- and the config's own
+		// error_log then lands in the same place anyway.
 		mkdirSync(path.join(prefix, "logs"), { recursive: true });
 
 		const confPath = path.join(prefix, "nginx.conf");
@@ -168,7 +235,6 @@ const nginx = {
 				port,
 				certPath,
 				keyPath,
-				style: http2Style("nginx"),
 			}),
 		);
 
@@ -203,8 +269,8 @@ const nginx = {
 			log: readLog,
 			close: async () => {
 				proc.kill();
-				// Wait for it to actually go, so the next row can rebind the port. nginx
-				// is spawned in the foreground, so its exit is the whole process tree's.
+				// Wait for it to actually go, so the next row can rebind the port. nginx is
+				// spawned in the foreground, so its exit is the whole process tree's.
 				await new Promise((resolve) => {
 					if (proc.exitCode !== null) return resolve();
 					proc.once("exit", resolve);
@@ -216,4 +282,4 @@ const nginx = {
 	},
 };
 
-module.exports = { nginx, buildConf, http2Style, parseHttp2Style, HEADER_LIMIT };
+module.exports = { nginx, buildConf, parseVersion, newEnough, MINIMUM, HEADER_LIMIT };

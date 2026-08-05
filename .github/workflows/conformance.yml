@@ -54,22 +54,35 @@ jobs:
         run: |
           go install github.com/caddyserver/caddy/v2/cmd/caddy@v2.11.4
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
-      - name: Install nginx, Apache and HAProxy
-        # One apt invocation for the three of them. Ubuntu 24.04 ships nginx 1.24,
-        # which is why the nginx row declares no H3 and emits the pre-1.25.1 spelling
-        # of the HTTP/2 directive.
-        #
+      - name: Install Apache and HAProxy
         # Apache is `apache2` here and `httpd` on Arch, with different module
         # directories; the row resolves both at runtime, and printing what it found
         # makes a provisioning change visible in the log rather than as a row that
         # mysteriously stops running.
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends nginx apache2 haproxy
-          nginx -v
+          sudo apt-get install -y --no-install-recommends apache2 haproxy
           apache2 -v
           haproxy -v
           ls /usr/lib/apache2/modules/mod_ssl.so
+      - name: Install nginx from nginx.org mainline
+        # Not Ubuntu's nginx: 24.04 ships 1.24, which cannot do HTTP/3 at all, and the
+        # row needs a build configured with --with-http_v3_module. nginx's own mainline
+        # packages have it.
+        #
+        # The flag is asserted here rather than left to the row, which would report
+        # itself unavailable and -- under CONFORMANCE_REQUIRE_ALL -- fail with a
+        # message about the build when the cause is this step.
+        run: |
+          curl -fsSL https://nginx.org/keys/nginx_signing.key \
+            | sudo gpg --dearmor -o /usr/share/keyrings/nginx.gpg
+          echo "deb [signed-by=/usr/share/keyrings/nginx.gpg] \
+            http://nginx.org/packages/mainline/ubuntu $(lsb_release -cs) nginx" \
+            | sudo tee /etc/apt/sources.list.d/nginx.list
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends nginx
+          nginx -v
+          nginx -V 2>&1 | tr ' ' '\n' | grep -- --with-http_v3_module
       # Cached on the pinned tag, because nothing packages quiche-server and building
       # it means building BoringSSL, which needs cmake and Go -- both already here --
       # and several minutes. The binary is stripped first: unstripped it is ~150MB of

@@ -48,8 +48,8 @@ whatever servers emit, fáith must correctly handle. So far, everything we've te
 | **keepalive** | ● | · | · | · | ● | · | · | · | · |
 | **header-limits** | ● | · | · | ● | ● | ● | · | · | · |
 | **goaway** | · | ● | · | · | · | · | · | · | · |
-| **h3** | · | · | ● | · | · | · | · | · | ● |
-| **altsvc** | · | · | ● | · | · | · | · | · | · |
+| **h3** | · | · | ● | ● | · | · | · | · | ● |
+| **altsvc** | · | · | ● | ● | · | · | · | · | · |
 
 ● covered  
 · not applicable to this server  

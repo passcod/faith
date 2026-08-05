@@ -7,7 +7,7 @@
 
 const test = require("tape");
 
-const { nginx, parseHttp2Style } = require("./nginx.js");
+const { nginx, parseVersion, newEnough, MINIMUM } = require("./nginx.js");
 const { assertKnownCapabilities } = require("../capabilities.js");
 const { PAYLOAD } = require("../contract.js");
 const { assertServesContract } = require("./contract-check.js");
@@ -15,61 +15,80 @@ const { assertServesContract } = require("./contract-check.js");
 const { Agent } = require("../../../index.js");
 const { fetch } = require("../../../wrapper.js");
 
-// Only one nginx is installed on any given machine, so the spelling this picks for
-// the *other* version is never exercised by starting a server. Getting it wrong
-// leaves nginx quietly serving HTTP/1.1, which the row's version probe reports as
-// though faith had failed to negotiate -- so the boundary is checked directly.
-test("nginx: HTTP/2 is spelled the way this version wants it", (t) => {
-	const legacy = parseHttp2Style("nginx version: nginx/1.24.0");
-	t.equal(legacy.listenSuffix, " http2", "1.24 takes the listen parameter");
-	t.equal(legacy.directive, "", "and not the standalone directive");
+// Only one nginx is installed on any given machine, so the floor this enforces is
+// never exercised from both sides by starting a server. It matters because the two
+// nginx boundaries land three weeks apart: HTTP/3 in 1.25.0, and the standalone
+// `http2` directive in 1.25.1. The config speaks only the newer dialect, so anything
+// between them would be handed a directive it does not know and refuse to start.
+test("nginx: the version floor sits above both boundaries", (t) => {
+	t.notOk(newEnough(parseVersion("nginx version: nginx/1.24.0")), "1.24 has no HTTP/3 at all");
+	t.notOk(
+		newEnough(parseVersion("nginx version: nginx/1.25.0")),
+		"1.25.0 has HTTP/3 but wants the deprecated listen parameter, so it is out too",
+	);
+	t.ok(
+		newEnough(parseVersion("nginx version: nginx/1.25.1")),
+		`1.25.1 is the floor, and takes the http2 directive this config writes`,
+	);
+	t.ok(newEnough(parseVersion("nginx version: nginx/1.31.3")), "and anything newer is fine");
+	t.ok(newEnough(parseVersion("nginx version: nginx/2.0.0")), "including a major bump");
 
-	// 1.25.1 is the release that deprecated the listen parameter, so it is the first
-	// version on the modern side rather than a round number.
-	const boundary = parseHttp2Style("nginx version: nginx/1.25.1");
-	t.equal(boundary.directive, "http2 on;", "1.25.1 takes the standalone directive");
-	t.equal(boundary.listenSuffix, "", "and not the listen parameter");
-
-	const before = parseHttp2Style("nginx version: nginx/1.25.0");
-	t.equal(before.listenSuffix, " http2", "1.25.0, one patch earlier, is still legacy");
-
-	const unreadable = parseHttp2Style("something else entirely");
-	t.equal(unreadable.directive, "http2 on;", "an unreadable banner guesses forward");
-	t.equal(unreadable.version, null, "and says it could not tell");
+	// An unreadable banner is not new enough: the row would rather report itself
+	// unavailable, with the version it could not read, than hand a config to a binary
+	// it knows nothing about.
+	t.notOk(newEnough(parseVersion("something else entirely")), "an unreadable banner is not");
+	t.equal(MINIMUM.join("."), "1.25.1", "and the floor is stated once, where it is enforced");
 
 	t.end();
 });
 
-test("nginx: serves and negotiates", async (t) => {
-	assertKnownCapabilities(nginx.capabilities, "server nginx");
+for (const server of [nginx]) {
+	test(`nginx: ${server.name} serves and negotiates`, async (t) => {
+		assertKnownCapabilities(server.capabilities, `server ${server.name}`);
 
-	if (!nginx.available()) {
-		t.pass("nginx is not installed, so its configuration is unverified");
-		t.end();
-		return;
-	}
+		if (!server.available()) {
+			// For the h3 row this is usually a build fact rather than a missing server:
+			// HTTP/3 is a compile-time module, and no Ubuntu 24.04 package has it.
+			t.pass(`${server.name} is unavailable here, so its configuration is unverified`);
+			t.end();
+			return;
+		}
 
-	const running = await nginx.start();
-	const agent = new Agent({
-		tls: { extraRoots: [running.ca] },
-		dns: { overrides: [{ domain: "localhost", addresses: ["127.0.0.1"] }] },
-		http3: { upgradeEnabled: false },
-	});
-
-	try {
-		const res = await fetch(`${running.url}/hello`, { agent, timeout: 10_000 });
-		const body = await res.text();
-		t.equal(res.status, 200, "serves the baseline route");
-		t.equal(body, PAYLOAD, "and the expected payload");
-		t.equal(res.version, nginx.expectVersion, "negotiates exactly the protocol the row claims");
-
-		await assertServesContract(t, {
-			url: running.url,
-			agent,
-			capabilities: nginx.capabilities,
+		const running = await server.start();
+		const agent = new Agent({
+			tls: { extraRoots: [running.ca] },
+			dns: { overrides: [{ domain: "localhost", addresses: ["127.0.0.1"] }] },
+			http3: { upgradeEnabled: false },
 		});
-	} finally {
-		await running.close();
-		t.end();
-	}
-});
+
+		try {
+			const res = await fetch(`${running.url}/hello`, { agent, timeout: 10_000 });
+			const body = await res.text();
+			t.equal(res.status, 200, "serves the baseline route");
+			t.equal(body, PAYLOAD, "and the expected payload");
+			t.equal(
+				res.version,
+				server.expectVersion,
+				"negotiates exactly the protocol the row claims",
+			);
+
+			// nginx writes no advertisement of its own, so on the h3 row this header is
+			// entirely the config's doing -- and it is what the altsvc dimension reads.
+			if (server.capabilities.has("altsvc")) {
+				t.ok(
+					res.headers.get("alt-svc"),
+					"and carries the hand-written Alt-Svc header, which nginx never adds itself",
+				);
+			}
+
+			await assertServesContract(t, {
+				url: running.url,
+				agent,
+				capabilities: server.capabilities,
+			});
+		} finally {
+			await running.close();
+			t.end();
+		}
+	});
+}

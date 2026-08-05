@@ -209,9 +209,14 @@ async function main() {
 		// Say out loud what did not run. A row silently absent from a green run is
 		// the failure mode this whole distinction exists to prevent, and a TAP
 		// comment survives into the CI log where someone reading it will see it.
-		const missing = [...available].filter(([, ok]) => !ok).map(([name]) => name);
+		const missing = [...available]
+			.filter(([, ok]) => !ok)
+			.map(([name]) => {
+				const server = SERVERS.find((s) => s.name === name);
+				return server.whyUnavailable ? `${name} (${server.whyUnavailable()})` : name;
+			});
 		if (missing.length > 0) {
-			console.log(`# not installed, so unverified: ${missing.join(", ")}`);
+			console.log(`# unverified, because the server was unavailable: ${missing.join(", ")}`);
 			console.log("# set CONFORMANCE_REQUIRE_ALL=1 to make that a failure");
 		}
 
@@ -272,7 +277,12 @@ async function main() {
 
 				if (!available.get(server.name)) {
 					cell.unavailable = true;
-					const why = `${server.name} is not installed`;
+					// A row may explain itself, because "not installed" is often wrong: an nginx
+					// built without --with-http_v3_module is installed and still cannot run this
+					// row, and the two situations have unrelated fixes.
+					const why = server.whyUnavailable
+						? `${server.name}: ${server.whyUnavailable()}`
+						: `${server.name} is not installed`;
 					// Either way this is one assertion, so the cell is never silent: a
 					// dev sees a named pass they can read, CI sees a named failure.
 					if (REQUIRE_ALL) t.fail(`${why}, and CONFORMANCE_REQUIRE_ALL is set`);

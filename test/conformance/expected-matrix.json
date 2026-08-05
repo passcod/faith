@@ -231,14 +231,14 @@
 		{
 			"server": "nginx",
 			"dimension": "h3",
-			"status": "skip",
-			"reason": "lacks h3"
+			"status": "run",
+			"reason": null
 		},
 		{
 			"server": "nginx",
 			"dimension": "altsvc",
-			"status": "skip",
-			"reason": "lacks altsvc"
+			"status": "run",
+			"reason": null
 		},
 		{
 			"server": "apache-h1",
