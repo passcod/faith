@@ -990,6 +990,73 @@ constant from `ERROR_CODES`, instead of doing string matching on the error messa
 Due to technical limitations, when reading a body stream, reads might fail, but that error
 will not have a `code` property.
 
+## Environment variables
+
+Fáith reads a handful of environment variables when an `Agent` is created (including the implicit
+global default agent), so that `fetch()` behaves like Node's built-in fetch without extra
+configuration. They are read once, at `Agent` construction; changing them afterwards only affects
+agents created later.
+
+### `NODE_EXTRA_CA_CERTS`
+
+A path to a PEM file whose certificates are added to the trust store, on top of the platform roots
+and any [`tls.extraRoots`](#agentoptionstlsobject). This is the ambient equivalent of `extraRoots`,
+and the certificates from both are combined.
+
+Unlike `extraRoots` — which throws if the PEM is malformed — this variable is lenient, matching
+Node's warn-and-continue behaviour: an empty value, a file that cannot be read, or one that fails to
+parse is ignored rather than fatal.
+
+### `NODE_TLS_REJECT_UNAUTHORIZED`
+
+When set to exactly `0`, TLS certificate validation is disabled for the agent. Any other value (or
+leaving it unset) keeps validation enabled.
+
+This is insecure — it accepts any certificate, defeating TLS authentication — and exists only to
+match Node's semantics. Prefer `NODE_EXTRA_CA_CERTS` or `tls.extraRoots` to trust a specific
+private CA.
+
+### `NODE_USE_ENV_PROXY`
+
+When set to exactly `0`, the agent ignores the ambient proxy configuration (`HTTP_PROXY`,
+`HTTPS_PROXY`, `ALL_PROXY`, `NO_PROXY`, and the operating system's proxy settings) that Fáith
+otherwise reads automatically.
+
+Note that this is inverted from Node, where proxy support is opt-*in* and this variable turns it
+*on*. Fáith reads the proxy environment by default, so the variable acts purely as an opt-*out*
+switch: unset (or `1`) keeps proxying enabled.
+
+### `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`, `NO_PROXY`
+
+Honoured automatically (subject to `NODE_USE_ENV_PROXY` above). `HTTP_PROXY` and `HTTPS_PROXY` select
+the proxy per scheme, `ALL_PROXY` is the fallback for both, and `NO_PROXY` is a comma-separated list
+of hosts, domains, and CIDR ranges to connect to directly. The lowercase spellings are also
+accepted.
+
+### `SSL_CERT_FILE`, `SSL_CERT_DIR`
+
+On Unix platforms other than macOS, these override where the system trust store is loaded from — a
+single PEM bundle and a directory of certificates respectively. They are the standard OpenSSL
+variables, honoured here through the platform certificate verifier. On macOS and Windows the OS
+trust store is used directly and these are ignored, as they are by Node on those platforms.
+
+Note that `SSL_CERT_FILE` *replaces* the system roots with the given file, whereas
+`NODE_EXTRA_CA_CERTS` *adds* to them.
+
+### `SSLKEYLOGFILE`
+
+A path to which TLS session keys are written, for decrypting captured traffic in tools like
+Wireshark. Honoured automatically. As in other implementations, this leaks the key material needed
+to decrypt the agent's TLS traffic, so only set it when debugging.
+
+### Not honoured
+
+- `NODE_USE_SYSTEM_CA`: Fáith bundles no root certificate set of its own — the platform trust store
+  is its only default source of roots, and is always used. There is nothing for this variable to
+  toggle, so it is ignored.
+- `OPENSSL_CONF`: Fáith uses [rustls](https://github.com/rustls/rustls), not OpenSSL, so OpenSSL's
+  configuration file does not apply.
+
 ## Versions
 
 Two version constants are exposed:
