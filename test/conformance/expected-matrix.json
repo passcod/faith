@@ -49,6 +49,18 @@
 			"reason": "lacks goaway, h2"
 		},
 		{
+			"server": "controllable-h1",
+			"dimension": "h3",
+			"status": "skip",
+			"reason": "lacks h3"
+		},
+		{
+			"server": "controllable-h1",
+			"dimension": "altsvc",
+			"status": "skip",
+			"reason": "lacks altsvc"
+		},
+		{
 			"server": "controllable-h2",
 			"dimension": "trailers",
 			"status": "run",
@@ -97,6 +109,18 @@
 			"reason": null
 		},
 		{
+			"server": "controllable-h2",
+			"dimension": "h3",
+			"status": "skip",
+			"reason": "lacks h3"
+		},
+		{
+			"server": "controllable-h2",
+			"dimension": "altsvc",
+			"status": "skip",
+			"reason": "lacks altsvc"
+		},
+		{
 			"server": "caddy",
 			"dimension": "trailers",
 			"status": "skip",
@@ -145,6 +169,18 @@
 			"reason": "lacks goaway"
 		},
 		{
+			"server": "caddy",
+			"dimension": "h3",
+			"status": "run",
+			"reason": null
+		},
+		{
+			"server": "caddy",
+			"dimension": "altsvc",
+			"status": "run",
+			"reason": null
+		},
+		{
 			"server": "nginx",
 			"dimension": "trailers",
 			"status": "skip",
@@ -191,6 +227,18 @@
 			"dimension": "goaway",
 			"status": "skip",
 			"reason": "lacks goaway"
+		},
+		{
+			"server": "nginx",
+			"dimension": "h3",
+			"status": "skip",
+			"reason": "lacks h3"
+		},
+		{
+			"server": "nginx",
+			"dimension": "altsvc",
+			"status": "skip",
+			"reason": "lacks altsvc"
 		},
 		{
 			"server": "apache-h1",
@@ -241,6 +289,18 @@
 			"reason": "lacks goaway, h2"
 		},
 		{
+			"server": "apache-h1",
+			"dimension": "h3",
+			"status": "skip",
+			"reason": "lacks h3"
+		},
+		{
+			"server": "apache-h1",
+			"dimension": "altsvc",
+			"status": "skip",
+			"reason": "lacks altsvc"
+		},
+		{
 			"server": "apache-h2",
 			"dimension": "trailers",
 			"status": "skip",
@@ -287,6 +347,18 @@
 			"dimension": "goaway",
 			"status": "skip",
 			"reason": "lacks goaway"
+		},
+		{
+			"server": "apache-h2",
+			"dimension": "h3",
+			"status": "skip",
+			"reason": "lacks h3"
+		},
+		{
+			"server": "apache-h2",
+			"dimension": "altsvc",
+			"status": "skip",
+			"reason": "lacks altsvc"
 		},
 		{
 			"server": "haproxy-h1",
@@ -337,6 +409,18 @@
 			"reason": "lacks goaway, h2"
 		},
 		{
+			"server": "haproxy-h1",
+			"dimension": "h3",
+			"status": "skip",
+			"reason": "lacks h3"
+		},
+		{
+			"server": "haproxy-h1",
+			"dimension": "altsvc",
+			"status": "skip",
+			"reason": "lacks altsvc"
+		},
+		{
 			"server": "haproxy-h2",
 			"dimension": "trailers",
 			"status": "run",
@@ -383,6 +467,78 @@
 			"dimension": "goaway",
 			"status": "skip",
 			"reason": "lacks goaway"
+		},
+		{
+			"server": "haproxy-h2",
+			"dimension": "h3",
+			"status": "skip",
+			"reason": "lacks h3"
+		},
+		{
+			"server": "haproxy-h2",
+			"dimension": "altsvc",
+			"status": "skip",
+			"reason": "lacks altsvc"
+		},
+		{
+			"server": "quiche",
+			"dimension": "trailers",
+			"status": "skip",
+			"reason": "lacks trailers"
+		},
+		{
+			"server": "quiche",
+			"dimension": "framing",
+			"status": "skip",
+			"reason": "lacks chunked"
+		},
+		{
+			"server": "quiche",
+			"dimension": "encoding",
+			"status": "skip",
+			"reason": "lacks gzip"
+		},
+		{
+			"server": "quiche",
+			"dimension": "conditional",
+			"status": "skip",
+			"reason": "lacks conditional"
+		},
+		{
+			"server": "quiche",
+			"dimension": "alpn",
+			"status": "skip",
+			"reason": "lacks alpnMulti"
+		},
+		{
+			"server": "quiche",
+			"dimension": "keepalive",
+			"status": "skip",
+			"reason": "lacks keepaliveLimit"
+		},
+		{
+			"server": "quiche",
+			"dimension": "header-limits",
+			"status": "skip",
+			"reason": "lacks headerLimits"
+		},
+		{
+			"server": "quiche",
+			"dimension": "goaway",
+			"status": "skip",
+			"reason": "lacks goaway, h2"
+		},
+		{
+			"server": "quiche",
+			"dimension": "h3",
+			"status": "run",
+			"reason": null
+		},
+		{
+			"server": "quiche",
+			"dimension": "altsvc",
+			"status": "skip",
+			"reason": "lacks altsvc"
 		}
 	]
 }

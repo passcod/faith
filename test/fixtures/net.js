@@ -138,6 +138,39 @@ async function waitForPort({ port, host = "127.0.0.1", timeoutMs = 15_000, descr
 	}
 }
 
+/**
+ * Resolve once something holds the UDP port.
+ *
+ * There is no UDP equivalent of a connect, and an HTTP/3-only server has no TCP
+ * listener to probe: quiche-server prints nothing on startup even at RUST_LOG=info,
+ * so its log is no help either. What is observable is the socket itself -- once the
+ * server has bound the port, binding it here fails with EADDRINUSE, and that
+ * failure is the readiness signal.
+ */
+async function waitForUdpPort({ port, host = "127.0.0.1", timeoutMs = 15_000, describe, proc, diagnose }) {
+	const deadline = Date.now() + timeoutMs;
+	for (;;) {
+		if (proc && proc.exitCode !== null) {
+			throw new Error(
+				`${describe} exited with ${proc.exitCode} during startup${detail(diagnose)}`,
+			);
+		}
+		const taken = await new Promise((resolve) => {
+			const socket = dgram.createSocket("udp4");
+			socket.once("error", () => resolve(true));
+			// No reuseAddr: the whole point is to be refused when the port is in use.
+			socket.bind(port, host, () => socket.close(() => resolve(false)));
+		});
+		if (taken) return;
+		if (Date.now() > deadline) {
+			throw new Error(
+				`${describe} did not bind udp/${host}:${port} within ${timeoutMs}ms${detail(diagnose)}`,
+			);
+		}
+		await new Promise((resolve) => setTimeout(resolve, 50));
+	}
+}
+
 function detail(diagnose) {
 	if (!diagnose) return "";
 	try {
@@ -149,4 +182,4 @@ function detail(diagnose) {
 	}
 }
 
-module.exports = { ensureCert, ensureCombinedCert, findFreePort, waitForPort };
+module.exports = { ensureCert, ensureCombinedCert, findFreePort, waitForPort, waitForUdpPort };

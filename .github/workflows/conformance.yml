@@ -3,6 +3,9 @@ env:
   DEBUG: napi:*
   APP_NAME: faith
   CARGO_INCREMENTAL: "1"
+  # Pinned for the same reason go-httpbin and Caddy are: this row's whole purpose is
+  # a specific QUIC implementation, and "whatever main is today" is not one.
+  QUICHE_TAG: "0.29.3"
 on:
   push:
     branches:
@@ -67,6 +70,26 @@ jobs:
           apache2 -v
           haproxy -v
           ls /usr/lib/apache2/modules/mod_ssl.so
+      # Cached on the pinned tag, because nothing packages quiche-server and building
+      # it means building BoringSSL, which needs cmake and Go -- both already here --
+      # and several minutes. The binary is stripped first: unstripped it is ~150MB of
+      # debug info that would go into the cache on every miss.
+      - id: quiche-cache
+        uses: actions/cache@v4
+        with:
+          path: /tmp/quiche-server
+          key: quiche-server-${{ env.QUICHE_TAG }}-${{ runner.os }}
+      - name: Build quiche-server
+        if: steps.quiche-cache.outputs.cache-hit != 'true'
+        run: |
+          git clone --depth 1 --branch "$QUICHE_TAG" --recursive \
+            https://github.com/cloudflare/quiche.git /tmp/quiche-src
+          cargo build --release --manifest-path /tmp/quiche-src/Cargo.toml --bin quiche-server
+          strip -o /tmp/quiche-server /tmp/quiche-src/target/release/quiche-server
+      - name: Point the row at it
+        run: |
+          echo "QUICHE_SERVER=/tmp/quiche-server" >> "$GITHUB_ENV"
+          /tmp/quiche-server --help | head -3
       - name: Run the matrix
         run: npm run test:conformance
         env:

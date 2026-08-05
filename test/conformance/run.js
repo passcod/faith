@@ -20,6 +20,7 @@ const { caddy } = require("./servers/caddy.js");
 const { nginx } = require("./servers/nginx.js");
 const { apacheH1, apacheH2 } = require("./servers/apache.js");
 const { haproxyH1, haproxyH2 } = require("./servers/haproxy.js");
+const { quiche } = require("./servers/quiche.js");
 
 const { Agent } = require("../../index.js");
 const { fetch } = require("../../wrapper.js");
@@ -33,6 +34,7 @@ const SERVERS = [
 	apacheH2,
 	haproxyH1,
 	haproxyH2,
+	quiche,
 ];
 const DIMENSIONS = [
 	require("./dimensions/trailers.js"),
@@ -43,6 +45,8 @@ const DIMENSIONS = [
 	require("./dimensions/keepalive.js"),
 	require("./dimensions/header-limits.js"),
 	require("./dimensions/goaway.js"),
+	require("./dimensions/h3.js"),
+	require("./dimensions/altsvc.js"),
 ];
 
 const EXPECTED = require("./expected-matrix.json");
@@ -67,6 +71,42 @@ const CELL_TIMEOUT_MS = 30_000;
  * is what makes comparing it against expected-matrix.json worth anything.
  */
 const REQUIRE_ALL = Boolean(process.env.CONFORMANCE_REQUIRE_ALL);
+
+/**
+ * The agent a cell talks to its row with.
+ *
+ * HTTP/3 upgrades are off by default, so every row stays on the protocol it
+ * declares and the version probe means something. A row may override that through
+ * `agentOptions` on its started handle -- quiche has no TCP listener at all, so the
+ * only way to reach it is with a seeded Alt-Svc hint -- and a dimension may override
+ * it again for its own request.
+ *
+ * Merged one level deep, because these settings are grouped objects: a shallow
+ * spread of `{ http3: ... }` would drop the row's hints on the floor the moment a
+ * dimension asked for anything else under http3.
+ */
+function buildAgent(running, overrides = {}) {
+	const layers = [
+		{
+			tls: { extraRoots: [running.ca] },
+			dns: { overrides: [{ domain: "localhost", addresses: ["127.0.0.1"] }] },
+			http3: { upgradeEnabled: false },
+		},
+		running.agentOptions || {},
+		overrides,
+	];
+
+	const merged = {};
+	for (const layer of layers) {
+		for (const [key, value] of Object.entries(layer)) {
+			merged[key] =
+				value && typeof value === "object" && !Array.isArray(value)
+					? { ...merged[key], ...value }
+					: value;
+		}
+	}
+	return new Agent(merged);
+}
 
 function planCells() {
 	// Each dimension's requirements are static, so validating them once here
@@ -251,15 +291,16 @@ async function main() {
 					return;
 				}
 
-				const agent = new Agent({
-					tls: { extraRoots: [running.ca] },
-					dns: { overrides: [{ domain: "localhost", addresses: ["127.0.0.1"] }] },
-					http3: { upgradeEnabled: false },
-				});
 				// The row is in the context because some behaviours are only assertable
 				// against the number it was configured with: how many requests before it
 				// closes a connection, how large a request header it will accept.
-				const ctx = { url: running.url, agent, server };
+				//
+				// `makeAgent` is for the dimensions that need different agent settings than
+				// the default -- HTTP/3 wants upgrades on, which every other dimension
+				// wants off so its row stays on the protocol it declares.
+				const makeAgent = (overrides) => buildAgent(running, overrides);
+				const agent = makeAgent();
+				const ctx = { url: running.url, agent, server, makeAgent };
 
 				try {
 					// Pin the protocol. Nothing in the dimensions is HTTP/1-specific, so
