@@ -21,7 +21,7 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 jobs:
-  build:
+  test:
     strategy:
       fail-fast: false
       matrix:
@@ -69,3 +69,15 @@ jobs:
       - run: npm run test
         env:
           HTTPBIN_URL: http://localhost:8888
+
+  # Dummy job to have a stable name for PR requirements
+  tests-pass:
+    if: always() # always run even if dependencies fail
+    name: Tests pass
+    needs: [test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: re-actors/alls-green@release/v1
+        with:
+          jobs: ${{ toJSON(needs) }}
+          allowed-skips: ${{ needs.plan.outputs.allowed-skips }}
