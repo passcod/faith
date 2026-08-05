@@ -71,6 +71,35 @@ fn ipv6_wildcard_bindable() -> bool {
 	})
 }
 
+/// Applies the Node.js TLS environment variables to a reqwest client builder,
+/// matching how Node.js honours them for its own TLS clients. This runs for
+/// every agent, so `fetch()` behaves like Node's built-in fetch out of the box.
+///
+/// - `NODE_EXTRA_CA_CERTS`: a path to a PEM file whose certificates are added to
+///   the trust store on top of the platform roots. As in Node.js, a value that
+///   is empty, or points at a file that cannot be read or parsed, is ignored
+///   rather than fatal — unlike the explicit [`AgentTlsOptions::extra_roots`]
+///   option, which throws. Certificates load in addition to any `extra_roots`.
+///
+/// - `NODE_TLS_REJECT_UNAUTHORIZED`: when set to exactly `"0"`, TLS certificate
+///   validation is disabled for the agent. This is insecure and exists only to
+///   match Node.js semantics; any other value leaves validation enabled.
+fn apply_node_tls_env(mut client: reqwest::ClientBuilder) -> reqwest::ClientBuilder {
+	if let Ok(path) = std::env::var("NODE_EXTRA_CA_CERTS")
+		&& !path.is_empty()
+		&& let Ok(bytes) = std::fs::read(&path)
+		&& let Ok(certs) = Certificate::from_pem_bundle(&bytes)
+	{
+		client = client.tls_certs_merge(certs);
+	}
+
+	if std::env::var("NODE_TLS_REJECT_UNAUTHORIZED").as_deref() == Ok("0") {
+		client = client.danger_accept_invalid_certs(true);
+	}
+
+	client
+}
+
 #[napi(string_enum)]
 #[derive(Debug, Clone, Copy)]
 pub enum CacheStore {
@@ -751,6 +780,8 @@ impl Agent {
 				}
 			}
 		}
+
+		client = apply_node_tls_env(client);
 
 		let reqwest_client = client
 			.build()
