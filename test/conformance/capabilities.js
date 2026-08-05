@@ -53,4 +53,4 @@ function assertKnownCapabilities(names, context) {
 	}
 }
 
-module.exports = { CAPABILITIES, KNOWN, assertKnownCapabilities };
+module.exports = { CAPABILITIES, assertKnownCapabilities };

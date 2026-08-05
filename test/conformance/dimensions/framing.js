@@ -19,6 +19,10 @@ const { fetch } = require("../../../wrapper.js");
 module.exports = {
 	name: "framing",
 	requires: [C.CHUNKED, C.CONTENT_LENGTH],
+	// Declared so the runner catches this dimension quietly losing its coverage:
+	// tape counts a test that asserts nothing as a pass. No negative case here, so
+	// no negativeAssertions.
+	assertions: 4,
 
 	async run(t, { url, agent }) {
 		const chunked = await fetchWith(agent, `${url}/framing/chunked`);

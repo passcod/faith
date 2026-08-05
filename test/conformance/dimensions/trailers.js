@@ -13,6 +13,10 @@ const { fetch } = require("../../../wrapper.js");
 module.exports = {
 	name: "trailers",
 	requires: [C.TRAILERS],
+	// Declared so the runner catches this dimension quietly losing its coverage:
+	// tape counts a test that asserts nothing as a pass.
+	assertions: 3,
+	negativeAssertions: 1,
 
 	async run(t, { url, agent }) {
 		const res = await fetchWith(agent, `${url}/trailers`);

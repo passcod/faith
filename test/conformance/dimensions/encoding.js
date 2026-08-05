@@ -9,6 +9,10 @@ const { fetch } = require("../../../wrapper.js");
 module.exports = {
 	name: "encoding",
 	requires: [C.GZIP],
+	// Declared so the runner catches this dimension quietly losing its coverage:
+	// tape counts a test that asserts nothing as a pass.
+	assertions: 2,
+	negativeAssertions: 2,
 
 	async run(t, { url, agent }) {
 		const res = await fetchWith(agent, `${url}/encoding/gzip`);

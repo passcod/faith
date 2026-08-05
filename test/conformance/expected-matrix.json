@@ -1,10 +1,10 @@
 {
 	"cells": [
-		{ "server": "controllable-h1", "dimension": "trailers", "status": "run" },
-		{ "server": "controllable-h1", "dimension": "framing", "status": "run" },
-		{ "server": "controllable-h1", "dimension": "encoding", "status": "run" },
-		{ "server": "controllable-h2", "dimension": "trailers", "status": "run" },
-		{ "server": "controllable-h2", "dimension": "framing", "status": "skip" },
-		{ "server": "controllable-h2", "dimension": "encoding", "status": "run" }
+		{ "server": "controllable-h1", "dimension": "trailers", "status": "run", "reason": null },
+		{ "server": "controllable-h1", "dimension": "framing", "status": "run", "reason": null },
+		{ "server": "controllable-h1", "dimension": "encoding", "status": "run", "reason": null },
+		{ "server": "controllable-h2", "dimension": "trailers", "status": "run", "reason": null },
+		{ "server": "controllable-h2", "dimension": "framing", "status": "skip", "reason": "lacks chunked" },
+		{ "server": "controllable-h2", "dimension": "encoding", "status": "run", "reason": null }
 	]
 }

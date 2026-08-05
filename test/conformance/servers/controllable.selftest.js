@@ -13,7 +13,7 @@ const { fetch } = require("../../../wrapper.js");
 
 for (const server of [controllableH1, controllableH2]) {
 	test(`controllable origin: ${server.name} serves and negotiates`, async (t) => {
-		assertKnownCapabilities(server.capabilities, server.name);
+		assertKnownCapabilities(server.capabilities, `server ${server.name}`);
 
 		const running = await server.start();
 		const agent = new Agent({
@@ -29,7 +29,7 @@ for (const server of [controllableH1, controllableH2]) {
 			t.equal(body, PAYLOAD, "and the expected payload");
 			t.equal(
 				res.version,
-				server.name === "controllable-h1" ? "HTTP/1.1" : "HTTP/2.0",
+				server.expectVersion,
 				"negotiates exactly the protocol the row claims",
 			);
 		} finally {
