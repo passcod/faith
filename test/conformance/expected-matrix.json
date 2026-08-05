@@ -19,6 +19,18 @@
 			"reason": null
 		},
 		{
+			"server": "controllable-h1",
+			"dimension": "conditional",
+			"status": "run",
+			"reason": null
+		},
+		{
+			"server": "controllable-h1",
+			"dimension": "alpn",
+			"status": "skip",
+			"reason": "lacks alpnMulti"
+		},
+		{
 			"server": "controllable-h2",
 			"dimension": "trailers",
 			"status": "run",
@@ -35,6 +47,18 @@
 			"dimension": "encoding",
 			"status": "run",
 			"reason": null
+		},
+		{
+			"server": "controllable-h2",
+			"dimension": "conditional",
+			"status": "run",
+			"reason": null
+		},
+		{
+			"server": "controllable-h2",
+			"dimension": "alpn",
+			"status": "skip",
+			"reason": "lacks alpnMulti"
 		},
 		{
 			"server": "caddy",
@@ -51,6 +75,18 @@
 		{
 			"server": "caddy",
 			"dimension": "encoding",
+			"status": "run",
+			"reason": null
+		},
+		{
+			"server": "caddy",
+			"dimension": "conditional",
+			"status": "run",
+			"reason": null
+		},
+		{
+			"server": "caddy",
+			"dimension": "alpn",
 			"status": "run",
 			"reason": null
 		}

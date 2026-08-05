@@ -26,6 +26,8 @@ const DIMENSIONS = [
 	require("./dimensions/trailers.js"),
 	require("./dimensions/framing.js"),
 	require("./dimensions/encoding.js"),
+	require("./dimensions/conditional.js"),
+	require("./dimensions/alpn.js"),
 ];
 
 const EXPECTED = require("./expected-matrix.json");
