@@ -97,6 +97,12 @@ jobs:
           # step broke. Without this the run would report that row as unverified and
           # still pass, which is the coverage loss this job exists to catch.
           CONFORMANCE_REQUIRE_ALL: "1"
+      - name: The committed table must match the matrix
+        # Regenerate and let git say whether anything moved. A failing matrix has
+        # already failed the job above, so whatever this renders is a green run.
+        run: |
+          npm run conformance:readme
+          git diff --exit-code -- README.md
       - name: Render the matrix
         # Always: a failing matrix is exactly when the table is worth reading, and the
         # runner writes matrix.json on failure too. Guarded, because a selftest failure
