@@ -3,3 +3,4 @@ node_modules
 *.node
 
 test/conformance/matrix.json
+test/conformance/matrix.md

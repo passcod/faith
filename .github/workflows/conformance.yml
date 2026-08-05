@@ -1,0 +1,82 @@
+name: Conformance
+env:
+  DEBUG: napi:*
+  APP_NAME: faith
+  CARGO_INCREMENTAL: "1"
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - "**/*.md"
+      - "LICENSE*"
+      - "**/*.gitignore"
+      - .editorconfig
+      - .rustfmt.toml
+      - docs/**
+  # Nightly, because these rows exercise other people's servers: a row can start
+  # failing without anything in this repository changing.
+  schedule:
+    - cron: "17 4 * * *"
+  pull_request:
+  workflow_dispatch:
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  matrix:
+    # Linux only. Every row is either an apt package or a build that expects a
+    # Unix prefix layout, and the matrix covers faith's behaviour against server
+    # implementations -- which is not an axis that varies by client OS.
+    runs-on: ubuntu-latest
+    name: conformance matrix
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - run: rustup toolchain install --profile minimal --no-self-update stable
+      - uses: Swatinem/rust-cache@v2
+      - run: npm install
+      # `npm run test:conformance` deliberately does not build, so that a local
+      # iteration on a dimension is not a Rust rebuild. This job has to.
+      - run: npm run build
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - name: Install Caddy
+        # Pinned to the same version test.yml uses, so the HTTP/3 regression tests
+        # and the Caddy row cannot disagree about what "Caddy" means.
+        run: |
+          go install github.com/caddyserver/caddy/v2/cmd/caddy@v2.11.4
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      - name: Install nginx
+        # Ubuntu 24.04 ships 1.24, which is why the nginx row declares no H3 and
+        # emits the pre-1.25.1 spelling of the HTTP/2 directive.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends nginx
+          nginx -v
+      - name: Run the matrix
+        run: npm run test:conformance
+        env:
+          # Every server above is provisioned, so one missing means a provisioning
+          # step broke. Without this the run would report that row as unverified and
+          # still pass, which is the coverage loss this job exists to catch.
+          CONFORMANCE_REQUIRE_ALL: "1"
+      - name: Render the matrix
+        # Always: a failing matrix is exactly when the table is worth reading, and
+        # the runner writes matrix.json on failure too.
+        if: always()
+        run: npm run conformance:render
+      - uses: actions/upload-artifact@v4
+        # The runner writes these to the runner's own disk, so uploading them is the
+        # only way they survive the job at all.
+        if: always()
+        with:
+          name: conformance-matrix
+          path: |
+            test/conformance/matrix.json
+            test/conformance/matrix.md
+          if-no-files-found: error

@@ -48,6 +48,18 @@ assertions secretly about gzip. So Caddy, nginx and Apache declare
 `CONTENT_LENGTH` and not `CHUNKED`, framing skips on those rows, and it runs on
 the HAProxy row — where chunked pass-through is the interesting case anyway.
 
+## Two changes to the order below
+
+**The workflow comes before the remaining rows.** Nothing runs the conformance
+suite in CI today — `npm run test` does not include it — so every row added before
+`conformance.yml` exists is verified only on whatever machine happened to run it.
+Phase 5's workflow therefore lands with phase 2, and Apache, HAProxy and quiche
+arrive into a matrix that CI is already running. The README table stays last, since
+it wants the finished matrix.
+
+**Task 8 moves to phase 4.** `makeAgent` exists for the Alt-Svc dimension, which is
+in phase 4; building it in phase 2 would leave a knob nothing calls for two phases.
+
 ## Global constraints
 
 - Every binary is pinned, matching how go-httpbin and Caddy already are: apt for
@@ -163,15 +175,6 @@ assert faith negotiates HTTP/2.0. Distinct from the runner's `expectVersion`
 probe, which asserts what a single-protocol row must produce; this asserts a
 *preference* when the server offers a choice.
 
-### Task 8: Dimension-scoped agents
-
-**Files:** modify `run.js`, `dimensions/*.js` as needed.
-
-The runner builds one agent per cell with `http3.upgradeEnabled: false`. The
-Alt-Svc dimension in a later phase needs upgrades on, so the cell context gains
-`makeAgent(overrides)` returning an agent with the row's CA and DNS overrides
-merged with the caller's. `agent` stays, as the default.
-
 ---
 
 ## Phase 3 — Apache, HAProxy, and the connection-lifecycle dimensions
@@ -253,14 +256,18 @@ Requires `H3`: a GET over HTTP/3 returning the payload, asserting
 `res.version === "HTTP/3.0"` — a third QUIC implementation behind the same
 assertions the TCP rows run.
 
-### Task 14: The Alt-Svc upgrade dimension
+### Task 14: The Alt-Svc upgrade dimension, and dimension-scoped agents
 
-**Files:** create `dimensions/altsvc.js`.
+**Files:** create `dimensions/altsvc.js`; modify `run.js`.
 
-Requires `ALTSVC`: with an agent from `makeAgent({ http3: { upgradeEnabled: true
-} })`, assert the first response advertises Alt-Svc over TCP and a subsequent
-request negotiates HTTP/3. Runs on the Caddy row. This is the path #23 broke, so
-it belongs in the matrix rather than only in the regression tests.
+The runner builds one agent per cell with `http3.upgradeEnabled: false`. This
+dimension needs upgrades on, so the cell context gains `makeAgent(overrides)`
+returning an agent with the row's CA and DNS overrides merged with the caller's.
+`agent` stays as the default, so no existing dimension changes.
+
+Requires `ALTSVC`: assert the first response advertises Alt-Svc over TCP and that a
+subsequent request negotiates HTTP/3. Runs on the Caddy row. This is the path #23
+broke, so it belongs in the matrix rather than only in the regression tests.
 
 ---
 
