@@ -51,13 +51,22 @@ jobs:
         run: |
           go install github.com/caddyserver/caddy/v2/cmd/caddy@v2.11.4
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
-      - name: Install nginx
-        # Ubuntu 24.04 ships 1.24, which is why the nginx row declares no H3 and
-        # emits the pre-1.25.1 spelling of the HTTP/2 directive.
+      - name: Install nginx, Apache and HAProxy
+        # One apt invocation for the three of them. Ubuntu 24.04 ships nginx 1.24,
+        # which is why the nginx row declares no H3 and emits the pre-1.25.1 spelling
+        # of the HTTP/2 directive.
+        #
+        # Apache is `apache2` here and `httpd` on Arch, with different module
+        # directories; the row resolves both at runtime, and printing what it found
+        # makes a provisioning change visible in the log rather than as a row that
+        # mysteriously stops running.
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends nginx
+          sudo apt-get install -y --no-install-recommends nginx apache2 haproxy
           nginx -v
+          apache2 -v
+          haproxy -v
+          ls /usr/lib/apache2/modules/mod_ssl.so
       - name: Run the matrix
         run: npm run test:conformance
         env:
@@ -66,10 +75,17 @@ jobs:
           # still pass, which is the coverage loss this job exists to catch.
           CONFORMANCE_REQUIRE_ALL: "1"
       - name: Render the matrix
-        # Always: a failing matrix is exactly when the table is worth reading, and
-        # the runner writes matrix.json on failure too.
+        # Always: a failing matrix is exactly when the table is worth reading, and the
+        # runner writes matrix.json on failure too. Guarded, because a selftest failure
+        # means the matrix never ran and there is nothing to render -- and a red render
+        # step on top of that hides the failure that actually matters.
         if: always()
-        run: npm run conformance:render
+        run: |
+          if [ -f test/conformance/matrix.json ]; then
+            npm run conformance:render
+          else
+            echo "no matrix.json: the run did not get as far as the matrix"
+          fi
       - uses: actions/upload-artifact@v4
         # The runner writes these to the runner's own disk, so uploading them is the
         # only way they survive the job at all.
@@ -79,4 +95,6 @@ jobs:
           path: |
             test/conformance/matrix.json
             test/conformance/matrix.md
-          if-no-files-found: error
+          # A run that died before writing these is already failing for a better
+          # reason, and turning the missing artifact into a second failure buries it.
+          if-no-files-found: warn
