@@ -1,0 +1,635 @@
+{
+	"kind": "realised",
+	"cells": [
+		{
+			"server": "node-h1",
+			"dimension": "trailers",
+			"status": "run",
+			"reason": null,
+			"outcome": "pass"
+		},
+		{
+			"server": "node-h1",
+			"dimension": "chunked bodies",
+			"status": "run",
+			"reason": null,
+			"outcome": "pass"
+		},
+		{
+			"server": "node-h1",
+			"dimension": "gzip",
+			"status": "run",
+			"reason": null,
+			"outcome": "pass"
+		},
+		{
+			"server": "node-h1",
+			"dimension": "conditional GET",
+			"status": "run",
+			"reason": null,
+			"outcome": "pass"
+		},
+		{
+			"server": "node-h1",
+			"dimension": "protocol negotiation",
+			"status": "skip",
+			"reason": "lacks alpnMulti",
+			"outcome": "skipped"
+		},
+		{
+			"server": "node-h1",
+			"dimension": "connection reuse",
+			"status": "run",
+			"reason": null,
+			"outcome": "pass"
+		},
+		{
+			"server": "node-h1",
+			"dimension": "oversized headers",
+			"status": "run",
+			"reason": null,
+			"outcome": "pass"
+		},
+		{
+			"server": "node-h1",
+			"dimension": "h2 GOAWAY",
+			"status": "skip",
+			"reason": "lacks goaway, h2",
+			"outcome": "skipped"
+		},
+		{
+			"server": "node-h1",
+			"dimension": "HTTP/3",
+			"status": "skip",
+			"reason": "lacks h3",
+			"outcome": "skipped"
+		},
+		{
+			"server": "node-h1",
+			"dimension": "HTTP/3 upgrade",
+			"status": "skip",
+			"reason": "lacks altsvc",
+			"outcome": "skipped"
+		},
+		{
+			"server": "node-h2",
+			"dimension": "trailers",
+			"status": "run",
+			"reason": null,
+			"outcome": "pass"
+		},
+		{
+			"server": "node-h2",
+			"dimension": "chunked bodies",
+			"status": "skip",
+			"reason": "lacks chunked",
+			"outcome": "skipped"
+		},
+		{
+			"server": "node-h2",
+			"dimension": "gzip",
+			"status": "run",
+			"reason": null,
+			"outcome": "pass"
+		},
+		{
+			"server": "node-h2",
+			"dimension": "conditional GET",
+			"status": "run",
+			"reason": null,
+			"outcome": "pass"
+		},
+		{
+			"server": "node-h2",
+			"dimension": "protocol negotiation",
+			"status": "skip",
+			"reason": "lacks alpnMulti",
+			"outcome": "skipped"
+		},
+		{
+			"server": "node-h2",
+			"dimension": "connection reuse",
+			"status": "skip",
+			"reason": "lacks keepaliveLimit",
+			"outcome": "skipped"
+		},
+		{
+			"server": "node-h2",
+			"dimension": "oversized headers",
+			"status": "skip",
+			"reason": "lacks headerLimits",
+			"outcome": "skipped"
+		},
+		{
+			"server": "node-h2",
+			"dimension": "h2 GOAWAY",
+			"status": "run",
+			"reason": null,
+			"outcome": "pass"
+		},
+		{
+			"server": "node-h2",
+			"dimension": "HTTP/3",
+			"status": "skip",
+			"reason": "lacks h3",
+			"outcome": "skipped"
+		},
+		{
+			"server": "node-h2",
+			"dimension": "HTTP/3 upgrade",
+			"status": "skip",
+			"reason": "lacks altsvc",
+			"outcome": "skipped"
+		},
+		{
+			"server": "caddy",
+			"dimension": "trailers",
+			"status": "skip",
+			"reason": "lacks trailers",
+			"outcome": "skipped"
+		},
+		{
+			"server": "caddy",
+			"dimension": "chunked bodies",
+			"status": "skip",
+			"reason": "lacks chunked",
+			"outcome": "skipped"
+		},
+		{
+			"server": "caddy",
+			"dimension": "gzip",
+			"status": "run",
+			"reason": null,
+			"outcome": "pass"
+		},
+		{
+			"server": "caddy",
+			"dimension": "conditional GET",
+			"status": "run",
+			"reason": null,
+			"outcome": "pass"
+		},
+		{
+			"server": "caddy",
+			"dimension": "protocol negotiation",
+			"status": "run",
+			"reason": null,
+			"outcome": "pass"
+		},
+		{
+			"server": "caddy",
+			"dimension": "connection reuse",
+			"status": "skip",
+			"reason": "lacks keepaliveLimit",
+			"outcome": "skipped"
+		},
+		{
+			"server": "caddy",
+			"dimension": "oversized headers",
+			"status": "skip",
+			"reason": "lacks headerLimits",
+			"outcome": "skipped"
+		},
+		{
+			"server": "caddy",
+			"dimension": "h2 GOAWAY",
+			"status": "skip",
+			"reason": "lacks goaway",
+			"outcome": "skipped"
+		},
+		{
+			"server": "caddy",
+			"dimension": "HTTP/3",
+			"status": "run",
+			"reason": null,
+			"outcome": "pass"
+		},
+		{
+			"server": "caddy",
+			"dimension": "HTTP/3 upgrade",
+			"status": "run",
+			"reason": null,
+			"outcome": "pass"
+		},
+		{
+			"server": "nginx",
+			"dimension": "trailers",
+			"status": "skip",
+			"reason": "lacks trailers",
+			"outcome": "skipped"
+		},
+		{
+			"server": "nginx",
+			"dimension": "chunked bodies",
+			"status": "skip",
+			"reason": "lacks chunked",
+			"outcome": "skipped"
+		},
+		{
+			"server": "nginx",
+			"dimension": "gzip",
+			"status": "run",
+			"reason": null,
+			"outcome": "pass"
+		},
+		{
+			"server": "nginx",
+			"dimension": "conditional GET",
+			"status": "run",
+			"reason": null,
+			"outcome": "pass"
+		},
+		{
+			"server": "nginx",
+			"dimension": "protocol negotiation",
+			"status": "run",
+			"reason": null,
+			"outcome": "pass"
+		},
+		{
+			"server": "nginx",
+			"dimension": "connection reuse",
+			"status": "skip",
+			"reason": "lacks keepaliveLimit",
+			"outcome": "skipped"
+		},
+		{
+			"server": "nginx",
+			"dimension": "oversized headers",
+			"status": "run",
+			"reason": null,
+			"outcome": "pass"
+		},
+		{
+			"server": "nginx",
+			"dimension": "h2 GOAWAY",
+			"status": "skip",
+			"reason": "lacks goaway",
+			"outcome": "skipped"
+		},
+		{
+			"server": "nginx",
+			"dimension": "HTTP/3",
+			"status": "run",
+			"reason": null,
+			"outcome": "pass"
+		},
+		{
+			"server": "nginx",
+			"dimension": "HTTP/3 upgrade",
+			"status": "run",
+			"reason": null,
+			"outcome": "pass"
+		},
+		{
+			"server": "apache-h1",
+			"dimension": "trailers",
+			"status": "skip",
+			"reason": "lacks trailers",
+			"outcome": "skipped"
+		},
+		{
+			"server": "apache-h1",
+			"dimension": "chunked bodies",
+			"status": "skip",
+			"reason": "lacks chunked",
+			"outcome": "skipped"
+		},
+		{
+			"server": "apache-h1",
+			"dimension": "gzip",
+			"status": "run",
+			"reason": null,
+			"outcome": "pass"
+		},
+		{
+			"server": "apache-h1",
+			"dimension": "conditional GET",
+			"status": "run",
+			"reason": null,
+			"outcome": "pass"
+		},
+		{
+			"server": "apache-h1",
+			"dimension": "protocol negotiation",
+			"status": "skip",
+			"reason": "lacks alpnMulti",
+			"outcome": "skipped"
+		},
+		{
+			"server": "apache-h1",
+			"dimension": "connection reuse",
+			"status": "run",
+			"reason": null,
+			"outcome": "pass"
+		},
+		{
+			"server": "apache-h1",
+			"dimension": "oversized headers",
+			"status": "run",
+			"reason": null,
+			"outcome": "pass"
+		},
+		{
+			"server": "apache-h1",
+			"dimension": "h2 GOAWAY",
+			"status": "skip",
+			"reason": "lacks goaway, h2",
+			"outcome": "skipped"
+		},
+		{
+			"server": "apache-h1",
+			"dimension": "HTTP/3",
+			"status": "skip",
+			"reason": "lacks h3",
+			"outcome": "skipped"
+		},
+		{
+			"server": "apache-h1",
+			"dimension": "HTTP/3 upgrade",
+			"status": "skip",
+			"reason": "lacks altsvc",
+			"outcome": "skipped"
+		},
+		{
+			"server": "apache-h2",
+			"dimension": "trailers",
+			"status": "skip",
+			"reason": "lacks trailers",
+			"outcome": "skipped"
+		},
+		{
+			"server": "apache-h2",
+			"dimension": "chunked bodies",
+			"status": "skip",
+			"reason": "lacks chunked",
+			"outcome": "skipped"
+		},
+		{
+			"server": "apache-h2",
+			"dimension": "gzip",
+			"status": "run",
+			"reason": null,
+			"outcome": "pass"
+		},
+		{
+			"server": "apache-h2",
+			"dimension": "conditional GET",
+			"status": "run",
+			"reason": null,
+			"outcome": "pass"
+		},
+		{
+			"server": "apache-h2",
+			"dimension": "protocol negotiation",
+			"status": "run",
+			"reason": null,
+			"outcome": "pass"
+		},
+		{
+			"server": "apache-h2",
+			"dimension": "connection reuse",
+			"status": "skip",
+			"reason": "lacks keepaliveLimit",
+			"outcome": "skipped"
+		},
+		{
+			"server": "apache-h2",
+			"dimension": "oversized headers",
+			"status": "run",
+			"reason": null,
+			"outcome": "pass"
+		},
+		{
+			"server": "apache-h2",
+			"dimension": "h2 GOAWAY",
+			"status": "skip",
+			"reason": "lacks goaway",
+			"outcome": "skipped"
+		},
+		{
+			"server": "apache-h2",
+			"dimension": "HTTP/3",
+			"status": "skip",
+			"reason": "lacks h3",
+			"outcome": "skipped"
+		},
+		{
+			"server": "apache-h2",
+			"dimension": "HTTP/3 upgrade",
+			"status": "skip",
+			"reason": "lacks altsvc",
+			"outcome": "skipped"
+		},
+		{
+			"server": "haproxy-h1",
+			"dimension": "trailers",
+			"status": "run",
+			"reason": null,
+			"outcome": "pass"
+		},
+		{
+			"server": "haproxy-h1",
+			"dimension": "chunked bodies",
+			"status": "run",
+			"reason": null,
+			"outcome": "pass"
+		},
+		{
+			"server": "haproxy-h1",
+			"dimension": "gzip",
+			"status": "run",
+			"reason": null,
+			"outcome": "pass"
+		},
+		{
+			"server": "haproxy-h1",
+			"dimension": "conditional GET",
+			"status": "run",
+			"reason": null,
+			"outcome": "pass"
+		},
+		{
+			"server": "haproxy-h1",
+			"dimension": "protocol negotiation",
+			"status": "skip",
+			"reason": "lacks alpnMulti",
+			"outcome": "skipped"
+		},
+		{
+			"server": "haproxy-h1",
+			"dimension": "connection reuse",
+			"status": "skip",
+			"reason": "lacks keepaliveLimit",
+			"outcome": "skipped"
+		},
+		{
+			"server": "haproxy-h1",
+			"dimension": "oversized headers",
+			"status": "skip",
+			"reason": "lacks headerLimits",
+			"outcome": "skipped"
+		},
+		{
+			"server": "haproxy-h1",
+			"dimension": "h2 GOAWAY",
+			"status": "skip",
+			"reason": "lacks goaway, h2",
+			"outcome": "skipped"
+		},
+		{
+			"server": "haproxy-h1",
+			"dimension": "HTTP/3",
+			"status": "skip",
+			"reason": "lacks h3",
+			"outcome": "skipped"
+		},
+		{
+			"server": "haproxy-h1",
+			"dimension": "HTTP/3 upgrade",
+			"status": "skip",
+			"reason": "lacks altsvc",
+			"outcome": "skipped"
+		},
+		{
+			"server": "haproxy-h2",
+			"dimension": "trailers",
+			"status": "run",
+			"reason": null,
+			"outcome": "pass"
+		},
+		{
+			"server": "haproxy-h2",
+			"dimension": "chunked bodies",
+			"status": "skip",
+			"reason": "lacks chunked",
+			"outcome": "skipped"
+		},
+		{
+			"server": "haproxy-h2",
+			"dimension": "gzip",
+			"status": "run",
+			"reason": null,
+			"outcome": "pass"
+		},
+		{
+			"server": "haproxy-h2",
+			"dimension": "conditional GET",
+			"status": "run",
+			"reason": null,
+			"outcome": "pass"
+		},
+		{
+			"server": "haproxy-h2",
+			"dimension": "protocol negotiation",
+			"status": "run",
+			"reason": null,
+			"outcome": "pass"
+		},
+		{
+			"server": "haproxy-h2",
+			"dimension": "connection reuse",
+			"status": "skip",
+			"reason": "lacks keepaliveLimit",
+			"outcome": "skipped"
+		},
+		{
+			"server": "haproxy-h2",
+			"dimension": "oversized headers",
+			"status": "skip",
+			"reason": "lacks headerLimits",
+			"outcome": "skipped"
+		},
+		{
+			"server": "haproxy-h2",
+			"dimension": "h2 GOAWAY",
+			"status": "skip",
+			"reason": "lacks goaway",
+			"outcome": "skipped"
+		},
+		{
+			"server": "haproxy-h2",
+			"dimension": "HTTP/3",
+			"status": "skip",
+			"reason": "lacks h3",
+			"outcome": "skipped"
+		},
+		{
+			"server": "haproxy-h2",
+			"dimension": "HTTP/3 upgrade",
+			"status": "skip",
+			"reason": "lacks altsvc",
+			"outcome": "skipped"
+		},
+		{
+			"server": "quiche",
+			"dimension": "trailers",
+			"status": "skip",
+			"reason": "lacks trailers",
+			"outcome": "skipped"
+		},
+		{
+			"server": "quiche",
+			"dimension": "chunked bodies",
+			"status": "skip",
+			"reason": "lacks chunked",
+			"outcome": "skipped"
+		},
+		{
+			"server": "quiche",
+			"dimension": "gzip",
+			"status": "skip",
+			"reason": "lacks gzip",
+			"outcome": "skipped"
+		},
+		{
+			"server": "quiche",
+			"dimension": "conditional GET",
+			"status": "skip",
+			"reason": "lacks conditional",
+			"outcome": "skipped"
+		},
+		{
+			"server": "quiche",
+			"dimension": "protocol negotiation",
+			"status": "skip",
+			"reason": "lacks alpnMulti",
+			"outcome": "skipped"
+		},
+		{
+			"server": "quiche",
+			"dimension": "connection reuse",
+			"status": "skip",
+			"reason": "lacks keepaliveLimit",
+			"outcome": "skipped"
+		},
+		{
+			"server": "quiche",
+			"dimension": "oversized headers",
+			"status": "skip",
+			"reason": "lacks headerLimits",
+			"outcome": "skipped"
+		},
+		{
+			"server": "quiche",
+			"dimension": "h2 GOAWAY",
+			"status": "skip",
+			"reason": "lacks goaway, h2",
+			"outcome": "skipped"
+		},
+		{
+			"server": "quiche",
+			"dimension": "HTTP/3",
+			"status": "run",
+			"reason": null,
+			"outcome": "pass"
+		},
+		{
+			"server": "quiche",
+			"dimension": "HTTP/3 upgrade",
+			"status": "skip",
+			"reason": "lacks altsvc",
+			"outcome": "skipped"
+		}
+	]
+}

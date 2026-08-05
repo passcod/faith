@@ -19,7 +19,7 @@ use napi_derive::napi;
 use reqwest::{StatusCode, Url, Version, header::HeaderMap};
 use serde_json;
 use stream_shared::SharedStream;
-use tokio::{sync::RwLock, task::yield_now};
+use tokio::sync::watch;
 
 use crate::{
 	agent::InnerAgentStats,
@@ -44,7 +44,7 @@ pub struct FaithResponse {
 	pub(crate) redirected: bool,
 	pub(crate) stats: Arc<InnerAgentStats>,
 	pub(crate) status_code: StatusCode,
-	pub(crate) trailers: Arc<RwLock<Trailers>>,
+	pub(crate) trailers: Arc<TrailersSlot>,
 	pub(crate) url: Url,
 	pub(crate) version: Version,
 }
@@ -62,12 +62,64 @@ pub struct PeerInformation {
 	pub certificate: Option<Vec<u8>>,
 }
 
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub enum Trailers {
 	#[default]
 	NotYet,
 	None,
 	Some(HeaderMap),
+}
+
+/// Where the trailers land: written by whoever finishes the body, awaited by `trailers()`.
+///
+/// A watch channel, rather than a lock read in a loop. Per the fetch spec's trailers
+/// proposal (<https://github.com/whatwg/fetch/pull/1940>) this promise is *meant* not to
+/// resolve until the body has been consumed, so the wait is unbounded by design -- which is
+/// precisely why polling was the wrong shape for it. Awaiting trailers without reading the
+/// body now leaves an idle pending promise rather than a pegged core, and the future can be
+/// cancelled while it waits.
+#[derive(Debug)]
+pub struct TrailersSlot(watch::Sender<Trailers>);
+
+impl Default for TrailersSlot {
+	fn default() -> Self {
+		Self(watch::channel(Trailers::NotYet).0)
+	}
+}
+
+impl TrailersSlot {
+	/// Record trailers that arrived, waking whoever is waiting.
+	fn arrived(&self, trailers: HeaderMap) {
+		self.0.send_replace(Trailers::Some(trailers));
+	}
+
+	/// Record that the body ended, if no trailers frame got there first.
+	///
+	/// `send_if_modified` so the read and the write are one step, and so waiters are woken
+	/// only by the call that actually settled it.
+	fn ended(&self) {
+		self.0.send_if_modified(|state| {
+			if matches!(state, Trailers::NotYet) {
+				*state = Trailers::None;
+				true
+			} else {
+				false
+			}
+		});
+	}
+
+	/// Wait until the body has settled the question.
+	async fn settled(&self) -> Trailers {
+		let mut rx = self.0.subscribe();
+		// `wait_for` tests the current value before waiting, so trailers that already
+		// arrived return without yielding. Its error case is the sender being gone, which
+		// means the response was dropped and nothing can ever set this -- no trailers is
+		// the only answer left.
+		match rx.wait_for(|state| !matches!(state, Trailers::NotYet)).await {
+			Ok(state) => state.clone(),
+			Err(_) => Trailers::None,
+		}
+	}
 }
 
 #[napi]
@@ -281,8 +333,7 @@ impl FaithResponse {
 									Err(err) => Some(Err(err.to_string())),
 									Ok(frame) => match frame.into_trailers() {
 										Ok(trailers) => {
-											let mut t = trailers_lock.write().await;
-											*t = Trailers::Some(trailers);
+											trailers_lock.arrived(trailers);
 											None
 										}
 										Err(frame) => Some(
@@ -295,10 +346,7 @@ impl FaithResponse {
 							}
 						})
 						.chain(stream::once(async move {
-							let mut t = trailers_finish.write().await;
-							if matches!(*t, Trailers::NotYet) {
-								*t = Trailers::None;
-							}
+							trailers_finish.ended();
 							// Track that we've finished consuming a body
 							stats_finish.bodies_finished.fetch_add(1, Ordering::Relaxed);
 							// Mark body as drained so Drop doesn't try to drain again
@@ -359,6 +407,7 @@ impl FaithResponse {
 		let body = self.body.body.clone();
 		let drained_flag = self.body.drained.clone();
 		let is_multiplexed = self.body.is_multiplexed();
+		let trailers = self.trailers.clone();
 		faith_promise(env, async move {
 			if let Some(arc) = body {
 				if is_multiplexed {
@@ -372,6 +421,12 @@ impl FaithResponse {
 				}
 			}
 			drained_flag.store(true, Ordering::SeqCst);
+			// Discarding the body discards its trailers: on a multiplexed connection the
+			// stream was cancelled before any could arrive, and draining an HTTP/1 body
+			// here bypasses the stream that would have collected them. Settling this as
+			// "none" rather than leaving it pending is the point -- a caller who discarded
+			// the body and then awaited trailers used to wait forever.
+			trailers.ended();
 			Ok(())
 		})
 	}
@@ -448,32 +503,33 @@ impl FaithResponse {
 	///
 	/// This was once in the spec as a getter but was removed as it wasn't implemented by any browser.
 	///
-	/// Note that this will never resolve if you don't also consume the body in some way.
+	/// Trailers only exist once the body has ended, so this does not resolve until the body
+	/// has been consumed — by `text()`, `bytes()`, `json()`, `blob()`, or reading the `body`
+	/// stream. Awaiting it first, on its own, waits forever: that is the behaviour the fetch
+	/// spec's trailers proposal describes (<https://github.com/whatwg/fetch/pull/1940>), not
+	/// a quirk of Fáith. Holding the promise while something else reads the body is fine, and
+	/// costs nothing while it is pending.
+	///
+	/// `discard()` counts as consuming the body but discards its trailers with it, so this
+	/// then resolves to `null` rather than waiting for trailers that can no longer arrive.
 	///
 	/// This is an async fn as an internal implementation detail and the wrapper makes it a property.
 	#[napi]
 	pub async fn trailers(&self) -> Option<Vec<(String, String)>> {
-		let t = Arc::clone(&self.trailers);
-		loop {
-			match &*t.read().await {
-				Trailers::NotYet => {
-					yield_now().await;
-					continue;
-				}
-				Trailers::None => break None,
-				Trailers::Some(h) => {
-					break Some(
-						h.iter()
-							.filter_map(|(name, value)| {
-								value
-									.to_str()
-									.ok()
-									.map(|v| (name.to_string(), v.to_string()))
-							})
-							.collect(),
-					);
-				}
-			}
+		match self.trailers.settled().await {
+			// NotYet cannot come back from `settled`, which is what it waits on.
+			Trailers::NotYet | Trailers::None => None,
+			Trailers::Some(headers) => Some(
+				headers
+					.iter()
+					.filter_map(|(name, value)| {
+						value
+							.to_str()
+							.ok()
+							.map(|v| (name.to_string(), v.to_string()))
+					})
+					.collect(),
+			),
 		}
 	}
 

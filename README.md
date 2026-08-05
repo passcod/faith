@@ -428,9 +428,26 @@ from well-known status codes.
 The `trailers()` read-only property of the `Response` interface returns a promise that resolves to
 either `null` or a `Headers` structure that contains the HTTP/2 or /3 trailing headers.
 
-Note that this will never resolve if you don't also consume the body in some way.
+**This does not resolve until the body has been consumed**, because trailers arrive after the body
+ends. Read the body first — `text()`, `bytes()`, `json()`, `blob()`, or the `body` stream — and then
+await the trailers:
 
-Custom to Fáith. This was once in the spec but was removed as it wasn't implemented by any browser.
+```javascript
+const res = await fetch(url);
+const body = await res.text();
+const trailers = await res.trailers; // resolves
+```
+
+Awaiting the trailers on their own, without ever reading the body, waits forever: there is nothing
+to end the body and produce them. That is the behaviour the current spec proposal describes
+([whatwg/fetch#1940](https://github.com/whatwg/fetch/pull/1940)), not a quirk of Fáith. Holding the
+promise while something else reads the body is fine, and costs nothing while it is pending.
+
+`discard()` counts as consuming the body, but discards its trailers along with it: the promise then
+resolves to `null` rather than waiting for trailers that can no longer arrive.
+
+Custom to Fáith. This was once in the spec but was removed as it wasn't implemented by any browser;
+the proposal above is the current effort to bring it back.
 
 ### `Response.type: string`
 
