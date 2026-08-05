@@ -309,9 +309,17 @@ export class Response {
 	 * resolves to either `null` or a `Headers` structure that contains the HTTP/2 or /3 trailing
 	 * headers.
 	 *
-	 * This was once in the spec but was removed as it wasn't implemented by any browser.
+	 * This was once in the spec but was removed as it wasn't implemented by any browser;
+	 * https://github.com/whatwg/fetch/pull/1940 is the current effort to bring it back.
 	 *
-	 * Note that this will never resolve if you don't also consume the body in some way.
+	 * Trailers arrive after the body ends, so this does not resolve until the body has been
+	 * consumed — by `text()`, `bytes()`, `json()`, `blob()`, or reading the `body` stream.
+	 * Awaiting it on its own, without ever reading the body, waits forever; that is what
+	 * the spec above describes. Holding the promise while something else reads the body is
+	 * fine, and costs nothing while it is pending.
+	 *
+	 * `discard()` counts as consuming the body but discards its trailers with it: this then
+	 * resolves to `null`.
 	 */
 	readonly trailers: Promise<Headers | null>;
 

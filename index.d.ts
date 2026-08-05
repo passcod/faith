@@ -236,7 +236,15 @@ json(): Promise<any>
  *
  * This was once in the spec as a getter but was removed as it wasn't implemented by any browser.
  *
- * Note that this will never resolve if you don't also consume the body in some way.
+ * Trailers only exist once the body has ended, so this does not resolve until the body
+ * has been consumed — by `text()`, `bytes()`, `json()`, `blob()`, or reading the `body`
+ * stream. Awaiting it first, on its own, waits forever: that is the behaviour the fetch
+ * spec's trailers proposal describes (<https://github.com/whatwg/fetch/pull/1940>), not
+ * a quirk of Fáith. Holding the promise while something else reads the body is fine, and
+ * costs nothing while it is pending.
+ *
+ * `discard()` counts as consuming the body but discards its trailers with it, so this
+ * then resolves to `null` rather than waiting for trailers that can no longer arrive.
  *
  * This is an async fn as an internal implementation detail and the wrapper makes it a property.
  */
