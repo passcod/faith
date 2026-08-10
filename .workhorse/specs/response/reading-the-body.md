@@ -4,13 +4,13 @@ id: BODY
 
 # Reading the response body
 
-The response body is available once, either as a stream or through a whole-body reading method. The single-consumption model follows the fetch standard's disturbed-stream semantics; what Fáith adds is explicit control over the connection cost of not reading (`discard()`) and honesty about what sharing a body means (`clone()`).
+The response body is available once, either as a stream or through a whole-body reading method. The single-consumption model follows the fetch standard's disturbed-stream semantics: a body is read from the network exactly once and consumed at most once per response object, and nothing tees it automatically. `clone()` is the one sanctioned way to obtain a second consumer, and `discard()` gives explicit control over the connection cost of not reading.
 
 ## The body stream
 
 - [ ] `body` is a `ReadableStream` of the body contents, or `null` for responses that cannot carry a body (HEAD requests, `204 No Content`). Browsers return a stream there anyway; Fáith follows the specification.
 - [ ] Accessing `body` marks the response disturbed (`bodyUsed` becomes true), even before any bytes are consumed.
-- [ ] Repeated `body` accesses each return a stream that yields the full body from the start: chunks are retained while the response is alive, so every handle can replay them.
+- [ ] Repeated `body` accesses are permitted, but every access is a handle onto the same single reading of the body, not a fresh copy: the body's bytes are delivered once across all handles, never replayed.
 - [ ] Errors surfaced through the body stream carry no `code` property (a technical limitation, documented as such).
 
 ## Whole-body methods
@@ -26,7 +26,8 @@ The response body is available once, either as a stream or through a whole-body 
 ## clone()
 
 - [ ] `clone()` throws if the response is already disturbed.
-- [ ] Original and clone each read the full body independently, sequentially or concurrently, and receive identical content; the underlying chunks are shared in memory rather than copied per clone. Trailers settle once, for original and clones alike.
+- [ ] Original and clone are separate response objects, each entitled to one full read of the body, sequentially or concurrently, receiving identical content.
+- [ ] Cloning does not tee the body: there is still exactly one underlying transfer, whose chunks are shared in memory between the consumers rather than duplicated into independent branches. Trailers settle once, for original and clones alike.
 
 ## discard()
 
