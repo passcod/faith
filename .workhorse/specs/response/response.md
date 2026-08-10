@@ -12,6 +12,7 @@ It is not constructible by callers; it mirrors the Web API `Response` surface an
 
 `status`, `ok` (status in 200-299), `url` (final URL after redirects), and `redirected` behave as in the fetch standard (see [REDIR](../fetch/redirects.md) for the `redirected` port caveat).
 `headers` is a Web API `Headers` object, built lazily and memoised; Fáith ships no custom `Headers` class.
+A header whose value is not valid UTF-8 is dropped rather than surfaced in a lossy form.
 `statusText` carries the canonical reason phrase for the status code.
 HTTP/2 and HTTP/3 have no reason phrases on the wire, so the phrase is simulated from well-known codes there; unknown codes yield an empty string.
 `type` is always `basic`.

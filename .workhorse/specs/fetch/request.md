@@ -16,13 +16,18 @@ A `Request` with a body has that body read to completion during conversion; Fái
 
 ## Method and headers
 
-The method defaults to `GET`, is uppercased, and an invalid method throws an invalid-method error.
+The method defaults to `GET` and an invalid method throws an invalid-method error.
+Every method is uppercased, including methods outside the set the fetch standard normalises, so a custom method reaches the server in upper case; this is a divergence from the standard (see [FAITH](../overview.md)).
 Headers are accepted as a `Headers` object or a plain object literal; other shapes throw.
 A header set to `null` is removed.
 All request headers can be set; Fáith enforces no browser forbidden-header list.
-A per-request header with an invalid name or value throws an invalid-header error naming the offender.
-(Agent-level default headers are instead dropped silently: a construction-time convenience versus a per-call mistake.)
+A per-request header with an invalid name or value throws an invalid-header error naming the offender, while agent-level default headers with an invalid name or value are dropped (see [AGENT](../agent/overview.md)).
 Per-request headers override the agent's default headers on a per-name basis.
+
+## Headers Fáith sets
+
+A request the caller adds no headers to still carries `Host` for the target authority, `Accept: */*`, `Accept-Encoding` advertising the encodings Fáith can decode (see [ENC](content-encoding.md)), and `User-Agent` (see [AGENT](../agent/overview.md)).
+A caller-supplied or agent-default value for any of these replaces the value Fáith would otherwise send.
 
 ## Body
 
@@ -35,7 +40,7 @@ Fáith operates in half duplex: the whole request is sent before the response is
 
 `credentials` defaults to `include` (there being no origin to be same as, `same-origin` is accepted and treated as `include`).
 `credentials: "omit"` strips username/password from the URL, removes any `Cookie` header from the request, and removes `Set-Cookie` from the headers returned to the caller.
-Two upstream limitations hold: an agent-configured TLS client certificate is still presented under `omit`, and an agent cookie jar still ingests `Set-Cookie` values even as they are stripped from the visible headers (see [COOK](../agent/cookies.md)).
+An agent-configured TLS client certificate is still presented under `omit`, and an agent cookie jar still ingests `Set-Cookie` values even as they are stripped from the headers the caller sees (see [COOK](../agent/cookies.md)).
 
 ## Options without effect
 
@@ -47,3 +52,4 @@ Options that assume a browser (`mode`, `referrer`, `referrerPolicy`, `attributio
 `cache` selects the HTTP cache mode for this request (see [CACHE](../cache/http-cache.md)).
 `integrity` requests body verification (see [SRI](integrity.md)).
 `signal` and `timeout` cancel the request (see [CANCEL](cancellation-and-timeouts.md)).
+Compressed transfer needs no option and is described in [ENC](content-encoding.md).

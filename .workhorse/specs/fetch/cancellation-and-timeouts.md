@@ -5,7 +5,7 @@ id: CANCEL
 # Cancellation and timeouts
 
 A request can be ended early three ways: an `AbortSignal`, a per-request `timeout`, and agent-level timeouts.
-They differ in what phase they cover and what error they produce, and those differences are the point: callers pick by failure mode.
+They differ in what phase they cover and what error they produce, so callers pick by failure mode.
 
 ## AbortSignal
 
@@ -26,3 +26,9 @@ Unlike `signal`, it applies through the entire response receipt, including the b
 `timeout.read` bounds each read operation and resets after a successful read: the tool for detecting stalled connections when the response size is unknown.
 `timeout.total` is a deadline for the whole request-response cycle, from connection start to body end.
 All three default to unset; each produces a timeout error (code `Timeout`) when exceeded.
+
+## How the deadlines combine
+
+A per-request `timeout` replaces `timeout.total` for that request rather than tightening it, so a request may raise or lower the agent's deadline.
+`timeout.connect` and `timeout.read` apply regardless, and the first deadline to expire ends the request.
+Whichever total deadline is in force runs across a redirect chain: following redirects does not restart it (see [REDIR](redirects.md)).

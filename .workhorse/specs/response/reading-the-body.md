@@ -4,17 +4,18 @@ id: BODY
 
 # Reading the response body
 
-The response body is available once, either as a stream or through a whole-body reading method.
-The single-consumption model follows the fetch standard's disturbed-stream semantics: a body is read from the network exactly once and consumed at most once per response object, and nothing tees it automatically.
-`clone()` is the one sanctioned way to obtain a second consumer, and `discard()` gives explicit control over the connection cost of not reading.
+The response body is read from the network once and delivered either as a stream or through a whole-body reading method.
+The whole-body methods follow the fetch standard's disturbed-stream semantics: the first consumer wins and later ones are refused.
+`clone()` is the sanctioned way to obtain a second consumer, and `discard()` gives explicit control over the connection cost of not reading.
+Bodies are delivered decoded whichever path reads them (see [ENC](../fetch/content-encoding.md)).
 
 ## The body stream
 
 `body` is a `ReadableStream` of the body contents, or `null` for responses that cannot carry a body (HEAD requests, `204 No Content`).
 Browsers return a stream there anyway; Fáith follows the specification.
 Accessing `body` marks the response disturbed (`bodyUsed` becomes true), even before any bytes are consumed.
-Repeated `body` accesses are permitted, but every access is a handle onto the same single reading of the body, not a fresh copy: the body's bytes are delivered once across all handles, never replayed.
-Errors surfaced through the body stream carry no `code` property (a technical limitation, documented as such).
+Each access to `body` returns a new stream that delivers the whole body from the start, and the streams advance independently of one another: a handle taken after another has consumed part of the body still sees the bytes that handle consumed.
+Errors surfaced through the body stream carry no `code` property (see [ERR](../errors/errors.md)).
 
 ## Whole-body methods
 
@@ -36,7 +37,9 @@ Trailers settle once, for original and clones alike.
 ## discard()
 
 `discard()` disposes of the body so the connection can be reused, resolving when disposal is done: on HTTP/1 the body is drained; on HTTP/2 and HTTP/3 the stream is cancelled outright, since the connection is reusable regardless.
-After `discard()`, the trailers promise resolves to `null` (see [TRL](trailers.md)), and `bodyUsed` remains false.
+It is idempotent, and calling it on a body that has already been read is accepted rather than an error.
+A discarded body cannot be read afterwards: the whole-body methods and `clone()` reject with the already-disturbed error, while `bodyUsed` stays false because no stream was ever handed out.
+After `discard()`, the trailers promise resolves to `null` (see [TRL](trailers.md)).
 An unread, undiscarded HTTP/1 response holds its connection until the response is garbage collected, at which point the body is drained and the connection returned to the pool on a best-effort basis, or closed when that is not possible.
 `discard()` is the deterministic path; the collector is only the safety net.
 

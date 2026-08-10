@@ -10,12 +10,14 @@ Both exist so operational problems (connection leaks, retransmission storms, poo
 ## stats()
 
 `stats()` returns cumulative counters: `requestsSent`, `responsesReceived`, `bodiesStarted`, `bodiesFinished`.
+They count requests made through the agent rather than exchanges on the wire, so a request served from the HTTP cache counts like any other (see [CACHE](../cache/http-cache.md)).
+`bodiesStarted` counts bodies opened for reading, which a discarded body is not.
 A persistent gap between `bodiesStarted` and `bodiesFinished` is the designed leak indicator for response bodies that were opened but never consumed or discarded.
 
 ## connections()
 
 `connections()` lists the agent's current TCP connections with per-connection statistics.
-QUIC connections are not tracked (an upstream limitation); each entry's `connectionType` is `tcp`.
+QUIC connections are not tracked; each entry's `connectionType` is `tcp`.
 Each entry identifies the connection by local/remote address and port, and carries usage data: `responseCount` (may undercount when redirects are followed internally), `firstSeen`, `lastSeen`, and `expiry` (an estimate of when the connection leaves the pool, pushed back on reuse and derived from the pool idle timeout).
 Network statistics are sampled from the operating system about once a second, so consumers can difference successive readings into rates (e.g. retransmission rate).
 An agent with nothing tracked does not sample at all.

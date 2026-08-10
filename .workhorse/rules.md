@@ -41,5 +41,7 @@ Always deep-link to a section; referencing a whole spec (`spec:BAK`) is not allo
 
 - Describe the system's own behaviour and contracts: the request shape it handles, the guarantee it makes.
   Don't narrate a dependency's decision logic or version-specific quirks beyond the minimum needed to justify a requirement.
+- Where behaviour is shaped by what a dependency can express, state the behaviour in the spec without attributing it, and record the cause in [`upstream-limitations.md`](upstream-limitations.md).
+  A caller depends on the behaviour either way; the register is what makes it reviewable when the dependency changes.
 - Don't scaffold or label: no "Strategy A/B", "Phase N", or plan tags in spec prose.
   Describe the mechanism directly.

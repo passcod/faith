@@ -41,8 +41,8 @@ This is the backstop for blackholed paths; real refusals arrive much faster.
 
 An HTTP/3 attempt cut short from outside (abort via `signal`) is indistinguishable from a hung path, so each mid-flight cancellation counts a strike against the origin.
 Reaching `upgradeCancelStrikes` (default 3) demotes the origin to failed; any successful confirmation resets the count.
-Strikes only accumulate when they land within about a minute of each other; a retry loop with a longer backoff never accumulates a run, so such callers should set the option to 1 for immediate demotion.
-Setting 0 disables strike demotion (not recommended).
+Strikes only accumulate when they land within about a minute of each other; a retry loop with a longer backoff never accumulates a run, so such callers set the option to 1 for immediate demotion.
+Setting 0 disables strike demotion.
 One fault neither strikes nor the attempt timeout catches: a path that carries small datagrams but drops full-size ones (an MTU blackhole).
 Headers arrive, so both mechanisms count success; the transfer stalls in the body, where only `maxIdleTimeout` or the request's own timeout ends it, and the origin stays confirmed.
 

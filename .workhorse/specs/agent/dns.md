@@ -23,4 +23,4 @@ This also disables Happy Eyeballs and the DNS cache; the trade is compatibility 
 Addresses may carry a port; without one, port 0 means "the conventional port for the protocol in use".
 An explicit port in the fetched URL wins over the override's port.
 An address that parses as neither `ip:port` nor a bare IP throws an address-parse error at agent construction.
-Resolving a domain to an empty address list blocks that domain for the agent.
+Resolving a domain to an empty address list blocks that domain for the agent: requests to it fail with a network error without any connection being attempted.
