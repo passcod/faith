@@ -14,7 +14,8 @@ Bodies are delivered decoded whichever path reads them (see [ENC](../fetch/conte
 `body` is a `ReadableStream` of the body contents, or `null` for responses that cannot carry a body (HEAD requests, `204 No Content`).
 Browsers return a stream there anyway; Fáith follows the specification.
 Accessing `body` marks the response disturbed (`bodyUsed` becomes true), even before any bytes are consumed.
-Each access to `body` returns a new stream that delivers the whole body from the start, and the streams advance independently of one another: a handle taken after another has consumed part of the body still sees the bytes that handle consumed.
+A response has one body stream: `body` builds it on first access and returns that same `ReadableStream` object thereafter.
+Consumption therefore advances a single position, and a handle taken after part of the body has been read continues from where the earlier one left off.
 Errors surfaced through the body stream carry no `code` property (see [ERR](../errors/errors.md)).
 
 ## Whole-body methods
@@ -47,4 +48,4 @@ An unread, undiscarded HTTP/1 response holds its connection until the response i
 
 `webResponse()` returns a Web API `Response` built from the body stream, `status`, `statusText`, and `headers`: the properties a Web `Response` can be constructed with.
 Fáith-specific properties (`url`, `version`, `peer`, `trailers`, `redirected`) do not carry over.
-It always succeeds on an undisturbed response; if the body was partially read, the Web `Response` sees only the remaining bytes.
+It succeeds on an undisturbed response, and is built over the response's own body stream rather than a copy: a partially read body carries across with only its remaining bytes, and a reader held on `body` is released before converting, since a Web `Response` cannot be constructed over a locked stream.
