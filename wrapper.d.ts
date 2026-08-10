@@ -264,9 +264,10 @@ export class Response {
 	 * corresponding to the HTTP status code in `Response.status`. For example, this would be `OK` for a
 	 * status code `200`, `Continue` for `100`, `Not Found` for `404`.
 	 *
-	 * In HTTP/1, servers can send custom status text. This is returned here. In HTTP/2 and HTTP/3, custom
-	 * status text is not supported at all, and the `statusText` property is either empty or simulated
-	 * from well-known status codes.
+	 * Fáith always returns the canonical status message for the code. In HTTP/1, servers can send
+	 * custom status text, but that text is not surfaced here; in HTTP/2 and HTTP/3, custom status
+	 * text is not supported at all. For status codes with no well-known message, this is an empty
+	 * string.
 	 */
 	readonly statusText: string;
 	/**
