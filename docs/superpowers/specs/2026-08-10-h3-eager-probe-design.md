@@ -63,8 +63,9 @@ floodgates open.
 - True per-request connection racing. That needs reqwest to expose connection
   establishment or grow an h3-with-TCP-fallback mode; noted as an upstream wish, not
   designed for here.
-- Fixing the MTU-blackhole caveat (path carries small datagrams but drops full-size
-  ones mid-body). Unchanged, though the probe narrows it — see below.
+- Fixing the MTU-blackhole caveat from the application layer. It turns out to be
+  largely handled below us already — see "Padding the probe" for why, and for what a
+  padded probe would and would not buy.
 - Changing how the advertised port is honoured (#24). The probe follows the same
   `port_actionable` rules as today.
 
@@ -104,10 +105,12 @@ the transport end-to-end just as well as a 200 — the request semantics are irr
 `HEAD` is safe, idempotent, and body-less by definition. The one check kept from the
 inline path: the response's version must actually be HTTP/3, else it counts as a failure.
 
-A completed QUIC handshake is a stronger signal than it may look: Initial packets are
-padded to 1200 bytes and the server's certificate flight is several full-size datagrams,
-so success proves the path carries full-size datagrams at least server→client. The
-documented MTU-blackhole caveat shrinks to the upload direction.
+A completed QUIC handshake is a stronger signal than it may look: RFC 9000 §14.1 makes
+the client expand every datagram carrying an Initial to at least 1200 bytes, and the
+server likewise for ack-eliciting Initials — with the certificate flight several
+full-size datagrams on top. Success therefore proves the path carries 1200-byte
+datagrams in **both** directions. What happens above 1200 is not the probe's problem,
+or anything the application layer can influence — see "Padding the probe" below.
 
 ### 3. Triggering and single-flight
 
@@ -168,6 +171,51 @@ Probe tasks are held as abort handles on the agent (alongside the existing backg
 resources) and aborted in `close()`. Without that, a probe's raw-`Client` clone would keep
 the connection pool alive for up to the probe timeout after close. Aborting mid-handshake
 just abandons the quinn connection attempt, which is safe.
+
+### 9. Padding the probe: considered, deferred
+
+Could the probe also exercise the upload direction — a body on the HEAD, or a deliberately
+oversized header block — to shrink the MTU caveat further? Both are mechanically
+expressible, and the header variant is even sound; but the MTU rationale dissolves on
+inspection of what quinn actually does with datagram sizes.
+
+**Application data cannot force datagram sizes.** reqwest builds its QUIC endpoint from
+`TransportConfig::default()` (reqwest `async_impl/client.rs`), which means quinn starts
+every connection at `initial_mtu` = 1200 and raises it only through DPLPMTUD: dedicated
+PING+PADDING probe packets, re-run on a 600s interval, upper bound 1452, and the MTU
+moves only after a probe of that exact size is acknowledged. Probe loss is not treated as
+congestion loss, and an active black-hole detector drops the MTU back (60s cooldown) if
+full-size packets start vanishing mid-life. Two consequences:
+
+- On a fresh connection — which the probe always is — a bulk upload is packed into
+  1200-byte datagrams, the size the handshake *just proved in both directions*. The
+  padding transits fine and demonstrates nothing new about MTU.
+- The >1200 blackhole the caveat worries about is already handled below us, gracefully:
+  DPLPMTUD never raises the MTU across it, and if a path narrows later, the black-hole
+  detector walks back to 1200 rather than stalling. The truly pathological residue — a
+  path that passed 1200-byte handshake datagrams and later drops even those — is a
+  *confirmed-then-breaks* event, which is exactly what the #23 machinery (attempt
+  timeout, strikes, clone fallback) exists for. No probe-time padding reaches it.
+
+What padding *would* test is something else: sustained-flow treatment. Middleboxes and
+policers exist that admit a QUIC handshake but throttle, reclassify, or kill UDP flows
+that persist beyond a few packets — and the handshake is thinnest as evidence in the
+upload direction, where the client sends the least. If that failure family shows up in
+practice, the right shape is a **padding header, not a body**: reqwest's h3 path does
+send an attached body regardless of method (verified in `h3_client/pool.rs` — no method
+check), but it spawns the upload concurrently with awaiting the response, so a server
+that responds early and issues `STOP_SENDING` cuts the padding short at an unknowable
+point, and the probe's confirm-on-any-response logic would need to learn to ignore
+body-send errors. A junk header, by contrast, *must* be read in full before the server
+can respond at all, so the bytes are on the wire before any confirmation — and even a
+`431 Request Header Fields Too Large` still confirms HTTP/3. Sized around 4KB it stays
+under the common 8–16KB header caps (the conformance matrix's oversized-headers rows are
+prior art on tolerance), and it wants high-entropy content, since QPACK Huffman-encodes
+literals and would shrink repetitive padding.
+
+Deferred, not designed in: an `upgradeProbePadding` byte-count option (default 0) slots
+into the probe construction trivially if the sustained-flow case materialises. The
+first cut keeps the probe minimal.
 
 ## Timing, before and after
 
