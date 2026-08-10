@@ -123,6 +123,10 @@ In the following documentation, italics are parts that are *identical to how nat
 (as per MDN), and non-italics document where behaviour varies and is specific to fáith (unless
 otherwise specified).
 
+This reference describes how to use the API. For what fáith requires of itself, including the
+standards it answers to and the points where it knowingly diverges from them, see the
+[specs](./.workhorse/specs/overview.md).
+
 ## `fetch()`
 
 ### Syntax
