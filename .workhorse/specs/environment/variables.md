@@ -34,7 +34,7 @@ Fáith proxies by default, so unlike Node (where the same variable opts in), it 
 
 ## Debugging
 
-`SSLKEYLOGFILE` names a path to which TLS session keys are written, enabling decryption of captured traffic in tools like Wireshark.
+`SSLKEYLOGFILE` names a path to which TLS session keys are written, enabling decryption of captured traffic when debugging.
 
 ## Variables with nothing to control
 

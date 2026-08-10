@@ -15,7 +15,7 @@ IPv4 and IPv6 answers race with the Happy Eyeballs algorithm, so a broken family
 ## System resolver
 
 `dns.system: true` switches to the system's resolver.
-This also disables Happy Eyeballs and the DNS cache; the trade is compatibility for performance, and it is the first thing to try when Fáith fails to resolve something curl can.
+This also disables Happy Eyeballs and the DNS cache; the trade is compatibility for performance, and it is the first thing to try when Fáith fails to resolve something other clients can.
 
 ## Overrides
 

@@ -27,7 +27,7 @@ A cached response is not a network exchange and neither records nor confirms any
 
 `http3.hints` ({host, port} pairs) declare origins the caller knows speak HTTP/3.
 A hint is the user's own assertion, so it seeds the **confirmed** state directly, does not expire, and is never probed: the first request to a hinted origin speaks HTTP/3 immediately, which is what HTTP/3-only origins need.
-Hints apply to `https` origins, and a hint for an origin currently in the failed state is refused; failures still demote hinted origins for `upgradeFailedTtl` like any other.
+Hints apply to `https` origins, and a hint for an origin in the failed state is refused; failures still demote hinted origins for `upgradeFailedTtl` like any other.
 
 ## The upgrade attempt
 

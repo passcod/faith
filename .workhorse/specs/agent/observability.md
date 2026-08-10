@@ -15,7 +15,7 @@ A persistent gap between `bodiesStarted` and `bodiesFinished` is the designed le
 ## connections()
 
 `connections()` lists the agent's current TCP connections with per-connection statistics.
-QUIC connections are not tracked (an upstream limitation); `connectionType` is `tcp` and would become `quic` if that changes.
+QUIC connections are not tracked (an upstream limitation); each entry's `connectionType` is `tcp`.
 Each entry identifies the connection by local/remote address and port, and carries usage data: `responseCount` (may undercount when redirects are followed internally), `firstSeen`, `lastSeen`, and `expiry` (an estimate of when the connection leaves the pool, pushed back on reuse and derived from the pool idle timeout).
 Network statistics are sampled from the operating system about once a second, so consumers can difference successive readings into rates (e.g. retransmission rate).
 An agent with nothing tracked does not sample at all.
