@@ -7,7 +7,7 @@ id: FAITH
 Fáith is a fetch API implementation for Node.js backed by a Rust network stack instead of undici and libuv.
 It is published as the native module `@passcod/faith` and aims to behave like the browser's fetch wherever that concept translates to a server-side runtime, while exposing the capabilities that stack unlocks: transparent HTTP/2 and HTTP/3, IPv4/IPv6 Happy Eyeballs, DNS caching, an optional cookie jar, and HTTP caching.
 
-The library's contract has two halves: fidelity to the fetch standard, and honest divergence where the standard assumes a browser.
+The library's contract has two halves: fidelity to the fetch standard, and divergence where the standard assumes a browser.
 Divergences are deliberate, documented, and stable rather than accidental.
 
 ## Compatibility stance
