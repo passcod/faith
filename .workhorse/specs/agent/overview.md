@@ -1,0 +1,34 @@
+---
+id: AGENT
+---
+
+# Agent
+
+An `Agent` is an instance of the HTTP client: it owns a connection pool, a DNS resolver and cache, optional cookie jar and HTTP cache, HTTP/3 knowledge, and statistics. Every request runs on an agent: reusing connections and DNS answers across requests is where most of Fáith's performance comes from, so there is no agentless path.
+
+## The default agent
+
+- [ ] A `fetch()` without an explicit `agent` uses a module-level default agent, constructed with no options on first use and shared by all such calls for the life of the process.
+- [ ] Creating an agent per request is an anti-pattern the design deliberately does not optimise for: each agent pays for its own resolver, pool, and trust store load.
+
+## Construction
+
+- [ ] Options are validated at construction. Errors that indicate a broken configuration throw: an unparseable `localAddress` or DNS override address (syntax error), malformed `tls.identity` or `tls.extraRoots` PEM (syntax error), and a disk cache without a path (configuration error).
+- [ ] Convenience inputs degrade gracefully instead: default headers with invalid names or values are dropped entry by entry, and a `redirect: "manual"` is treated as `follow`.
+- [ ] Node-compatible environment variables are read at construction and layer on top of explicit options (see `environment/variables.md`).
+
+## Identity and defaults
+
+- [ ] `userAgent` sets the `User-Agent` for all requests; the default is `Faith/{version} reqwest/{version}`, and the `USER_AGENT` constant is exported so callers can prepend their own product token.
+- [ ] `headers` sets default headers on every request, marked `sensitive` where appropriate (e.g. `Authorization`); per-request headers override them by name.
+- [ ] `localAddress` forces the source IP for connections. When unset, on hosts that cannot bind the IPv6 wildcard, the QUIC socket binds the IPv4 wildcard instead (probed once per process), so HTTP/3 works on IPv4-only hosts rather than silently falling back to TCP. Dual-stack hosts are unaffected.
+
+## Lifecycle
+
+- [ ] `close()` releases the agent's resources on demand: the connection pool, the DNS resolver, in-flight HTTP/3 probes, and the HTTP/3 knowledge cache. This exists because waiting for the garbage collector is not acceptable for code that creates many short-lived agents.
+- [ ] Requests already in flight when `close()` is called run to completion; new requests on a closed agent throw a closed-agent error (code `Closed`).
+- [ ] `close()` is idempotent, and the cookie jar remains readable after closing.
+
+## Sub-configuration
+
+Nested option groups are specified in their own areas: `agent/connection-pool.md`, `agent/cookies.md`, `agent/dns.md`, `agent/tls.md`, `agent/observability.md`, `cache/http-cache.md`, `http3/upgrade.md`, `http3/transport.md`, and `fetch/redirects.md` and `fetch/cancellation-and-timeouts.md` for the `redirect` and `timeout` groups.
