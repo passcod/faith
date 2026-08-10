@@ -11,3 +11,7 @@ When picking up a task, read the skill whose folder name matches what you're bei
 
 Workhorse keeps this section, the skills, and the reference docs current automatically: the first agent turn of a session smart-merges the latest release over your local edits, so your deliberate changes survive. Edit or remove it freely.
 <!-- END:workhorse -->
+
+# Workspace rules
+
+- **Spec house style:** [`.workhorse/rules.md`](.workhorse/rules.md) sits on top of `.agents/docs/spec-format.md` and wins wherever the two differ. In brief: prose specs with one sentence per line (no `- [ ]` checklists), spec-to-spec links as `[ID](path.md)`, and code references as `spec:ID#fragment` deep links (no whitespace, whole-spec references not allowed). Read it before writing or editing anything under `.workhorse/specs/`.

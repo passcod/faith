@@ -123,6 +123,10 @@ In the following documentation, italics are parts that are *identical to how nat
 (as per MDN), and non-italics document where behaviour varies and is specific to fáith (unless
 otherwise specified).
 
+This reference describes how to use the API. For what fáith requires of itself, including the
+standards it answers to and the points where it knowingly diverges from them, see the
+[specs](./.workhorse/specs/overview.md).
+
 ## `fetch()`
 
 ### Syntax
@@ -445,9 +449,9 @@ response. For example, 200 for success, 404 if the resource could not be found.*
 corresponding to the HTTP status code in `Response.status`. For example, this would be `OK` for a
 status code `200`, `Continue` for `100`, `Not Found` for `404`.*
 
-In HTTP/1, servers can send custom status text. This is returned here. In HTTP/2 and HTTP/3, custom
-status text is not supported at all, and the `statusText` property is either empty or simulated
-from well-known status codes.
+Fáith always returns the canonical status message for the code. In HTTP/1, servers can send custom
+status text, but that text is not surfaced here; in HTTP/2 and HTTP/3, custom status text is not
+supported at all. For status codes with no well-known message, this is an empty string.
 
 ### `Response.trailers: Promise<Headers | null>`
 
@@ -557,6 +561,8 @@ efficient access, consider handling the response body as a stream.
 *The `text()` method of the `Response` interface takes a `Response` stream and reads it to
 completion. It returns a promise that resolves with a `String`. The response is always decoded
 using UTF-8.*
+
+*Invalid UTF-8 sequences are replaced with U+FFFD (the replacement character) rather than throwing.*
 
 ### `Response.webResponse(): globalThis.Response`
 
@@ -723,22 +729,88 @@ track of failures, so it doesn't waste time retrying HTTP/3 for hosts that don't
 it even if they did advertise it.
 
 Setting this setting to `false` disables this mechanism, which effectively disables HTTP/3 usage.
+See `upgradeProbe` below for how advertisements are verified before foreground requests are
+routed over HTTP/3.
 
 Default: `true`.
+
+#### `AgentOptions.http3.upgradeProbe: bool`
+
+An Alt-Svc advertisement says the server listens on UDP; it cannot say there is UDP connectivity
+between you and it. Without probing, the next request after an advertisement attempts HTTP/3
+inline, and on a silently broken UDP path it stalls until `upgradeAttemptTimeout` (or the QUIC
+idle timeout) before falling back to TCP, recurring every `upgradeFailedTtl` for as long as the
+path stays broken.
+
+With probing (the default), requests keep using TCP until a background `HEAD /` over HTTP/3 has
+confirmed the path. The probe shares the connection pool, so the first upgraded request rides the
+probe's warm connection. A broken path costs one failed background request per `upgradeFailedTtl`
+and no foreground latency at all. Any HTTP/3 response confirms the path, whatever its status: a
+401 or 405 proves the transport as well as a 200 does.
+
+The probe is a synthetic request the server will see in its logs. Set this to `false` to restore
+the inline upgrade if that is unacceptable (per-request billing, easily-alarmed WAFs).
+
+`hints` are exempt either way: a hint is your own assertion, so the first request to a hinted
+origin speaks HTTP/3 immediately.
+
+Default: `true`.
+
+#### `AgentOptions.http3.upgradeProbeTimeout: number`
+
+Ceiling on how long a background HTTP/3 probe may take before the origin is treated as failed, in
+milliseconds. This bounds background work only — no foreground request ever waits on a probe — so
+it can afford to be generous: a healthy handshake plus HEAD completes in one or two round trips.
+Set to 0 to leave probes bounded only by the QUIC idle timeout.
+
+Default: 5000 (5 seconds).
+
+#### `AgentOptions.http3.upgradeSlowFactor: number`
+
+Demote an origin off HTTP/3 when its QUIC path is provenly slower than its TCP path by this
+factor. Set to 0 to disable path-time demotion.
+
+Fáith keeps a per-origin moving average of time-to-response-headers for each protocol family.
+HTTP/3 is preferred at parity and when moderately slower — its advantages (no head-of-line
+blocking, connection migration) pay off beyond the average — so this factor should stay well
+above 1. Only a sustained gap acts: at least 8 samples on each side, and the QUIC average must
+also exceed the TCP one by an absolute 10ms so LAN-fast origins don't flap on noise.
+
+A demoted origin is not treated as broken: it re-enters through a background probe after
+`upgradeSlowTtl`, asking whether the path has improved at zero foreground cost.
+
+Default: 2.5.
+
+#### `AgentOptions.http3.upgradeSlowTtl: number`
+
+How long (in seconds) a path-time demotion holds before the origin is re-evaluated through a
+background probe. See `upgradeSlowFactor`.
+
+Default: 600 (10 minutes).
 
 #### `AgentOptions.http3.hints: Array<{ host: string; port: number }>`
 
 If you know upfront that a host has HTTP/3 support, and at what port it's listening, you can skip
-a first HTTP/1 or /2 connection by providing a hint here. If the connection fails, the hint will
-be ignored for the `upgradeFailedTtl` duration, just like for the normal pathway with Alt-Svc
-advertisements (essentially, hints pre-populate the Alt-Svc advertisements cache).
+a first HTTP/1 or /2 connection by providing a hint here. A hint is your own assertion, so it
+seeds the *confirmed* state directly: the very first request to a hinted origin speaks HTTP/3
+(which is what HTTP/3-only origins with no TCP listener need), no background probe is spent on it,
+and the hint itself never expires. If a connection to a hinted origin fails, the origin is demoted
+for the `upgradeFailedTtl` duration, just like for the normal pathway with Alt-Svc advertisements.
 
 #### `AgentOptions.http3.upgradeAdvertisedTtl: number`
 #### `AgentOptions.http3.upgradeConfirmedTtl: number`
 #### `AgentOptions.http3.upgradeFailedTtl: number`
 #### `AgentOptions.http3.upgradeCacheCapacity: number`
 
-These four settings allow tweaking the HTTP/3 advertisement/knowledge cache behaviour.
+These four settings allow tweaking the HTTP/3 advertisement/knowledge cache behaviour:
+
+- `upgradeAdvertisedTtl`: how long (in seconds) an Alt-Svc advertisement is remembered, when the
+  header carries no `ma` (max-age) parameter of its own. Default: 86400 (1 day).
+- `upgradeConfirmedTtl`: how long (in seconds) a proven HTTP/3 origin stays confirmed before it
+  has to be re-established. Default: 86400 (1 day).
+- `upgradeFailedTtl`: how long (in seconds) a failed origin is blocked from upgrading, probing,
+  and recording new advertisements. Default: 300 (5 minutes).
+- `upgradeCacheCapacity`: the maximum number of origins tracked. Default: 10000.
 
 #### `AgentOptions.http3.upgradeCancelStrikes: number`
 
@@ -801,6 +873,19 @@ TLS is unaffected either way: certificates are still validated against the origi
 only the port changes.
 
 Default: `false`.
+
+### `AgentOptions.localAddress: string`
+
+Bind outgoing sockets to this local IP address before connecting. Throws an `AddressParse` error
+if the value does not parse as an IP address.
+
+This also selects the address family of the HTTP/3 (QUIC) socket. By default that socket binds
+the IPv6 wildcard (`[::]`), which fails on hosts without usable IPv6 — there, HTTP/3 would
+silently fall back to TCP. Fáith detects that case automatically (probed once per process) and
+binds `0.0.0.0` instead, so you normally don't need to set this; provide it only to force a
+specific source address.
+
+Default: unset (IPv6 wildcard for QUIC where available, else `0.0.0.0`).
 
 ### `AgentOptions.pool: object`
 
@@ -876,6 +961,16 @@ This is only really useful with HTTP/3.
 
 Default: false.
 
+#### `AgentOptions.tls.extraRoots: Array<Buffer | string>`
+
+Additional PEM-formatted root certificates to trust, on top of the platform's trust store. Each
+entry may be a PEM bundle containing multiple certificates.
+
+This is mainly useful for connecting to servers with self-signed or private-CA certificates, such
+as internal services or local test servers. This is one of the few options that will cause the
+`Agent` constructor to throw if the input is in the wrong format. For the ambient (and lenient)
+equivalent, see [`NODE_EXTRA_CA_CERTS`](#node_extra_ca_certs).
+
 #### `AgentOptions.tls.identity: string | Buffer`
 
 Provide a PEM-formatted certificate and private key to present as a TLS client certificate (also
@@ -905,6 +1000,16 @@ const agent = new Agent({
   userAgent: `YourApp/1.2.3 ${USER_AGENT}`,
 });
 ```
+
+### `Agent.close()`
+
+Close the agent, releasing its connection pool, DNS resolver, and any background tasks it owns,
+rather than waiting for the garbage collector to drop it. This is worth doing when you create many
+short-lived agents; a single long-lived agent can just be left to the GC.
+
+Requests already in flight run to completion. Any new request on a closed agent throws a `Closed`
+error. Calling `close()` more than once is a no-op. The cookie store, if any, remains readable via
+`getCookie`.
 
 ### `Agent.addCookie(url: string, cookie: string)`
 
@@ -1010,9 +1115,9 @@ error kind, documented in this comprehensive mapping:
   - `AddressParse` — IP parse error for `AgentOptions.dns.overrides`
   - `InvalidIntegrity` — SRI parse error for `RequestInit.integrity`
   - `JsonParse` — JSON parse error for `response.json()`
-  - `PemParse` — PEM parse error for `AgentOptions.tls.identity`
-  - `Utf8Parse` — UTF8 decoding error for `response.text()`
+  - `PemParse` — PEM parse error for `AgentOptions.tls.identity` or `AgentOptions.tls.extraRoots`
 - JS `TypeError`:
+  - `Closed` — a request was made on an agent that has been closed
   - `InvalidHeader` — invalid header name or value
   - `InvalidMethod` — invalid HTTP method
   - `InvalidUrl` — invalid URL string
@@ -1043,7 +1148,7 @@ agents created later.
 ### `NODE_EXTRA_CA_CERTS`
 
 A path to a PEM file whose certificates are added to the trust store, on top of the platform roots
-and any [`tls.extraRoots`](#agentoptionstlsobject). This is the ambient equivalent of `extraRoots`,
+and any [`tls.extraRoots`](#agentoptionstlsextraroots-arraybuffer--string). This is the ambient equivalent of `extraRoots`,
 and the certificates from both are combined.
 
 Unlike `extraRoots` — which throws if the PEM is malformed — this variable is lenient, matching
