@@ -14,7 +14,18 @@ Knowledge is keyed by origin (`scheme://host:port`, always the origin's own port
 An origin is in one of three states, each with its own lifetime.
 **Advertised** means the server said HTTP/3 exists; it lives for `upgradeAdvertisedTtl` (default 1 day), or the advertisement's own `ma` when given, and with probing on, an advertisement alone never routes a foreground request (see [PROBE](probing.md)).
 **Confirmed** means HTTP/3 was proven end to end by an actual HTTP/3 response; it lives for `upgradeConfirmedTtl` (default 1 day) and is the only state foreground requests upgrade from.
-**Failed** means an attempt failed; it lives for `upgradeFailedTtl` (default 5 minutes) and blocks upgrading, probing, and even recording fresh advertisements, so a flapping origin cannot re-enter the cycle until the failure knowledge expires.
+**Failed** means an attempt failed; it blocks upgrading, probing, and even recording fresh advertisements, so a flapping origin cannot re-enter the cycle until the failure knowledge expires, and it lives for a cooldown that lengthens the longer an origin keeps failing (see [Failure backoff](#failure-backoff)).
+
+## Failure backoff
+
+An origin whose UDP path is blocked for good would otherwise be retried at a fixed rate forever, so Fáith keeps a consecutive-failure count per origin and derives the cooldown from it.
+The first failure holds the origin for `upgradeFailedTtl` (default 5 minutes) and each consecutive one doubles that, up to `upgradeFailedMaxTtl` (default 1 hour): on the defaults, 5 minutes, then 10, 20, 40, and an hour thereafter.
+The cap is never less than `upgradeFailedTtl`, so setting it at or below the base gives a flat cooldown.
+Every failure counts the same however it arrives, whether a foreground attempt failed, a background probe failed, or a run of cancellation strikes demoted the origin.
+
+A confirmed HTTP/3 response clears the count, so an origin that comes good starts from the base cooldown if it later breaks again.
+Otherwise the count outlives the cooldown it set by one further cooldown of the same length: an origin that fails again as soon as its cooldown lapses escalates, while one left untouched for that much longer is judged from the base again.
+Counts are held per origin within the same `upgradeCacheCapacity` bound as the rest of the origin knowledge.
 
 ## Reading advertisements
 
@@ -27,7 +38,7 @@ A cached response is not a network exchange and neither records nor confirms any
 
 `http3.hints` ({host, port} pairs) declare origins the caller knows speak HTTP/3.
 A hint is the user's own assertion, so it seeds the **confirmed** state directly, does not expire, and is never probed: the first request to a hinted origin speaks HTTP/3 immediately, which is what HTTP/3-only origins need.
-Hints apply to `https` origins, and a hint for an origin in the failed state is refused; failures still demote hinted origins for `upgradeFailedTtl` like any other.
+Hints apply to `https` origins, and a hint for an origin in the failed state is refused; failures still demote hinted origins for the cooldown like any other.
 
 ## The upgrade attempt
 

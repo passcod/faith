@@ -5,7 +5,7 @@ id: PROBE
 # Eager HTTP/3 probing
 
 An `Alt-Svc` advertisement says the server listens on UDP; it cannot say there is UDP connectivity between this client and that server.
-Verifying that inline would sacrifice a foreground request to a possible 30-60 second stall on a silently broken path, once per failure TTL, forever.
+Verifying that inline would sacrifice a foreground request to a possible 30-60 second stall on a silently broken path, once per cooldown, for as long as the path stays broken.
 So advertisements only make an origin probe-worthy: a background probe verifies the path, and foreground requests keep to TCP until it has.
 
 ## The probe
@@ -13,7 +13,7 @@ So advertisements only make an origin probe-worthy: a background probe verifies 
 A probe is a `HEAD` request to the origin's root (query, fragment, and userinfo stripped), forced to HTTP/3, launched in the background when an advertisement arrives on a non-HTTP/3 response, and again opportunistically at the start of any TCP-routed request whose origin is probe-worthy.
 A probe neither reads nor writes the HTTP cache, so a replayed HTTP/3-versioned response cannot fake a confirmation; it cannot itself trigger further probing; and its QUIC connection joins the agent's connection pool, so the first upgraded request starts warm.
 Any HTTP/3 response confirms the origin, whatever its status: a 401 or 405 proves the transport as well as a 200 does.
-Anything else (a non-HTTP/3 response, an error, or the probe timeout, `http3.upgradeProbeTimeout`, default 5 seconds, 0 for unbounded) records a failure with the usual failure TTL.
+Anything else (a non-HTTP/3 response, an error, or the probe timeout, `http3.upgradeProbeTimeout`, default 5 seconds, 0 for unbounded) records a failure, which counts towards the origin's failure backoff like any other (see [H3UP](upgrade.md)).
 Probes are single-flight per origin: concurrent triggers for the same origin produce one probe.
 Origins already confirmed, failed, or marked slow are not probe-worthy.
 Open probes are aborted by `Agent.close()`.
