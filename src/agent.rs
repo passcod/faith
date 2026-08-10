@@ -25,7 +25,7 @@ use reqwest::{
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 
 #[cfg(feature = "http3")]
-use crate::alt_svc::{AltSvcCache, AltSvcMiddleware};
+use crate::alt_svc::{AltSvcCache, AltSvcCacheConfig, AltSvcMiddleware, H3Prober};
 use crate::{
 	conn_tracker::{ConnectionInfo, ConnectionTracker},
 	error::{FaithError, FaithErrorKind},
@@ -256,6 +256,64 @@ pub struct AgentHttp3Options {
 	///
 	/// Default: true.
 	pub upgrade_enabled: Option<bool>,
+	/// Whether advertised HTTP/3 endpoints are verified with a background probe
+	/// before any foreground request is routed to them.
+	///
+	/// An `Alt-Svc` advertisement says the server listens on UDP; it cannot say
+	/// there is UDP connectivity between you and it. Without probing, the next
+	/// request after an advertisement attempts HTTP/3 inline, and on a silently
+	/// broken UDP path it stalls until the QUIC idle timeout or
+	/// `upgradeAttemptTimeout` before falling back to TCP — recurring every
+	/// `upgradeFailedTtl` for as long as the path stays broken.
+	///
+	/// With probing (the default), requests keep using TCP until a background
+	/// `HEAD /` over HTTP/3 has confirmed the path. The probe shares the
+	/// connection pool, so the first upgraded request rides the probe's warm
+	/// connection. A broken path costs one failed background request per
+	/// `upgradeFailedTtl` and no foreground latency at all.
+	///
+	/// The probe is a synthetic request the server will see in its logs. Set
+	/// this to `false` to restore the inline upgrade if that is unacceptable
+	/// (per-request billing, easily-alarmed WAFs).
+	///
+	/// `hints` are exempt either way: a hint is your own assertion, so the first
+	/// request to a hinted origin speaks HTTP/3 immediately, which is also what
+	/// makes h3-only origins (no TCP listener) work.
+	///
+	/// Default: true.
+	pub upgrade_probe: Option<bool>,
+	/// Ceiling on how long a background HTTP/3 probe may take before the origin
+	/// is treated as failed, in **milliseconds**.
+	///
+	/// This bounds background work only — no foreground request ever waits on a
+	/// probe — so it can afford to be generous: a healthy handshake plus HEAD
+	/// completes in one or two round trips. Set to 0 to leave probes bounded
+	/// only by the QUIC idle timeout.
+	///
+	/// Default: 5000 (5 seconds).
+	pub upgrade_probe_timeout: Option<u32>,
+	/// Demote an origin off HTTP/3 when its QUIC path is provenly slower than
+	/// its TCP path by this factor. Set to 0 to disable path-time demotion.
+	///
+	/// Fáith keeps a per-origin moving average of time-to-response-headers for
+	/// each protocol family. HTTP/3 is preferred at parity and when moderately
+	/// slower — its advantages (no head-of-line blocking, connection migration)
+	/// pay off beyond the average — so this factor should stay well above 1.
+	/// Only a sustained gap acts: at least 8 samples on each side, and the QUIC
+	/// average must also exceed the TCP one by an absolute 10ms so LAN-fast
+	/// origins don't flap on noise.
+	///
+	/// A demoted origin is not treated as broken: it re-enters through a
+	/// background probe after `upgradeSlowTtl`, asking whether the path has
+	/// improved at zero foreground cost.
+	///
+	/// Default: 2.5.
+	pub upgrade_slow_factor: Option<f64>,
+	/// How long (in seconds) a path-time demotion holds before the origin is
+	/// re-evaluated. See `upgradeSlowFactor`.
+	///
+	/// Default: 600 (10 minutes).
+	pub upgrade_slow_ttl: Option<u32>,
 	/// How long (in seconds) to cache an Alt-Svc advertisement before the first HTTP/3 attempt.
 	/// This is overridden by the `ma` (max-age) parameter in the Alt-Svc header if present.
 	///
@@ -593,6 +651,11 @@ pub struct Agent {
 	#[cfg(feature = "http3")]
 	#[allow(dead_code)]
 	pub(crate) alt_svc_cache: Option<Arc<AltSvcCache>>,
+	/// Held so `close()` can abort in-flight background probes: each one owns a
+	/// clone of the raw client, which would otherwise keep the connection pool
+	/// alive past close for up to the probe timeout.
+	#[cfg(feature = "http3")]
+	pub(crate) h3_prober: Option<Arc<H3Prober>>,
 	/// Mirrors `http3.upgradeFollowAdvertisedPort`. Lives here because `fetch` needs
 	/// it to stop a rewritten port from being reported as a redirect.
 	pub(crate) h3_follow_advertised_port: bool,
@@ -816,7 +879,7 @@ impl Agent {
 		let h3_follow_advertised_port = false;
 
 		#[cfg(feature = "http3")]
-		let (alt_svc_cache, alt_svc_middleware) = {
+		let (alt_svc_cache, alt_svc_middleware, h3_prober) = {
 			let http3_opts = options.http3.as_ref();
 			let enabled = http3_opts.and_then(|o| o.upgrade_enabled).unwrap_or(true);
 
@@ -852,16 +915,40 @@ impl Agent {
 				0 => None,
 				millis => Some(Duration::from_millis(millis.into())),
 			};
+			let probe = http3_opts.and_then(|o| o.upgrade_probe).unwrap_or(true);
+			let probe_timeout = match http3_opts
+				.and_then(|o| o.upgrade_probe_timeout)
+				.unwrap_or(5_000)
+			{
+				0 => None,
+				millis => Some(Duration::from_millis(millis.into())),
+			};
+			let slow_factor = http3_opts
+				.and_then(|o| o.upgrade_slow_factor)
+				.unwrap_or(2.5);
+			let slow_ttl = Duration::from_secs(
+				http3_opts
+					.and_then(|o| o.upgrade_slow_ttl)
+					.unwrap_or(600)
+					.into(),
+			);
 
-			let cache = Arc::new(AltSvcCache::new(
+			let cache = Arc::new(AltSvcCache::new(AltSvcCacheConfig {
 				advertised_ttl,
 				confirmed_ttl,
 				failed_ttl,
 				capacity,
 				cancel_strikes,
-				Duration::from_secs(60),
-				h3_follow_advertised_port,
-			));
+				strike_window: Duration::from_secs(60),
+				follow_advertised_port: h3_follow_advertised_port,
+				// The single-flight claim must outlive the probe it covers, so
+				// an aborted probe frees its origin without a report; without a
+				// probe deadline, the QUIC idle timeout (max 120s) is the bound.
+				probe_ttl: probe_timeout
+					.map_or(Duration::from_secs(125), |t| t + Duration::from_secs(5)),
+				slow_factor,
+				slow_ttl,
+			}));
 
 			if let Some(hints) = http3_opts.and_then(|o| o.hints.as_ref()) {
 				for hint in hints {
@@ -869,10 +956,25 @@ impl Agent {
 				}
 			}
 
-			let middleware = AltSvcMiddleware::new(cache.clone(), enabled, attempt_timeout);
+			// The prober sends on the *raw* client, deliberately: it must skip
+			// the HTTP cache (a replayed cached response would fake a
+			// confirmation) and this very middleware (no recursion), while
+			// sharing the h3 connection pool so a successful probe leaves a warm
+			// connection for the foreground. Only built when both the upgrade
+			// machinery and probing are on.
+			let prober = (enabled && probe).then(|| {
+				Arc::new(H3Prober::new(
+					reqwest_client.clone(),
+					cache.clone(),
+					probe_timeout,
+				))
+			});
+
+			let middleware =
+				AltSvcMiddleware::new(cache.clone(), enabled, attempt_timeout, prober.clone());
 
 			// Registered below rather than here — see the note at the registration.
-			(Some(cache), middleware)
+			(Some(cache), middleware, prober)
 		};
 
 		if let Some(cache) = options.cache
@@ -950,6 +1052,8 @@ impl Agent {
 			conn_tracker: ConnectionTracker::new(conn_timeout),
 			#[cfg(feature = "http3")]
 			alt_svc_cache,
+			#[cfg(feature = "http3")]
+			h3_prober,
 			h3_follow_advertised_port,
 		})
 	}
@@ -979,6 +1083,12 @@ impl Agent {
 		self.client = None;
 		#[cfg(feature = "http3")]
 		{
+			// Probes hold a raw client clone; abort them so the pool doesn't
+			// outlive close by up to the probe timeout.
+			if let Some(prober) = &self.h3_prober {
+				prober.abort_all();
+			}
+			self.h3_prober = None;
 			self.alt_svc_cache = None;
 		}
 	}

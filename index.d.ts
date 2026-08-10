@@ -385,6 +385,72 @@ export interface AgentHttp3Options {
    */
   upgradeEnabled?: boolean
   /**
+   * Whether advertised HTTP/3 endpoints are verified with a background probe
+   * before any foreground request is routed to them.
+   *
+   * An `Alt-Svc` advertisement says the server listens on UDP; it cannot say
+   * there is UDP connectivity between you and it. Without probing, the next
+   * request after an advertisement attempts HTTP/3 inline, and on a silently
+   * broken UDP path it stalls until the QUIC idle timeout or
+   * `upgradeAttemptTimeout` before falling back to TCP — recurring every
+   * `upgradeFailedTtl` for as long as the path stays broken.
+   *
+   * With probing (the default), requests keep using TCP until a background
+   * `HEAD /` over HTTP/3 has confirmed the path. The probe shares the
+   * connection pool, so the first upgraded request rides the probe's warm
+   * connection. A broken path costs one failed background request per
+   * `upgradeFailedTtl` and no foreground latency at all.
+   *
+   * The probe is a synthetic request the server will see in its logs. Set
+   * this to `false` to restore the inline upgrade if that is unacceptable
+   * (per-request billing, easily-alarmed WAFs).
+   *
+   * `hints` are exempt either way: a hint is your own assertion, so the first
+   * request to a hinted origin speaks HTTP/3 immediately, which is also what
+   * makes h3-only origins (no TCP listener) work.
+   *
+   * Default: true.
+   */
+  upgradeProbe?: boolean
+  /**
+   * Ceiling on how long a background HTTP/3 probe may take before the origin
+   * is treated as failed, in **milliseconds**.
+   *
+   * This bounds background work only — no foreground request ever waits on a
+   * probe — so it can afford to be generous: a healthy handshake plus HEAD
+   * completes in one or two round trips. Set to 0 to leave probes bounded
+   * only by the QUIC idle timeout.
+   *
+   * Default: 5000 (5 seconds).
+   */
+  upgradeProbeTimeout?: number
+  /**
+   * Demote an origin off HTTP/3 when its QUIC path is provenly slower than
+   * its TCP path by this factor. Set to 0 to disable path-time demotion.
+   *
+   * Fáith keeps a per-origin moving average of time-to-response-headers for
+   * each protocol family. HTTP/3 is preferred at parity and when moderately
+   * slower — its advantages (no head-of-line blocking, connection migration)
+   * pay off beyond the average — so this factor should stay well above 1.
+   * Only a sustained gap acts: at least 8 samples on each side, and the QUIC
+   * average must also exceed the TCP one by an absolute 10ms so LAN-fast
+   * origins don't flap on noise.
+   *
+   * A demoted origin is not treated as broken: it re-enters through a
+   * background probe after `upgradeSlowTtl`, asking whether the path has
+   * improved at zero foreground cost.
+   *
+   * Default: 2.5.
+   */
+  upgradeSlowFactor?: number
+  /**
+   * How long (in seconds) a path-time demotion holds before the origin is
+   * re-evaluated. See `upgradeSlowFactor`.
+   *
+   * Default: 600 (10 minutes).
+   */
+  upgradeSlowTtl?: number
+  /**
    * How long (in seconds) to cache an Alt-Svc advertisement before the first HTTP/3 attempt.
    * This is overridden by the `ma` (max-age) parameter in the Alt-Svc header if present.
    *
