@@ -10,7 +10,7 @@ The response body is available once, either as a stream or through a whole-body 
 
 - [ ] `body` is a `ReadableStream` of the body contents, or `null` for responses that cannot carry a body (HEAD requests, `204 No Content`). Browsers return a stream there anyway; Fáith follows the specification.
 - [ ] Accessing `body` marks the response disturbed (`bodyUsed` becomes true), even before any bytes are consumed.
-- [ ] Repeated `body` accesses return streams over the same underlying source at its current position: bytes consumed through one reader are not seen by another. The body is one sequence of bytes, however many handles are taken to it.
+- [ ] Repeated `body` accesses each return a stream that yields the full body from the start: chunks are retained while the response is alive, so every handle can replay them.
 - [ ] Errors surfaced through the body stream carry no `code` property (a technical limitation, documented as such).
 
 ## Whole-body methods
@@ -26,7 +26,7 @@ The response body is available once, either as a stream or through a whole-body 
 ## clone()
 
 - [ ] `clone()` throws if the response is already disturbed.
-- [ ] A clone shares the underlying body with its original: each gets its own disturbed flag, but bytes read through one are consumed from the shared stream. Trailers settle once, for original and clones alike.
+- [ ] Original and clone each read the full body independently, sequentially or concurrently, and receive identical content; the underlying chunks are shared in memory rather than copied per clone. Trailers settle once, for original and clones alike.
 
 ## discard()
 
