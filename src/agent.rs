@@ -923,7 +923,9 @@ impl Agent {
 				0 => None,
 				millis => Some(Duration::from_millis(millis.into())),
 			};
-			let slow_factor = http3_opts.and_then(|o| o.upgrade_slow_factor).unwrap_or(2.5);
+			let slow_factor = http3_opts
+				.and_then(|o| o.upgrade_slow_factor)
+				.unwrap_or(2.5);
 			let slow_ttl = Duration::from_secs(
 				http3_opts
 					.and_then(|o| o.upgrade_slow_ttl)
@@ -942,9 +944,8 @@ impl Agent {
 				// The single-flight claim must outlive the probe it covers, so
 				// an aborted probe frees its origin without a report; without a
 				// probe deadline, the QUIC idle timeout (max 120s) is the bound.
-				probe_ttl: probe_timeout.map_or(Duration::from_secs(125), |t| {
-					t + Duration::from_secs(5)
-				}),
+				probe_ttl: probe_timeout
+					.map_or(Duration::from_secs(125), |t| t + Duration::from_secs(5)),
 				slow_factor,
 				slow_ttl,
 			}));

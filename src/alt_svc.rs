@@ -310,7 +310,8 @@ impl AltSvcCache {
 	/// consults `advertised` as well as `confirmed`. Only used when
 	/// `upgradeProbe` is off.
 	pub fn should_use_h3(&self, url: &reqwest::Url) -> Option<u16> {
-		self.confirmed_port(url).or_else(|| self.probe_candidate(url))
+		self.confirmed_port(url)
+			.or_else(|| self.probe_candidate(url))
 	}
 
 	/// Record a foreground request's time-to-response-headers for its protocol
@@ -360,15 +361,14 @@ impl AltSvcCache {
 			})
 			.into_value();
 
-		if version == http::Version::HTTP_3 && updated.count >= EWMA_MIN_SAMPLES {
-			if let Some(tcp) = self.tcp_times.get(&origin) {
-				if tcp.count >= EWMA_MIN_SAMPLES
-					&& updated.avg_ms > tcp.avg_ms * self.slow_factor
-					&& updated.avg_ms - tcp.avg_ms > SLOW_FLOOR_MS
-				{
-					self.demote_slow(&origin);
-				}
-			}
+		if version == http::Version::HTTP_3
+			&& updated.count >= EWMA_MIN_SAMPLES
+			&& let Some(tcp) = self.tcp_times.get(&origin)
+			&& tcp.count >= EWMA_MIN_SAMPLES
+			&& updated.avg_ms > tcp.avg_ms * self.slow_factor
+			&& updated.avg_ms - tcp.avg_ms > SLOW_FLOOR_MS
+		{
+			self.demote_slow(&origin);
 		}
 	}
 
@@ -615,7 +615,11 @@ impl std::fmt::Debug for H3Prober {
 }
 
 impl H3Prober {
-	pub fn new(client: reqwest::Client, cache: Arc<AltSvcCache>, timeout: Option<Duration>) -> Self {
+	pub fn new(
+		client: reqwest::Client,
+		cache: Arc<AltSvcCache>,
+		timeout: Option<Duration>,
+	) -> Self {
 		Self {
 			client,
 			cache,
@@ -644,10 +648,7 @@ impl H3Prober {
 				let _ = probe_url.set_port(Some(port));
 			}
 
-			let attempt = client
-				.head(probe_url)
-				.version(http::Version::HTTP_3)
-				.send();
+			let attempt = client.head(probe_url).version(http::Version::HTTP_3).send();
 
 			let outcome = match timeout {
 				Some(limit) => tokio::time::timeout(limit, attempt).await.ok(),
@@ -815,8 +816,11 @@ impl Middleware for AltSvcMiddleware {
 					Some(Ok(response)) => {
 						if response.version() == http::Version::HTTP_3 {
 							self.cache.confirm_h3(&url, h3_port);
-							self.cache
-								.record_path_time(&url, response.version(), started.elapsed());
+							self.cache.record_path_time(
+								&url,
+								response.version(),
+								started.elapsed(),
+							);
 						}
 
 						if let Some(alt_svc) = response.headers().get("alt-svc") {
@@ -840,8 +844,11 @@ impl Middleware for AltSvcMiddleware {
 						let started = Instant::now();
 						let result = next.run(req_clone, extensions).await;
 						if let Ok(ref response) = result {
-							self.cache
-								.record_path_time(&url, response.version(), started.elapsed());
+							self.cache.record_path_time(
+								&url,
+								response.version(),
+								started.elapsed(),
+							);
 						}
 						result
 					}
