@@ -558,7 +558,7 @@ efficient access, consider handling the response body as a stream.
 completion. It returns a promise that resolves with a `String`. The response is always decoded
 using UTF-8.*
 
-Invalid UTF-8 sequences are replaced with U+FFFD (the replacement character) rather than throwing.
+*Invalid UTF-8 sequences are replaced with U+FFFD (the replacement character) rather than throwing.*
 
 ### `Response.webResponse(): globalThis.Response`
 
