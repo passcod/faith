@@ -7,7 +7,7 @@ id: BODY
 The response body is read from the network once and delivered either as a stream or through a whole-body reading method.
 The whole-body methods follow the fetch standard's disturbed-stream semantics: the first consumer wins and later ones are refused.
 `clone()` is the sanctioned way to obtain a second consumer, and `discard()` gives explicit control over the connection cost of not reading.
-Bodies are delivered decoded whichever path reads them (see [ENC](../fetch/content-encoding.md)).
+A body Fáith decodes is delivered decoded whichever path reads it (see [ENC](../fetch/content-encoding.md)).
 
 ## The body stream
 

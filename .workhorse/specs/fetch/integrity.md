@@ -17,6 +17,7 @@ Unknown algorithms among several are silently ignored; if every listed algorithm
 ## When verification happens
 
 Verification runs when the body is consumed through `bytes()`, `json()`, `text()`, `arrayBuffer()`, or `blob()`: the paths where the whole body is in hand.
+The digest is taken over the bytes the caller receives, which are the encoded bytes on a response Fáith does not decode (see [ENC](content-encoding.md)).
 A mismatch throws an integrity-mismatch error from that call.
 Reading through the `body` stream does not verify: the consumer sees bytes before the digest can be known, so stream consumers take on their own verification.
 Because the body is not available at `fetch()` resolution time, a mismatch surfaces at the body-reading call, not at `fetch()`.

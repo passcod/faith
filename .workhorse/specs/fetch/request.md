@@ -28,6 +28,7 @@ Per-request headers override the agent's default headers on a per-name basis.
 
 A request the caller adds no headers to still carries `Host` for the target authority, `Accept: */*`, `Accept-Encoding` advertising the encodings Fáith can decode (see [ENC](content-encoding.md)), and `User-Agent` (see [AGENT](../agent/overview.md)).
 A caller-supplied or agent-default value for any of these replaces the value Fáith would otherwise send.
+Taking over `Accept-Encoding` also takes over decoding the response (see [ENC](content-encoding.md)).
 
 ## Body
 
