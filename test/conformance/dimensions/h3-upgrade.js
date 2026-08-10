@@ -15,10 +15,20 @@ const { PAYLOAD } = require("../contract.js");
 const { fetch } = require("../../../wrapper.js");
 
 /**
- * Requests after the first, matching what the HTTP/3 regression tests do: the
- * upgrade lands on a subsequent request rather than the one that learned about it.
+ * Requests after the first: the upgrade lands on a subsequent request rather
+ * than the one that learned about it.
  */
 const WARMUPS = 3;
+
+/**
+ * The advertisement is verified by a background probe before any request is
+ * routed to HTTP/3, so how many requests the upgrade takes depends on how fast
+ * the probe's QUIC handshake completes, not on a fixed request count. Poll
+ * with a pause rather than hammering, up to a deadline a slow runner still
+ * fits inside.
+ */
+const UPGRADE_DEADLINE = 10_000;
+const UPGRADE_POLL_INTERVAL = 100;
 
 module.exports = {
 	name: "HTTP/3 upgrade",
@@ -42,10 +52,13 @@ module.exports = {
 
 		let warm;
 		let body;
-		for (let i = 0; i < WARMUPS; i++) {
+		const deadline = Date.now() + UPGRADE_DEADLINE;
+		do {
 			warm = await fetch(`${url}/hello`, { agent, timeout: 15_000 });
 			body = await warm.text();
-		}
+			if (warm.version === "HTTP/3.0") break;
+			await new Promise((r) => setTimeout(r, UPGRADE_POLL_INTERVAL));
+		} while (Date.now() < deadline);
 		t.ok(
 			warm.version === "HTTP/3.0" && body === PAYLOAD,
 			`a later request took the advertised route: ${warm.version}`,

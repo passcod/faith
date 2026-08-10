@@ -115,7 +115,11 @@ test("HTTP/3: upgradeFollowAdvertisedPort connects to the advertised port", asyn
 	if (!guard(t)) return;
 
 	const { fetch } = require("../wrapper.js");
-	const h = await harness({ upgradeFollowAdvertisedPort: true });
+	// Probing off: this test pins the *inline* upgrade mechanics (the request
+	// after the advertisement attempts h3 itself). With probing on, the upgrade
+	// lands whenever the background probe finishes, which is a different test —
+	// see http3-probe.test.js.
+	const h = await harness({ upgradeFollowAdvertisedPort: true, upgradeProbe: false });
 
 	try {
 		const first = await fetch(h.url, { agent: h.agent, timeout: 10000 });
@@ -158,8 +162,12 @@ test("HTTP/3: the TCP fallback keeps the origin port, not the rewritten one", as
 	// above the clone and this test fails outright — the other tests here can't
 	// catch that, because Caddy serves TCP on the advertised port too.
 	const dead = await findFreePort();
+	// Probing off, as above: the clone-before-rewrite ordering this test pins
+	// only exists on the inline path. (With probing on, the dead advertisement
+	// would fail in the background and no foreground request would ever carry
+	// the rewritten port.)
 	const h = await harness(
-		{ upgradeFollowAdvertisedPort: true },
+		{ upgradeFollowAdvertisedPort: true, upgradeProbe: false },
 		{ altSvc: `h3=":${dead}"` },
 	);
 

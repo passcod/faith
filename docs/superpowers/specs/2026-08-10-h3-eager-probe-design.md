@@ -257,7 +257,8 @@ but slower than the TCP one: a QUIC-hostile middlebox, an anycast split routing 
 somewhere worse, a server whose h3 stack is simply less tuned. Today (and under this
 design) a working-but-slow h3 path is confirmed and preferred anyway.
 
-Sketch, deliberately kept out of scope for the first cut:
+Implemented alongside the probe (`upgradeSlowFactor`, default 2.5, 0 disables;
+`upgradeSlowTtl`, default 600s), to the following shape:
 
 - **Measure.** Keep an exponentially-weighted moving average of time-to-response-headers
   per origin *per protocol family* (TCP: h1/h2 together; QUIC: h3). Foreground requests
