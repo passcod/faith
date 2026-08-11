@@ -10,9 +10,10 @@ On a server there is no document to protect, but the same mechanism guards artef
 ## Accepted values
 
 The option takes the standard SRI format `<hash-algo>-<hash-source>`, with `sha256`, `sha384`, and `sha512` as the known algorithms and the base64-encoded digest as the source.
-Multiple space-separated values are accepted; verification passes if any one matches.
-Accepting any match is a divergence from Subresource Integrity, which requires the strongest listed algorithm to be the one verified (see [FAITH](../overview.md)).
-Unknown algorithms among several are silently ignored; if every listed algorithm is unknown, the request throws an invalid-integrity error at parse time.
+Multiple space-separated values are accepted.
+Verification uses the strongest algorithm listed, ranking `sha512` above `sha384` above `sha256`, and checks the body against the digests given for that algorithm alone; it passes if any of those matches.
+A value that lists both a weak and a strong digest is therefore held to the strong one, and a body matching only the weak digest fails verification.
+Unknown algorithms are silently ignored when picking the strongest; if every listed algorithm is unknown, the request throws an invalid-integrity error at parse time.
 
 ## When verification happens
 
