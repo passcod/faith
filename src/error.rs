@@ -18,19 +18,20 @@ use strum::{EnumIter, IntoEnumIterator};
 ///   - `Network` — network error
 ///   - `Redirect` — when the agent is configured to error on redirects
 /// - JS `SyntaxError`:
+///   - `AddressParse` — IP parse error for `AgentOptions.dns.overrides`
+///   - `InvalidIntegrity` — SRI parse error for `RequestInit.integrity`
 ///   - `JsonParse` — JSON parse error for `response.json()`
-///   - `PemParse` — PEM parse error for `AgentOptions.tls.identity`
+///   - `PemParse` — PEM parse error for `AgentOptions.tls.identity` or `AgentOptions.tls.extraRoots`
 /// - JS `TypeError`:
 ///   - `Closed` — a request was made on an agent that has been closed
 ///   - `InvalidHeader` — invalid header name or value
 ///   - `InvalidMethod` — invalid HTTP method
 ///   - `InvalidUrl` — invalid URL string
 ///   - `ResponseAlreadyDisturbed` — body already read (mutually exclusive operations)
-///   - `ResponseBodyNotAvailable` — body is null or not available
 /// - JS generic `Error`:
 ///   - `BodyStream` — internal stream handling error
 ///   - `Config` — invalid agent configuration
-///   - `RuntimeThread` — failed to start or schedule threads on the internal tokio runtime
+///   - `IntegrityMismatch` — SRI checksum mismatch (with `RequestInit.integrity`)
 ///
 /// The library exports an `ERROR_CODES` object which has every error code the library throws, and
 /// every error thrown also has a `code` property that is set to one of those codes. So you can
@@ -58,8 +59,6 @@ pub enum FaithErrorKind {
 	PemParse,
 	Redirect,
 	ResponseAlreadyDisturbed,
-	ResponseBodyNotAvailable,
-	RuntimeThread,
 	Timeout,
 }
 
@@ -89,29 +88,23 @@ impl FaithErrorKind {
 			Self::PemParse => "invalid client certificate or key",
 			Self::Redirect => "got a redirect",
 			Self::ResponseAlreadyDisturbed => "response body already disturbed",
-			Self::ResponseBodyNotAvailable => "response body not available",
-			Self::RuntimeThread => "internal tokio runtime thread error",
 			Self::Timeout => "timed out",
 		}
 	}
 
 	fn js_type(self) -> JsErrorType {
 		match self {
-			Self::BodyStream | Self::Config | Self::IntegrityMismatch | Self::RuntimeThread => {
-				JsErrorType::GenericError
-			}
+			Self::BodyStream | Self::Config | Self::IntegrityMismatch => JsErrorType::GenericError,
 			Self::Aborted | Self::Timeout => JsErrorType::NamedError("AbortError"),
 			Self::Network | Self::Redirect => JsErrorType::NamedError("NetworkError"),
-			Self::AddressParse
-			| Self::InvalidIntegrity
-			| Self::JsonParse
-			| Self::PemParse => JsErrorType::SyntaxError,
+			Self::AddressParse | Self::InvalidIntegrity | Self::JsonParse | Self::PemParse => {
+				JsErrorType::SyntaxError
+			}
 			Self::Closed
 			| Self::InvalidHeader
 			| Self::InvalidMethod
 			| Self::InvalidUrl
-			| Self::ResponseAlreadyDisturbed
-			| Self::ResponseBodyNotAvailable => JsErrorType::TypeError,
+			| Self::ResponseAlreadyDisturbed => JsErrorType::TypeError,
 		}
 	}
 }
@@ -179,6 +172,25 @@ impl FaithError {
 	}
 }
 
+/// Dig a [`FaithError`] back out of an error chain, if one is in there.
+///
+/// The `error` redirect policy refuses a redirect by handing reqwest a [`FaithError`], which comes
+/// back to us wrapped in an error of reqwest's own, so the kind we chose has to be recovered from
+/// the source chain to survive as a `code`. Redirect failures reqwest raises on its own account
+/// (exhausting the hop limit, an https-only downgrade) carry no [`FaithError`] and so fall through
+/// to the generic mapping, which is what tells the two apart.
+fn faith_kind_in_chain(err: &(dyn Error + 'static)) -> Option<FaithErrorKind> {
+	let mut source = err.source();
+	while let Some(e) = source {
+		if let Some(faith) = e.downcast_ref::<FaithError>() {
+			return Some(faith.kind);
+		}
+		source = e.source();
+	}
+
+	None
+}
+
 impl From<reqwest::Error> for FaithError {
 	fn from(err: reqwest::Error) -> Self {
 		// Always include full error chain for debugging
@@ -190,10 +202,18 @@ impl From<reqwest::Error> for FaithError {
 		}
 
 		if err.is_timeout() {
-			FaithError::new(FaithErrorKind::Timeout, Some(msg))
-		} else {
-			FaithError::new(FaithErrorKind::Network, Some(msg))
+			return FaithError::new(FaithErrorKind::Timeout, Some(msg));
 		}
+
+		// A redirect the agent's own policy refused carries the kind we handed reqwest; one reqwest
+		// raised on its own account stays a plain network error.
+		let kind = err
+			.is_redirect()
+			.then(|| faith_kind_in_chain(&err))
+			.flatten()
+			.unwrap_or(FaithErrorKind::Network);
+
+		FaithError::new(kind, Some(msg))
 	}
 }
 

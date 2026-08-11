@@ -1122,12 +1122,10 @@ error kind, documented in this comprehensive mapping:
   - `InvalidMethod` — invalid HTTP method
   - `InvalidUrl` — invalid URL string
   - `ResponseAlreadyDisturbed` — body already read (mutually exclusive operations)
-  - `ResponseBodyNotAvailable` — body is null or not available
 - JS generic `Error`:
   - `BodyStream` — internal stream handling error
   - `Config` — invalid agent configuration
   - `IntegrityMismatch` — SRI checksum mismatch (with `RequestInit.integrity`)
-  - `RuntimeThread` — failed to start or schedule threads on the internal tokio runtime
 
 The library exports an `ERROR_CODES` object which has every error code the library throws, and
 every error thrown also has a `code` property that is set to one of those codes. So you can

@@ -1,5 +1,5 @@
 const test = require("tape");
-const { fetch: faithFetch, Agent } = require("../wrapper.js");
+const { fetch: faithFetch, Agent, ERROR_CODES } = require("../wrapper.js");
 const { url } = require("./helpers.js");
 
 test("Agent with redirect: 'follow' (default)", async (t) => {
@@ -76,7 +76,7 @@ test("Agent with redirect: 'stop' returns first redirect", async (t) => {
 });
 
 test("Agent with redirect: 'error' throws on redirect", async (t) => {
-	t.plan(1);
+	t.plan(3);
 
 	const agent = new Agent({
 		redirect: "error",
@@ -87,6 +87,12 @@ test("Agent with redirect: 'error' throws on redirect", async (t) => {
 		t.fail("Should throw error on redirect");
 	} catch (err) {
 		t.pass("Should throw error when redirect encountered");
+		t.equal(err.name, "NetworkError", "Should be a NetworkError");
+		t.equal(
+			err.code,
+			ERROR_CODES.Redirect,
+			"Should carry the Redirect code, not the generic Network one",
+		);
 	}
 });
 
@@ -474,7 +480,7 @@ test("Agent redirect with non-redirect status codes", async (t) => {
 });
 
 test("Agent redirect: 'follow' respects redirect limit", async (t) => {
-	t.plan(1);
+	t.plan(2);
 
 	const agent = new Agent({
 		redirect: "follow",
@@ -485,6 +491,11 @@ test("Agent redirect: 'follow' respects redirect limit", async (t) => {
 		t.fail("Should throw error when exceeding redirect limit");
 	} catch (err) {
 		t.pass("Should throw error for too many redirects");
+		t.equal(
+			err.code,
+			ERROR_CODES.Network,
+			"Exhausting the hop limit is a transport failure, not a refused redirect",
+		);
 	}
 });
 

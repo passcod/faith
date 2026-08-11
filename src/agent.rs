@@ -807,7 +807,10 @@ impl Agent {
 				Redirect::Follow | Redirect::Manual => {}
 				Redirect::Error => {
 					client = client.redirect(Policy::custom(|attempt| {
-						attempt.error(Box::new(FaithError::from(FaithErrorKind::Redirect)))
+						// Hand reqwest the error unboxed: it boxes for us, and boxing first would
+						// put a `Box<FaithError>` in the source chain, which does not downcast
+						// back to `FaithError` when we come to recover the kind as a `code`.
+						attempt.error(FaithError::from(FaithErrorKind::Redirect))
 					}));
 				}
 				Redirect::Stop => {

@@ -40,8 +40,6 @@ export const ERROR_CODES: {
 	readonly PemParse: "PemParse";
 	readonly Redirect: "Redirect";
 	readonly ResponseAlreadyDisturbed: "ResponseAlreadyDisturbed";
-	readonly ResponseBodyNotAvailable: "ResponseBodyNotAvailable";
-	readonly RuntimeThread: "RuntimeThread";
 	readonly Timeout: "Timeout";
 };
 
