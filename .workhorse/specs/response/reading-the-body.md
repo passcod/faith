@@ -48,4 +48,5 @@ An unread, undiscarded HTTP/1 response holds its connection until the response i
 
 `webResponse()` returns a Web API `Response` built from the body stream, `status`, `statusText`, and `headers`: the properties a Web `Response` can be constructed with.
 Fáith-specific properties (`url`, `version`, `peer`, `trailers`, `redirected`) do not carry over.
-It succeeds on an undisturbed response, and is built over the response's own body stream rather than a copy: a partially read body carries across with only its remaining bytes, and a reader held on `body` is released before converting, since a Web `Response` cannot be constructed over a locked stream.
+It is built over the response's own body stream rather than a copy, so the conversion is available until that stream is read from or locked and refused after, as the standard does not build a `Response` over one.
+Accessing `body` without reading from it does not stand in the way.
