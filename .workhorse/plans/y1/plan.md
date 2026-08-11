@@ -32,6 +32,6 @@ Decoding moves from once per network response to once per delivered response, so
 - [ ] Deliver a `Content-Encoding` naming more than one coding as received
 - [ ] Check the disk store across the change: entries written before it hold decoded bodies with no `Content-Encoding`, so they read back as identity
 
-## Open question
+## Left to its own card
 
-Request body compression, raised while planning and not yet decided. RFC 9110 §8.4 sanctions a content coding on request content, and §12.5.3 makes `Accept-Encoding` in a response the server's statement of what it accepts, with 415 plus `Accept-Encoding` the failure signal. There is no pre-flight negotiation, so a caller has to know the server accepts it. The fetch standard has no API for it, so it would be a Fáith extension with its own option rather than standard behaviour.
+Request body compression came up while planning this and is captured in the card breakdown. It rides on the compression ownership this card establishes, but carries its own option, error semantics, and 415 handling.
