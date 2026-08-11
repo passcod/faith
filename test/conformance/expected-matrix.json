@@ -38,6 +38,12 @@
 		},
 		{
 			"server": "node-h1",
+			"dimension": "aggressive idle close",
+			"status": "run",
+			"reason": null
+		},
+		{
+			"server": "node-h1",
 			"dimension": "oversized headers",
 			"status": "run",
 			"reason": null
@@ -95,6 +101,12 @@
 			"dimension": "connection reuse",
 			"status": "skip",
 			"reason": "lacks keepaliveLimit"
+		},
+		{
+			"server": "node-h2",
+			"dimension": "aggressive idle close",
+			"status": "skip",
+			"reason": "lacks idleClose, h1"
 		},
 		{
 			"server": "node-h2",
@@ -158,6 +170,12 @@
 		},
 		{
 			"server": "caddy",
+			"dimension": "aggressive idle close",
+			"status": "skip",
+			"reason": "lacks idleClose"
+		},
+		{
+			"server": "caddy",
 			"dimension": "oversized headers",
 			"status": "skip",
 			"reason": "lacks headerLimits"
@@ -215,6 +233,12 @@
 			"dimension": "connection reuse",
 			"status": "skip",
 			"reason": "lacks keepaliveLimit"
+		},
+		{
+			"server": "nginx",
+			"dimension": "aggressive idle close",
+			"status": "skip",
+			"reason": "lacks idleClose"
 		},
 		{
 			"server": "nginx",
@@ -278,6 +302,12 @@
 		},
 		{
 			"server": "apache-h1",
+			"dimension": "aggressive idle close",
+			"status": "skip",
+			"reason": "lacks idleClose"
+		},
+		{
+			"server": "apache-h1",
 			"dimension": "oversized headers",
 			"status": "run",
 			"reason": null
@@ -335,6 +365,12 @@
 			"dimension": "connection reuse",
 			"status": "skip",
 			"reason": "lacks keepaliveLimit"
+		},
+		{
+			"server": "apache-h2",
+			"dimension": "aggressive idle close",
+			"status": "skip",
+			"reason": "lacks idleClose, h1"
 		},
 		{
 			"server": "apache-h2",
@@ -398,6 +434,12 @@
 		},
 		{
 			"server": "haproxy-h1",
+			"dimension": "aggressive idle close",
+			"status": "skip",
+			"reason": "lacks idleClose"
+		},
+		{
+			"server": "haproxy-h1",
 			"dimension": "oversized headers",
 			"status": "skip",
 			"reason": "lacks headerLimits"
@@ -455,6 +497,12 @@
 			"dimension": "connection reuse",
 			"status": "skip",
 			"reason": "lacks keepaliveLimit"
+		},
+		{
+			"server": "haproxy-h2",
+			"dimension": "aggressive idle close",
+			"status": "skip",
+			"reason": "lacks idleClose, h1"
 		},
 		{
 			"server": "haproxy-h2",
@@ -515,6 +563,12 @@
 			"dimension": "connection reuse",
 			"status": "skip",
 			"reason": "lacks keepaliveLimit"
+		},
+		{
+			"server": "quiche",
+			"dimension": "aggressive idle close",
+			"status": "skip",
+			"reason": "lacks idleClose, h1"
 		},
 		{
 			"server": "quiche",

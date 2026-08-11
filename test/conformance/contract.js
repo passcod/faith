@@ -77,6 +77,20 @@ const ROUTES = [
 		requires: [C.GOAWAY],
 		what: "reports how many GOAWAYs and sessions the origin has seen",
 	},
+	{
+		path: "/idle/drop",
+		requires: [C.IDLE_CLOSE],
+		what: "answers normally, then silently drops the connection underneath",
+	},
+	{
+		// The same counters `/goaway/state` serves, behind a second path because the
+		// two are gated on different capabilities: the row that can drop connections
+		// is not the row that can send a GOAWAY, and neither should have to declare
+		// the other's capability to read a number.
+		path: "/idle/state",
+		requires: [C.IDLE_CLOSE],
+		what: "reports how many requests the origin answered, and how many it then dropped",
+	},
 ];
 
 /** The routes a server declaring `capabilities` is obliged to serve. */

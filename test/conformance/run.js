@@ -43,6 +43,7 @@ const DIMENSIONS = [
 	require("./dimensions/conditional-get.js"),
 	require("./dimensions/negotiation.js"),
 	require("./dimensions/connection-reuse.js"),
+	require("./dimensions/idle-close.js"),
 	require("./dimensions/oversized-headers.js"),
 	require("./dimensions/goaway.js"),
 	require("./dimensions/h3.js"),
