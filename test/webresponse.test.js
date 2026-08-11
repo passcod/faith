@@ -276,3 +276,54 @@ test("webResponse() body stream is shared", async (t) => {
     t.fail(`Unexpected error: ${error.message}`);
   }
 });
+
+test("webResponse() is refused once the body stream has been read from", async (t) => {
+  t.plan(3);
+
+  const total = 65536;
+
+  const faithResponse = await fetch(
+    url(`/stream-bytes/${total}?chunk_size=1024`),
+  );
+
+  // The Web Response is built over this very stream, and the standard does not
+  // build one over a stream that has been read from or locked.
+  const reader = faithResponse.body.getReader();
+  const first = await reader.read();
+  t.ok(!first.done, "first read should return a chunk");
+  t.ok(first.value.length < total, "first chunk should be part of the body");
+  reader.releaseLock();
+
+  try {
+    faithResponse.webResponse();
+    t.fail("Should have thrown after the body stream was read from");
+  } catch (error) {
+    t.equal(
+      error.constructor.name,
+      "TypeError",
+      "should throw TypeError for a disturbed stream",
+    );
+  }
+});
+
+test("webResponse() is refused while a reader is held on the body", async (t) => {
+  t.plan(1);
+
+  const faithResponse = await fetch(url("/get"));
+
+  // Locked but not yet read from: the standard refuses this too.
+  const reader = faithResponse.body.getReader();
+
+  try {
+    faithResponse.webResponse();
+    t.fail("Should have thrown while the body stream was locked");
+  } catch (error) {
+    t.equal(
+      error.constructor.name,
+      "TypeError",
+      "should throw TypeError for a locked stream",
+    );
+  } finally {
+    reader.releaseLock();
+  }
+});

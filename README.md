@@ -387,6 +387,10 @@ contents,* or `null` for any actual HTTP response that has no body, such as `HEA
 Note that browsers currently do not return `null` for those responses, but the spec requires it.
 Fáith chooses to respect the spec rather than the browsers in this case.
 
+A response has one body stream: it is built on first access and the same stream is returned
+thereafter, so reading through it advances a single position. Use `clone()` to get a second full
+read of the body.
+
 ### `Response.bodyUsed: boolean`
 
 *The `bodyUsed` read-only property of the `Response` interface is a boolean value that indicates
@@ -575,8 +579,10 @@ returns a Response from:
 - the `status`, `statusCode`, and `headers` properties
 
 Note that if `json()`, `bytes()`, etc has been called on the original response, the body stream
-of the new Web `Response` will be empty or inaccessible. If the body stream of the original
-response has been partially read, only the remaining bytes will be available in the new `Response`.
+of the new Web `Response` will be empty or inaccessible. The new `Response` is built over the same
+body stream, so convert before reading from or locking that stream: a Web `Response` cannot be
+constructed over a stream that has been read from or locked. Accessing `.body` without reading
+from it is fine.
 
 ## `Agent`
 

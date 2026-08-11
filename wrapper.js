@@ -25,6 +25,8 @@ class Response {
 	#nativeResponse;
 	/** @type {Headers | undefined} */
 	#headers;
+	/** @type {ReadableStream<Uint8Array> | null | undefined} */
+	#body;
 
 	constructor(nativeResponse) {
 		this.#nativeResponse = nativeResponse;
@@ -79,8 +81,16 @@ class Response {
 		})();
 	}
 
+	// spec:BODY#the-body-stream
 	get body() {
-		return this.#nativeResponse.body();
+		// The native binding mints a fresh stream on every call, and each one
+		// replays the body from the start. A response has one body stream, so
+		// build it once and hand out the same object thereafter. `undefined`
+		// means not built yet; `null` is a response that cannot carry a body.
+		if (this.#body === undefined) {
+			this.#body = this.#nativeResponse.body() ?? null;
+		}
+		return this.#body;
 	}
 
 	/**

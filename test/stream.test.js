@@ -154,8 +154,9 @@ test("Test body returns null after consumption", async (t) => {
     reader.releaseLock();
 
     const stream2 = response.body;
-    t.ok(
-      stream2 !== null,
+    t.equal(
+      stream2,
+      stream1,
       "wrapper caches stream, so second access returns same stream",
     );
   } else {
