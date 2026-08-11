@@ -31,10 +31,3 @@ Fáith-specific extensions (such as `agent`, `timeout`, response `peer`, `versio
 Requests negotiate HTTP/1.1 or HTTP/2 over ALPN transparently.
 HTTP/3 is reached through the Alt-Svc upgrade mechanism (see [H3UP](http3/upgrade.md)) or through explicit hints, never by breaking a request that could have succeeded over TCP.
 IPv4 and IPv6 are both used, racing connections with the Happy Eyeballs algorithm when Fáith's own DNS client is in use (see [DNS](agent/dns.md)).
-
-## Packaging
-
-The package exposes a single entry point, in CommonJS and ESM form, and every behaviour these specs describe is reached through it.
-The native binding beneath that entry point is internal, so the API contract is stated in terms of the entry point's surface alone.
-TypeScript typings cover the full public API, including Fáith-specific extensions and the `ERROR_CODES` map.
-Two version constants are exported: `FAITH_VERSION` (the library itself) and `REQWEST_VERSION` (the underlying HTTP stack), usable in user agent strings and diagnostics.
