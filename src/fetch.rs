@@ -27,6 +27,9 @@ use crate::{
 	stream_body::StreamBody,
 };
 
+/// The methods the fetch standard normalises to upper case; any other method is sent as given.
+const NORMALISED_METHODS: [&str; 6] = ["DELETE", "GET", "HEAD", "OPTIONS", "POST", "PUT"];
+
 #[napi]
 pub fn faith_fetch<'env>(
 	env: &'env Env,
@@ -49,10 +52,12 @@ pub fn faith_fetch<'env>(
 
 	faith_promise(env, async move {
 		let mut abort = abort;
-		let method = options
-			.method
-			.map(|m| m.to_uppercase())
-			.unwrap_or_else(|| "GET".to_string());
+		let method = options.method.as_deref().unwrap_or("GET");
+		// spec:REQ#method-and-headers
+		let method = NORMALISED_METHODS
+			.into_iter()
+			.find(|normalised| normalised.eq_ignore_ascii_case(method))
+			.unwrap_or(method);
 
 		let method =
 			Method::from_bytes(method.as_bytes()).map_err(|_| FaithErrorKind::InvalidMethod)?;

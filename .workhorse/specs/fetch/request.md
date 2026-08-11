@@ -17,7 +17,7 @@ A `Request` with a body has that body read to completion during conversion; Fái
 ## Method and headers
 
 The method defaults to `GET` and an invalid method throws an invalid-method error.
-Every method is uppercased, including methods outside the set the fetch standard normalises, so a custom method reaches the server in upper case; this is a divergence from the standard (see [FAITH](../overview.md)).
+A method that matches `DELETE`, `GET`, `HEAD`, `OPTIONS`, `POST`, or `PUT` case-insensitively is normalised to upper case, matching the set the fetch standard normalises; any other method is sent with its case as given, so a server routing case-sensitively on a custom method sees the method the caller wrote.
 Headers are accepted as a `Headers` object or a plain object literal; other shapes throw.
 A header set to `null` is removed.
 All request headers can be set; Fáith enforces no browser forbidden-header list.
