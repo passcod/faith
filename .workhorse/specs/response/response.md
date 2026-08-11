@@ -23,6 +23,28 @@ HTTP/2 and HTTP/3 have no reason phrases on the wire, so the phrase is simulated
 `peer` describes the remote peer: `address` (IP and port, when available) and `certificate` (the DER-encoded leaf certificate when the connection was TLS, as a Buffer).
 Each access builds a fresh object and a fresh Buffer copy.
 `trailers` is a promise of the trailing headers (see [TRL](trailers.md)).
+`timing` is a per-request timing breakdown in the shape of a `PerformanceResourceTiming` (see [Request timing](#request-timing)).
+
+## Request timing
+
+`timing` reports how long the request took, phase by phase, in the shape of a Web `PerformanceResourceTiming`.
+Fields that map onto that interface take its names; those with no equivalent take a descriptive name.
+Each access builds a fresh object reflecting what is known at that moment.
+
+The breakdown covers the phases observable at Fáith's request boundary:
+
+- `requestStart` — the moment the request began, and the origin all other phases are measured against
+- `requestSent` — the request head and body have been fully written to the connection
+- `responseStart` — the first byte of the response, i.e. the response headers, has arrived
+- `responseEnd` — the last byte of the body has arrived, reading `null` until the body is finished (fully read or discarded, see [BODY](reading-the-body.md))
+- `reused` — whether the request travelled on a pooled connection rather than a freshly established one (see [POOL](../agent/connection-pool.md))
+- `nextHopProtocol` — the negotiated ALPN protocol identifier (e.g. `h2`, `http/1.1`, `h3`)
+
+Phase timestamps are fractional milliseconds on a monotonic clock shared across the breakdown, so consumers subtract one phase from another to obtain a duration; `requestStart` is the earliest and the rest are no earlier than it.
+Connection setup phases (DNS resolution, TCP connect, TLS handshake) sit below the layer Fáith instruments and are not part of the breakdown.
+
+`responseStart` less `requestStart` is the time to response headers.
+That measurement is taken at a single instrumentation point and is the same one the per-protocol path-time average consumes for HTTP/3 slow-path demotion (see [PROBE](../http3/probing.md)), so a request's surfaced timing and the average it feeds never diverge.
 
 ## Threading
 
