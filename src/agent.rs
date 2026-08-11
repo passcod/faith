@@ -659,6 +659,10 @@ pub struct Agent {
 	/// Mirrors `http3.upgradeFollowAdvertisedPort`. Lives here because `fetch` needs
 	/// it to stop a rewritten port from being reported as a redirect.
 	pub(crate) h3_follow_advertised_port: bool,
+	/// The agent's default `Accept-Encoding`, if one was set among its default headers.
+	/// `fetch` consults it to decide which codings to decode when a request adds none of
+	/// its own (see [`crate::encoding`]).
+	pub(crate) default_accept_encoding: Option<HeaderValue>,
 }
 
 #[napi]
@@ -736,6 +740,7 @@ impl Agent {
 			}
 		}
 
+		let mut default_accept_encoding = None;
 		if let Some(headers) = options.headers
 			&& !headers.is_empty()
 		{
@@ -760,6 +765,7 @@ impl Agent {
 					Some((name, value))
 				},
 			));
+			default_accept_encoding = map.get(reqwest::header::ACCEPT_ENCODING).cloned();
 			client = client.default_headers(map);
 		}
 
@@ -1055,6 +1061,7 @@ impl Agent {
 			#[cfg(feature = "http3")]
 			h3_prober,
 			h3_follow_advertised_port,
+			default_accept_encoding,
 		})
 	}
 

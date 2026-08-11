@@ -25,6 +25,7 @@ use crate::{
 	agent::InnerAgentStats,
 	async_task::{Value, faith_promise},
 	body::{Body, BodyHolder, DynStream, drain_body_inner},
+	encoding::{Coding, decode_stream},
 	error::{FaithError, FaithErrorKind},
 	integrity::verify_integrity,
 };
@@ -37,6 +38,10 @@ use crate::{
 #[derive(Debug, Clone)]
 pub struct FaithResponse {
 	pub(crate) body: BodyHolder,
+	/// The coding to decode the body under, or `None` to deliver it as received.
+	/// Set once when the response is built, from the request's `Accept-Encoding` and the
+	/// response's `Content-Encoding` (see [`crate::encoding`]).
+	pub(crate) decode: Option<Coding>,
 	pub(crate) disturbed: Arc<AtomicBool>,
 	pub(crate) headers: HeaderMap,
 	pub(crate) integrity: Option<String>,
@@ -325,7 +330,11 @@ impl FaithResponse {
 				let trailers_finish = self.trailers.clone();
 				let stats_finish = self.stats.clone();
 				let drained_finish = drained_flag.clone();
-				let stream = SharedStream::new(Box::pin(
+				// The frame stream pulls trailers off to the side (via `arrived`) and yields
+				// data bytes only, so decoding sees no trailer frames. Bookkeeping is chained
+				// onto the raw byte stream, so it still fires when the body ends even though a
+				// decoder sits above it.
+				let bytes = Box::pin(
 					BodyStream::new(inner)
 						.then(move |frame| {
 							let trailers_lock = trailers_stream.clone();
@@ -355,7 +364,13 @@ impl FaithResponse {
 							None
 						}))
 						.filter_map(async |item| item),
-				) as Pin<Box<DynStream>>);
+				) as Pin<Box<DynStream>>;
+
+				let bytes = match self.decode {
+					Some(coding) => decode_stream(bytes, coding),
+					None => bytes,
+				};
+				let stream = SharedStream::new(bytes);
 
 				// the _ is the Consumed we put in there earlier
 				let _ = replace(lock, Body::Stream(stream.clone()));

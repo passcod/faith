@@ -9,6 +9,13 @@ publish = false
 crate-type = ["cdylib"]
 
 [dependencies]
+async-compression = { version = "0.4", default-features = false, features = [
+    "tokio",
+    "gzip",
+    "zlib",
+    "brotli",
+    "zstd",
+] }
 async-stream = "0.3.6"
 async-trait = "0.1.89"
 bytes = "1.9.0"
@@ -22,17 +29,13 @@ libc = "0.2.179"
 napi = { version = "3.7.0", features = ["napi9", "serde-json", "tokio_rt", "web_stream"] }
 napi-derive = "3.4.0"
 reqwest = { version = "0.13.4", default-features = false, features = [
-    "brotli",
     "cookies",
-    "deflate",
-    "gzip",
     "hickory-dns",
     "http2",
     "json",
     "rustls",
     "stream",
     "system-proxy",
-    "zstd",
 ] }
 reqwest-middleware = { version = "0.5.2", features = ["http2", "rustls"] }
 serde = { version = "1.0.228", features = ["derive"] }

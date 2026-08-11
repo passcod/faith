@@ -22,15 +22,15 @@ Decoding moves from once per network response to once per delivered response, so
 
 ## Build steps
 
-- [ ] Disable reqwest's ownership of compression: drop the `gzip`, `brotli`, `deflate`, and `zstd` features in `Cargo.toml`, and confirm no `Accept-Encoding` is added beneath Fáith once they are gone (`AcceptEncoding::to_header_value` returns `None` with all four off, `tower-http/src/compression_utils.rs:44`)
-- [ ] Send the default `Accept-Encoding` from Fáith, matching the value the stack sent before so the wire does not change
-- [ ] Parse `Accept-Encoding` into a decision: coding named outright wins over `*`, a zero quality value refuses, and `*` covers what is not named. RFC 9110 §12.5.3 has `*` match "any available content coding not explicitly listed in the field"
-- [ ] Decode in Fáith's own layer, outside the cache middleware, driven by the request's parsed `Accept-Encoding` and the response's `Content-Encoding`
-- [ ] Take a direct dependency on `async-compression` for the four codings. It is in the tree today only because `tower-http` pulls it in, and reqwest's compression features are exactly `tower-http/decompression-*` (`reqwest/Cargo.toml:104,120,125,186`), so dropping them takes `async-compression`, `flate2`, `brotli`, and `zstd` out with them
-- [ ] Decode on the streaming path as well as the whole-body path, since every read path delivers decoded bytes
-- [ ] Strip `Content-Encoding` and `Content-Length` only when a body is actually decoded, so `HEAD` and bodyless responses keep them
-- [ ] Deliver a `Content-Encoding` naming more than one coding as received
-- [ ] Check the disk store across the change: entries written before it hold decoded bodies with no `Content-Encoding`, so they read back as identity
+- [x] Disable reqwest's ownership of compression: drop the `gzip`, `brotli`, `deflate`, and `zstd` features in `Cargo.toml`, and confirm no `Accept-Encoding` is added beneath Fáith once they are gone (`AcceptEncoding::to_header_value` returns `None` with all four off, `tower-http/src/compression_utils.rs:44`)
+- [x] Send the default `Accept-Encoding` from Fáith, matching the value the stack sent before so the wire does not change
+- [x] Parse `Accept-Encoding` into a decision: coding named outright wins over `*`, a zero quality value refuses, and `*` covers what is not named. RFC 9110 §12.5.3 has `*` match "any available content coding not explicitly listed in the field"
+- [x] Decode in Fáith's own layer, outside the cache middleware, driven by the request's parsed `Accept-Encoding` and the response's `Content-Encoding`
+- [x] Take a direct dependency on `async-compression` for the four codings. It is in the tree today only because `tower-http` pulls it in, and reqwest's compression features are exactly `tower-http/decompression-*` (`reqwest/Cargo.toml:104,120,125,186`), so dropping them takes `async-compression`, `flate2`, `brotli`, and `zstd` out with them
+- [x] Decode on the streaming path as well as the whole-body path, since every read path delivers decoded bytes
+- [x] Strip `Content-Encoding` and `Content-Length` only when a body is actually decoded, so `HEAD` and bodyless responses keep them
+- [x] Deliver a `Content-Encoding` naming more than one coding as received
+- [x] Check the disk store across the change: entries written before it hold decoded bodies with no `Content-Encoding`, so they read back as identity. A pre-change entry decodes to `None` (no `Content-Encoding` stored) and is delivered as-is; new entries store the coding and decode on the way out. No migration needed.
 
 ## Left to its own card
 
