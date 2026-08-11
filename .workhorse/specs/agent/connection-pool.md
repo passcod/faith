@@ -13,6 +13,7 @@ It defaults to 90 seconds, and the same window bounds how long an idle connectio
 HTTP/1 connections return to the pool once their response body has been fully read or discarded; an unconsumed body holds its connection (see [BODY](../response/reading-the-body.md)).
 HTTP/2 and HTTP/3 connections multiplex, so reuse does not depend on body consumption.
 The connection established by a successful HTTP/3 probe lands in the same pool, so the first upgraded request starts on a warm connection (see [PROBE](../http3/probing.md)).
+A connection opened by `preconnect(origin)` lands in the pool the same way, so the first request to that origin starts warm (see [WARM](warm-up.md)).
 
 ## Reusing a connection that has died
 
