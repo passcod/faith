@@ -44,4 +44,11 @@ Coverage lives in three places: the decision logic in `src/encoding.rs` unit tes
 - [x] A stored response holds the bytes as they came off the wire and is decoded on the way out (verifies spec: ENC, CACHE)
 - [x] With no `Vary`, one stored entry answers both a caller who negotiated gzip and one who asked for identity, decoded for the first and as sent for the second (verifies spec: ENC, CACHE)
 - [x] A disk-store entry round-trips its coding across a hit (verifies spec: ENC, CACHE)
-- [ ] A disk-store entry written before this change reads back as identity. Not automated: it needs a store populated by the previous build, so it is a manual check against an existing cache directory. Pre-change entries hold decoded bodies with no `Content-Encoding`, so the decision returns "no coding" and they are delivered as-is.
+
+## Across the release boundary
+
+Covered in `test/integration/legacy-cache-encoding.test.js`, which installs the previous release from npm and runs it alongside the working tree. These skip when the package cannot be fetched, being checks on a released artefact rather than on this tree.
+
+- [x] A disk-store entry written by the previous release is served from disk and delivered as identity, its body already decoded and naming no coding, so nothing needs migrating (verifies spec: ENC, CACHE)
+- [x] The default `Accept-Encoding` is byte-identical to what the previous release sent, so servers negotiate the same way (verifies spec: ENC)
+- [x] The previous release decoded despite `Accept-Encoding: identity` and stripped the coding headers, which the working tree no longer does (verifies spec: ENC)

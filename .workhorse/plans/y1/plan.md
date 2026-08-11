@@ -30,7 +30,14 @@ Decoding moves from once per network response to once per delivered response, so
 - [x] Decode on the streaming path as well as the whole-body path, since every read path delivers decoded bytes
 - [x] Strip `Content-Encoding` and `Content-Length` only when a body is actually decoded, so `HEAD` and bodyless responses keep them
 - [x] Deliver a `Content-Encoding` naming more than one coding as received
-- [x] Check the disk store across the change: entries written before it hold decoded bodies with no `Content-Encoding`, so they read back as identity. A pre-change entry decodes to `None` (no `Content-Encoding` stored) and is delivered as-is; new entries store the coding and decode on the way out. No migration needed.
+- [x] Check the disk store across the change: entries written before it hold decoded bodies with no `Content-Encoding`, so they read back as identity. Verified against the real artefact rather than reasoned about: `test/integration/legacy-cache-encoding.test.js` installs 0.4.0 from npm, has it populate a disk store, and reads that store from the working tree. The entry is served off disk without a network trip and delivered as-is. No migration needed.
+
+## Verified against the previous release
+
+Running 0.4.0 alongside the working tree also settled two things that cannot be checked from one build:
+
+- The default `Accept-Encoding` is byte-identical across the two (`zstd,gzip,deflate,br`), so the wire genuinely does not change.
+- 0.4.0 decodes and strips the coding headers even when the request asked for `identity`, which pins the defect this card fixed.
 
 ## Left to its own card
 
