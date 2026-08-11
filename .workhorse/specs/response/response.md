@@ -33,17 +33,17 @@ Each access builds a fresh object reflecting what is known at that moment.
 
 The breakdown covers the phases observable at Fáith's request boundary:
 
-- `requestStart` — the moment the request began, and the origin all other phases are measured against
+- `fetchStart` — the moment the request began, and the origin all other phases are measured against
 - `requestSent` — the request head and body have been fully written to the connection
 - `responseStart` — the first byte of the response, i.e. the response headers, has arrived
 - `responseEnd` — the last byte of the body has arrived, reading `null` until the body is finished (fully read or discarded, see [BODY](reading-the-body.md))
 - `reused` — whether the request travelled on a pooled connection rather than a freshly established one (see [POOL](../agent/connection-pool.md))
-- `nextHopProtocol` — the negotiated ALPN protocol identifier (e.g. `h2`, `http/1.1`, `h3`)
+- `nextHopProtocol` — the protocol the request travelled over, as an ALPN Protocol ID (RFC 7301): `h3`, `h2`, `h2c`, `http/1.1`, and so on, whether or not the connection actually negotiated over ALPN
 
-Phase timestamps are fractional milliseconds on a monotonic clock shared across the breakdown, so consumers subtract one phase from another to obtain a duration; `requestStart` is the earliest and the rest are no earlier than it.
-Connection setup phases (DNS resolution, TCP connect, TLS handshake) sit below the layer Fáith instruments and are not part of the breakdown.
+Phase timestamps are fractional milliseconds on a monotonic clock shared across the breakdown, so consumers subtract one phase from another to obtain a duration; `fetchStart` is the earliest and the rest are no earlier than it.
+The breakdown starts at the request boundary, so the interval from `fetchStart` to `requestSent` covers connection acquisition (pool wait, or DNS, connect, and TLS handshake on a fresh connection) as a single span rather than as separate phases.
 
-`responseStart` less `requestStart` is the time to response headers.
+`responseStart` less `fetchStart` is the time to response headers.
 That measurement is taken at a single instrumentation point and is the same one the per-protocol path-time average consumes for HTTP/3 slow-path demotion (see [PROBE](../http3/probing.md)), so a request's surfaced timing and the average it feeds never diverge.
 
 ## Threading
