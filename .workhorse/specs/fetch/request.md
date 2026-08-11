@@ -30,6 +30,16 @@ A request the caller adds no headers to still carries `Host` for the target auth
 A caller-supplied or agent-default value for any of these replaces the value Fáith would otherwise send.
 An `Accept-Encoding` from the caller also selects which codings Fáith decodes on the way back (see [ENC](content-encoding.md)).
 
+## Request priority
+
+The `priority` option carries a hint about how the request ranks against others, expressed on the wire as an RFC 9218 `Priority` header with an urgency (`u`) parameter. Urgency runs from 0 (most urgent) to 7 (least urgent), and lower urgency means the server should serve the request sooner.
+
+`priority: "high"` sends a low urgency value, marking the request as more urgent than a default request.
+`priority: "low"` sends a high urgency value, marking it less urgent than a default request.
+`priority: "auto"`, an unrecognised value, and the absence of the option all send no `Priority` header, leaving the request at the server's default urgency.
+
+A `Priority` header the caller sets directly, or one configured as an agent default header, wins over the mapping: Fáith emits the caller's header unchanged and does not derive a value from `priority`.
+
 ## Body
 
 Accepted body types: string, `ArrayBuffer`, `Blob`, `DataView`, `File`, `FormData`, `TypedArray`, `URLSearchParams`, and `ReadableStream`.
@@ -45,7 +55,7 @@ An agent-configured TLS client certificate is still presented under `omit`, and 
 
 ## Options without effect
 
-Options that assume a browser (`mode`, `referrer`, `referrerPolicy`, `attributionReporting`, `browsingTopics`, `keepalive`, `priority`) and options Fáith does not recognise are ignored rather than rejected.
+Options that assume a browser (`mode`, `referrer`, `referrerPolicy`, `attributionReporting`, `browsingTopics`, `keepalive`) and options Fáith does not recognise are ignored rather than rejected.
 `redirect` on the request is ignored; redirect policy lives on the agent (see [REDIR](redirects.md)).
 
 ## Related request options
