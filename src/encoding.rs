@@ -56,15 +56,20 @@ impl Coding {
 /// A `Content-Encoding` naming more than one coding, an unknown coding, or a coding the
 /// request did not accept yields `None`, and the body is delivered as received.
 pub(crate) fn decision(headers: &HeaderMap, accept: &AcceptEncoding) -> Option<Coding> {
-	let value = headers.get(CONTENT_ENCODING)?.to_str().ok()?;
-
-	// A representation encoded more than once is the caller's to unwind.
-	let mut codings = value.split(',').filter(|token| !token.trim().is_empty());
-	let single = codings.next()?;
-	if codings.next().is_some() {
-		return None;
+	// A representation encoded more than once is the caller's to unwind. The codings may
+	// arrive comma-joined on one line or split across several `Content-Encoding` lines --
+	// the same list either way, so both forms are gathered together before counting.
+	let mut codings = Vec::new();
+	for value in headers.get_all(CONTENT_ENCODING) {
+		// A line that is not valid ASCII names nothing Fáith can match; deliver as received
+		// rather than decoding whatever line sits beside it.
+		let value = value.to_str().ok()?;
+		codings.extend(value.split(',').map(str::trim).filter(|c| !c.is_empty()));
 	}
 
+	let [single] = codings[..] else {
+		return None;
+	};
 	let coding = Coding::from_token(single)?;
 	accept.accepts(coding).then_some(coding)
 }
@@ -262,6 +267,42 @@ mod tests {
 	fn more_than_one_coding_is_delivered_as_received() {
 		assert_eq!(decide("gzip, br", DEFAULT_ACCEPT_ENCODING), None);
 		assert_eq!(decide("br, gzip", DEFAULT_ACCEPT_ENCODING), None);
+		assert_eq!(decide("identity, gzip", DEFAULT_ACCEPT_ENCODING), None);
+	}
+
+	#[test]
+	fn codings_split_across_header_lines_count_together() {
+		// The same list as `gzip, br` on one line, so neither coding is decoded.
+		let mut headers = HeaderMap::new();
+		headers.append(CONTENT_ENCODING, HeaderValue::from_static("gzip"));
+		headers.append(CONTENT_ENCODING, HeaderValue::from_static("br"));
+		assert_eq!(
+			decision(&headers, &AcceptEncoding::parse(DEFAULT_ACCEPT_ENCODING)),
+			None
+		);
+	}
+
+	#[test]
+	fn one_coding_split_across_lines_with_an_empty_line_still_decodes() {
+		// An empty line contributes no coding, leaving gzip the only one named.
+		let mut headers = HeaderMap::new();
+		headers.append(CONTENT_ENCODING, HeaderValue::from_static("gzip"));
+		headers.append(CONTENT_ENCODING, HeaderValue::from_static(""));
+		assert_eq!(
+			decision(&headers, &AcceptEncoding::parse(DEFAULT_ACCEPT_ENCODING)),
+			Some(Coding::Gzip)
+		);
+	}
+
+	#[test]
+	fn a_non_ascii_line_is_delivered_as_received() {
+		let mut headers = HeaderMap::new();
+		headers.append(CONTENT_ENCODING, HeaderValue::from_static("gzip"));
+		headers.append(CONTENT_ENCODING, HeaderValue::from_bytes(b"\xff").unwrap());
+		assert_eq!(
+			decision(&headers, &AcceptEncoding::parse(DEFAULT_ACCEPT_ENCODING)),
+			None
+		);
 	}
 
 	#[test]

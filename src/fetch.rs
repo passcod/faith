@@ -123,8 +123,10 @@ pub fn faith_fetch<'env>(
 				.unwrap_or_else(|| DEFAULT_ACCEPT_ENCODING.to_owned()),
 		);
 		if request_accept_encoding.is_none() && agent.default_accept_encoding.is_none() {
-			request =
-				request.header(ACCEPT_ENCODING, HeaderValue::from_static(DEFAULT_ACCEPT_ENCODING));
+			request = request.header(
+				ACCEPT_ENCODING,
+				HeaderValue::from_static(DEFAULT_ACCEPT_ENCODING),
+			);
 		}
 
 		// Handle body: prefer streaming body over buffered body

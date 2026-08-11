@@ -28,6 +28,7 @@ Decoding applies to every way of reading the body, the `body` stream included (s
 Every other response is delivered as received, with `Content-Encoding` and `Content-Length` intact, leaving the caller to decode the bytes.
 That covers a response in a coding Fáith cannot decode, and a response in a coding the request's `Accept-Encoding` did not accept.
 It also covers a `Content-Encoding` naming more than one coding: Fáith decodes a single coding, and a representation encoded repeatedly is the caller's to unwind.
+The codings a response names are counted across every `Content-Encoding` it carries, whether they arrive comma-joined on one line or split across several, those being the same list.
 
 ## Where decoding sits
 
