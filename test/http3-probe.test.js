@@ -6,8 +6,8 @@
  * is UDP connectivity between here and there. Before the probe, the first
  * request after an advertisement attempted HTTP/3 inline, and on a silently
  * broken UDP path it stalled until the QUIC idle timeout (~30s) or
- * `upgradeAttemptTimeout` before falling back — recurring every
- * `upgradeFailedTtl`, sacrificing a random foreground request each cycle.
+ * `upgradeAttemptTimeout` before falling back — recurring once per failure
+ * cooldown, sacrificing a random foreground request each cycle.
  *
  * With the probe (the default), requests keep to TCP until a background
  * `HEAD /` over HTTP/3 confirms the path. These tests pin both halves of that
@@ -174,9 +174,10 @@ test("HTTP/3 probe: recovery re-enters through a probe, not a foreground gamble"
 	if (!guard(t)) return;
 
 	const { fetch } = require("../wrapper.js");
-	// A short failed TTL so the recovery cycle fits in a test; everything else
-	// stays at defaults.
-	const h = await harness({ upgradeFailedTtl: 1 });
+	// A short failed TTL so the recovery cycle fits in a test, and a cap right
+	// above it so the run of failed probes this test provokes can't back the
+	// cooldown off past the recovery deadline. Everything else stays at defaults.
+	const h = await harness({ upgradeFailedTtl: 1, upgradeFailedMaxTtl: 2 });
 
 	h.relay.blackhole();
 
@@ -215,6 +216,59 @@ test("HTTP/3 probe: recovery re-enters through a probe, not a foreground gamble"
 		t.ok(
 			recovered.elapsed < FOREGROUND_BUDGET,
 			`recovery cost no foreground stall either (${recovered.elapsed}ms)`,
+		);
+	} finally {
+		await h.close();
+		t.end();
+	}
+});
+
+test("HTTP/3 probe: a path that stays broken is re-probed less and less often", async (t) => {
+	if (!guard(t)) return;
+
+	const { fetch } = require("../wrapper.js");
+	// Second-scale cooldowns and a fast probe timeout so several cycles fit in a
+	// test; the cap is well clear of them so it can't flatten the doubling this
+	// measures.
+	const h = await harness({
+		upgradeFailedTtl: 1,
+		upgradeFailedMaxTtl: 60,
+		upgradeProbeTimeout: 200,
+	});
+
+	h.relay.blackhole();
+
+	try {
+		// Foreground requests stay on TCP throughout, so every datagram the relay
+		// drops belongs to a probe. A rise in the drop counter after a quiet
+		// stretch is therefore a fresh probe attempt, and the intervals between
+		// those are the cooldowns the origin earned.
+		const attempts = [];
+		let dropped = h.relay.state.dropped;
+		let lastDropAt = 0;
+
+		const deadline = Date.now() + 20_000;
+		while (Date.now() < deadline && attempts.length < 4) {
+			// Keeps advertisements arriving over TCP and gives each request the
+			// chance to trigger the opportunistic probe.
+			await timed(fetch, h.url, h.agent);
+			await new Promise((r) => setTimeout(r, 100));
+
+			if (h.relay.state.dropped > dropped) {
+				const now = Date.now();
+				// Retransmissions within one attempt land far closer together than
+				// the shortest cooldown.
+				if (now - lastDropAt > 400) attempts.push(now);
+				dropped = h.relay.state.dropped;
+				lastDropAt = now;
+			}
+		}
+
+		const gaps = attempts.slice(1).map((at, i) => at - attempts[i]);
+		t.ok(attempts.length >= 3, `the broken path was probed repeatedly (${attempts.length} attempts)`);
+		t.ok(
+			gaps.length >= 2 && gaps.every((gap, i) => i === 0 || gap > gaps[i - 1] * 1.5),
+			`each retry waited longer than the one before it (${gaps.join("ms, ")}ms)`,
 		);
 	} finally {
 		await h.close();

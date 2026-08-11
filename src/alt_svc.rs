@@ -24,6 +24,26 @@ pub struct AltSvcAdvertisement {
 	pub max_age: Option<Duration>,
 }
 
+/// A run of consecutive HTTP/3 failures against one origin.
+///
+/// Both instants are carried in the value rather than left to the cache's TTL,
+/// because they differ per origin and from each other: the entry deliberately
+/// outlives the cooldown it set, so that a count survives the block it caused and
+/// can escalate the next one. `advertised` does the same for `ma`.
+///
+/// spec:H3UP#failure-backoff
+#[derive(Debug, Clone, Copy)]
+struct FailureEntry {
+	/// Consecutive failures with no confirmation in between.
+	count: u32,
+	/// Until when the origin is blocked from upgrading, probing, and recording
+	/// advertisements. The only field that gates behaviour.
+	blocked_until: Instant,
+	/// Until when `count` still describes a run. Past it the origin is judged
+	/// from the base cooldown again.
+	counted_until: Instant,
+}
+
 /// A per-origin exponentially-weighted moving average of time-to-response-headers.
 ///
 /// Two `f64`s per origin and no sample storage: the average decays stale history
@@ -47,7 +67,11 @@ const SLOW_FLOOR_MS: f64 = 10.0;
 pub struct AltSvcCacheConfig {
 	pub advertised_ttl: Duration,
 	pub confirmed_ttl: Duration,
+	/// Cooldown a first failure earns; each consecutive one doubles it.
 	pub failed_ttl: Duration,
+	/// Ceiling on the doubling. Clamped up to `failed_ttl`, so setting it at or
+	/// below the base gives a flat cooldown.
+	pub failed_max_ttl: Duration,
 	pub capacity: u64,
 	pub cancel_strikes: u32,
 	pub strike_window: Duration,
@@ -67,7 +91,9 @@ pub struct AltSvcCacheConfig {
 pub struct AltSvcCache {
 	advertised: Cache<String, AltSvcEntry>,
 	confirmed: Cache<String, AltSvcEntry>,
-	failed: Cache<String, ()>,
+	/// Origins that failed over HTTP/3, with their run of consecutive failures.
+	/// An entry present here is not necessarily blocked: see [`Self::is_failed`].
+	failed: Cache<String, FailureEntry>,
 	/// Consecutive cancelled HTTP/3 attempts per origin. Entries expire on a TTL
 	/// (the strike window), so a run has to be sustained to count.
 	cancellations: Cache<String, u32>,
@@ -84,6 +110,8 @@ pub struct AltSvcCache {
 
 	advertised_ttl: Duration,
 	confirmed_ttl: Duration,
+	failed_ttl: Duration,
+	failed_max_ttl: Duration,
 	cancel_strikes: u32,
 	follow_advertised_port: bool,
 	slow_factor: f64,
@@ -108,6 +136,7 @@ impl AltSvcCache {
 			advertised_ttl,
 			confirmed_ttl,
 			failed_ttl,
+			failed_max_ttl,
 			capacity,
 			cancel_strikes,
 			strike_window,
@@ -116,6 +145,10 @@ impl AltSvcCache {
 			slow_factor,
 			slow_ttl,
 		} = config;
+
+		// A cap below the base would mean the first failure already exceeds it;
+		// clamping makes that setting a flat cooldown rather than a shorter one.
+		let failed_max_ttl = failed_max_ttl.max(failed_ttl);
 
 		Self {
 			advertised: Cache::builder()
@@ -126,9 +159,12 @@ impl AltSvcCache {
 				.max_capacity(capacity)
 				.time_to_live(confirmed_ttl)
 				.build(),
+			// Twice the longest cooldown: the outer bound on how long an entry
+			// can be worth keeping, since a count is dropped one cooldown after
+			// the block it caused lapsed. Per-entry instants do the real work.
 			failed: Cache::builder()
 				.max_capacity(capacity)
-				.time_to_live(failed_ttl)
+				.time_to_live(failed_max_ttl.saturating_mul(2))
 				.build(),
 			cancellations: Cache::builder()
 				.max_capacity(capacity)
@@ -152,10 +188,33 @@ impl AltSvcCache {
 				.build(),
 			advertised_ttl,
 			confirmed_ttl,
+			failed_ttl,
+			failed_max_ttl,
 			cancel_strikes,
 			follow_advertised_port,
 			slow_factor,
 		}
+	}
+
+	/// The cooldown the `count`-th consecutive failure earns: the base doubled
+	/// once per failure before it, capped.
+	///
+	/// spec:H3UP#failure-backoff
+	fn failure_cooldown(&self, count: u32) -> Duration {
+		let doublings = count.saturating_sub(1).min(u32::BITS - 1);
+		self.failed_ttl
+			.saturating_mul(2u32.saturating_pow(doublings))
+			.min(self.failed_max_ttl)
+	}
+
+	/// Whether the origin is inside its failure cooldown.
+	///
+	/// Presence in `failed` is not the question: an entry outlives its cooldown
+	/// so the failure count survives to escalate the next one.
+	fn is_failed(&self, origin: &str) -> bool {
+		self.failed
+			.get(origin)
+			.is_some_and(|entry| entry.blocked_until > Instant::now())
 	}
 
 	fn origin_key(url: &reqwest::Url) -> Option<String> {
@@ -186,7 +245,7 @@ impl AltSvcCache {
 			return;
 		}
 
-		if self.failed.contains_key(&origin) {
+		if self.is_failed(&origin) {
 			return;
 		}
 
@@ -212,7 +271,7 @@ impl AltSvcCache {
 	pub fn add_hint(&self, host: &str, port: u16) {
 		let origin = format!("https://{}:{}", host, port);
 
-		if self.failed.contains_key(&origin) {
+		if self.is_failed(&origin) {
 			return;
 		}
 
@@ -252,7 +311,7 @@ impl AltSvcCache {
 	pub fn confirmed_port(&self, url: &reqwest::Url) -> Option<u16> {
 		let origin = Self::origin_key(url)?;
 
-		if self.failed.contains_key(&origin) || self.slow.contains_key(&origin) {
+		if self.is_failed(&origin) || self.slow.contains_key(&origin) {
 			return None;
 		}
 
@@ -270,7 +329,7 @@ impl AltSvcCache {
 	pub fn probe_candidate(&self, url: &reqwest::Url) -> Option<u16> {
 		let origin = Self::origin_key(url)?;
 
-		if self.failed.contains_key(&origin)
+		if self.is_failed(&origin)
 			|| self.slow.contains_key(&origin)
 			|| self.confirmed.contains_key(&origin)
 		{
@@ -412,8 +471,10 @@ impl AltSvcCache {
 
 		// Promoted out of `advertised`; it has served its purpose.
 		self.advertised.invalidate(&origin);
-		// A working h3 response is proof of health; forget any strikes.
+		// A working h3 response is proof of health; forget any strikes, and end
+		// whatever run of failures preceded it.
 		self.cancellations.invalidate(&origin);
+		self.clear_failure_count(&origin);
 
 		let entry = AltSvcEntry {
 			port,
@@ -459,6 +520,32 @@ impl AltSvcCache {
 		}
 	}
 
+	/// Forget the origin's run of failures, so the next one starts the backoff
+	/// from the base cooldown again.
+	///
+	/// A cooldown still running is left alone. A confirmation racing a concurrent
+	/// failure must not unblock the origin that failure just blocked: the failure
+	/// is the more recent evidence about the path, and [`Self::confirm_h3`]
+	/// relies on its own entry being masked until the block lapses.
+	///
+	/// spec:H3UP#failure-backoff
+	fn clear_failure_count(&self, origin: &str) {
+		let Some(entry) = self.failed.get(origin) else {
+			return;
+		};
+
+		if entry.blocked_until > Instant::now() {
+			self.failed
+				.insert(origin.to_string(), FailureEntry { count: 0, ..entry });
+		} else {
+			self.failed.invalidate(origin);
+		}
+	}
+
+	/// Record a failed HTTP/3 attempt, blocking the origin for a cooldown that
+	/// lengthens the longer it keeps failing.
+	///
+	/// spec:H3UP#failure-backoff
 	pub fn record_h3_failure(&self, url: &reqwest::Url) {
 		let Some(origin) = Self::origin_key(url) else {
 			return;
@@ -468,7 +555,28 @@ impl AltSvcCache {
 		self.confirmed.invalidate(&origin);
 		// Already demoted; further counting is meaningless.
 		self.cancellations.invalidate(&origin);
-		self.failed.insert(origin, ());
+
+		let now = Instant::now();
+		// An entry whose run has lapsed is history, not a run in progress: the
+		// origin went a whole further cooldown without failing again, so it is
+		// judged from the base.
+		let count = self
+			.failed
+			.get(&origin)
+			.filter(|entry| entry.counted_until > now)
+			.map_or(1, |entry| entry.count.saturating_add(1));
+		let cooldown = self.failure_cooldown(count);
+
+		self.failed.insert(
+			origin,
+			FailureEntry {
+				count,
+				blocked_until: now + cooldown,
+				// The count has to outlive the block it caused, or it could never
+				// escalate: the next attempt only comes once the block lapses.
+				counted_until: now + cooldown.saturating_mul(2),
+			},
+		);
 	}
 }
 
@@ -1089,10 +1197,27 @@ mod tests {
 		strike_window: Duration,
 		follow_advertised_port: bool,
 	) -> AltSvcCache {
+		test_cache_failing(
+			cancel_strikes,
+			strike_window,
+			follow_advertised_port,
+			Duration::from_secs(300),
+			Duration::from_secs(3600),
+		)
+	}
+
+	fn test_cache_failing(
+		cancel_strikes: u32,
+		strike_window: Duration,
+		follow_advertised_port: bool,
+		failed_ttl: Duration,
+		failed_max_ttl: Duration,
+	) -> AltSvcCache {
 		AltSvcCache::new(AltSvcCacheConfig {
 			advertised_ttl: Duration::from_secs(86400),
 			confirmed_ttl: Duration::from_secs(86400),
-			failed_ttl: Duration::from_secs(300),
+			failed_ttl,
+			failed_max_ttl,
 			capacity: 10_000,
 			cancel_strikes,
 			strike_window,
@@ -1341,9 +1466,7 @@ mod tests {
 			"while the slow marker lives, the origin is not re-probed either"
 		);
 		assert!(
-			!cache
-				.failed
-				.contains_key(&"https://example.com:443".to_string()),
+			!cache.is_failed("https://example.com:443"),
 			"slow is not broken: the failed cache stays out of it"
 		);
 
@@ -1410,9 +1533,7 @@ mod tests {
 			"three strikes demotes the origin"
 		);
 		assert!(
-			cache
-				.failed
-				.contains_key(&"https://example.com:443".to_string()),
+			cache.is_failed("https://example.com:443"),
 			"demotion goes through the failed cache, so re-advertisement can't re-arm it"
 		);
 	}
@@ -1469,6 +1590,157 @@ mod tests {
 			cache.should_use_h3(&url),
 			Some(443),
 			"strikes older than the window don't count towards the run"
+		);
+	}
+
+	fn failure_entry(cache: &AltSvcCache) -> FailureEntry {
+		cache
+			.failed
+			.get("https://example.com:443")
+			.expect("the origin has a failure on record")
+	}
+
+	#[test]
+	fn test_failure_cooldown_doubles_up_to_the_cap() {
+		let cache = test_cache();
+
+		let schedule: Vec<u64> = (1..=6)
+			.map(|count| cache.failure_cooldown(count).as_secs())
+			.collect();
+
+		assert_eq!(
+			schedule,
+			vec![300, 600, 1200, 2400, 3600, 3600],
+			"each consecutive failure doubles the base, then holds at the cap"
+		);
+	}
+
+	#[test]
+	fn test_failure_cooldown_cap_below_base_is_flat() {
+		let cache = test_cache_failing(
+			3,
+			Duration::from_secs(60),
+			false,
+			Duration::from_secs(300),
+			Duration::from_secs(60),
+		);
+
+		let schedule: Vec<u64> = (1..=4)
+			.map(|count| cache.failure_cooldown(count).as_secs())
+			.collect();
+
+		assert_eq!(
+			schedule,
+			vec![300, 300, 300, 300],
+			"a cap under the base is clamped up to it, giving a cooldown that never backs off"
+		);
+	}
+
+	#[test]
+	fn test_consecutive_failures_lengthen_the_cooldown() {
+		let cache = test_cache_failing(
+			3,
+			Duration::from_secs(60),
+			false,
+			Duration::from_millis(200),
+			Duration::from_secs(60),
+		);
+		let url = reqwest::Url::parse("https://example.com/path").unwrap();
+
+		cache.record_alt_svc(&url, &ad(443, None));
+		cache.record_h3_failure(&url);
+		assert!(
+			cache.is_failed("https://example.com:443"),
+			"the first failure blocks the origin"
+		);
+
+		// Past the first cooldown, but well inside the run's own lifetime: this is
+		// the retry the cooldown allowed, and it fails too.
+		std::thread::sleep(Duration::from_millis(250));
+		assert!(
+			!cache.is_failed("https://example.com:443"),
+			"the first cooldown lapses on its own"
+		);
+
+		cache.record_h3_failure(&url);
+		let entry = failure_entry(&cache);
+		assert_eq!(
+			entry.count, 2,
+			"failing again straight after a lapsed cooldown continues the run"
+		);
+		assert!(
+			cache.is_failed("https://example.com:443"),
+			"and blocks the origin again, for twice as long"
+		);
+	}
+
+	#[test]
+	fn test_run_lapses_when_the_origin_stops_failing() {
+		let cache = test_cache_failing(
+			3,
+			Duration::from_secs(60),
+			false,
+			Duration::from_millis(100),
+			Duration::from_secs(60),
+		);
+		let url = reqwest::Url::parse("https://example.com/path").unwrap();
+
+		cache.record_h3_failure(&url);
+		// One cooldown beyond the block it caused: nobody exercised the origin in
+		// that stretch, so the next failure is judged on its own.
+		std::thread::sleep(Duration::from_millis(300));
+
+		cache.record_h3_failure(&url);
+		assert_eq!(
+			failure_entry(&cache).count,
+			1,
+			"an origin left alone past its run starts from the base cooldown again"
+		);
+	}
+
+	#[test]
+	fn test_confirmation_ends_the_run() {
+		let cache = test_cache();
+		let url = reqwest::Url::parse("https://example.com/path").unwrap();
+
+		cache.record_h3_failure(&url);
+		cache.record_h3_failure(&url);
+		assert_eq!(failure_entry(&cache).count, 2);
+
+		cache.confirm_h3(&url, 443);
+		cache.record_h3_failure(&url);
+
+		let entry = failure_entry(&cache);
+		assert_eq!(
+			entry.count, 1,
+			"a working h3 response ends the run, so the next failure starts at the base"
+		);
+		assert_eq!(
+			entry.blocked_until.duration_since(Instant::now()).as_secs(),
+			299,
+			"and is blocked for the base cooldown, not the doubled one"
+		);
+	}
+
+	#[test]
+	fn test_confirmation_does_not_cut_a_live_cooldown_short() {
+		// A confirmation can race a concurrent failure. The failure is the more
+		// recent word on the path, so it keeps the origin blocked; only the run
+		// is forgotten.
+		let cache = test_cache();
+		let url = reqwest::Url::parse("https://example.com/path").unwrap();
+
+		cache.record_h3_failure(&url);
+		cache.confirm_h3(&url, 443);
+
+		assert!(
+			cache.is_failed("https://example.com:443"),
+			"the cooldown the failure set still runs"
+		);
+		assert_eq!(
+			failure_entry(&cache).count,
+			0,
+			"but the run behind it is cleared"
 		);
 	}
 }
