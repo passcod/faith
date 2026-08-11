@@ -9,8 +9,8 @@ This keeps redirect behaviour a property of the client configuration rather than
 
 ## Policies
 
-`follow` (the default) follows redirects automatically, up to 10 hops; exceeding the limit is a network error.
-`error` rejects the fetch promise with a network error when a redirect status is returned.
+`follow` (the default) follows redirects automatically, up to 10 hops; exceeding the limit is a network error carrying `Network` (see [ERR](../errors/errors.md)).
+`error` rejects the fetch promise when a redirect status is returned, with a network error carrying `Redirect` so a caller can tell a refused redirect from a transport failure.
 `stop` (Fáith-specific) follows nothing and returns the redirect response itself, giving callers manual control without the browser's opaque `manual` semantics.
 `manual` is accepted for compatibility with the fetch standard's vocabulary and behaves as `follow`.
 

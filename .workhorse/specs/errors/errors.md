@@ -19,7 +19,8 @@ Errors surfaced through reading the response `body` stream carry no `code`.
 
 The codes below are the whole of `ERROR_CODES`, and the reference documentation shipped with the library (the TypeScript typings and the README) lists the same codes under the same JavaScript error names.
 Abort-shaped failures throw an error named `AbortError`: `Aborted` (cancelled via `signal`) and `Timeout` (any timeout).
-Network-shaped failures throw an error named `NetworkError`, carrying `Network`, which covers transport and protocol failures and a redirect refused by an agent whose redirect policy is `error` (see [REDIR](../fetch/redirects.md)).
+Network-shaped failures throw an error named `NetworkError`: `Network` covers transport and protocol failures, and `Redirect` a redirect refused by an agent whose redirect policy is `error` (see [REDIR](../fetch/redirects.md)).
+A redirect that fails for a reason the agent did not ask for, such as exhausting the hop limit, is a transport failure and carries `Network`.
 Malformed input that has a textual syntax throws `SyntaxError`: `AddressParse` (DNS override or local address), `InvalidIntegrity` (SRI value), `JsonParse` (`response.json()`), `PemParse` (TLS identity or extra roots).
 API misuse throws `TypeError`: `InvalidHeader`, `InvalidMethod`, `InvalidUrl`, `Closed` (request on a closed agent), and `ResponseAlreadyDisturbed` (reading a body that has been consumed or discarded, see [BODY](../response/reading-the-body.md)).
 The remainder throw a generic `Error`: `BodyStream` (internal stream handling), `Config` (invalid agent configuration), and `IntegrityMismatch` (SRI digest mismatch).
