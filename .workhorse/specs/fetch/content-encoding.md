@@ -19,9 +19,18 @@ A coding the header names outright settles the question whatever `*` says, so `g
 So a caller asking for gzip alone receives a gzip response decoded, while a server that compresses in the face of `Accept-Encoding: identity` hands the caller the compressed bytes.
 Whether to decode follows from the `Accept-Encoding` the request carried, one inherited from an agent default header included, and not from any separate decoding setting.
 `Content-Encoding` and `Content-Length` are removed from the response headers on decoding, so the headers the caller reads describe the bytes the caller receives.
+Removing them is a knowing divergence from the fetch standard, which decodes the body and leaves the header list as it was (see [FAITH](../overview.md)).
+A response that cannot carry a body keeps both headers, nothing having been decoded, so a `HEAD` response still describes the representation a `GET` would return.
 Decoding applies to every way of reading the body, the `body` stream included (see [BODY](../response/reading-the-body.md)).
 
 ## Bodies delivered as received
 
 Every other response is delivered as received, with `Content-Encoding` and `Content-Length` intact, leaving the caller to decode the bytes.
 That covers a response in a coding Fáith cannot decode, and a response in a coding the request's `Accept-Encoding` did not accept.
+It also covers a `Content-Encoding` naming more than one coding: Fáith decodes a single coding, and a representation encoded repeatedly is the caller's to unwind.
+
+## Where decoding sits
+
+Fáith owns content coding itself rather than leaving it to the HTTP stack underneath, which is what allows the decision to rest on the `Accept-Encoding` of the request in hand.
+Decoding happens outside the HTTP cache, so a stored response holds the bytes as they came off the wire with its `Content-Encoding` and `Content-Length` as received (see [CACHE](../cache/http-cache.md)).
+A response served from the cache is decoded on its way to the caller under the `Accept-Encoding` of the request being served, so one stored entry answers callers who negotiated different codings, and a cache holds compressed bodies at the size the origin sent them.

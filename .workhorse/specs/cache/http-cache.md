@@ -19,6 +19,7 @@ With no `cache.store` configured, requests neither consult nor populate any cach
 
 A stored response is identified by the request method and the full URL, and each identity holds one stored response.
 A response whose `Vary` header names request headers is served only to a request whose values for those headers match the ones it was stored against; a request that does not match goes to the network and its response replaces the stored one.
+A response is stored as it came off the wire, its content coding intact, and decoded on the way out to whichever request it answers (see [ENC](../fetch/content-encoding.md)).
 
 ## Freshness perspective
 
