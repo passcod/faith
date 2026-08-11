@@ -4,6 +4,7 @@ mod alt_svc;
 mod async_task;
 mod body;
 mod conn_tracker;
+mod encoding;
 mod error;
 mod fetch;
 mod integrity;

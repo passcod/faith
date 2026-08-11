@@ -12,7 +12,7 @@ use napi::{
 use napi_derive::napi;
 use reqwest::{Method, StatusCode};
 use reqwest::{
-	header::{HeaderName, HeaderValue},
+	header::{ACCEPT_ENCODING, HeaderName, HeaderValue},
 	tls::TlsInfo,
 };
 use tokio::sync::{Mutex, mpsc};
@@ -20,6 +20,7 @@ use tokio::sync::{Mutex, mpsc};
 use crate::{
 	async_task::faith_promise,
 	body::{Body, BodyHolder},
+	encoding::{self, AcceptEncoding, DEFAULT_ACCEPT_ENCODING},
 	error::{FaithError, FaithErrorKind},
 	options::{CredentialsOption, FaithOptions, FaithOptionsAndBody},
 	response::{FaithResponse, PeerInformation},
@@ -97,6 +98,35 @@ pub fn faith_fetch<'env>(
 				})?;
 				request = request.header(header_name, header_value);
 			}
+		}
+
+		// The request's `Accept-Encoding` governs which codings Fáith decodes on the way
+		// back (spec: ENC): a value on the request, else one inherited from the agent's
+		// default headers, else the default Fáith sends itself. Neither the request nor the
+		// agent advertising a value means nothing beneath Fáith adds one now that it owns
+		// the codings, so Fáith sends the default explicitly.
+		let request_accept_encoding = options.headers.as_ref().and_then(|headers| {
+			headers
+				.iter()
+				.find(|(name, _)| name.eq_ignore_ascii_case("accept-encoding"))
+				.map(|(_, value)| value.clone())
+		});
+		let accept_encoding = AcceptEncoding::parse(
+			&request_accept_encoding
+				.clone()
+				.or_else(|| {
+					agent
+						.default_accept_encoding
+						.as_ref()
+						.and_then(|value| value.to_str().ok().map(str::to_owned))
+				})
+				.unwrap_or_else(|| DEFAULT_ACCEPT_ENCODING.to_owned()),
+		);
+		if request_accept_encoding.is_none() && agent.default_accept_encoding.is_none() {
+			request = request.header(
+				ACCEPT_ENCODING,
+				HeaderValue::from_static(DEFAULT_ACCEPT_ENCODING),
+			);
 		}
 
 		// Handle body: prefer streaming body over buffered body
@@ -187,6 +217,17 @@ pub fn faith_fetch<'env>(
 			headers.remove("set-cookie");
 		}
 
+		// Decode only a body Fáith negotiated the coding for; a bodyless response keeps its
+		// `Content-Encoding` and `Content-Length` describing the representation (spec: ENC).
+		let decode = if empty {
+			None
+		} else {
+			encoding::decision(&headers, &accept_encoding)
+		};
+		if decode.is_some() {
+			encoding::strip_decoded_headers(&mut headers);
+		}
+
 		Ok(FaithResponse {
 			body: if empty {
 				BodyHolder::none()
@@ -197,6 +238,7 @@ pub fn faith_fetch<'env>(
 					version,
 				)
 			},
+			decode,
 			disturbed: Arc::new(AtomicBool::new(false)),
 			headers,
 			integrity: options.integrity,
