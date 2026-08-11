@@ -393,14 +393,14 @@ export interface AgentHttp3Options {
    * there is UDP connectivity between you and it. Without probing, the next
    * request after an advertisement attempts HTTP/3 inline, and on a silently
    * broken UDP path it stalls until the QUIC idle timeout or
-   * `upgradeAttemptTimeout` before falling back to TCP — recurring every
-   * `upgradeFailedTtl` for as long as the path stays broken.
+   * `upgradeAttemptTimeout` before falling back to TCP — recurring once per
+   * failure cooldown for as long as the path stays broken.
    *
    * With probing (the default), requests keep using TCP until a background
    * `HEAD /` over HTTP/3 has confirmed the path. The probe shares the
    * connection pool, so the first upgraded request rides the probe's warm
    * connection. A broken path costs one failed background request per
-   * `upgradeFailedTtl` and no foreground latency at all.
+   * cooldown and no foreground latency at all.
    *
    * The probe is a synthetic request the server will see in its logs. Set
    * this to `false` to restore the inline upgrade if that is unacceptable
@@ -465,12 +465,28 @@ export interface AgentHttp3Options {
    */
   upgradeConfirmedTtl?: number
   /**
-   * How long (in seconds) to cache a failed HTTP/3 attempt. During this time, no HTTP/3
-   * upgrades will be attempted for the origin, even if the server sends Alt-Svc headers.
+   * How long (in seconds) a *first* failed HTTP/3 attempt blocks an origin. During this
+   * time, no HTTP/3 upgrades will be attempted for the origin, even if the server sends
+   * Alt-Svc headers.
+   *
+   * Each consecutive failure doubles the cooldown, up to `upgradeFailedMaxTtl`, so an
+   * origin whose UDP path is blocked for good is retried less and less often instead of
+   * forever at this interval. A confirmed HTTP/3 response ends the run.
    *
    * Default: 300 (5 minutes).
    */
   upgradeFailedTtl?: number
+  /**
+   * Ceiling (in seconds) on the cooldown that consecutive HTTP/3 failures double out of
+   * `upgradeFailedTtl`.
+   *
+   * On the defaults an origin that keeps failing is blocked for 5 minutes, then 10, 20,
+   * 40, and an hour thereafter. Set this at or below `upgradeFailedTtl` for a flat
+   * cooldown that never backs off.
+   *
+   * Default: 3600 (1 hour).
+   */
+  upgradeFailedMaxTtl?: number
   /**
    * How many consecutive cancelled HTTP/3 attempts, within a 60-second window,
    * demote an origin back to TCP.

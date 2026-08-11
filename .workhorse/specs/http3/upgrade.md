@@ -14,7 +14,7 @@ Knowledge is keyed by origin (`scheme://host:port`, always the origin's own port
 An origin is in one of three states, each with its own lifetime.
 **Advertised** means the server said HTTP/3 exists; it lives for `upgradeAdvertisedTtl` (default 1 day), or the advertisement's own `ma` when given, and with probing on, an advertisement alone never routes a foreground request (see [PROBE](probing.md)).
 **Confirmed** means HTTP/3 was proven end to end by an actual HTTP/3 response; it lives for `upgradeConfirmedTtl` (default 1 day) and is the only state foreground requests upgrade from.
-**Failed** means an attempt failed; it blocks upgrading, probing, and even recording fresh advertisements, so a flapping origin cannot re-enter the cycle until the failure knowledge expires, and it lives for a cooldown that lengthens the longer an origin keeps failing (see [Failure backoff](#failure-backoff)).
+**Failed** means an attempt failed; it blocks upgrading, probing, and even recording fresh advertisements, so a flapping origin cannot re-enter the cycle until the failure knowledge expires, and it lives for a cooldown that lengthens the longer an origin keeps failing.
 
 ## Failure backoff
 

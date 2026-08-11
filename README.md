@@ -739,12 +739,12 @@ Default: `true`.
 An Alt-Svc advertisement says the server listens on UDP; it cannot say there is UDP connectivity
 between you and it. Without probing, the next request after an advertisement attempts HTTP/3
 inline, and on a silently broken UDP path it stalls until `upgradeAttemptTimeout` (or the QUIC
-idle timeout) before falling back to TCP, recurring every `upgradeFailedTtl` for as long as the
+idle timeout) before falling back to TCP, recurring once per failure cooldown for as long as the
 path stays broken.
 
 With probing (the default), requests keep using TCP until a background `HEAD /` over HTTP/3 has
 confirmed the path. The probe shares the connection pool, so the first upgraded request rides the
-probe's warm connection. A broken path costs one failed background request per `upgradeFailedTtl`
+probe's warm connection. A broken path costs one failed background request per cooldown
 and no foreground latency at all. Any HTTP/3 response confirms the path, whatever its status: a
 401 or 405 proves the transport as well as a 200 does.
 
@@ -795,22 +795,31 @@ a first HTTP/1 or /2 connection by providing a hint here. A hint is your own ass
 seeds the *confirmed* state directly: the very first request to a hinted origin speaks HTTP/3
 (which is what HTTP/3-only origins with no TCP listener need), no background probe is spent on it,
 and the hint itself never expires. If a connection to a hinted origin fails, the origin is demoted
-for the `upgradeFailedTtl` duration, just like for the normal pathway with Alt-Svc advertisements.
+for the failure cooldown, just like for the normal pathway with Alt-Svc advertisements.
 
 #### `AgentOptions.http3.upgradeAdvertisedTtl: number`
 #### `AgentOptions.http3.upgradeConfirmedTtl: number`
 #### `AgentOptions.http3.upgradeFailedTtl: number`
+#### `AgentOptions.http3.upgradeFailedMaxTtl: number`
 #### `AgentOptions.http3.upgradeCacheCapacity: number`
 
-These four settings allow tweaking the HTTP/3 advertisement/knowledge cache behaviour:
+These five settings allow tweaking the HTTP/3 advertisement/knowledge cache behaviour:
 
 - `upgradeAdvertisedTtl`: how long (in seconds) an Alt-Svc advertisement is remembered, when the
   header carries no `ma` (max-age) parameter of its own. Default: 86400 (1 day).
 - `upgradeConfirmedTtl`: how long (in seconds) a proven HTTP/3 origin stays confirmed before it
   has to be re-established. Default: 86400 (1 day).
-- `upgradeFailedTtl`: how long (in seconds) a failed origin is blocked from upgrading, probing,
-  and recording new advertisements. Default: 300 (5 minutes).
+- `upgradeFailedTtl`: how long (in seconds) a *first* failure blocks an origin from upgrading,
+  probing, and recording new advertisements. Default: 300 (5 minutes).
+- `upgradeFailedMaxTtl`: ceiling (in seconds) on that cooldown as consecutive failures double it.
+  Default: 3600 (1 hour).
 - `upgradeCacheCapacity`: the maximum number of origins tracked. Default: 10000.
+
+Each consecutive failure doubles the cooldown, so an origin whose UDP path is blocked for good is
+retried less and less often rather than forever at a fixed interval: on the defaults 5 minutes,
+then 10, 20, 40, and an hour thereafter. Any confirmed HTTP/3 response ends the run, and so does
+leaving the origin alone for a further cooldown beyond the one it earned. Set `upgradeFailedMaxTtl`
+at or below `upgradeFailedTtl` for a flat cooldown that never backs off.
 
 #### `AgentOptions.http3.upgradeCancelStrikes: number`
 
