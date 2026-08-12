@@ -933,6 +933,13 @@ export interface FaithOptionsAndBody {
   headers?: Array<[string, string]>
   integrity?: string
   method?: string
+  /**
+   * The relative priority of this request: `high`, `low`, or `auto`.
+   *
+   * Taken as a string rather than an enum so that an unrecognised value is ignored like any
+   * other option Fáith does not recognise, rather than rejected.
+   */
+  priority?: string
   timeout?: number
 }
 

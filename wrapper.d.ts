@@ -188,6 +188,24 @@ export interface FetchOptions {
 	 */
 	method?: string;
 	/**
+	 * A hint of how this request ranks against others, sent as the [RFC 9218][1] `Priority`
+	 * header. Browsers use this option to prioritise streams; Fáith sends the header and lets
+	 * the server schedule, which is what HTTP/2 and HTTP/3 servers act on.
+	 *
+	 * Urgency runs from 0 (most urgent) to 7 (least urgent), and a request without the header
+	 * is served at the default urgency of 3.
+	 *
+	 * - `high`: sends `Priority: u=1`
+	 * - `low`: sends `Priority: u=5`
+	 * - `auto`: sends no header, leaving the request at the default urgency
+	 *
+	 * A `Priority` header you set yourself, on the request or as an `Agent` default header,
+	 * is sent as written and no value is derived from this option.
+	 *
+	 * [1]: https://www.rfc-editor.org/rfc/rfc9218.html
+	 */
+	priority?: "high" | "low" | "auto";
+	/**
 	 * An `AbortSignal`. If this option is set, the request can be canceled by calling `abort()` on the
 	 * corresponding `AbortController`.
 	 */
