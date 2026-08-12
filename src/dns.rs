@@ -41,7 +41,9 @@ impl std::fmt::Debug for FaithResolver {
 
 impl FaithResolver {
 	async fn resolver(&self) -> Result<&TokioResolver, NetError> {
-		self.state.get_or_try_init(|| async { new_resolver() }).await
+		self.state
+			.get_or_try_init(|| async { new_resolver() })
+			.await
 	}
 
 	/// Resolve `host` and leave the answer in the shared cache, so a later request skips the

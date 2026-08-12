@@ -41,4 +41,20 @@ Fixing that is its own card (see the [breakdown](../../breakdowns/d1/breakdown.m
 - **(a)** Fáith taking over redirect-following itself (a redirect middleware in the stack, reqwest client set to `Policy::none()`), so the raw client never follows — which fixes the probe bug too, but is the same refactor the probe-redirect card owns, and the breakdown says D1 does not depend on it; or
 - **(b)** relaxing the criterion so `preconnect` inherits the agent's redirect policy, exactly as the probe does today.
 
-Needs a decision before the TCP send is written; it is the one part of `preconnect` that cannot be implemented faithfully to the current spec within D1's stated scope.
+**Decided: (b).** The warm-up inherits the agent's redirect policy, keeping D1 in its stated scope. The WARM spec's redirect criterion was reworded to match, the constraint is recorded in [the upstream limitations register](../../upstream-limitations.md), and (a) is now its own card in [the breakdown](../../breakdowns/d1/breakdown.md), where fixing it once covers the probe and the warm-up together.
+
+## What was built
+
+- `src/dns.rs` — `FaithResolver`, a hickory resolver Fáith owns, installed with `ClientBuilder::dns_resolver` and shared with `prefetchDns` so both resolve against one cache. Mirrors reqwest's own resolver config (system config, Google fallback, `Ipv4AndIpv6`). Not installed under `dns.system: true`, where `prefetchDns` is a no-op.
+- `Agent::prefetch_dns` and `Agent::preconnect` in `src/agent.rs`, plus the origin/host parsing helpers and their unit tests. Both hold the raw `reqwest::Client` (shared pool, no middleware) so the warm-up bypasses the HTTP cache and stays out of request accounting while still pooling for the foreground.
+- Coalescing via two moka caches on the agent: `warmed` (TTL the pool idle timeout) and `warming` (single-flight claim, released by a guard).
+- `ConnectionTracker::track_warmup`, which lists a warm-up connection at a response count of zero and leaves an already-tracked connection alone.
+- `H3Prober::maybe_probe`, extracted from `AltSvcMiddleware` so a TCP warm-up triggers a probe the same way a real request does.
+
+### The transport decision has to mirror the middleware exactly
+
+`preconnect` first read only `confirmed_port()`, which is right in probe mode but wrong in the other two: with `upgradeProbe: false` the foreground path upgrades on an advertisement (`should_use_h3`), and with `upgradeEnabled: false` nothing upgrades at all. A warm-up that read the caches differently from the middleware would warm the wrong transport. The agent now carries `h3_upgrade_enabled` and branches on the prober's presence, matching `AltSvcMiddleware::handle`. `test/http3-warm-up.test.js` pins all three modes; two of its cases fail without this.
+
+### Untestable on loopback
+
+The spec's `POST`-onto-a-dead-warm-up-connection case is a race that cannot be forced locally, the same limitation the `aggressive idle close` dimension documents. `test/agent-warm-up.test.js` builds an origin that abandons the connection right after answering the warm-up's `HEAD /` — the conformance harness cannot host this, since its dropping route is a path of its own while a warm-up always targets the root — and asserts the `GET` recovers and the `POST` is never answered wrongly, accepting either outcome for the `POST` itself. Left unticked in [the test cases](../../test-cases/d1/overview.md).

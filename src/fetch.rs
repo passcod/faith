@@ -243,6 +243,11 @@ pub fn faith_fetch<'env>(
 			false
 		};
 
+		// The origin now holds a connection the pool keeps idle, so a `preconnect` for it has
+		// nothing left to do (spec:WARM). Keyed on the URL the request was sent to, so a
+		// redirect chain marks the origin that actually answered rather than the one asked for.
+		agent.mark_warm(&response_url);
+
 		let peer = PeerInformation {
 			address: response.remote_addr(),
 			certificate: response

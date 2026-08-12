@@ -697,6 +697,11 @@ pub struct Agent {
 	/// Mirrors `http3.upgradeFollowAdvertisedPort`. Lives here because `fetch` needs
 	/// it to stop a rewritten port from being reported as a redirect.
 	pub(crate) h3_follow_advertised_port: bool,
+	/// Mirrors `http3.upgradeEnabled`. A warm-up needs it to route the way a foreground request
+	/// would: with the upgrade machinery off, nothing upgrades, whatever the caches hold.
+	/// (spec:WARM#preconnect)
+	#[cfg(feature = "http3")]
+	pub(crate) h3_upgrade_enabled: bool,
 	/// The agent's default `Accept-Encoding`, if one was set among its default headers.
 	/// `fetch` consults it to decide which codings to decode when a request adds none of
 	/// its own (see [`crate::encoding`]).
@@ -938,7 +943,7 @@ impl Agent {
 		let h3_follow_advertised_port = false;
 
 		#[cfg(feature = "http3")]
-		let (alt_svc_cache, alt_svc_middleware, h3_prober) = {
+		let (alt_svc_cache, alt_svc_middleware, h3_prober, h3_upgrade_enabled) = {
 			let http3_opts = options.http3.as_ref();
 			let enabled = http3_opts.and_then(|o| o.upgrade_enabled).unwrap_or(true);
 
@@ -1040,7 +1045,7 @@ impl Agent {
 				AltSvcMiddleware::new(cache.clone(), enabled, attempt_timeout, prober.clone());
 
 			// Registered below rather than here — see the note at the registration.
-			(Some(cache), middleware, prober)
+			(Some(cache), middleware, prober, enabled)
 		};
 
 		if let Some(cache) = options.cache
@@ -1141,6 +1146,8 @@ impl Agent {
 			#[cfg(feature = "http3")]
 			h3_prober,
 			h3_follow_advertised_port,
+			#[cfg(feature = "http3")]
+			h3_upgrade_enabled,
 			default_accept_encoding,
 			has_default_priority,
 		})
@@ -1272,6 +1279,15 @@ impl Agent {
 		self.conn_tracker.get_for_napi(env)
 	}
 
+	/// Note that a request reached this origin, so it holds a connection the pool keeps idle for
+	/// the idle window and a `preconnect` for it has no new work to do (spec:WARM).
+	///
+	/// Called for foreground requests as well as warm-ups, because the criterion is about the
+	/// origin holding an idle pooled connection, not about how it came to hold one.
+	pub(crate) fn mark_warm(&self, url: &Url) {
+		self.warmed.insert(origin_key(url), ());
+	}
+
 	/// Warm the DNS cache for `host`, so a later request to it skips the lookup.
 	///
 	/// Mirrors the browser's `dns-prefetch` resource hint. The argument is a bare host; a scheme,
@@ -1330,18 +1346,29 @@ impl Agent {
 
 		// Already warm within the idle window, or a warm-up for this origin already in flight:
 		// either way there is no new work to do, so resolve without opening a duplicate.
-		if self.warmed.contains_key(&key) || !self.warming.entry(key.clone()).or_insert(()).is_fresh()
+		if self.warmed.contains_key(&key)
+			|| !self.warming.entry(key.clone()).or_insert(()).is_fresh()
 		{
 			return faith_promise(env, async move { Ok(()) });
 		}
 
-		// The transport the next foreground request would take: HTTP/3 only from the confirmed
-		// state, TCP otherwise (spec:WARM).
+		// The transport the next foreground request would take, decided exactly as
+		// `AltSvcMiddleware` decides it: nothing upgrades with the machinery off; with a prober,
+		// only a confirmed origin routes to QUIC (an advertisement is evidence worth probing, not
+		// worth routing on); without one, the legacy inline upgrade acts on advertisements too.
+		// Diverging here would warm the wrong transport (spec:WARM#preconnect).
 		#[cfg(feature = "http3")]
 		let h3_port = self
 			.alt_svc_cache
 			.as_ref()
-			.and_then(|cache| cache.confirmed_port(&url));
+			.filter(|_| self.h3_upgrade_enabled)
+			.and_then(|cache| {
+				if self.h3_prober.is_some() {
+					cache.confirmed_port(&url)
+				} else {
+					cache.should_use_h3(&url)
+				}
+			});
 		#[cfg(not(feature = "http3"))]
 		let h3_port: Option<u16> = None;
 
@@ -1434,11 +1461,16 @@ fn caller_error(env: &Env, kind: FaithErrorKind) -> napi::Error {
 /// `None` if there is no host to resolve. A DNS name carries none of those parts, so a fuller
 /// string is reduced to its host. (spec:WARM)
 fn extract_host(input: &str) -> Option<String> {
-	let url = Url::parse(input)
-		.ok()
-		.filter(Url::has_host)
-		// A bare host is not a URL on its own; giving it an authority makes it parse as one.
-		.or_else(|| Url::parse(&format!("dns://{input}")).ok().filter(Url::has_host))?;
+	// A string that already spells a scheme is read as the URL it is; anything else is the
+	// bare-host case, where a name is not a URL on its own and giving it an authority makes it
+	// parse as one. Telling the two apart on the scheme separator matters both ways: `example.com:8443`
+	// otherwise parses as a *scheme* of `example.com` with no host, and a schemed string with no host
+	// (`file:///path`, a bare `https://`) would have its scheme misread as a host by the fallback.
+	let url = if input.contains("://") {
+		Url::parse(input).ok()?
+	} else {
+		Url::parse(&format!("dns://{input}")).ok()?
+	};
 	let host = url.host_str()?;
 	// `host_str` brackets an IPv6 literal; the resolver wants it bare.
 	let host = host
@@ -1466,11 +1498,118 @@ fn reduce_to_origin(input: &str) -> Option<Url> {
 
 /// The `scheme://host:port` key an origin coalesces on, with the port defaulted by scheme so
 /// `https://host` and `https://host:443` are the same origin. Matches the Alt-Svc cache's key.
-fn origin_key(url: &Url) -> String {
+pub(crate) fn origin_key(url: &Url) -> String {
 	format!(
 		"{}://{}:{}",
 		url.scheme(),
 		url.host_str().unwrap_or_default(),
 		url.port_or_known_default().unwrap_or_default(),
 	)
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn prefetch_dns_takes_a_bare_host() {
+		assert_eq!(extract_host("example.com").as_deref(), Some("example.com"));
+	}
+
+	#[test]
+	fn prefetch_dns_ignores_the_parts_a_name_does_not_have() {
+		// A DNS name has no scheme, port, or path, so a fuller string is reduced to its host
+		// rather than rejected (spec:WARM#prefetchdns).
+		for input in [
+			"https://example.com",
+			"https://example.com:8443",
+			"https://example.com/some/path?q=1#frag",
+			"https://user:pass@example.com/",
+			"example.com:8443",
+		] {
+			assert_eq!(
+				extract_host(input).as_deref(),
+				Some("example.com"),
+				"{input:?} names example.com whatever else it carries"
+			);
+		}
+	}
+
+	#[test]
+	fn prefetch_dns_unwraps_an_ipv6_literal() {
+		// `host_str` brackets an IPv6 literal, but the resolver wants it bare.
+		assert_eq!(
+			extract_host("https://[2001:db8::1]:8443").as_deref(),
+			Some("2001:db8::1")
+		);
+	}
+
+	#[test]
+	fn prefetch_dns_rejects_a_string_with_no_host() {
+		for input in ["", "   ", "/just/a/path", "https://"] {
+			assert!(
+				extract_host(input).is_none(),
+				"{input:?} names no host to resolve"
+			);
+		}
+	}
+
+	#[test]
+	fn preconnect_reduces_a_longer_url_to_its_origin() {
+		// The same reduction the HTTP/3 probe applies (spec:WARM#preconnect).
+		let url = reduce_to_origin("https://user:pass@example.com/some/path?q=1#frag")
+			.expect("a full URL reduces to its origin");
+
+		assert_eq!(url.as_str(), "https://example.com/");
+		assert_eq!(url.username(), "", "userinfo is stripped");
+		assert_eq!(url.password(), None);
+		assert_eq!(url.query(), None);
+		assert_eq!(url.fragment(), None);
+	}
+
+	#[test]
+	fn preconnect_defaults_the_port_by_scheme() {
+		// An omitted port defaults by scheme, so an origin spelled either way coalesces on one
+		// key (spec:WARM#preconnect).
+		for (bare, spelled) in [
+			("https://example.com", "https://example.com:443"),
+			("http://example.com", "http://example.com:80"),
+		] {
+			let bare = origin_key(&reduce_to_origin(bare).expect("parses"));
+			let spelled = origin_key(&reduce_to_origin(spelled).expect("parses"));
+			assert_eq!(
+				bare, spelled,
+				"the omitted port defaults to the spelled one"
+			);
+		}
+	}
+
+	#[test]
+	fn preconnect_keeps_distinct_origins_apart() {
+		// The pool caps and the warm record are per origin: scheme, host, and port together
+		// (spec:POOL).
+		let key = |input: &str| origin_key(&reduce_to_origin(input).expect("parses"));
+
+		assert_ne!(key("https://example.com"), key("https://example.com:8443"));
+		assert_ne!(key("https://example.com"), key("http://example.com"));
+		assert_ne!(key("https://example.com"), key("https://other.example"));
+	}
+
+	#[test]
+	fn preconnect_rejects_what_cannot_be_connected_to() {
+		for input in [
+			"not an origin",
+			"",
+			"/just/a/path",
+			// No host to connect to.
+			"file:///etc/hosts",
+			// No default port for the scheme, and none given.
+			"unknownscheme://example.com",
+		] {
+			assert!(
+				reduce_to_origin(input).is_none(),
+				"{input:?} is not a connectable origin"
+			);
+		}
+	}
 }
