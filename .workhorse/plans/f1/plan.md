@@ -52,30 +52,53 @@ an idle connection does, and a half-closed route measures a scenario nothing in 
 wild produces. But the half-close result is why the retry cannot be justified on "no
 response arrived" alone.
 
-## Where that leaves the fix
+## The decision: idempotent methods only
 
-Retry once, at the middleware layer, the way the HTTP/3 clone-fallback in
-`src/alt_svc.rs` does: `try_clone()` the request up front, and on failure re-run the
-clone through a fresh connection. Conditions to gate on:
+`POST` and `PATCH` are not replayed. The half-close row above is the argument: a
+connection that died carries no evidence of whether the origin processed the request
+before it went, so a request whose repetition would count twice surfaces the failure
+instead. This matches Go, and it means callers talking to an aggressively-closing
+origin still see occasional errors on non-idempotent requests. That is the accepted
+cost, not an oversight.
 
-- the error is the connection-died-before-any-response class, not a genuine transport
-  failure, and no response bytes arrived
-- `try_clone()` succeeded, so streaming bodies are excluded and stay unretryable
-- one attempt only, so a permanently broken origin is not hammered
+## The retry needed a bound, not a single attempt
 
-Open decision, and the reason this is not already written: whether the retry covers
-non-idempotent methods. Retrying GET/HEAD/PUT/DELETE is sound on the evidence above.
-Retrying POST is what the card asks for and what the half-close row argues against.
-Idempotent-only matches Go; covering POST too needs a deliberate call that the
-double-processing risk is worth taking.
+Implemented as `DeadConnectionRetry` in `src/retry.rs`, registered last in
+`Agent::new` so it sits innermost — inside the Alt-Svc layer, so a failed HTTP/3
+attempt stays the fallback's business, and inside the HTTP cache, so a replay
+re-sends rather than redoing the lookup.
+
+One replay was not enough, and the reason is worth keeping. An origin that closes
+idle connections closes all of them, so the pool comes back holding several that are
+already gone, and the replay draws from that same pool. Measured against the
+dimension, with the debug build:
+
+| replays | GET failures |
+| --- | --- |
+| 1 | 58 of 135 assertions |
+| 3 | 6 of 135 |
+| 4 | 0 of 360 |
+| 5 | 0 of 360 |
+
+Settled on five. Each failed attempt has at least evicted one dead connection, so
+what is needed is bounded by how many the pool was holding rather than by anything
+about the origin. The bound is a safety valve for an origin that ends every
+connection this way — indistinguishable from a full pool, since nothing in the error
+says whether the connection was reused — with the request's own timeout as the outer
+backstop.
 
 ## Steps
 
 - [x] Add the `idleClose` capability, the `/idle/drop` and `/idle/state` routes, and
       the `aggressive idle close` dimension
 - [x] Establish whether hyper and reqwest already cover this — they do not
-- [ ] Decide the idempotency question above
-- [ ] Implement the retry in a middleware layer
-- [ ] Re-run the dimension; the eight volley assertions go green
+- [x] Decide the idempotency question: idempotent only
+- [x] Implement the replay middleware and wire it in innermost
+- [x] Re-run the dimension: green over three consecutive full runs
+- [x] Spec the behaviour in POOL, and record the cause in the upstream-limitations
+      register
+- [ ] Cover the unticked cases in `.workhorse/test-cases/f1/overview.md` — the replay
+      conditions (streaming body, refused connection, timeout, 5xx, abort) are
+      asserted by construction in the code but not yet by a test
 - [ ] Regenerate the README conformance table (CI does this; it cannot be done
       faithfully on a dev machine where nginx, haproxy and quiche are absent)

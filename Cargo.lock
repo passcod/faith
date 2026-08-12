@@ -589,6 +589,7 @@ dependencies = [
  "http",
  "http-body-util",
  "http-cache-reqwest",
+ "hyper",
  "hyper-util",
  "libc",
  "moka",

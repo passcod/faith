@@ -32,6 +32,12 @@ Redirects followed inside the HTTP stack do not surface per-hop response events 
 Spec: [ERR](specs/errors/errors.md), The code contract.
 A failure inside the stream travels back through the binding's error channel, which carries a status and a message and cannot construct a JavaScript error object to hang properties on, unlike a failure raised from a call.
 
+## A request written into a closed connection is replayed by Fáith, up to a bound
+
+Spec: [POOL](specs/agent/connection-pool.md), Reusing a connection that has died.
+The HTTP stack replays a request on a reused pooled connection only while it still owns the request message, which is the case where nothing reached the wire at all; a request written into a socket the origin had already closed is classified as a send that got no complete response, and is not replayed.
+The stack also does not report whether the connection that failed came from the pool or had just been opened, which is the bound its own replay uses, so Fáith bounds the number of attempts instead of the kind of connection.
+
 ## An advertised HTTP/3 port cannot be honoured while keeping the origin's authority
 
 Spec: [H3UP](specs/http3/upgrade.md), Advertised ports.

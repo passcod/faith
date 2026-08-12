@@ -13,17 +13,18 @@
  * are racing on loopback. So the shape is: fill the pool, let the origin abandon
  * every connection in it at once, then immediately ask for all of them back. Losing
  * the race is the interesting outcome and this cannot force it, but it can make it
- * likely and repeat it, and the assertion is the same either way: no caller-visible
- * failure, whichever way the race lands. A machine that never once loses the race
- * passes this without having tested anything, which is the price of the scenario
- * being a race at all; the origin-side count below is what keeps it from passing
- * because the origin quietly did nothing.
+ * likely and repeat it. A machine that never once loses the race passes this without
+ * having tested anything, which is the price of the scenario being a race at all; the
+ * origin-side count at the end is what keeps it from passing because the origin
+ * quietly did nothing.
  *
- * POSTs, not just GETs. A retry after a connection dies is only safe for a
- * non-idempotent request if nothing was ever written to the wire, so a client that
- * gets the condition wrong -- retrying on "no response arrived" rather than on "the
- * request was never sent" -- would either double-send here or refuse to retry and
- * fail the request. Both are visible from this side.
+ * The two methods are held to different standards, which is the point of running
+ * both. A GET is replayed, so it must never reach the caller as a failure. A POST is
+ * not, because nothing in the error says whether the origin processed the request
+ * before the connection went, so the caller sees it -- that is the deliberate
+ * trade, and asserting POSTs always succeed would assert the opposite of the
+ * intended behaviour. What a POST must never do is come back *wrong*, so its
+ * volley is checked for bad answers rather than for failures.
  *
  * HTTP/1 only. The premise is a pool holding one connection per in-flight request;
  * a multiplexed h2 session that goes away is the `h2 GOAWAY` dimension.
@@ -48,10 +49,13 @@ const ROUNDS = 4;
 /**
  * Fire `CONCURRENCY` requests at the dropping route and describe what went wrong.
  *
- * Returns the failures rather than asserting per request: sixty-four assertions
- * saying "fine" bury the run, and the thing worth reading is which of them was not.
- * A throw is a failure like any other here -- a dead pooled connection surfaces as a
- * rejected fetch, which is precisely the symptom under test.
+ * Splits the two ways a request can go wrong, because the methods are judged on
+ * different ones: `lost` is the connection dying and taking the request with it,
+ * `wrong` is an answer that arrived and was not the right one. A POST is allowed to
+ * be lost and never allowed to be wrong.
+ *
+ * Returns them rather than asserting per request: sixty-four assertions saying "fine"
+ * bury the run, and the thing worth reading is which of them was not.
  */
 async function fireVolley(url, agent, method) {
 	const attempts = Array.from({ length: CONCURRENCY }, async (_, i) => {
@@ -59,19 +63,25 @@ async function fireVolley(url, agent, method) {
 			const res = await fetch(`${url}/idle/drop`, {
 				agent,
 				method,
-				// Cloneable, so nothing about *this* body stops a client from retrying.
+				// Cloneable, so nothing about *this* body stops a client from retrying:
+				// a POST left unretried here is a decision, not a body it could not
+				// replay.
 				body: method === "POST" ? PAYLOAD : undefined,
 				timeout: 10_000,
 			});
 			const body = await res.text();
-			if (res.status !== 200) return `${method} ${i}: status ${res.status}`;
-			if (body !== PAYLOAD) return `${method} ${i}: body ${JSON.stringify(body)}`;
-			return null;
+			if (res.status !== 200) return { wrong: `${method} ${i}: status ${res.status}` };
+			if (body !== PAYLOAD) return { wrong: `${method} ${i}: body ${JSON.stringify(body)}` };
+			return {};
 		} catch (err) {
-			return `${method} ${i}: ${err.code || ""} ${err.message}`.trim();
+			return { lost: `${method} ${i}: ${err.code || ""} ${err.message}`.trim() };
 		}
 	});
-	return (await Promise.all(attempts)).filter(Boolean);
+	const results = await Promise.all(attempts);
+	return {
+		lost: results.map((r) => r.lost).filter(Boolean),
+		wrong: results.map((r) => r.wrong).filter(Boolean),
+	};
 }
 
 /** What the origin says it has done. Deltas, since the counters are process-wide. */
@@ -94,26 +104,30 @@ module.exports = {
 		const before = await readState(url, own);
 
 		for (let round = 1; round <= ROUNDS; round++) {
-			// Fill: every one of these is answered in full and then abandoned, so the
-			// pool ends the volley holding CONCURRENCY connections the origin has
-			// already let go of.
+			// GETs, which are replayable, so none of these may reach the caller as a
+			// failure however the race lands. Every one is answered in full and then
+			// abandoned, so the pool ends the volley holding CONCURRENCY connections
+			// the origin has already let go of.
 			const fill = await fireVolley(url, own, "GET");
+			const survived = [...fill.lost, ...fill.wrong];
 			t.equal(
-				fill.length,
+				survived.length,
 				0,
-				`round ${round}: the volley that fills the pool succeeded` +
-					(fill.length ? ` -- ${fill.join("; ")}` : ""),
+				`round ${round}: every GET survived the connection under it going away` +
+					(survived.length ? ` -- ${survived.join("; ")}` : ""),
 			);
 
-			// Reclaim, with no delay whatsoever: the line above is the closest this
-			// can get to reusing those connections before the client has noticed they
-			// are gone.
+			// POSTs, reclaiming those connections with no delay whatsoever: the line
+			// above is the closest this can get to reusing them before the client has
+			// noticed they are gone. Losing one is the accepted cost of not replaying
+			// a request the origin may have processed; answering one wrongly is not.
 			const reclaim = await fireVolley(url, own, "POST");
 			t.equal(
-				reclaim.length,
+				reclaim.wrong.length,
 				0,
-				`round ${round}: and the POSTs that reuse the pool did too` +
-					(reclaim.length ? ` -- ${reclaim.join("; ")}` : ""),
+				`round ${round}: and no POST came back with the wrong answer ` +
+					`(${reclaim.lost.length} of ${CONCURRENCY} went down with the connection)` +
+					(reclaim.wrong.length ? ` -- ${reclaim.wrong.join("; ")}` : ""),
 			);
 		}
 
