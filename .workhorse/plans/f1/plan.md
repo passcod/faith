@@ -100,5 +100,8 @@ backstop.
 - [ ] Cover the unticked cases in `.workhorse/test-cases/f1/overview.md` — the replay
       conditions (streaming body, refused connection, timeout, 5xx, abort) are
       asserted by construction in the code but not yet by a test
-- [ ] Regenerate the README conformance table (CI does this; it cannot be done
-      faithfully on a dev machine where nginx, haproxy and quiche are absent)
+- [x] Regenerate the README conformance table. CI renders it and fails on
+      `git diff --exit-code`, so it has to be in the commit rather than left to CI.
+      A dev machine without nginx, haproxy and quiche cannot render it from a real
+      run, but the realised matrix can be reconstructed from `expected-matrix.json`
+      once CI reports every cell passing, and rendering that gives the same table
