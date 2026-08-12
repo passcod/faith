@@ -586,6 +586,7 @@ dependencies = [
  "async-trait",
  "bytes",
  "futures",
+ "hickory-resolver",
  "http",
  "http-body-util",
  "http-cache-reqwest",

@@ -41,9 +41,9 @@ A caller who must not make unsolicited requests to an origin should not preconne
 `http3.upgradeProbe: false` does not suppress it either: that option governs HTTP/3 upgrade probing and continues to do only that, so a TCP warm-up still sends its `HEAD` (see [PROBE](../http3/probing.md)).
 
 The response is discarded whatever its status, because the connection rather than the answer is the point, and any status proves the connection as well as a 200 does.
-Redirects are not followed: the caller asked for this origin to be warm, and chasing a redirect would spend the warm-up on a different one.
 The warm-up neither reads nor writes the HTTP cache, so a cached response cannot stand in for connecting and the discarded response cannot enter the cache (see [CACHE](../cache/http-cache.md)).
-It otherwise carries the agent's configuration like any request to that origin, including default headers, `userAgent`, and the cookie jar, so an origin that sets cookies on its root can update the jar from a warm-up (see [COOK](cookies.md)).
+It otherwise carries the agent's configuration like any request to that origin, including default headers, `userAgent`, the cookie jar, and the agent's redirect handling, so an origin that sets cookies on its root can update the jar from a warm-up (see [COOK](cookies.md)).
+Because it follows the agent's redirect policy, a warm-up whose root answers with a redirect can end up warming the redirect's target rather than only the origin asked for; the connection to the origin itself is still made and pooled on the way (see the [upstream limitations register](../../upstream-limitations.md)).
 The agent's connect and request timeouts bound it, so a silent path fails the warm-up rather than leaving its promise pending forever (see [CANCEL](../fetch/cancellation-and-timeouts.md)).
 
 ## Warming an origin that closes idle connections

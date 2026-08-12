@@ -791,6 +791,20 @@ impl H3Prober {
 		tasks.push(handle.abort_handle());
 	}
 
+	/// Kick off a background probe for the URL's origin if one is warranted: an actionable
+	/// advertisement present, the origin neither confirmed, failed, nor slow, and no probe
+	/// already in flight. The same decision [`AltSvcMiddleware::maybe_probe`] makes, exposed so a
+	/// `preconnect` TCP warm-up to a probe-worthy origin triggers a probe as a real request would.
+	pub fn maybe_probe(&self, url: &reqwest::Url) {
+		let Some(port) = self.cache.probe_candidate(url) else {
+			return;
+		};
+		if !self.cache.claim_probe(url) {
+			return;
+		}
+		self.spawn(url.clone(), port);
+	}
+
 	pub fn abort_all(&self) {
 		let mut tasks = self
 			.tasks
@@ -850,16 +864,9 @@ impl AltSvcMiddleware {
 	/// probing enabled, an actionable advertisement present, the origin neither
 	/// confirmed, failed, nor slow, and no probe already in flight.
 	fn maybe_probe(&self, url: &reqwest::Url) {
-		let Some(prober) = &self.prober else {
-			return;
-		};
-		let Some(port) = self.cache.probe_candidate(url) else {
-			return;
-		};
-		if !self.cache.claim_probe(url) {
-			return;
+		if let Some(prober) = &self.prober {
+			prober.maybe_probe(url);
 		}
-		prober.spawn(url.clone(), port);
 	}
 }
 

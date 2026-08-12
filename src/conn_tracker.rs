@@ -167,6 +167,32 @@ impl ConnectionTracker {
 		known
 	}
 
+	/// Register a warm-up connection that no request has yet been credited to.
+	///
+	/// A `preconnect` connection is listed before any foreground request uses it, at a response
+	/// count of zero (spec:WARM). An entry already tracked is left untouched: a warm-up to an
+	/// origin that already holds a pooled connection does no new work, and must not disturb the
+	/// count or timestamps of the connection it would reuse.
+	pub fn track_warmup(&self, local_addr: SocketAddr, remote_addr: SocketAddr) {
+		let now = SystemTime::now();
+		let key = ConnectionKey {
+			local_addr,
+			remote_addr,
+		};
+		self.connections.entry(key).and_compute_with(|entry| {
+			if entry.is_some() {
+				Op::Nop
+			} else {
+				Op::Put(TrackedConnection {
+					first_seen: now,
+					last_seen: now,
+					response_count: 0,
+					latest_stats: None,
+				})
+			}
+		});
+	}
+
 	pub fn get_for_napi<'env>(&self, env: &'env Env) -> Vec<ConnectionInfo<'env>> {
 		self.connections
 			.iter()

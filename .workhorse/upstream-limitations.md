@@ -44,6 +44,13 @@ Spec: [WARM](specs/agent/warm-up.md), What preconnect sends.
 The HTTP stack does not expose a way to place a connection into its pool, only to make a request that leaves one there, so a warm connection cannot be obtained without a request the origin sees.
 This is also why the HTTP/3 probe is a synthetic `HEAD` rather than a bare handshake.
 
+## `preconnect()` follows the agent's redirect policy rather than stopping at the origin
+
+Spec: [WARM](specs/agent/warm-up.md), What preconnect sends.
+The HTTP stack's redirect policy is fixed per client and has no per-request override, and its connection pool is per client too, so the raw client `preconnect` shares to land its connection in the foreground pool cannot follow a different redirect policy from foreground requests.
+A warm-up therefore follows the agent's redirect policy, so a redirecting root can warm the redirect's target in addition to the origin asked for.
+Moving redirect-following into Fáith's own layer would let the shared client stop at the first response; it is tracked as its own card.
+
 ## An advertised HTTP/3 port cannot be honoured while keeping the origin's authority
 
 Spec: [H3UP](specs/http3/upgrade.md), Advertised ports.
