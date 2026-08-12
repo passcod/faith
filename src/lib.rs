@@ -10,6 +10,7 @@ mod fetch;
 mod integrity;
 mod options;
 mod response;
+mod retry;
 mod stream_body;
 
 pub use agent::*;

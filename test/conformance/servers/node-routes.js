@@ -24,7 +24,7 @@ const { PAYLOAD, COMPRESSIBLE, TRAILER_NAME, TRAILER_VALUE, ETAG } = require("..
  * Process-wide and never reset, because each cell starts its own server while this
  * module stays loaded. Readers compare deltas, not absolute values.
  */
-const state = { goaways: 0, sessions: 0 };
+const state = { goaways: 0, sessions: 0, answered: 0, dropped: 0 };
 
 function handle(req, res) {
 	const url = new URL(req.url, "https://localhost");
@@ -128,6 +128,53 @@ function handle(req, res) {
 		// What the origin has done, so a dimension can assert on it rather than on
 		// effects it has no way to see.
 		case "/goaway/state":
+			res.setHeader("content-type", "application/json");
+			res.end(JSON.stringify(state));
+			return;
+
+		// --- aggressive idle close ---
+		// Answers in full, then closes the connection without ever having said it
+		// would. This is the origin behaviour the pooling client cannot see coming:
+		// the response is complete and unremarkable, so the connection goes back
+		// into the pool, and the FIN lands some unknowable moment later.
+		//
+		// Both directions, in that order, and neither half is optional. `end()`
+		// first because it is graceful: it flushes the response before the FIN,
+		// where destroying outright can reset the connection with bytes still in
+		// the TLS buffer and turn this into a truncation test. Then `destroy()`
+		// once that flush has completed, because `end()` alone is a *half*-close --
+		// Node keeps the read side open, so it goes on parsing and handling
+		// requests written into the socket afterwards that it can no longer answer.
+		// A real origin closing an idle connection shuts both directions, and those
+		// later requests never reach it at all. Left half-closed, this route
+		// measures a scenario no origin in the wild produces, and the requests it
+		// swallows are ones the origin really did process.
+		case "/idle/drop": {
+			// POSTs come through here, and an unread request body leaves the stream
+			// paused and the socket unable to finish.
+			req.resume();
+			const socket = req.socket;
+			res.setHeader("content-type", "text/plain");
+			res.setHeader("content-length", String(Buffer.byteLength(PAYLOAD)));
+			// Counted where the request is parsed, so it counts requests the origin
+			// really received: one written into a socket the origin had already
+			// abandoned never gets here, which is the whole point.
+			state.answered++;
+			res.end(PAYLOAD, () => {
+				// `socket` is captured above rather than read as `res.socket` here:
+				// Node detaches the socket from the response as it finishes, so
+				// `res.socket` in this callback is null and the close silently never
+				// happens. That failure mode is indistinguishable from a client that
+				// survived every close, which is why the dimension asserts this
+				// counter rather than assuming the route did its job.
+				state.dropped++;
+				socket.end();
+				socket.once("finish", () => socket.destroy());
+			});
+			return;
+		}
+
+		case "/idle/state":
 			res.setHeader("content-type", "application/json");
 			res.end(JSON.stringify(state));
 			return;

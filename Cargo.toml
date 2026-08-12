@@ -23,6 +23,7 @@ futures = "0.3.31"
 moka = { version = "0.12", features = ["sync"] }
 http = "1.4.0"
 http-body-util = "0.1.3"
+hyper = "1.8.1"
 http-cache-reqwest = { version = "1.0.0-alpha.6", features = ["manager-cacache", "manager-moka"] }
 hyper-util = { version = "0.1", features = ["client-legacy", "tokio"] }
 libc = "0.2.179"

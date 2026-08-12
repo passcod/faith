@@ -46,6 +46,7 @@ whatever servers emit, fáith must correctly handle. So far, everything we've te
 | **conditional GET** | ● | ● | ● | ● | ● | ● | ● | ● | · |
 | **protocol negotiation** | · | · | ● | ● | · | ● | · | ● | · |
 | **connection reuse** | ● | · | · | · | ● | · | · | · | · |
+| **aggressive idle close** | ● | · | · | · | · | · | · | · | · |
 | **oversized headers** | ● | · | · | ● | ● | ● | · | · | · |
 | **h2 GOAWAY** | · | ● | · | · | · | · | · | · | · |
 | **HTTP/3** | · | · | ● | ● | · | · | · | · | ● |

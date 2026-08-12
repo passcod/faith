@@ -30,6 +30,7 @@ use crate::{
 	conn_tracker::{ConnectionInfo, ConnectionTracker},
 	error::{FaithError, FaithErrorKind},
 	options::{PRIORITY, RequestCacheMode},
+	retry::DeadConnectionRetry,
 };
 
 #[napi]
@@ -1079,6 +1080,16 @@ impl Agent {
 		{
 			client = client.with(alt_svc_middleware);
 		}
+
+		// Registered last, so it sits innermost and wraps nothing but the exchange
+		// itself. Inside the Alt-Svc layer rather than outside it, because each
+		// protocol attempt is its own connection and deserves its own retry: a
+		// failed HTTP/3 attempt is the fallback's business, and re-running the
+		// upgrade decision from out here would re-attempt HTTP/3 on a path already
+		// judged dead and record a second failure against the origin for it. Inside
+		// the HTTP cache for the same reason as the Alt-Svc layer -- a retry should
+		// re-send the request, not redo the cache lookup that led to it.
+		client = client.with(DeadConnectionRetry);
 
 		Ok(Self {
 			client: Some(client.build()),
