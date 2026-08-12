@@ -28,6 +28,7 @@ use crate::{
 	encoding::{Coding, decode_stream},
 	error::{FaithError, FaithErrorKind},
 	integrity::verify_integrity,
+	timing::{TimingBreakdown, TimingSlot},
 };
 
 /// The `Response` interface of the Fetch API represents the response to a request.
@@ -49,6 +50,7 @@ pub struct FaithResponse {
 	pub(crate) redirected: bool,
 	pub(crate) stats: Arc<InnerAgentStats>,
 	pub(crate) status_code: StatusCode,
+	pub(crate) timing: Arc<TimingSlot>,
 	pub(crate) trailers: Arc<TrailersSlot>,
 	pub(crate) url: Url,
 	pub(crate) version: Version,
@@ -329,11 +331,10 @@ impl FaithResponse {
 				let trailers_stream = self.trailers.clone();
 				let trailers_finish = self.trailers.clone();
 				let stats_finish = self.stats.clone();
+				let timing_finish = self.timing.clone();
 				let drained_finish = drained_flag.clone();
 				// The frame stream pulls trailers off to the side (via `arrived`) and yields
-				// data bytes only, so decoding sees no trailer frames. Bookkeeping is chained
-				// onto the raw byte stream, so it still fires when the body ends even though a
-				// decoder sits above it.
+				// data bytes only, so decoding sees no trailer frames.
 				let bytes = Box::pin(
 					BodyStream::new(inner)
 						.then(move |frame| {
@@ -355,14 +356,6 @@ impl FaithResponse {
 								}
 							}
 						})
-						.chain(stream::once(async move {
-							trailers_finish.ended();
-							// Track that we've finished consuming a body
-							stats_finish.bodies_finished.fetch_add(1, Ordering::Relaxed);
-							// Mark body as drained so Drop doesn't try to drain again
-							drained_finish.store(true, Ordering::SeqCst);
-							None
-						}))
 						.filter_map(async |item| item),
 				) as Pin<Box<DynStream>>;
 
@@ -370,6 +363,29 @@ impl FaithResponse {
 					Some(coding) => decode_stream(bytes, coding),
 					None => bytes,
 				};
+
+				// Chained onto the stream that is actually delivered, above any decoder: a
+				// decoder reaches the end of its own framing without necessarily polling the
+				// bytes underneath to completion, so bookkeeping chained below it would never
+				// run for a decoded body, leaving the trailers promise and the timing pending
+				// for good.
+				let bytes = Box::pin(
+					bytes.chain(
+						stream::once(async move {
+							trailers_finish.ended();
+							// The last byte of the body: every read path ends here, so
+							// this is where the timing settles
+							// (spec:RESP#request-timing).
+							timing_finish.ended();
+							// Track that we've finished consuming a body
+							stats_finish.bodies_finished.fetch_add(1, Ordering::Relaxed);
+							// Mark body as drained so Drop doesn't try to drain again
+							drained_finish.store(true, Ordering::SeqCst);
+						})
+						.filter_map(async |()| None),
+					),
+				) as Pin<Box<DynStream>>;
+
 				let stream = SharedStream::new(bytes);
 
 				// the _ is the Consumed we put in there earlier
@@ -424,6 +440,7 @@ impl FaithResponse {
 		let drained_flag = self.body.drained.clone();
 		let is_multiplexed = self.body.is_multiplexed();
 		let trailers = self.trailers.clone();
+		let timing = self.timing.clone();
 		faith_promise(env, async move {
 			if let Some(arc) = body {
 				if is_multiplexed {
@@ -443,6 +460,8 @@ impl FaithResponse {
 			// "none" rather than leaving it pending is the point -- a caller who discarded
 			// the body and then awaited trailers used to wait forever.
 			trailers.ended();
+			// Discarding is one of the ways a body finishes (spec:RESP#request-timing).
+			timing.ended();
 			Ok(())
 		})
 	}
@@ -511,6 +530,28 @@ impl FaithResponse {
 				.map_err(|e| FaithError::new(FaithErrorKind::JsonParse, Some(e.to_string())))?;
 			Ok(Value(value))
 		})
+	}
+
+	/// Custom to Fáith.
+	///
+	/// The measurements behind the `timing` property, which the wrapper turns into a
+	/// `PerformanceResourceTiming`.
+	///
+	/// A resource timing entry describes a finished request, so this does not resolve until
+	/// the body has ended: by being read, by `discard()`, or by the collector draining one
+	/// that was abandoned. A response that cannot carry a body has ended already.
+	///
+	/// Phases are milliseconds from the start of the request rather than absolute times, so
+	/// the wrapper can place them on the same clock as the platform's other performance
+	/// entries.
+	///
+	/// This is an async fn as an internal implementation detail and the wrapper makes it a
+	/// property.
+	///
+	/// spec:RESP#request-timing
+	#[napi]
+	pub async fn timing(&self) -> TimingBreakdown {
+		self.timing.settled().await.into()
 	}
 
 	/// The `trailers()` read-only property of the `Response` interface returns a promise that

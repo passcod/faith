@@ -18,6 +18,137 @@ const ERROR_CODES = native.errorCodes().reduce((acc, code) => {
 }, {});
 
 /**
+ * The MIME essence of a `Content-Type`: type and subtype, lower cased, parameters dropped.
+ * @param {string | null} value
+ * @returns {string}
+ */
+function mimeEssence(value) {
+	if (!value) {
+		return "";
+	}
+	return value.split(";", 1)[0].trim().toLowerCase();
+}
+
+/**
+ * Mint the response's `PerformanceResourceTiming`.
+ *
+ * `PerformanceResourceTiming` is not constructible, so the only way to hand back the platform's
+ * own type is `markResourceTiming`, which mints the entry and contributes it to the resource
+ * timeline in the same call — the same route Node's own fetch takes. That is why this happens
+ * once per request and is memoised: minting again would publish a second entry for the one
+ * request.
+ *
+ * The platform's class implements an older revision of the interface, so the attributes it
+ * lacks — and Fáith's two additions — are defined on the entry as own properties, which shadow
+ * the prototype's accessors and leave `instanceof` intact. The built-in `toJSON` only knows the
+ * attributes the class carries, so it is shadowed too, or a serialised entry would silently
+ * lose every field added here.
+ *
+ * spec:RESP#request-timing
+ *
+ * @param {Response} response
+ * @param {number} fetchStart
+ * @param {import('./index').TimingBreakdown} measurements
+ * @returns {PerformanceResourceTiming}
+ */
+function mintResourceTiming(response, fetchStart, measurements) {
+	const headersAt = fetchStart + measurements.headersMs;
+	// A body that never finished has no last byte to report, which the interface spells 0.
+	const responseEnd =
+		measurements.bodyMs == null ? 0 : fetchStart + measurements.bodyMs;
+	const cacheMode = measurements.fromCache ? "local" : "";
+
+	const entry = performance.markResourceTiming(
+		{
+			startTime: fetchStart,
+			endTime: responseEnd,
+			finalServiceWorkerStartTime: 0,
+			redirectStartTime: 0,
+			redirectEndTime: 0,
+			postRedirectStartTime: fetchStart,
+			finalNetworkRequestStartTime: 0,
+			finalNetworkResponseStartTime: headersAt,
+			encodedBodySize: 0,
+			decodedBodySize: 0,
+			finalConnectionTimingInfo: {
+				domainLookupStartTime: 0,
+				domainLookupEndTime: 0,
+				connectionStartTime: 0,
+				connectionEndTime: 0,
+				secureConnectionStartTime: 0,
+				ALPNNegotiatedProtocol: measurements.nextHopProtocol,
+			},
+		},
+		response.url,
+		"fetch",
+		globalThis,
+		cacheMode,
+		{},
+		response.status,
+		measurements.fromCache ? "cache" : "",
+	);
+
+	// Every attribute Fáith states a value for, so the entry reads the same whatever revision
+	// of the interface the platform's class happens to implement.
+	const fields = {
+		startTime: fetchStart,
+		duration: responseEnd === 0 ? 0 : responseEnd - fetchStart,
+		fetchStart,
+		redirectStart: 0,
+		redirectEnd: 0,
+		workerStart: 0,
+		workerRouterEvaluationStart: 0,
+		workerCacheLookupStart: 0,
+		workerMatchedRouterSource: "",
+		workerFinalRouterSource: "",
+		domainLookupStart: 0,
+		domainLookupEnd: 0,
+		connectStart: 0,
+		connectEnd: 0,
+		secureConnectionStart: 0,
+		requestStart: 0,
+		requestSent: 0,
+		firstInterimResponseStart: 0,
+		finalResponseHeadersStart: headersAt,
+		responseStart: headersAt,
+		responseEnd,
+		nextHopProtocol: measurements.nextHopProtocol,
+		deliveryType: measurements.fromCache ? "cache" : "",
+		renderBlockingStatus: "non-blocking",
+		responseStatus: response.status,
+		contentType: mimeEssence(response.headers.get("content-type")),
+		contentEncoding: measurements.contentEncoding ?? "",
+		transferSize: 0,
+		encodedBodySize: 0,
+		decodedBodySize: 0,
+		serverTiming: [],
+		reused: measurements.reused,
+	};
+
+	for (const [key, value] of Object.entries(fields)) {
+		Object.defineProperty(entry, key, {
+			value,
+			enumerable: true,
+			configurable: true,
+		});
+	}
+
+	Object.defineProperty(entry, "toJSON", {
+		value() {
+			return {
+				name: this.name,
+				entryType: this.entryType,
+				initiatorType: this.initiatorType,
+				...fields,
+			};
+		},
+		configurable: true,
+	});
+
+	return entry;
+}
+
+/**
  * Response class that provides spec-compliant Fetch API
  */
 class Response {
@@ -27,9 +158,15 @@ class Response {
 	#headers;
 	/** @type {ReadableStream<Uint8Array> | null | undefined} */
 	#body;
+	/**
+	 * The request's timing, shared with any clone: one request, one entry.
+	 * @type {{ fetchStart: number, entry: Promise<PerformanceResourceTiming> | undefined }}
+	 */
+	#timing;
 
-	constructor(nativeResponse) {
+	constructor(nativeResponse, timing) {
 		this.#nativeResponse = nativeResponse;
+		this.#timing = timing;
 	}
 
 	// Mirror the native class's getters onto this prototype, once at class
@@ -64,6 +201,15 @@ class Response {
 			this.#headers = headers;
 		}
 		return this.#headers;
+	}
+
+	// spec:RESP#request-timing
+	get timing() {
+		this.#timing.entry ??= (async () => {
+			const measurements = await this.#nativeResponse.timing();
+			return mintResourceTiming(this, this.#timing.fetchStart, measurements);
+		})();
+		return this.#timing.entry;
 	}
 
 	get trailers() {
@@ -157,7 +303,9 @@ class Response {
 	 * @throws {Error} If response body has already been read
 	 */
 	clone() {
-		return new Response(this.#nativeResponse.clone());
+		// The clone reads the same body over the same connection, so it shares the
+		// original's timing rather than publishing a second entry for the one request.
+		return new Response(this.#nativeResponse.clone(), this.#timing);
 	}
 
 	/**
@@ -203,6 +351,10 @@ let defaultAgent;
  * - Invalid types: throws TypeError
  */
 async function fetch(resource, options = {}) {
+	// The moment the request began, on the clock the platform's other performance entries
+	// use, so the phases the native side measures can be placed against it
+	// (spec:RESP#request-timing).
+	const timing = { fetchStart: performance.now(), entry: undefined };
 	let url;
 	let nativeOptions;
 
@@ -379,7 +531,7 @@ async function fetch(resource, options = {}) {
 			})();
 
 			const nativeResponse = await responsePromise;
-			return new Response(nativeResponse);
+			return new Response(nativeResponse, timing);
 		} else if (nativeOptions.body instanceof ArrayBuffer) {
 			nativeOptions.body = Buffer.from(nativeOptions.body);
 		} else if (Array.isArray(nativeOptions.body)) {
@@ -413,7 +565,7 @@ async function fetch(resource, options = {}) {
 	}
 
 	const nativeResponse = await faithFetch(url, nativeOptions, signal, null);
-	return new Response(nativeResponse);
+	return new Response(nativeResponse, timing);
 }
 
 module.exports = {

@@ -8,6 +8,8 @@ use moka::sync::Cache;
 use reqwest::{Request, Response};
 use reqwest_middleware::{Middleware, Next, Result};
 
+use crate::timing::HeadersStamp;
+
 #[derive(Debug, Clone)]
 pub struct AltSvcEntry {
 	pub port: u16,
@@ -861,6 +863,28 @@ impl AltSvcMiddleware {
 	}
 }
 
+/// Run the rest of the stack and stamp the moment the response headers arrive.
+///
+/// This is the one place a response's arrival is observed: the returned instant is what the
+/// path-time average measures against, and the same instant reaches the caller through the
+/// request's extensions to become the surfaced timing, so the two can never disagree.
+///
+/// spec:RESP#request-timing
+async fn run_stamped(
+	next: Next<'_>,
+	req: Request,
+	extensions: &mut Extensions,
+) -> (Result<Response>, Instant) {
+	let result = next.run(req, extensions).await;
+	let at = Instant::now();
+	if result.is_ok()
+		&& let Some(stamp) = extensions.get::<HeadersStamp>()
+	{
+		stamp.mark(at);
+	}
+	(result, at)
+}
+
 #[async_trait::async_trait]
 impl Middleware for AltSvcMiddleware {
 	async fn handle(
@@ -870,7 +894,7 @@ impl Middleware for AltSvcMiddleware {
 		next: Next<'_>,
 	) -> Result<Response> {
 		if !self.enabled {
-			return next.run(req, extensions).await;
+			return run_stamped(next, req, extensions).await.0;
 		}
 
 		let url = req.url().clone();
@@ -911,23 +935,25 @@ impl Middleware for AltSvcMiddleware {
 				// statement so the mutable borrow of `extensions` ends here,
 				// leaving the fallback below free to use it.
 				let outcome = match self.attempt_timeout {
-					Some(limit) => tokio::time::timeout(limit, next.clone().run(req, extensions))
-						.await
-						.ok(),
-					None => Some(next.clone().run(req, extensions).await),
+					Some(limit) => {
+						tokio::time::timeout(limit, run_stamped(next.clone(), req, extensions))
+							.await
+							.ok()
+					}
+					None => Some(run_stamped(next.clone(), req, extensions).await),
 				};
 				// Reached on success, error and expiry alike; only a mid-flight
 				// drop skips it and leaves the guard armed.
 				guard.disarm();
 
 				match outcome {
-					Some(Ok(response)) => {
+					Some((Ok(response), at)) => {
 						if response.version() == http::Version::HTTP_3 {
 							self.cache.confirm_h3(&url, h3_port);
 							self.cache.record_path_time(
 								&url,
 								response.version(),
-								started.elapsed(),
+								at.duration_since(started),
 							);
 						}
 
@@ -945,17 +971,17 @@ impl Middleware for AltSvcMiddleware {
 					// deliver. Taking the fallback branch directly avoids having
 					// to synthesise a reqwest_middleware::Error, which would mean
 					// adding anyhow as a dependency.
-					Some(Err(_)) | None => {
+					Some((Err(_), _)) | None => {
 						self.cache.record_h3_failure(&url);
 
 						// Use the cloned request (which still has default HTTP version)
 						let started = Instant::now();
-						let result = next.run(req_clone, extensions).await;
+						let (result, at) = run_stamped(next, req_clone, extensions).await;
 						if let Ok(ref response) = result {
 							self.cache.record_path_time(
 								&url,
 								response.version(),
-								started.elapsed(),
+								at.duration_since(started),
 							);
 						}
 						result
@@ -963,7 +989,7 @@ impl Middleware for AltSvcMiddleware {
 				}
 			} else {
 				// Can't clone request (streaming body), just proceed without HTTP/3
-				next.run(req, extensions).await
+				run_stamped(next, req, extensions).await.0
 			}
 		} else {
 			// An advertisement from an earlier response may still be waiting on
@@ -972,12 +998,12 @@ impl Middleware for AltSvcMiddleware {
 			self.maybe_probe(&url);
 
 			let started = Instant::now();
-			let result = next.run(req, extensions).await;
+			let (result, at) = run_stamped(next, req, extensions).await;
 
 			// Check for Alt-Svc header in non-HTTP/3 responses
 			if let Ok(ref response) = result {
 				self.cache
-					.record_path_time(&url, response.version(), started.elapsed());
+					.record_path_time(&url, response.version(), at.duration_since(started));
 
 				if let Some(alt_svc) = response.headers().get("alt-svc") {
 					if let Ok(value) = alt_svc.to_str() {

@@ -22,6 +22,8 @@ Open probes are aborted by `Agent.close()`.
 ## Slow-path demotion
 
 Beyond broken-vs-working, Fáith tracks how fast each path actually is: a smoothed average of time-to-response-headers per protocol family (QUIC vs TCP) per origin.
+The response's arrival is observed once and feeds both this average and the response's own timing breakdown (see [RESP](../response/response.md)), so the two can never disagree about when it arrived.
+The average measures from the start of the attempt that produced the response, so an origin's path is judged on its own showing rather than on time spent attempting another.
 An origin whose QUIC path is sustainedly slower than its TCP path is demoted from confirmed back to advertised: slower means the average exceeds the TCP average by the `http3.upgradeSlowFactor` multiple (default 2.5) and by an absolute floor of about 10ms, with at least 8 samples on each side, so noise and sub-millisecond differences never demote.
 Setting the factor to 0 or less disables demotion.
 A slow origin is not a broken one: it keeps its advertisement and re-enters through a background probe after `http3.upgradeSlowTtl` (default 10 minutes), so asking "has the path improved?" never costs a foreground request either.

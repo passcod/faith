@@ -231,6 +231,26 @@ text(): Promise<string>
  */
 json(): Promise<any>
 /**
+ * Custom to Fáith.
+ *
+ * The measurements behind the `timing` property, which the wrapper turns into a
+ * `PerformanceResourceTiming`.
+ *
+ * A resource timing entry describes a finished request, so this does not resolve until
+ * the body has ended: by being read, by `discard()`, or by the collector draining one
+ * that was abandoned. A response that cannot carry a body has ended already.
+ *
+ * Phases are milliseconds from the start of the request rather than absolute times, so
+ * the wrapper can place them on the same clock as the platform's other performance
+ * entries.
+ *
+ * This is an async fn as an internal implementation detail and the wrapper makes it a
+ * property.
+ *
+ * spec:RESP#request-timing
+ */
+timing(): Promise<TimingBreakdown>
+/**
  * The `trailers()` read-only property of the `Response` interface returns a promise that
  * resolves to either `null` or a `Headers` structure that contains the HTTP/2 or /3 trailing
  * headers.
@@ -992,6 +1012,22 @@ export declare const enum Redirect {
 }
 
 export const REQWEST_VERSION: string
+
+/**
+ * The measurements behind a response's timing breakdown.
+ *
+ * The wrapper turns these into a `PerformanceResourceTiming`; the phases are milliseconds from
+ * the start of the request rather than absolute times, so the wrapper can place them on the
+ * same clock as the rest of the platform's performance entries.
+ */
+export interface TimingBreakdown {
+  headersMs: number
+  bodyMs?: number
+  reused: boolean
+  nextHopProtocol: string
+  contentEncoding?: string
+  fromCache: boolean
+}
 
 /**
  * Custom user agent string.

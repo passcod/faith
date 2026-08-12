@@ -12,6 +12,7 @@ mod options;
 mod response;
 mod retry;
 mod stream_body;
+mod timing;
 
 pub use agent::*;
 pub use error::error_codes;
