@@ -34,13 +34,18 @@ Each access builds a fresh object reflecting what is known at that moment.
 The breakdown covers the phases observable at Fáith's request boundary:
 
 - `fetchStart` — the moment the request began, and the origin all other phases are measured against
+- `requestSent` — the request head and body have been fully written to the connection
 - `responseStart` — the first byte of the response, i.e. the response headers, has arrived
-- `responseEnd` — the last byte of the body has arrived, reading `null` until the body is finished (fully read or discarded, see [BODY](reading-the-body.md))
+- `responseEnd` — the last byte of the body has arrived, once the body is finished (fully read or discarded, see [BODY](reading-the-body.md))
 - `reused` — whether the request travelled on a pooled connection rather than a freshly established one (see [POOL](../agent/connection-pool.md))
 - `nextHopProtocol` — the protocol the request travelled over, as an ALPN Protocol ID (RFC 7301): `h3`, `h2`, `h2c`, `http/1.1`, and so on, whether or not the connection actually negotiated over ALPN
 
-Phase timestamps are fractional milliseconds on a monotonic clock shared across the breakdown, so consumers subtract one phase from another to obtain a duration; `fetchStart` is the earliest and the rest are no earlier than it.
-The breakdown starts at the request boundary, so the interval from `fetchStart` to `responseStart` covers connection acquisition (pool wait, or DNS, connect, and TLS handshake on a fresh connection) and the server's own turnaround as a single span rather than as separate phases.
+Phase timestamps are fractional milliseconds on a monotonic clock shared across the breakdown, so consumers subtract one phase from another to obtain a duration.
+Where a timestamp is known, `fetchStart` is the earliest and the rest are no earlier than it.
+
+A phase that has not happened yet, or whose boundary Fáith cannot observe, reads 0, following `PerformanceResourceTiming`, where a phase that did not occur reads 0 rather than being absent.
+So `responseEnd` reads 0 until the body finishes, and a consumer differencing two phases checks both for a non-zero value first.
+The breakdown starts at the request boundary, so the interval from `fetchStart` to `requestSent` covers connection acquisition (pool wait, or DNS, connect, and TLS handshake on a fresh connection) as a single span rather than as separate phases.
 
 `responseStart` less `fetchStart` is the time to response headers.
 That measurement is taken at a single instrumentation point and is the same one the per-protocol path-time average consumes for HTTP/3 slow-path demotion (see [PROBE](../http3/probing.md)), so a request's surfaced timing and the average it feeds never diverge.
