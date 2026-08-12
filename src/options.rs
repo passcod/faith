@@ -129,6 +129,24 @@ pub enum DuplexOption {
 	Half,
 }
 
+/// The RFC 9218 header the `priority` option maps onto.
+pub(crate) const PRIORITY: &str = "priority";
+
+/// Maps the `priority` option onto an RFC 9218 `Priority` header value.
+///
+/// Urgency runs from 0 (most urgent) to 7 (least urgent), and a request that sends no header
+/// is served at the default urgency of 3. `high` and `low` sit either side of that default.
+/// `auto`, a value Fáith does not recognise, and no option at all send no header, which is how
+/// a request asks for the default urgency.
+fn priority_urgency(priority: Option<&str>) -> Option<&'static str> {
+	// spec:REQ#request-priority
+	match priority {
+		Some("high") => Some("u=1"),
+		Some("low") => Some("u=5"),
+		_ => None,
+	}
+}
+
 #[napi(object)]
 pub struct FaithOptionsAndBody {
 	pub agent: Reference<Agent>,
@@ -139,6 +157,11 @@ pub struct FaithOptionsAndBody {
 	pub headers: Option<Vec<(String, String)>>,
 	pub integrity: Option<String>,
 	pub method: Option<String>,
+	/// The relative priority of this request: `high`, `low`, or `auto`.
+	///
+	/// Taken as a string rather than an enum so that an unrecognised value is ignored like any
+	/// other option Fáith does not recognise, rather than rejected.
+	pub priority: Option<String>,
 	pub timeout: Option<u32>,
 }
 
@@ -149,6 +172,8 @@ pub(crate) struct FaithOptions {
 	pub(crate) headers: Option<Vec<(String, String)>>,
 	pub(crate) integrity: Option<String>,
 	pub(crate) method: Option<String>,
+	/// The `Priority` header value derived from the `priority` option, if it maps to one.
+	pub(crate) priority: Option<&'static str>,
 	pub(crate) timeout: Option<Duration>,
 }
 
@@ -169,6 +194,7 @@ impl FaithOptions {
 				headers: opts.headers,
 				integrity: opts.integrity,
 				method: opts.method,
+				priority: priority_urgency(opts.priority.as_deref()),
 				timeout: opts.timeout.map(Into::into).map(Duration::from_millis),
 			},
 			Agent::clone(&opts.agent),
@@ -178,5 +204,29 @@ impl FaithOptions {
 				Either3::C(u) => Arc::new(Buffer::from(u.as_ref())),
 			}),
 		)
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn maps_high_and_low_either_side_of_the_default_urgency() {
+		assert_eq!(priority_urgency(Some("high")), Some("u=1"));
+		assert_eq!(priority_urgency(Some("low")), Some("u=5"));
+	}
+
+	#[test]
+	fn sends_no_header_for_the_default_urgency() {
+		assert_eq!(priority_urgency(Some("auto")), None);
+		assert_eq!(priority_urgency(None), None);
+	}
+
+	#[test]
+	fn ignores_an_unrecognised_value() {
+		assert_eq!(priority_urgency(Some("urgent")), None);
+		assert_eq!(priority_urgency(Some("HIGH")), None);
+		assert_eq!(priority_urgency(Some("")), None);
 	}
 }

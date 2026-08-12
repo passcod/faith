@@ -29,7 +29,7 @@ use crate::alt_svc::{AltSvcCache, AltSvcCacheConfig, AltSvcMiddleware, H3Prober}
 use crate::{
 	conn_tracker::{ConnectionInfo, ConnectionTracker},
 	error::{FaithError, FaithErrorKind},
-	options::RequestCacheMode,
+	options::{PRIORITY, RequestCacheMode},
 };
 
 #[napi]
@@ -677,6 +677,9 @@ pub struct Agent {
 	/// `fetch` consults it to decide which codings to decode when a request adds none of
 	/// its own (see [`crate::encoding`]).
 	pub(crate) default_accept_encoding: Option<HeaderValue>,
+	/// Whether a `Priority` header sits among the agent's default headers. `fetch` consults
+	/// it so that default wins over the header the `priority` option would derive.
+	pub(crate) has_default_priority: bool,
 }
 
 #[napi]
@@ -755,6 +758,7 @@ impl Agent {
 		}
 
 		let mut default_accept_encoding = None;
+		let mut has_default_priority = false;
 		if let Some(headers) = options.headers
 			&& !headers.is_empty()
 		{
@@ -780,6 +784,7 @@ impl Agent {
 				},
 			));
 			default_accept_encoding = map.get(reqwest::header::ACCEPT_ENCODING).cloned();
+			has_default_priority = map.contains_key(PRIORITY);
 			client = client.default_headers(map);
 		}
 
@@ -1086,6 +1091,7 @@ impl Agent {
 			h3_prober,
 			h3_follow_advertised_port,
 			default_accept_encoding,
+			has_default_priority,
 		})
 	}
 

@@ -22,7 +22,7 @@ use crate::{
 	body::{Body, BodyHolder},
 	encoding::{self, AcceptEncoding, DEFAULT_ACCEPT_ENCODING},
 	error::{FaithError, FaithErrorKind},
-	options::{CredentialsOption, FaithOptions, FaithOptionsAndBody},
+	options::{CredentialsOption, FaithOptions, FaithOptionsAndBody, PRIORITY},
 	response::{FaithResponse, PeerInformation},
 	stream_body::StreamBody,
 };
@@ -131,6 +131,24 @@ pub fn faith_fetch<'env>(
 			request = request.header(
 				ACCEPT_ENCODING,
 				HeaderValue::from_static(DEFAULT_ACCEPT_ENCODING),
+			);
+		}
+
+		// The `priority` option is a hint, so a `Priority` header the caller wrote, or one
+		// among the agent's default headers, wins over the value derived from it
+		// (spec: REQ#request-priority). The agent's defaults are consulted here rather than
+		// left to reqwest: it fills a default header in only where the request carries none
+		// of that name, so setting the derived value would displace the agent's own.
+		if let Some(urgency) = options.priority
+			&& !agent.has_default_priority
+			&& !options.headers.as_ref().is_some_and(|headers| {
+				headers
+					.iter()
+					.any(|(name, _)| name.eq_ignore_ascii_case(PRIORITY))
+			}) {
+			request = request.header(
+				HeaderName::from_static(PRIORITY),
+				HeaderValue::from_static(urgency),
 			);
 		}
 
