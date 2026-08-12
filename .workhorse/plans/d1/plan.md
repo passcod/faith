@@ -20,4 +20,6 @@ The promise resolves and never rejects, so every failure path (DNS, refused, tim
 
 ## Latent probe issue found nearby
 
-Redirect policy is set on the `reqwest::Client` (`src/agent.rs:823`), so the raw client inherits it and defaults to following redirects. That means the existing H3 probe's `HEAD /` can be redirected to a different origin, and `H3Prober::spawn` then checks `response.version()` on the final response and confirms the **original** origin from another origin's transport. Not this card's behaviour to fix, but the warm-up must not inherit the same shape: `preconnect` does not follow redirects.
+Redirect policy is set on the `reqwest::Client` (`src/agent.rs:823`), so the raw client inherits it and defaults to following redirects. That means the existing H3 probe's `HEAD /` can be redirected to a different origin, and `H3Prober::spawn` then checks `response.version()` on the final response and confirms the **original** origin from another origin's transport.
+
+Fixing that is its own card (see the [breakdown](../../breakdowns/d1/breakdown.md)). What matters here is that the warm-up must not inherit the same shape: `preconnect` does not follow redirects.
