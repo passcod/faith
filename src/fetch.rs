@@ -1,6 +1,9 @@
-use std::sync::{
-	Arc,
-	atomic::{AtomicBool, Ordering},
+use std::{
+	sync::{
+		Arc,
+		atomic::{AtomicBool, Ordering},
+	},
+	time::Instant,
 };
 
 use http_cache_reqwest::CacheMode;
@@ -12,7 +15,7 @@ use napi::{
 use napi_derive::napi;
 use reqwest::{Method, StatusCode};
 use reqwest::{
-	header::{ACCEPT_ENCODING, HeaderName, HeaderValue},
+	header::{ACCEPT_ENCODING, CONTENT_ENCODING, HeaderName, HeaderValue},
 	tls::TlsInfo,
 };
 use tokio::sync::{Mutex, mpsc};
@@ -25,6 +28,7 @@ use crate::{
 	options::{CredentialsOption, FaithOptions, FaithOptionsAndBody},
 	response::{FaithResponse, PeerInformation},
 	stream_body::StreamBody,
+	timing::{HeadersStamp, RequestTiming, TimingSlot, alpn_protocol_id},
 };
 
 /// The methods the fetch standard normalises to upper case; any other method is sent as given.
@@ -72,12 +76,18 @@ pub fn faith_fetch<'env>(
 			let _ = parsed_url.set_password(None);
 		}
 
+		// The stamp rides along in the request's extensions for the middleware to fill in;
+		// this side keeps a handle on it so the one measurement taken inside the stack is
+		// the one surfaced (spec:RESP#request-timing).
+		let headers_stamp = HeadersStamp::default();
+
 		let mut request = agent
 			.client
 			.as_ref()
 			.ok_or(FaithErrorKind::Closed)?
 			.request(method, parsed_url.clone())
-			.with_extension(CacheMode::from(options.cache));
+			.with_extension(CacheMode::from(options.cache))
+			.with_extension(headers_stamp.clone());
 
 		if let Some(headers) = &options.headers {
 			for (key, value) in headers {
@@ -157,6 +167,9 @@ pub fn faith_fetch<'env>(
 
 		agent.stats.requests_sent.fetch_add(1, Ordering::Relaxed);
 
+		// The origin every phase is measured from.
+		let started = Instant::now();
+
 		// Race the request with the abort signal if signal was provided
 		let response = if has_signal {
 			tokio::select! {
@@ -201,12 +214,16 @@ pub fn faith_fetch<'env>(
 			parsed_url != response_url
 		};
 
-		// Track connection for TCP stats (if we can get both local and remote addr)
-		if let Some(http_info) = response.extensions().get::<HttpInfo>() {
+		// Track connection for TCP stats (if we can get both local and remote addr).
+		// A connection the tracker has already seen is one the pool handed back, which is
+		// what `reused` reports (spec:RESP#request-timing).
+		let reused = if let Some(http_info) = response.extensions().get::<HttpInfo>() {
 			let local_addr = http_info.local_addr();
 			let remote_addr = http_info.remote_addr();
-			agent.conn_tracker.track(local_addr, remote_addr);
-		}
+			agent.conn_tracker.track(local_addr, remote_addr)
+		} else {
+			false
+		};
 
 		let peer = PeerInformation {
 			address: response.remote_addr(),
@@ -222,6 +239,26 @@ pub fn faith_fetch<'env>(
 			headers.remove("set-cookie");
 		}
 
+		// A cache hit is served without ever reaching the layer that stamps, so fall back to
+		// the moment the send resolved, which for a hit is the moment the cache answered.
+		let headers_at = headers_stamp.get().unwrap_or_else(Instant::now);
+		let timing = RequestTiming {
+			headers_ms: headers_at.duration_since(started).as_secs_f64() * 1000.0,
+			body_ms: None,
+			reused,
+			next_hop_protocol: alpn_protocol_id(version, &response_url),
+			// Captured before a decoded body's `Content-Encoding` is stripped below, so the
+			// coding the response arrived under is reported either way.
+			content_encoding: headers
+				.get(CONTENT_ENCODING)
+				.and_then(|value| value.to_str().ok())
+				.map(str::to_owned),
+			from_cache: headers
+				.get("x-cache")
+				.and_then(|value| value.to_str().ok())
+				.is_some_and(|value| value.eq_ignore_ascii_case("HIT")),
+		};
+
 		// Decode only a body Fáith negotiated the coding for; a bodyless response keeps its
 		// `Content-Encoding` and `Content-Length` describing the representation (spec: ENC).
 		let decode = if empty {
@@ -233,6 +270,12 @@ pub fn faith_fetch<'env>(
 			encoding::strip_decoded_headers(&mut headers);
 		}
 
+		let timing = Arc::new(TimingSlot::new(started, timing));
+		// A response that cannot carry a body has nothing left to wait for.
+		if empty {
+			timing.ended();
+		}
+
 		Ok(FaithResponse {
 			body: if empty {
 				BodyHolder::none()
@@ -241,6 +284,7 @@ pub fn faith_fetch<'env>(
 				BodyHolder::new(
 					Some(Arc::new(Mutex::new(Body::Inner(http_response.into_body())))),
 					version,
+					timing.clone(),
 				)
 			},
 			decode,
@@ -251,6 +295,7 @@ pub fn faith_fetch<'env>(
 			redirected,
 			stats: agent.stats.clone(),
 			status_code,
+			timing,
 			trailers: Default::default(),
 			url: response_url,
 			version,

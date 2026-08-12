@@ -32,8 +32,10 @@ It is the platform's own class rather than an object shaped like one, so `instan
 
 The entry is a snapshot of a finished request, so the promise settles once the response's body is finished, whether that is by being read, by being discarded, or by the collector draining an abandoned body (see [BODY](reading-the-body.md)).
 A transfer that ends in an error settles it too, carrying the phases reached before the error, so the promise never hangs.
-Settling also contributes the entry to the process's resource timeline, where a `PerformanceObserver` watching `resource` entries receives it and the resource timing buffer bounds how many are retained.
-Each request contributes exactly one entry.
+A response that cannot carry a body has finished as soon as it arrives.
+
+Taking a response's breakdown also contributes the entry to the process's resource timeline, where a `PerformanceObserver` watching `resource` entries receives it and the resource timing buffer bounds how many are retained.
+A request contributes at most one entry: the breakdown is built once and shared by the response and its clones, so asking repeatedly, or from a clone, yields that same entry.
 
 The interface Fáith exposes is the current one, which runs ahead of the platform's class: the attributes that class does not carry, along with two Fáith-specific fields, are own properties of the entry, and `toJSON()` covers them so a serialised entry is complete.
 
@@ -53,6 +55,7 @@ Where a timestamp is non-zero, `fetchStart` is the earliest and the rest are no 
 `responseStart` follows the standard's derivation: `firstInterimResponseStart` when that is non-zero, otherwise `finalResponseHeadersStart`.
 
 The two additions are `reused`, whether the request travelled on a pooled connection rather than a freshly established one (see [POOL](../agent/connection-pool.md)), and `requestSent`, the moment the request head and body finished being written to the connection.
+Reuse is read from the connections the agent tracks, so it is reported for the same connections `connections()` lists (see [OBS](../agent/observability.md)).
 `requestSent` sits alongside the standard's `requestStart` rather than replacing it: `requestStart` marks the start of writing the request, `requestSent` the end, and the two differ by the upload time on a request carrying a body.
 
 The service worker fields (`workerStart`, `workerRouterEvaluationStart`, `workerCacheLookupStart`, `workerMatchedRouterSource`, `workerFinalRouterSource`) and `renderBlockingStatus` describe a browsing context: they have no server-side meaning, so the timestamps read 0, the sources read empty, and `renderBlockingStatus` reads `non-blocking`.
@@ -61,7 +64,8 @@ The service worker fields (`workerStart`, `workerRouterEvaluationStart`, `worker
 So the span from `fetchStart` to `finalResponseHeadersStart` covers connection acquisition (pool wait, or DNS, connect, and TLS handshake on a fresh connection) together with the server's own turnaround, rather than being attributable to a phase.
 
 `finalResponseHeadersStart` less `fetchStart` is the time to response headers.
-That measurement is taken at a single instrumentation point and is the same one the per-protocol path-time average consumes for HTTP/3 slow-path demotion (see [PROBE](../http3/probing.md)), so a request's surfaced timing and the average it feeds never diverge.
+The arrival of a response's headers is observed once, and both that field and the per-protocol path-time average for HTTP/3 slow-path demotion (see [PROBE](../http3/probing.md)) are derived from the one observation, so a request's surfaced timing and the average it feeds can never disagree about when the response arrived.
+The two measure from different origins: the surfaced timing runs from the start of the request, so it covers every attempt made on the request's behalf, while the average measures the attempt that produced the response, so a path's speed is judged on its own showing.
 
 ## Threading
 

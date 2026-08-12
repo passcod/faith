@@ -1,5 +1,18 @@
 # K1 · Expose a per-request timing breakdown
 
+## Build steps
+
+- [x] Carry the measurements: a timing slot on the response, settled when the body ends, mirroring how the trailers slot works
+- [x] Stamp the response's arrival once, inside the Alt-Svc layer, and let both the path-time average and the surfaced timing derive from it
+- [x] Fall back to timing the send itself when nothing stamps: a cache hit never reaches that layer, and neither does anything when HTTP/3 support is not built
+- [x] Settle the timing from every route out of a body: the stream ending, `discard()`, the collector's drain, and a response that cannot carry one
+- [x] Report reuse from the connection tracker, which knows whether the connection was already there
+- [x] Capture the response's `Content-Encoding` before a decoded body's header is stripped
+- [x] Mint the `PerformanceResourceTiming` in the wrapper, graft the attributes the platform's class lacks, and shadow `toJSON`
+- [x] Memoise the entry per request and share it with clones
+- [x] Types for the entry and the property
+- [x] Tests, including on the oldest supported Node
+
 ## Minting a real PerformanceResourceTiming
 
 Verified against Node v26.3.1.
@@ -23,8 +36,16 @@ The built-in `toJSON()` ignores own properties, so it needs shadowing with an ow
 
 ## Sharing the instrumentation point
 
-The path-time EWMA already measures time-to-response-headers at `src/alt_svc.rs:974`, wrapping `next.run(req)` and feeding `record_path_time`.
-The timing breakdown reads `fetchStart` to `finalResponseHeadersStart` from that same measurement so the two never diverge.
+`run_stamped` in `src/alt_svc.rs` wraps every `next.run` and takes one instant when the response arrives.
+That instant feeds `record_path_time` directly and reaches `fetch.rs` through a `HeadersStamp` in the request's extensions, so both readings come from the one observation.
+
+The two measure from different origins on purpose. The path-time average runs from the start of the attempt that produced the response, so an HTTP/3 attempt that fails and falls back to TCP does not charge the TCP path for the time the QUIC attempt wasted. The surfaced timing runs from the start of the request, so it reports what the caller actually waited. Only a successful run stamps, which is what keeps the recorded moment attached to the response the caller receives.
+
+A cache hit is served above this layer and never reaches it, and the layer is not built at all without the `http3` feature; both fall back to stamping where the send resolves.
+
+## Where the body ends
+
+The end-of-body bookkeeping was chained onto the raw byte stream, underneath the decoder. A decoder reaches the end of its own framing without necessarily polling the bytes underneath to completion, so for a decoded body that bookkeeping never ran: the trailers promise hung, `bodiesFinished` never incremented, and the timing would have hung too. It now hangs off the stream that is actually delivered, above any decoder. The trailer frames are still pulled off the raw stream, where they arrive.
 
 ## Divergences from undici worth keeping
 

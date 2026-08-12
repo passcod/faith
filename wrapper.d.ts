@@ -327,6 +327,24 @@ export class Response {
 	readonly trailers: Promise<Headers | null>;
 
 	/**
+	 * Custom to Fáith.
+	 *
+	 * The `timing` read-only property of the `Response` interface is a promise of the request's
+	 * timing breakdown, as a `PerformanceResourceTiming`.
+	 *
+	 * A resource timing entry describes a finished request, so this does not resolve until the
+	 * body has ended: by being read, by `discard()`, or by the collector draining one that was
+	 * abandoned. A response that cannot carry a body has ended already.
+	 *
+	 * Taking the breakdown also contributes the entry to the process's resource timeline, where
+	 * a `PerformanceObserver` watching `resource` entries receives it. The entry is minted once
+	 * per request and shared with clones, so a request contributes at most one.
+	 *
+	 * Phases Fáith does not observe read 0, as they do in a browser.
+	 */
+	readonly timing: Promise<FaithResourceTiming>;
+
+	/**
 	 * Discard the response body, releasing the connection back to the pool.
 	 *
 	 * This is useful when you don't need the body but want to ensure the connection
@@ -411,6 +429,63 @@ export class Response {
 	 * without reading from it is fine.
 	 */
 	webResponse(): globalThis.Response;
+}
+
+/**
+ * A request's timing breakdown: the platform's `PerformanceResourceTiming`, carrying the
+ * attributes of the current revision of the interface alongside two of Fáith's own.
+ *
+ * The entry is a genuine `PerformanceResourceTiming`, so `instanceof` holds and anything that
+ * consumes performance entries takes it unmodified. The attributes below are the ones the
+ * platform's own class does not declare.
+ */
+export interface FaithResourceTiming extends PerformanceResourceTiming {
+	/** The moment the final response's headers arrived. */
+	readonly finalResponseHeadersStart: number;
+	/** The moment an interim (1xx) response arrived. */
+	readonly firstInterimResponseStart: number;
+	/** The moment the first byte of the response arrived. */
+	readonly responseStart: number;
+	/** The ALPN Protocol ID (RFC 7301) of the protocol the request travelled over. */
+	readonly nextHopProtocol: string;
+	/** `cache` for a response served by the HTTP cache, empty for one fetched from the network. */
+	readonly deliveryType: string;
+	/** The web platform feature that initiated the request; always `fetch`. */
+	readonly initiatorType: string;
+	/** The response's status code. */
+	readonly responseStatus: number;
+	/** The MIME essence of the response's `Content-Type`. */
+	readonly contentType: string;
+	/** The coding the response body arrived under. */
+	readonly contentEncoding: string;
+	/** Whether the resource can block rendering; always `non-blocking` outside a browser. */
+	readonly renderBlockingStatus: string;
+	/** The response's `Server-Timing` metrics. */
+	readonly serverTiming: ReadonlyArray<{
+		readonly name: string;
+		readonly duration: number;
+		readonly description: string;
+	}>;
+	readonly workerRouterEvaluationStart: number;
+	readonly workerCacheLookupStart: number;
+	readonly workerMatchedRouterSource: string;
+	readonly workerFinalRouterSource: string;
+
+	/**
+	 * Custom to Fáith.
+	 *
+	 * Whether the request travelled on a connection that was already in the pool rather than one
+	 * established for it.
+	 */
+	readonly reused: boolean;
+
+	/**
+	 * Custom to Fáith.
+	 *
+	 * The moment the request head and body finished being written to the connection, where the
+	 * standard's `requestStart` marks the start of writing.
+	 */
+	readonly requestSent: number;
 }
 
 /**

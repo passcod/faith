@@ -36,3 +36,14 @@ A failure inside the stream travels back through the binding's error channel, wh
 
 Spec: [H3UP](specs/http3/upgrade.md), Advertised ports.
 Connecting to one endpoint while sending another authority is not expressible in the HTTP stack, which is why the default is to record the advertisement without acting on it.
+
+## Connection setup and request writing are absent from the timing breakdown
+
+Spec: [RESP](specs/response/response.md), Request timing.
+The HTTP stack reports neither the boundaries of connection setup (DNS resolution, TCP connect, TLS handshake) nor the moments a request's head and body are written, so the phases covering them have no measurement to carry.
+The stack also does not surface interim (1xx) responses, so a `103 Early Hints` cannot be timed, nor a wire-level byte count, so the transfer and body sizes have nothing to count.
+
+## Reuse is unknown for a request that travelled over QUIC
+
+Spec: [RESP](specs/response/response.md), Request timing.
+Reuse is read from the agent's connection tracker, which registers a connection from the local and remote addresses the HTTP stack attaches to a response, and attaches them only for TCP-based responses; this is the same constraint that keeps QUIC connections out of `connections()`.

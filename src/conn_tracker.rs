@@ -137,14 +137,20 @@ impl ConnectionTracker {
 		})
 	}
 
-	pub fn track(&self, local_addr: SocketAddr, remote_addr: SocketAddr) {
+	/// Record a response on a connection, returning whether that connection was already known.
+	///
+	/// A connection the tracker has seen before is one the pool handed back rather than one
+	/// dialled for this request, since a fresh connection takes a local port of its own.
+	pub fn track(&self, local_addr: SocketAddr, remote_addr: SocketAddr) -> bool {
 		let now = SystemTime::now();
 		let key = ConnectionKey {
 			local_addr,
 			remote_addr,
 		};
+		let mut known = false;
 		self.connections.entry(key).and_compute_with(|entry| {
 			if let Some(entry) = entry {
+				known = true;
 				let mut conn = entry.into_value();
 				conn.last_seen = now;
 				conn.response_count += 1;
@@ -158,6 +164,7 @@ impl ConnectionTracker {
 				})
 			}
 		});
+		known
 	}
 
 	pub fn get_for_napi<'env>(&self, env: &'env Env) -> Vec<ConnectionInfo<'env>> {

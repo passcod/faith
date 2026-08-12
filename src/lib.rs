@@ -11,6 +11,7 @@ mod integrity;
 mod options;
 mod response;
 mod stream_body;
+mod timing;
 
 pub use agent::*;
 pub use error::error_codes;

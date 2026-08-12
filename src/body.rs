@@ -15,6 +15,8 @@ use reqwest::Version;
 use stream_shared::SharedStream;
 use tokio::sync::Mutex;
 
+use crate::timing::TimingSlot;
+
 pub(crate) type DynStream = dyn Stream<Item = std::result::Result<Bytes, String>> + Send + Sync;
 
 pub(crate) enum Body {
@@ -30,14 +32,17 @@ pub(crate) struct BodyHolder {
 	pub(crate) drained: Arc<AtomicBool>,
 	/// HTTP version - HTTP/2+ doesn't need draining for connection reuse
 	pub(crate) version: Version,
+	/// Settled when the body ends, so an abandoned body still finishes its timing
+	pub(crate) timing: Option<Arc<TimingSlot>>,
 }
 
 impl BodyHolder {
-	pub fn new(body: Option<Arc<Mutex<Body>>>, version: Version) -> Self {
+	pub fn new(body: Option<Arc<Mutex<Body>>>, version: Version, timing: Arc<TimingSlot>) -> Self {
 		Self {
 			body,
 			version,
 			drained: Arc::new(AtomicBool::new(false)),
+			timing: Some(timing),
 		}
 	}
 
@@ -46,6 +51,7 @@ impl BodyHolder {
 			body: None,
 			version: Version::HTTP_11,
 			drained: Arc::new(AtomicBool::new(true)),
+			timing: None,
 		}
 	}
 
@@ -67,6 +73,7 @@ impl Clone for BodyHolder {
 			body: self.body.clone(),
 			drained: self.drained.clone(),
 			version: self.version,
+			timing: self.timing.clone(),
 		}
 	}
 }
@@ -77,6 +84,7 @@ impl Debug for BodyHolder {
 			.field("body", &self.body)
 			.field("drained", &self.drained.load(Ordering::SeqCst))
 			.field("version", &self.version)
+			.field("timing", &self.timing)
 			.finish()
 	}
 }
@@ -87,26 +95,48 @@ impl Drop for BodyHolder {
 			return;
 		}
 
-		// For HTTP/2 and HTTP/3, connections are multiplexed - dropping a body
-		// stream doesn't prevent connection reuse, so no need to drain.
-		if self.is_multiplexed() {
+		// Only the last holder ends the body: a clone going away while another still holds
+		// it settles nothing, since that one may yet read it.
+		if self
+			.body
+			.as_ref()
+			.is_some_and(|arc| Arc::strong_count(arc) > 1)
+		{
 			return;
 		}
 
-		if let Some(ref arc) = self.body {
-			// Only spawn drain task if we're the last holder
-			if Arc::strong_count(arc) == 1 {
-				let arc = self.body.take().unwrap();
-				// Only spawn if we're in a tokio runtime context
-				// (Drop might be called during GC outside of async context)
-				if let Ok(handle) = tokio::runtime::Handle::try_current() {
-					handle.spawn(async move {
-						drain_body_inner(arc).await;
-					});
-				}
+		// An abandoned body still ends here, so its timing settles rather than waiting for a
+		// read that is never coming (spec:RESP#request-timing).
+		let timing = self.timing.take();
+
+		// For HTTP/2 and HTTP/3, connections are multiplexed - dropping a body
+		// stream doesn't prevent connection reuse, so no need to drain.
+		if self.is_multiplexed() {
+			if let Some(timing) = timing {
+				timing.ended();
+			}
+			return;
+		}
+
+		if let Some(arc) = self.body.take() {
+			// Only spawn if we're in a tokio runtime context
+			// (Drop might be called during GC outside of async context)
+			if let Ok(handle) = tokio::runtime::Handle::try_current() {
+				handle.spawn(async move {
+					drain_body_inner(arc).await;
+					// The drain is what ends this body, so the timing settles on its
+					// last byte rather than on the collector noticing.
+					if let Some(timing) = timing {
+						timing.ended();
+					}
+				});
+			} else if let Some(timing) = timing {
 				// If no runtime, the connection will be closed rather than reused
 				// This is acceptable as a fallback
+				timing.ended();
 			}
+		} else if let Some(timing) = timing {
+			timing.ended();
 		}
 	}
 }
