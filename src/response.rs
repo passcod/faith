@@ -122,7 +122,10 @@ impl TrailersSlot {
 		// arrived return without yielding. Its error case is the sender being gone, which
 		// means the response was dropped and nothing can ever set this -- no trailers is
 		// the only answer left.
-		match rx.wait_for(|state| !matches!(state, Trailers::NotYet)).await {
+		match rx
+			.wait_for(|state| !matches!(state, Trailers::NotYet))
+			.await
+		{
 			Ok(state) => state.clone(),
 			Err(_) => Trailers::None,
 		}
