@@ -23,31 +23,38 @@ HTTP/2 and HTTP/3 have no reason phrases on the wire, so the phrase is simulated
 `peer` describes the remote peer: `address` (IP and port, when available) and `certificate` (the DER-encoded leaf certificate when the connection was TLS, as a Buffer).
 Each access builds a fresh object and a fresh Buffer copy.
 `trailers` is a promise of the trailing headers (see [TRL](trailers.md)).
-`timing` is a per-request timing breakdown in the shape of a `PerformanceResourceTiming` (see [Request timing](#request-timing)).
+`timing` is a per-request timing breakdown mirroring `PerformanceResourceTiming` (see [Request timing](#request-timing)).
 
 ## Request timing
 
-`timing` reports how long the request took, phase by phase, in the shape of a Web `PerformanceResourceTiming`.
-Fields that map onto that interface take its names; those with no equivalent take a descriptive name.
+`timing` reports how the request spent its time, mirroring the Web `PerformanceResourceTiming` interface: every attribute that interface defines is present under its own name, type, and units, and `toJSON()` serialises the same shape.
+Two Fáith-specific fields are added to it.
 Each access builds a fresh object reflecting what is known at that moment.
 
-The breakdown covers the phases observable at Fáith's request boundary:
+Timestamps are fractional milliseconds against a monotonic origin shared across the breakdown, so consumers subtract one from another to obtain a duration.
+A phase that did not occur, or whose boundary Fáith does not observe, reads 0, as it does in a browser; the fields typed as strings, sizes, and lists read empty on the same basis.
+Consumers therefore check a field for a non-zero value before differencing it.
+Where a timestamp is non-zero, `fetchStart` is the earliest and the rest are no earlier than it.
 
-- `fetchStart` — the moment the request began, and the origin all other phases are measured against
-- `requestSent` — the request head and body have been fully written to the connection
-- `responseStart` — the first byte of the response, i.e. the response headers, has arrived
-- `responseEnd` — the last byte of the body has arrived, once the body is finished (fully read or discarded, see [BODY](reading-the-body.md))
-- `reused` — whether the request travelled on a pooled connection rather than a freshly established one (see [POOL](../agent/connection-pool.md))
-- `nextHopProtocol` — the protocol the request travelled over, as an ALPN Protocol ID (RFC 7301): `h3`, `h2`, `h2c`, `http/1.1`, and so on, whether or not the connection actually negotiated over ALPN
+`name` is the final URL after redirects, `entryType` is `resource`, and `initiatorType` is `fetch`.
+`startTime` is the start of the fetch, and `duration` is `responseEnd` less `startTime` once the body is finished and 0 before that.
+`responseStatus` is the response's status code, `contentType` the minimised MIME essence of `Content-Type`, and `contentEncoding` the `Content-Encoding` value (see [ENC](../fetch/content-encoding.md)).
+`deliveryType` is `cache` for a response served by the HTTP cache and empty for one fetched from the network (see [CACHE](../cache/http-cache.md)).
+`nextHopProtocol` is the protocol the request travelled over as an ALPN Protocol ID (RFC 7301): `h3`, `h2`, `h2c`, `http/1.1`, and so on, whether or not the connection actually negotiated over ALPN.
 
-Phase timestamps are fractional milliseconds on a monotonic clock shared across the breakdown, so consumers subtract one phase from another to obtain a duration.
-Where a timestamp is known, `fetchStart` is the earliest and the rest are no earlier than it.
+`fetchStart` is the moment the request began and the origin the other phases are measured against.
+`finalResponseHeadersStart` is when the final response's headers arrived, and `responseEnd` when the last byte of the body arrived, which is once the body is finished (fully read or discarded, see [BODY](reading-the-body.md)).
+`responseStart` follows the standard's derivation: `firstInterimResponseStart` when that is non-zero, otherwise `finalResponseHeadersStart`.
 
-A phase that has not happened yet, or whose boundary Fáith cannot observe, reads 0, following `PerformanceResourceTiming`, where a phase that did not occur reads 0 rather than being absent.
-So `responseEnd` reads 0 until the body finishes, and a consumer differencing two phases checks both for a non-zero value first.
-The breakdown starts at the request boundary, so the interval from `fetchStart` to `requestSent` covers connection acquisition (pool wait, or DNS, connect, and TLS handshake on a fresh connection) as a single span rather than as separate phases.
+The two additions are `reused`, whether the request travelled on a pooled connection rather than a freshly established one (see [POOL](../agent/connection-pool.md)), and `requestSent`, the moment the request head and body finished being written to the connection.
+`requestSent` sits alongside the standard's `requestStart` rather than replacing it: `requestStart` marks the start of writing the request, `requestSent` the end, and the two differ by the upload time on a request carrying a body.
 
-`responseStart` less `fetchStart` is the time to response headers.
+The service worker fields (`workerStart`, `workerRouterEvaluationStart`, `workerCacheLookupStart`, `workerMatchedRouterSource`, `workerFinalRouterSource`) and `renderBlockingStatus` describe a browsing context: they have no server-side meaning, so the timestamps read 0, the sources read empty, and `renderBlockingStatus` reads `non-blocking`.
+
+`redirectStart`, `redirectEnd`, `domainLookupStart`, `domainLookupEnd`, `connectStart`, `connectEnd`, `secureConnectionStart`, `requestStart`, `requestSent`, and `firstInterimResponseStart` read 0, and `transferSize`, `encodedBodySize`, and `decodedBodySize` read 0 with `serverTiming` an empty list.
+So the span from `fetchStart` to `finalResponseHeadersStart` covers connection acquisition (pool wait, or DNS, connect, and TLS handshake on a fresh connection) together with the server's own turnaround, rather than being attributable to a phase.
+
+`finalResponseHeadersStart` less `fetchStart` is the time to response headers.
 That measurement is taken at a single instrumentation point and is the same one the per-protocol path-time average consumes for HTTP/3 slow-path demotion (see [PROBE](../http3/probing.md)), so a request's surfaced timing and the average it feeds never diverge.
 
 ## Threading
