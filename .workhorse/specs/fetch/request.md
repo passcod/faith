@@ -32,11 +32,12 @@ An `Accept-Encoding` from the caller also selects which codings Fáith decodes o
 
 ## Request priority
 
-The `priority` option carries a hint about how the request ranks against others, expressed on the wire as an RFC 9218 `Priority` header with an urgency (`u`) parameter. Urgency runs from 0 (most urgent) to 7 (least urgent), and lower urgency means the server should serve the request sooner.
+The `priority` option carries a hint about how the request ranks against others, expressed on the wire as an RFC 9218 `Priority` header with an urgency (`u`) parameter.
+Urgency runs from 0 (most urgent) to 7 (least urgent), with 3 as the scheme's default.
 
-`priority: "high"` sends a low urgency value, marking the request as more urgent than a default request.
-`priority: "low"` sends a high urgency value, marking it less urgent than a default request.
-`priority: "auto"`, an unrecognised value, and the absence of the option all send no `Priority` header, leaving the request at the server's default urgency.
+`priority: "high"` sends an urgency below the default, marking the request as more urgent than an unmarked one.
+`priority: "low"` sends an urgency above the default, marking it less urgent.
+`priority: "auto"`, an unrecognised value, and the absence of the option all send no `Priority` header, leaving the request at the default urgency.
 
 A `Priority` header the caller sets directly, or one configured as an agent default header, wins over the mapping: Fáith emits the caller's header unchanged and does not derive a value from `priority`.
 
