@@ -10,6 +10,7 @@ The system resolver remains available as an escape hatch for environments where 
 ## Built-in resolver
 
 Resolution uses Fáith's own client with an in-memory cache; repeat requests to a host skip the lookup entirely (connection reuse skips it further still).
+`prefetchDns(host)` populates this cache ahead of the first request (see [WARM](warm-up.md)).
 IPv4 and IPv6 answers race with the Happy Eyeballs algorithm, so a broken family degrades latency rather than breaking connectivity.
 
 ## System resolver

@@ -9,10 +9,13 @@ Pooling is always on; the options bound how long and how many idle connections a
 
 `pool.idleTimeout` closes a connection after that many seconds of inactivity.
 It defaults to 90 seconds, and the same window bounds how long an idle connection appears in `connections()` (see [OBS](observability.md)).
-`pool.maxIdlePerHost` caps idle connections kept per host, closing connections to stay under it; the default is no limit.
+`pool.maxIdlePerHost` caps idle connections kept per origin: scheme, host, and port together, so `https://example.com`, `https://example.com:8443`, and `http://example.com` are capped separately despite the option's name.
+Once an origin sits at the cap, a connection that would otherwise return to the pool is closed instead, so the connections already idle are the ones that survive.
+The default is no limit.
 HTTP/1 connections return to the pool once their response body has been fully read or discarded; an unconsumed body holds its connection (see [BODY](../response/reading-the-body.md)).
 HTTP/2 and HTTP/3 connections multiplex, so reuse does not depend on body consumption.
 The connection established by a successful HTTP/3 probe lands in the same pool, so the first upgraded request starts on a warm connection (see [PROBE](../http3/probing.md)).
+A connection opened by `preconnect(origin)` lands in the pool the same way, so the first request to that origin starts warm (see [WARM](warm-up.md)).
 
 ## Reusing a connection that has died
 

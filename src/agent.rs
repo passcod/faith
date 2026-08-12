@@ -9,11 +9,14 @@ use std::{
 	time::Duration,
 };
 
-use napi::bindgen_prelude::within_runtime_if_available;
+use napi::bindgen_prelude::{PromiseRaw, within_runtime_if_available};
 
+use http::Version;
 use http_cache_reqwest::{
 	CACacheManager, Cache, CacheOptions, HttpCache, HttpCacheOptions, MokaCacheBuilder, MokaManager,
 };
+use hyper_util::client::legacy::connect::HttpInfo;
+use moka::sync::Cache as MokaCache;
 use napi::{Either, Env, bindgen_prelude::Buffer};
 use napi_derive::napi;
 use reqwest::{
@@ -25,9 +28,13 @@ use reqwest::{
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 
 #[cfg(feature = "http3")]
+use crate::alt_svc::parse_alt_svc_header;
+#[cfg(feature = "http3")]
 use crate::alt_svc::{AltSvcCache, AltSvcCacheConfig, AltSvcMiddleware, H3Prober};
 use crate::{
+	async_task::faith_promise,
 	conn_tracker::{ConnectionInfo, ConnectionTracker},
+	dns::FaithResolver,
 	error::{FaithError, FaithErrorKind},
 	options::{PRIORITY, RequestCacheMode},
 	retry::DeadConnectionRetry,
@@ -660,6 +667,22 @@ pub struct Agent {
 	/// (connection pool, DNS resolver, background tasks) live inside this
 	/// client, so dropping it is what actually releases them.
 	pub(crate) client: Option<ClientWithMiddleware>,
+	/// The raw `reqwest::Client` underlying [`Self::client`], sharing its connection pool. A
+	/// `preconnect` warm-up sends its synthetic request here rather than through the middleware
+	/// stack, which bypasses the HTTP cache and the Alt-Svc layer (and so keeps the warm-up out of
+	/// request accounting), while still pooling the connection foreground requests reuse. `None`
+	/// once the agent is closed. (spec:WARM)
+	pub(crate) raw_client: Option<Client>,
+	/// Fáith's DNS resolver, shared with [`Self::client`] so `prefetchDns` warms the cache requests
+	/// read. `None` under the system resolver, where there is no such cache. (spec:WARM)
+	pub(crate) dns_resolver: Option<FaithResolver>,
+	/// Origins with a warm-up connection opened within the pool idle window, so a repeat
+	/// `preconnect` does no new work. Keyed by `scheme://host:port`; entries expire with the idle
+	/// timeout. (spec:WARM)
+	pub(crate) warmed: MokaCache<String, ()>,
+	/// Single-flight claims for in-flight `preconnect` warm-ups, so concurrent calls for the same
+	/// origin do not open duplicate connections. (spec:WARM)
+	pub(crate) warming: MokaCache<String, ()>,
 	pub(crate) cookie_jar: Option<Arc<Jar>>,
 	pub(crate) stats: Arc<InnerAgentStats>,
 	pub(crate) conn_tracker: Arc<ConnectionTracker>,
@@ -674,6 +697,11 @@ pub struct Agent {
 	/// Mirrors `http3.upgradeFollowAdvertisedPort`. Lives here because `fetch` needs
 	/// it to stop a rewritten port from being reported as a redirect.
 	pub(crate) h3_follow_advertised_port: bool,
+	/// Mirrors `http3.upgradeEnabled`. A warm-up needs it to route the way a foreground request
+	/// would: with the upgrade machinery off, nothing upgrades, whatever the caches hold.
+	/// (spec:WARM#preconnect)
+	#[cfg(feature = "http3")]
+	pub(crate) h3_upgrade_enabled: bool,
 	/// The agent's default `Accept-Encoding`, if one was set among its default headers.
 	/// `fetch` consults it to decide which codings to decode when a request adds none of
 	/// its own (see [`crate::encoding`]).
@@ -728,35 +756,42 @@ impl Agent {
 			None
 		};
 
-		if let Some(dns) = options.dns {
-			if dns.system.unwrap_or(false) {
-				client = client.no_hickory_dns();
-			} else {
-				for DnsOverride { domain, addresses } in dns.overrides.unwrap_or_default() {
-					client = client.resolve_to_addrs(
-						&domain,
-						&addresses
-							.into_iter()
-							.map(|addr| match SocketAddr::from_str(&addr) {
-								Ok(addr) => Ok(addr),
-								Err(err) => match IpAddr::from_str(&addr) {
-									Ok(IpAddr::V4(ip)) => {
-										Ok(SocketAddr::V4(SocketAddrV4::new(ip, 0)))
-									}
-									Ok(IpAddr::V6(ip)) => {
-										Ok(SocketAddr::V6(SocketAddrV6::new(ip, 0, 0, 0)))
-									}
-									Err(_) => Err(FaithError::new(
-										FaithErrorKind::AddressParse,
-										Some(format!("{addr:?}: {err}")),
-									)),
-								},
-							})
-							.collect::<Result<Vec<_>, FaithError>>()?,
-					)
-				}
+		let dns = options.dns.unwrap_or_default();
+		let dns_resolver = if dns.system.unwrap_or(false) {
+			// The system resolver (getaddrinfo) has no in-process cache Fáith can warm, so no
+			// resolver is installed and `prefetchDns` resolves as a no-op (spec:WARM).
+			client = client.no_hickory_dns();
+			None
+		} else {
+			for DnsOverride { domain, addresses } in dns.overrides.unwrap_or_default() {
+				client = client.resolve_to_addrs(
+					&domain,
+					&addresses
+						.into_iter()
+						.map(|addr| match SocketAddr::from_str(&addr) {
+							Ok(addr) => Ok(addr),
+							Err(err) => match IpAddr::from_str(&addr) {
+								Ok(IpAddr::V4(ip)) => Ok(SocketAddr::V4(SocketAddrV4::new(ip, 0))),
+								Ok(IpAddr::V6(ip)) => {
+									Ok(SocketAddr::V6(SocketAddrV6::new(ip, 0, 0, 0)))
+								}
+								Err(_) => Err(FaithError::new(
+									FaithErrorKind::AddressParse,
+									Some(format!("{addr:?}: {err}")),
+								)),
+							},
+						})
+						.collect::<Result<Vec<_>, FaithError>>()?,
+				)
 			}
-		}
+
+			// Fáith owns the hickory resolver rather than leaving it to reqwest's built-in one, so
+			// `prefetchDns` can warm the very cache reqwest's requests read (spec:WARM). reqwest
+			// still layers `dns.overrides` on top, so the overrides applied above keep working.
+			let resolver = FaithResolver::default();
+			client = client.dns_resolver(resolver.clone());
+			Some(resolver)
+		};
 
 		let mut default_accept_encoding = None;
 		let mut has_default_priority = false;
@@ -908,7 +943,7 @@ impl Agent {
 		let h3_follow_advertised_port = false;
 
 		#[cfg(feature = "http3")]
-		let (alt_svc_cache, alt_svc_middleware, h3_prober) = {
+		let (alt_svc_cache, alt_svc_middleware, h3_prober, h3_upgrade_enabled) = {
 			let http3_opts = options.http3.as_ref();
 			let enabled = http3_opts.and_then(|o| o.upgrade_enabled).unwrap_or(true);
 
@@ -1010,7 +1045,7 @@ impl Agent {
 				AltSvcMiddleware::new(cache.clone(), enabled, attempt_timeout, prober.clone());
 
 			// Registered below rather than here — see the note at the registration.
-			(Some(cache), middleware, prober)
+			(Some(cache), middleware, prober, enabled)
 		};
 
 		if let Some(cache) = options.cache
@@ -1093,6 +1128,16 @@ impl Agent {
 
 		Ok(Self {
 			client: Some(client.build()),
+			raw_client: Some(reqwest_client),
+			dns_resolver,
+			// A warm-up connection is warm only as long as the pool keeps it idle, so the record
+			// that an origin is warm expires with that same window.
+			warmed: MokaCache::builder().time_to_live(conn_timeout).build(),
+			// A safety TTL well past any reasonable warm-up, so a claim that never gets released
+			// (a warm-up whose task is dropped) frees the origin rather than wedging it.
+			warming: MokaCache::builder()
+				.time_to_live(Duration::from_secs(300))
+				.build(),
 			cookie_jar,
 			stats: Default::default(),
 			conn_tracker: ConnectionTracker::new(conn_timeout),
@@ -1101,6 +1146,8 @@ impl Agent {
 			#[cfg(feature = "http3")]
 			h3_prober,
 			h3_follow_advertised_port,
+			#[cfg(feature = "http3")]
+			h3_upgrade_enabled,
 			default_accept_encoding,
 			has_default_priority,
 		})
@@ -1127,8 +1174,12 @@ impl Agent {
 	#[napi]
 	pub fn close(&mut self) {
 		// Dropping the client releases the reqwest connection pool and the
-		// Hickory resolver task; the alt-svc cache goes with it.
+		// Hickory resolver task; the alt-svc cache goes with it. The raw client
+		// shares that pool and the resolver, so it goes too, and both are what a
+		// later `preconnect`/`prefetchDns` checks to throw the closed-agent error.
 		self.client = None;
+		self.raw_client = None;
+		self.dns_resolver = None;
 		#[cfg(feature = "http3")]
 		{
 			// Probes hold a raw client clone; abort them so the pool doesn't
@@ -1226,5 +1277,339 @@ impl Agent {
 	#[napi]
 	pub fn connections<'env>(&self, env: &'env Env) -> Vec<ConnectionInfo<'env>> {
 		self.conn_tracker.get_for_napi(env)
+	}
+
+	/// Note that a request reached this origin, so it holds a connection the pool keeps idle for
+	/// the idle window and a `preconnect` for it has no new work to do (spec:WARM).
+	///
+	/// Called for foreground requests as well as warm-ups, because the criterion is about the
+	/// origin holding an idle pooled connection, not about how it came to hold one.
+	pub(crate) fn mark_warm(&self, url: &Url) {
+		self.warmed.insert(origin_key(url), ());
+	}
+
+	/// Warm the DNS cache for `host`, so a later request to it skips the lookup.
+	///
+	/// Mirrors the browser's `dns-prefetch` resource hint. The argument is a bare host; a scheme,
+	/// port, or path in a fuller string is ignored. The returned promise resolves when the answer
+	/// lands in the cache and never rejects, whatever happens on the network — a resolution failure
+	/// resolves quietly, because the work is advisory. Under the system resolver there is no cache
+	/// to warm, so the call resolves without doing anything. A malformed host throws synchronously,
+	/// as does a call on a closed agent. (spec:WARM)
+	#[napi]
+	pub fn prefetch_dns<'env>(
+		&self,
+		env: &'env Env,
+		host: String,
+	) -> Result<PromiseRaw<'env, ()>, napi::Error> {
+		if self.client.is_none() {
+			return Err(caller_error(env, FaithErrorKind::Closed));
+		}
+
+		let Some(host) = extract_host(&host) else {
+			return Err(caller_error(env, FaithErrorKind::AddressParse));
+		};
+
+		let resolver = self.dns_resolver.clone();
+		faith_promise(env, async move {
+			if let Some(resolver) = resolver {
+				resolver.prefetch(&host).await;
+			}
+			Ok(())
+		})
+	}
+
+	/// Open a pooled connection to `origin`, so the first request to it skips DNS, TCP, and TLS
+	/// setup.
+	///
+	/// Mirrors the browser's `preconnect` resource hint. The argument is an origin
+	/// (`scheme://host[:port]`); a longer URL is reduced to its origin. The warm-up sends a
+	/// synthetic `HEAD` to the origin's root — the origin sees it — over the transport the next
+	/// foreground request would use: a confirmed HTTP/3 origin gets a warm QUIC connection, every
+	/// other origin a TCP one. The returned promise resolves when the attempt finishes and never
+	/// rejects: every network failure resolves quietly. A malformed origin throws synchronously, as
+	/// does a call on a closed agent. (spec:WARM)
+	#[napi]
+	pub fn preconnect<'env>(
+		&self,
+		env: &'env Env,
+		origin: String,
+	) -> Result<PromiseRaw<'env, ()>, napi::Error> {
+		let Some(raw_client) = self.raw_client.clone() else {
+			return Err(caller_error(env, FaithErrorKind::Closed));
+		};
+
+		let Some(url) = reduce_to_origin(&origin) else {
+			return Err(caller_error(env, FaithErrorKind::AddressParse));
+		};
+		let key = origin_key(&url);
+
+		// Already warm within the idle window, or a warm-up for this origin already in flight:
+		// either way there is no new work to do, so resolve without opening a duplicate.
+		if self.warmed.contains_key(&key)
+			|| !self.warming.entry(key.clone()).or_insert(()).is_fresh()
+		{
+			return faith_promise(env, async move { Ok(()) });
+		}
+
+		// The transport the next foreground request would take, decided exactly as
+		// `AltSvcMiddleware` decides it: nothing upgrades with the machinery off; with a prober,
+		// only a confirmed origin routes to QUIC (an advertisement is evidence worth probing, not
+		// worth routing on); without one, the legacy inline upgrade acts on advertisements too.
+		// Diverging here would warm the wrong transport (spec:WARM#preconnect).
+		#[cfg(feature = "http3")]
+		let h3_port = self
+			.alt_svc_cache
+			.as_ref()
+			.filter(|_| self.h3_upgrade_enabled)
+			.and_then(|cache| {
+				if self.h3_prober.is_some() {
+					cache.confirmed_port(&url)
+				} else {
+					cache.should_use_h3(&url)
+				}
+			});
+		#[cfg(not(feature = "http3"))]
+		let h3_port: Option<u16> = None;
+
+		#[cfg(feature = "http3")]
+		let alt_svc_cache = self.alt_svc_cache.clone();
+		#[cfg(feature = "http3")]
+		let h3_prober = self.h3_prober.clone();
+
+		let conn_tracker = self.conn_tracker.clone();
+		let warmed = self.warmed.clone();
+		let warming = self.warming.clone();
+
+		faith_promise(env, async move {
+			// Release the single-flight claim whatever happens, so a later warm-up isn't blocked
+			// by this one having finished.
+			struct ReleaseClaim {
+				warming: MokaCache<String, ()>,
+				key: String,
+			}
+			impl Drop for ReleaseClaim {
+				fn drop(&mut self) {
+					self.warming.invalidate(&self.key);
+				}
+			}
+			let _release = ReleaseClaim {
+				warming,
+				key: key.clone(),
+			};
+
+			let request = match h3_port {
+				Some(port) => {
+					let mut h3_url = url.clone();
+					// A port differing from the origin's only comes back with
+					// `upgradeFollowAdvertisedPort` on; rewriting the URL is how reqwest is told to
+					// connect there (mirrors the foreground path).
+					if Some(port) != h3_url.port_or_known_default() {
+						let _ = h3_url.set_port(Some(port));
+					}
+					raw_client.head(h3_url).version(Version::HTTP_3)
+				}
+				None => raw_client.head(url.clone()),
+			};
+
+			let outcome = request.send().await;
+
+			// A TCP warm-up leaves a pooled connection to track and, in probe mode, may reveal an
+			// HTTP/3 advertisement to act on; a QUIC warm-up does neither (QUIC connections are not
+			// tracked, and a confirmed origin has nothing left to probe).
+			if h3_port.is_none() {
+				if let Ok(response) = &outcome
+					&& let Some(info) = response.extensions().get::<HttpInfo>()
+				{
+					conn_tracker.track_warmup(info.local_addr(), info.remote_addr());
+				}
+
+				// A background probe verifies HTTP/3 for a probe-worthy origin exactly as a real
+				// TCP-routed request would, folding in any fresh advertisement first; the warm-up
+				// settles without waiting for it. Both only apply in probe mode (a prober present).
+				#[cfg(feature = "http3")]
+				if let Some(prober) = &h3_prober {
+					if let (Some(cache), Ok(response)) = (&alt_svc_cache, &outcome)
+						&& let Some(value) = response.headers().get("alt-svc")
+						&& let Ok(value) = value.to_str()
+						&& let Some(advertisement) = parse_alt_svc_header(value)
+					{
+						cache.record_alt_svc(&url, &advertisement);
+					}
+					prober.maybe_probe(&url);
+				}
+			}
+
+			// A connection was established, so the origin is warm for the idle window; a failed
+			// warm-up leaves it unmarked so a later `preconnect` may try again.
+			if outcome.is_ok() {
+				warmed.insert(key, ());
+			}
+
+			Ok(())
+		})
+	}
+}
+
+/// Build the JS error a warm-up throws synchronously for a caller mistake, preserving its `.code`
+/// and JS error class. Network failures never reach here — they resolve quietly (spec:WARM).
+fn caller_error(env: &Env, kind: FaithErrorKind) -> napi::Error {
+	napi::Error::from(FaithError::from(kind).into_js_error(env))
+}
+
+/// Extract the bare host from a `prefetchDns` argument, ignoring any scheme, port, or path, or
+/// `None` if there is no host to resolve. A DNS name carries none of those parts, so a fuller
+/// string is reduced to its host. (spec:WARM)
+fn extract_host(input: &str) -> Option<String> {
+	// A string that already spells a scheme is read as the URL it is; anything else is the
+	// bare-host case, where a name is not a URL on its own and giving it an authority makes it
+	// parse as one. Telling the two apart on the scheme separator matters both ways: `example.com:8443`
+	// otherwise parses as a *scheme* of `example.com` with no host, and a schemed string with no host
+	// (`file:///path`, a bare `https://`) would have its scheme misread as a host by the fallback.
+	let url = if input.contains("://") {
+		Url::parse(input).ok()?
+	} else {
+		Url::parse(&format!("dns://{input}")).ok()?
+	};
+	let host = url.host_str()?;
+	// `host_str` brackets an IPv6 literal; the resolver wants it bare.
+	let host = host
+		.strip_prefix('[')
+		.and_then(|rest| rest.strip_suffix(']'))
+		.unwrap_or(host);
+	(!host.is_empty()).then(|| host.to_owned())
+}
+
+/// Reduce a `preconnect` argument to its origin, or `None` if it is not a connectable origin. Path,
+/// query, fragment, and userinfo are stripped — the same reduction the HTTP/3 probe applies — and
+/// the scheme must have a known default port so an omitted port resolves. (spec:WARM)
+fn reduce_to_origin(input: &str) -> Option<Url> {
+	let mut url = Url::parse(input).ok()?;
+	if !url.has_host() || url.port_or_known_default().is_none() {
+		return None;
+	}
+	url.set_path("/");
+	url.set_query(None);
+	url.set_fragment(None);
+	let _ = url.set_username("");
+	let _ = url.set_password(None);
+	Some(url)
+}
+
+/// The `scheme://host:port` key an origin coalesces on, with the port defaulted by scheme so
+/// `https://host` and `https://host:443` are the same origin. Matches the Alt-Svc cache's key.
+pub(crate) fn origin_key(url: &Url) -> String {
+	format!(
+		"{}://{}:{}",
+		url.scheme(),
+		url.host_str().unwrap_or_default(),
+		url.port_or_known_default().unwrap_or_default(),
+	)
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn prefetch_dns_takes_a_bare_host() {
+		assert_eq!(extract_host("example.com").as_deref(), Some("example.com"));
+	}
+
+	#[test]
+	fn prefetch_dns_ignores_the_parts_a_name_does_not_have() {
+		// A DNS name has no scheme, port, or path, so a fuller string is reduced to its host
+		// rather than rejected (spec:WARM#prefetchdns).
+		for input in [
+			"https://example.com",
+			"https://example.com:8443",
+			"https://example.com/some/path?q=1#frag",
+			"https://user:pass@example.com/",
+			"example.com:8443",
+		] {
+			assert_eq!(
+				extract_host(input).as_deref(),
+				Some("example.com"),
+				"{input:?} names example.com whatever else it carries"
+			);
+		}
+	}
+
+	#[test]
+	fn prefetch_dns_unwraps_an_ipv6_literal() {
+		// `host_str` brackets an IPv6 literal, but the resolver wants it bare.
+		assert_eq!(
+			extract_host("https://[2001:db8::1]:8443").as_deref(),
+			Some("2001:db8::1")
+		);
+	}
+
+	#[test]
+	fn prefetch_dns_rejects_a_string_with_no_host() {
+		for input in ["", "   ", "/just/a/path", "https://"] {
+			assert!(
+				extract_host(input).is_none(),
+				"{input:?} names no host to resolve"
+			);
+		}
+	}
+
+	#[test]
+	fn preconnect_reduces_a_longer_url_to_its_origin() {
+		// The same reduction the HTTP/3 probe applies (spec:WARM#preconnect).
+		let url = reduce_to_origin("https://user:pass@example.com/some/path?q=1#frag")
+			.expect("a full URL reduces to its origin");
+
+		assert_eq!(url.as_str(), "https://example.com/");
+		assert_eq!(url.username(), "", "userinfo is stripped");
+		assert_eq!(url.password(), None);
+		assert_eq!(url.query(), None);
+		assert_eq!(url.fragment(), None);
+	}
+
+	#[test]
+	fn preconnect_defaults_the_port_by_scheme() {
+		// An omitted port defaults by scheme, so an origin spelled either way coalesces on one
+		// key (spec:WARM#preconnect).
+		for (bare, spelled) in [
+			("https://example.com", "https://example.com:443"),
+			("http://example.com", "http://example.com:80"),
+		] {
+			let bare = origin_key(&reduce_to_origin(bare).expect("parses"));
+			let spelled = origin_key(&reduce_to_origin(spelled).expect("parses"));
+			assert_eq!(
+				bare, spelled,
+				"the omitted port defaults to the spelled one"
+			);
+		}
+	}
+
+	#[test]
+	fn preconnect_keeps_distinct_origins_apart() {
+		// The pool caps and the warm record are per origin: scheme, host, and port together
+		// (spec:POOL).
+		let key = |input: &str| origin_key(&reduce_to_origin(input).expect("parses"));
+
+		assert_ne!(key("https://example.com"), key("https://example.com:8443"));
+		assert_ne!(key("https://example.com"), key("http://example.com"));
+		assert_ne!(key("https://example.com"), key("https://other.example"));
+	}
+
+	#[test]
+	fn preconnect_rejects_what_cannot_be_connected_to() {
+		for input in [
+			"not an origin",
+			"",
+			"/just/a/path",
+			// No host to connect to.
+			"file:///etc/hosts",
+			// No default port for the scheme, and none given.
+			"unknownscheme://example.com",
+		] {
+			assert!(
+				reduce_to_origin(input).is_none(),
+				"{input:?} is not a connectable origin"
+			);
+		}
 	}
 }

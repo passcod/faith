@@ -19,6 +19,7 @@ A persistent gap between `bodiesStarted` and `bodiesFinished` is the designed le
 `connections()` lists the agent's current TCP connections with per-connection statistics.
 QUIC connections are not tracked; each entry's `connectionType` is `tcp`.
 Each entry identifies the connection by local/remote address and port, and carries usage data: `responseCount` (may undercount when redirects are followed internally), `firstSeen`, `lastSeen`, and `expiry` (an estimate of when the connection leaves the pool, pushed back on reuse and derived from the pool idle timeout).
+A connection opened by `preconnect(origin)` is listed before any request has used it, with a `responseCount` of zero (see [WARM](warm-up.md)).
 Network statistics are sampled from the operating system about once a second, so consumers can difference successive readings into rates (e.g. retransmission rate).
 An agent with nothing tracked does not sample at all.
 Cross-platform fields: `rttUs`, `rttVarUs`, `retransmits`, `totalRetransmits`, `congestionWindow`.

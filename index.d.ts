@@ -67,6 +67,30 @@ export declare class Agent {
    * on field availability. If the platform isn't supported at all, this will always return empty.
    */
   connections(): Array<ConnectionInfo>
+  /**
+   * Warm the DNS cache for `host`, so a later request to it skips the lookup.
+   *
+   * Mirrors the browser's `dns-prefetch` resource hint. The argument is a bare host; a scheme,
+   * port, or path in a fuller string is ignored. The returned promise resolves when the answer
+   * lands in the cache and never rejects, whatever happens on the network — a resolution failure
+   * resolves quietly, because the work is advisory. Under the system resolver there is no cache
+   * to warm, so the call resolves without doing anything. A malformed host throws synchronously,
+   * as does a call on a closed agent. (spec:WARM)
+   */
+  prefetchDns(host: string): Promise<undefined>
+  /**
+   * Open a pooled connection to `origin`, so the first request to it skips DNS, TCP, and TLS
+   * setup.
+   *
+   * Mirrors the browser's `preconnect` resource hint. The argument is an origin
+   * (`scheme://host[:port]`); a longer URL is reduced to its origin. The warm-up sends a
+   * synthetic `HEAD` to the origin's root — the origin sees it — over the transport the next
+   * foreground request would use: a confirmed HTTP/3 origin gets a warm QUIC connection, every
+   * other origin a TCP one. The returned promise resolves when the attempt finishes and never
+   * rejects: every network failure resolves quietly. A malformed origin throws synchronously, as
+   * does a call on a closed agent. (spec:WARM)
+   */
+  preconnect(origin: string): Promise<undefined>
 }
 
 export declare class AgentStats {
