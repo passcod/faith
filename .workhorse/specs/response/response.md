@@ -23,27 +23,33 @@ HTTP/2 and HTTP/3 have no reason phrases on the wire, so the phrase is simulated
 `peer` describes the remote peer: `address` (IP and port, when available) and `certificate` (the DER-encoded leaf certificate when the connection was TLS, as a Buffer).
 Each access builds a fresh object and a fresh Buffer copy.
 `trailers` is a promise of the trailing headers (see [TRL](trailers.md)).
-`timing` is a per-request timing breakdown mirroring `PerformanceResourceTiming` (see [Request timing](#request-timing)).
+`timing` is a promise of the request's timing breakdown as a `PerformanceResourceTiming` (see [Request timing](#request-timing)).
 
 ## Request timing
 
-`timing` reports how the request spent its time, mirroring the Web `PerformanceResourceTiming` interface: every attribute that interface defines is present under its own name, type, and units, and `toJSON()` serialises the same shape.
-Two Fáith-specific fields are added to it.
-Each access builds a fresh object reflecting what is known at that moment.
+`timing` is a promise of how the request spent its time, as a genuine `PerformanceResourceTiming`.
+It is the platform's own class rather than an object shaped like one, so `instanceof PerformanceResourceTiming` holds and anything that consumes performance entries takes it unmodified.
 
-Timestamps are fractional milliseconds against a monotonic origin shared across the breakdown, so consumers subtract one from another to obtain a duration.
+The entry is a snapshot of a finished request, so the promise settles once the response's body is finished, whether that is by being read, by being discarded, or by the collector draining an abandoned body (see [BODY](reading-the-body.md)).
+A transfer that ends in an error settles it too, carrying the phases reached before the error, so the promise never hangs.
+Settling also contributes the entry to the process's resource timeline, where a `PerformanceObserver` watching `resource` entries receives it and the resource timing buffer bounds how many are retained.
+Each request contributes exactly one entry.
+
+The interface Fáith exposes is the current one, which runs ahead of the platform's class: the attributes that class does not carry, along with two Fáith-specific fields, are own properties of the entry, and `toJSON()` covers them so a serialised entry is complete.
+
+Timestamps are fractional milliseconds on the same clock as `performance.now()`, so they are comparable with other performance entries, and consumers subtract one from another to obtain a duration.
 A phase that did not occur, or whose boundary Fáith does not observe, reads 0, as it does in a browser; the fields typed as strings, sizes, and lists read empty on the same basis.
 Consumers therefore check a field for a non-zero value before differencing it.
 Where a timestamp is non-zero, `fetchStart` is the earliest and the rest are no earlier than it.
 
 `name` is the final URL after redirects, `entryType` is `resource`, and `initiatorType` is `fetch`.
-`startTime` is the start of the fetch, and `duration` is `responseEnd` less `startTime` once the body is finished and 0 before that.
+`startTime` is the start of the fetch, and `duration` is `responseEnd` less `startTime`.
 `responseStatus` is the response's status code, `contentType` the minimised MIME essence of `Content-Type`, and `contentEncoding` the `Content-Encoding` value (see [ENC](../fetch/content-encoding.md)).
 `deliveryType` is `cache` for a response served by the HTTP cache and empty for one fetched from the network (see [CACHE](../cache/http-cache.md)).
 `nextHopProtocol` is the protocol the request travelled over as an ALPN Protocol ID (RFC 7301): `h3`, `h2`, `h2c`, `http/1.1`, and so on, whether or not the connection actually negotiated over ALPN.
 
 `fetchStart` is the moment the request began and the origin the other phases are measured against.
-`finalResponseHeadersStart` is when the final response's headers arrived, and `responseEnd` when the last byte of the body arrived, which is once the body is finished (fully read or discarded, see [BODY](reading-the-body.md)).
+`finalResponseHeadersStart` is when the final response's headers arrived, and `responseEnd` when the body finished.
 `responseStart` follows the standard's derivation: `firstInterimResponseStart` when that is non-zero, otherwise `finalResponseHeadersStart`.
 
 The two additions are `reused`, whether the request travelled on a pooled connection rather than a freshly established one (see [POOL](../agent/connection-pool.md)), and `requestSent`, the moment the request head and body finished being written to the connection.
