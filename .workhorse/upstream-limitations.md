@@ -38,6 +38,12 @@ Spec: [POOL](specs/agent/connection-pool.md), Reusing a connection that has died
 The HTTP stack replays a request on a reused pooled connection only while it still owns the request message, which is the case where nothing reached the wire at all; a request written into a socket the origin had already closed is classified as a send that got no complete response, and is not replayed.
 The stack also does not report whether the connection that failed came from the pool or had just been opened, which is the bound its own replay uses, so Fáith bounds the number of attempts instead of the kind of connection.
 
+## `preconnect()` sends a request to the origin
+
+Spec: [WARM](specs/agent/warm-up.md), What preconnect sends.
+The HTTP stack does not expose a way to place a connection into its pool, only to make a request that leaves one there, so a warm connection cannot be obtained without a request the origin sees.
+This is also why the HTTP/3 probe is a synthetic `HEAD` rather than a bare handshake.
+
 ## An advertised HTTP/3 port cannot be honoured while keeping the origin's authority
 
 Spec: [H3UP](specs/http3/upgrade.md), Advertised ports.

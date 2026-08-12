@@ -7,8 +7,10 @@ id: WARM
 Two agent methods let a caller pay connection-setup costs before the first request needs them, so that request skips the round trips.
 `prefetchDns(host)` warms the DNS cache; `preconnect(origin)` resolves the host and opens a pooled connection.
 They mirror the browser resource-hint verbs of the same name.
-Both are advisory: a later request goes faster when the warm-up succeeded and pays the normal setup cost when it did not, so a warm-up never makes a request fail that would otherwise have worked.
+Both are advisory: a later request goes faster when the warm-up succeeded and pays the normal setup cost when it did not, and a failed warm-up is never reported to the caller.
 They differ in what they touch: `prefetchDns` reaches only the resolver, while `preconnect` reaches the origin itself with a synthetic request, which the origin can see.
+`prefetchDns` cannot change the outcome of a later request, only its speed.
+`preconnect` puts a connection in the pool, which carries the pool's own risk that the origin closes it silently, so what it promises is bounded by what happens to a pooled connection that dies (see [Warming an origin that closes idle connections](#warming-an-origin-that-closes-idle-connections)).
 
 ## prefetchDns
 
@@ -44,6 +46,16 @@ The warm-up neither reads nor writes the HTTP cache, so a cached response cannot
 It otherwise carries the agent's configuration like any request to that origin, including default headers, `userAgent`, and the cookie jar, so an origin that sets cookies on its root can update the jar from a warm-up (see [COOK](cookies.md)).
 The agent's connect and request timeouts bound it, so a silent path fails the warm-up rather than leaving its promise pending forever (see [CANCEL](../fetch/cancellation-and-timeouts.md)).
 
+## Warming an origin that closes idle connections
+
+A warm-up connection can die in the pool before the first request claims it, and an origin that closes idle connections does so without signalling it, so the request is written into a socket that is already gone (see [POOL](connection-pool.md)).
+Fáith sends such a request again on another connection, which is what keeps the warm-up invisible in the usual case.
+
+That recovery does not cover every request.
+A `POST` or `PATCH`, or a request carrying a `ReadableStream` body, is not sent again, so for those the dead warm-up connection surfaces as a failure the caller sees.
+Preconnecting an origin therefore trades a saved round trip against that exposure: it is the pool's existing risk, but a warm-up creates a pooled connection that would not otherwise exist and leaves it idle for longer than a just-used one, so it meets the risk more often.
+An origin known to close idle connections aggressively is a poor candidate for warming ahead of an unrepeatable request.
+
 ## Settling and idle lifetime
 
 Both methods return a promise that settles when the warm-up finishes, whether that is the DNS answer landing in the cache or the connection being established and pooled.
@@ -61,6 +73,7 @@ A warm-up connection is an ordinary idle pooled connection: `pool.idleTimeout` c
 That cap is per origin, so warm-ups to different origins never displace one another.
 Preconnecting an origin already at its cap closes the newly opened connection and leaves the existing idle ones in place, which costs the caller nothing because that origin is already warm.
 A TCP warm-up connection appears in `connections()` with an expiry derived from the idle timeout, like any pooled TCP connection; QUIC warm-ups are not listed there (see [OBS](observability.md)).
+A request that lands on a TCP warm-up connection reports `reused` in its timing breakdown, which is how a caller confirms a warm-up was actually spent rather than having lapsed (see [RESP](../response/response.md)).
 
 A warm-up stays out of the agent's request accounting: the `stats()` counters track requests the caller made through the agent, and a warm-up's own request is not one of those, so neither method moves them (see [OBS](observability.md)).
 They coalesce with work already in progress: a `preconnect` for an origin that already holds an idle pooled connection, or a `prefetchDns` for a host already fresh in the cache, does no new work, and concurrent warm-ups for the same target are single-flighted rather than opening duplicates.
