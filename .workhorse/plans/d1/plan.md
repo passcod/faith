@@ -29,3 +29,16 @@ The promise resolves and never rejects, so every failure path (DNS, refused, tim
 Redirect policy is set on the `reqwest::Client` (`src/agent.rs:829`), so the raw client inherits it and defaults to following redirects. That means the existing H3 probe's `HEAD /` can be redirected to a different origin, and `H3Prober::spawn` then checks `response.version()` on the final response and confirms the **original** origin from another origin's transport.
 
 Fixing that is its own card (see the [breakdown](../../breakdowns/d1/breakdown.md)). What matters here is that the warm-up must not inherit the same shape: `preconnect` does not follow redirects.
+
+## `prefetchDns` needs Fáith to own the resolver
+
+`reqwest`'s hickory resolver (`HickoryDnsResolver`) is `pub(crate)`, and its in-memory cache is reachable only by making a request through it — which is `preconnect`'s job, not `prefetchDns`'s (that verb must not touch the origin). So warming the DNS cache without a request means Fáith has to own the resolver: build a `hickory_resolver::TokioResolver` (mirroring reqwest's `new_resolver`: system config, `Ipv4AndIpv6` for Happy Eyeballs), install it via `ClientBuilder::dns_resolver()` so reqwest routes lookups and their cache through it, and keep a handle so `prefetchDns` can call `lookup_ip` directly and warm that same shared cache. `dns.overrides` keep working because reqwest layers `resolve_to_addrs` on top of any custom resolver (`DnsResolverWithOverrides`). Under `dns.system: true` no custom resolver is installed (getaddrinfo has no cache Fáith can warm), so `prefetchDns` resolves as a no-op. `hickory-resolver` becomes a direct dependency (already present transitively at 0.26.1).
+
+## The no-redirect requirement collides with pool sharing
+
+`reqwest`'s redirect policy is per-client and immutable after build; there is no per-request override (`redirect::Attempt` exposes only `status`/`url`/`previous`, not the request's headers or extensions). A connection pool is per-client too, and a `Client::clone` shares both the pool and the policy. So the shared raw client the probe uses — and that `preconnect` must also use to land its warm connection in the *foreground* pool — necessarily carries the agent's redirect policy, which follows by default. "`preconnect` does not follow redirects" therefore cannot hold at the same time as "the warm connection is reused by the next foreground request" without one of:
+
+- **(a)** Fáith taking over redirect-following itself (a redirect middleware in the stack, reqwest client set to `Policy::none()`), so the raw client never follows — which fixes the probe bug too, but is the same refactor the probe-redirect card owns, and the breakdown says D1 does not depend on it; or
+- **(b)** relaxing the criterion so `preconnect` inherits the agent's redirect policy, exactly as the probe does today.
+
+Needs a decision before the TCP send is written; it is the one part of `preconnect` that cannot be implemented faithfully to the current spec within D1's stated scope.
