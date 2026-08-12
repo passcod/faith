@@ -1042,6 +1042,81 @@ Requests already in flight run to completion. Any new request on a closed agent 
 error. Calling `close()` more than once is a no-op. The cookie store, if any, remains readable via
 `getCookie`.
 
+### `Agent.prefetchDns(host: string): Promise<void>`
+
+Warm the DNS cache for `host`, so a later request to it skips the lookup. This mirrors the
+browser's `dns-prefetch` resource hint.
+
+The argument is a bare host; a scheme, port, or path in a fuller string is ignored, since a DNS
+name has none of those. Resolution honours `dns.overrides` and races both address families under
+Happy Eyeballs exactly as a request's own lookup does. With `dns.system: true` there is no
+in-process cache to warm, so the call resolves without doing any work.
+
+```javascript
+await agent.prefetchDns('api.example.com');
+```
+
+### `Agent.preconnect(origin: string): Promise<void>`
+
+Open a pooled connection to `origin`, so the first request to it skips DNS, TCP, and TLS setup.
+This mirrors the browser's `preconnect` resource hint. Resolving the host warms the DNS cache as a
+side effect, so `preconnect` subsumes `prefetchDns` for that host.
+
+The argument is an origin (`scheme://host[:port]`); a longer URL is reduced to its origin, and an
+omitted port defaults by scheme. The connection is established over the transport the next request
+to that origin would use, so a confirmed HTTP/3 origin gets a warm QUIC connection and every other
+origin a TCP one.
+
+```javascript
+await Promise.all([
+  agent.preconnect('https://api.example.com'),
+  agent.preconnect('https://cdn.example.com'),
+]);
+```
+
+**The origin sees a request.** A pooled connection is one that has carried a request, so the
+warm-up sends a `HEAD` to the origin's root and the origin has it in its logs. There is no option
+that keeps the warm-up while suppressing the request, because without the request there is no warm
+connection. Don't preconnect an origin you must not make unsolicited requests to.
+
+The response is discarded whatever its status. The warm-up neither reads nor writes the HTTP cache,
+but otherwise carries the agent's configuration like any request to that origin — default headers,
+`userAgent`, the cookie jar, and the agent's redirect handling — so an origin that sets cookies on
+its root can update the jar from a warm-up, and one whose root redirects can end up warming the
+redirect's target as well.
+
+#### What a warm-up promises
+
+Both methods return a promise that **settles when the warm-up finishes and never rejects**, whatever
+happens on the network: a DNS failure, a refused connection, a timeout, and an agent closed
+mid-flight all resolve quietly, because the work is advisory and its outcome belongs to the real
+request. Fire-and-forget depends on this — a promise that could reject would raise an unhandled
+rejection in the unawaited call that is the common case.
+
+Caller mistakes are different, and throw synchronously before any async work starts: a malformed
+host or origin throws `AddressParse`, and a call on a closed agent throws `Closed`.
+
+Awaiting the promise sequences a warm-up ahead of the work that benefits from it, which is what
+lets a readiness check warm several origins before reporting ready. But settling says the attempt
+finished, not that a usable connection exists: the pool's idle window may already have lapsed, so a
+request issued after an awaited warm-up can still pay full setup cost. **A warm-up is not a
+reachability check.**
+
+A warm-up connection is an ordinary idle pooled connection, so `pool.idleTimeout` closes it when no
+request claims it in time and `pool.maxIdlePerHost` bounds it like any other. It appears in
+`connections()` with a `responseCount` of zero before any request uses it (QUIC warm-ups are not
+listed there), and neither method moves the `stats()` counters, which track requests you made.
+Warm-ups coalesce with work already done or in progress: a `preconnect` for an origin that already
+holds an idle pooled connection does nothing, and concurrent calls for the same target are
+single-flighted rather than opening duplicates.
+
+One caveat worth knowing: because a warm-up leaves a connection idle for longer than a just-used
+one, it meets the pool's existing risk of an origin closing a connection silently more often. Fáith
+sends such a request again on another connection, but a `POST`, a `PATCH`, or a request with a
+`ReadableStream` body is not replayed, so for those the dead connection surfaces as a failure. An
+origin known to close idle connections aggressively is a poor candidate for warming ahead of an
+unrepeatable request.
+
 ### `Agent.addCookie(url: string, cookie: string)`
 
 Add a cookie into the agent.
