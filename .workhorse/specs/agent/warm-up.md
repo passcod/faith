@@ -8,6 +8,7 @@ Two agent methods let a caller pay connection-setup costs before the first reque
 `prefetchDns(host)` warms the DNS cache; `preconnect(origin)` resolves the host and opens a pooled connection.
 They mirror the browser resource-hint verbs of the same name.
 Both are advisory: a later request goes faster when the warm-up succeeded and pays the normal setup cost when it did not, so a warm-up never makes a request fail that would otherwise have worked.
+They differ in what they touch: `prefetchDns` reaches only the resolver, while `preconnect` reaches the origin itself with a synthetic request, which the origin can see.
 
 ## prefetchDns
 
@@ -30,6 +31,19 @@ The connection is established over the transport the next foreground request to 
 Foreground requests upgrade only from the confirmed state, so a merely-advertised origin is warmed over TCP; warming it triggers a background HTTP/3 probe exactly as a real TCP-routed request to a probe-worthy origin would (see [PROBE](../http3/probing.md)).
 The warm-up settles on its TCP connection without waiting for that probe.
 
+## What preconnect sends
+
+A pooled connection is one that has carried a request, so warming the pool means making one: `preconnect` sends a synthetic `HEAD` to the origin's root, the same shape of request the HTTP/3 probe uses, and the origin sees it in its logs.
+This is part of what calling `preconnect` means rather than an implementation artefact.
+A caller who must not make unsolicited requests to an origin should not preconnect it; there is no option that keeps the warm-up while suppressing the request, because without the request there is no warm connection.
+`http3.upgradeProbe: false` does not suppress it either: that option governs HTTP/3 upgrade probing and continues to do only that, so a TCP warm-up still sends its `HEAD` (see [PROBE](../http3/probing.md)).
+
+The response is discarded whatever its status, because the connection rather than the answer is the point, and any status proves the connection as well as a 200 does.
+Redirects are not followed: the caller asked for this origin to be warm, and chasing a redirect would spend the warm-up on a different one.
+The warm-up neither reads nor writes the HTTP cache, so a cached response cannot stand in for connecting and the discarded response cannot enter the cache (see [CACHE](../cache/http-cache.md)).
+It otherwise carries the agent's configuration like any request to that origin, including default headers, `userAgent`, and the cookie jar, so an origin that sets cookies on its root can update the jar from a warm-up (see [COOK](cookies.md)).
+The agent's connect and request timeouts bound it, so a silent path fails the warm-up rather than leaving its promise pending forever (see [CANCEL](../fetch/cancellation-and-timeouts.md)).
+
 ## Settling and idle lifetime
 
 Both methods return a promise that settles when the warm-up finishes, whether that is the DNS answer landing in the cache or the connection being established and pooled.
@@ -38,7 +52,7 @@ Settling says the attempt finished, not that a usable connection exists: the idl
 A warm-up is not a reachability check.
 
 The promise resolves and never rejects, whatever happens on the network.
-A DNS failure, a refused connection, and an agent closed while the warm-up is in flight all resolve quietly, because the work is advisory and its outcome belongs to the real request rather than to the warm-up.
+A DNS failure, a refused connection, a timeout, and an agent closed while the warm-up is in flight all resolve quietly, because the work is advisory and its outcome belongs to the real request rather than to the warm-up.
 Fire-and-forget depends on this: a promise that could reject would raise an unhandled rejection in the unawaited call that is the common case.
 Caller errors surface differently, thrown synchronously from the call before any asynchronous work begins.
 A malformed host or origin throws a parse error, the same class of mistake `dns.overrides` reports for an unparseable address, and a call on a closed agent throws the closed-agent error (code `Closed`) (see [AGENT](overview.md)).
@@ -48,5 +62,5 @@ That cap is per origin, so warm-ups to different origins never displace one anot
 Preconnecting an origin already at its cap closes the newly opened connection and leaves the existing idle ones in place, which costs the caller nothing because that origin is already warm.
 A TCP warm-up connection appears in `connections()` with an expiry derived from the idle timeout, like any pooled TCP connection; QUIC warm-ups are not listed there (see [OBS](observability.md)).
 
-Warm-ups are not requests: they leave the `stats()` request counters untouched and neither read nor write the HTTP cache (see [OBS](observability.md), [CACHE](../cache/http-cache.md)).
+A warm-up stays out of the agent's request accounting: the `stats()` counters track requests the caller made through the agent, and a warm-up's own request is not one of those, so neither method moves them (see [OBS](observability.md)).
 They coalesce with work already in progress: a `preconnect` for an origin that already holds an idle pooled connection, or a `prefetchDns` for a host already fresh in the cache, does no new work, and concurrent warm-ups for the same target are single-flighted rather than opening duplicates.
