@@ -35,10 +35,14 @@ Building blocks confirmed present in 0.26.1:
   so the two caches don't fight.
 
 Interaction with existing behaviour to preserve:
-- `prefetch` and `clear_cache` (spec:WARM, spec:NETCHG) must clear/participate in
-  the wrapper map too, not just hickory's cache.
-- `networkChanged` clearing must drop stale entries so a network move doesn't keep
-  serving old IPs.
+- `prefetch` (spec:WARM) must participate in the wrapper map, not just hickory's cache.
+- Stale entries must not outlive `networkChanged()`.
+
+Revised after rebasing onto H1 (#78), which rewrote `src/dns.rs` to ~800 lines:
+the resolver now hangs off a `Generation` behind `built: OnceCell<Arc<Built>>`, and
+`networkChanged()` drops the generation rather than flushing a cache. So the stale
+map belongs **inside the generation**, which gets the network-change behaviour for
+free instead of needing its own clearing path.
 
 ## Benchmark
 
@@ -48,6 +52,19 @@ The `features` suite (`bench/run.mjs`, `runFeatures`) already has a DNS group
 variant there. Slow-resolver effect needs a delayed/slow DNS answer, not just a
 delayed HTTP response (`--delay` only delays the server) — the harness has no DNS
 delay knob today, so that's a gap to close for a meaningful row.
+
+### The existing DNS bench rows measure nothing (found while rebasing onto H1)
+
+H1 made `localhost` an always-exempt name, routed to the system resolver whatever
+Faith's own settings say (spec:DNS#exempt-names, `is_exempt` in `src/dns.rs`).
+Both DNS rows in `runFeatures` set `urlHost: "localhost"`, so `dns:hickory` and
+`dns:system` now resolve through the *same* system resolver and the comparison is
+empty. `bench/` was untouched by H1, so this is live on main.
+
+Fixing it is a prerequisite for this card's row, not a separate cleanup: the rows
+must use a non-exempt name (the helper's zone uses `.test`) and point Faith at the
+helper with `dns.servers`. Worth its own breakdown entry if it wants to ship
+separately, since it is a bench-validity bug independent of stale serving.
 
 ## Test and bench DNS server
 
@@ -66,19 +83,24 @@ Verified against a real hickory 0.26.1 resolver pointed at the helper: answers,
 TTLs, cache hits, and post-expiry re-queries all behave as expected, including
 0x20 case randomisation (the helper echoes the question bytes verbatim).
 
-### Blocker: Faith can't be pointed at a custom nameserver
+### Wiring: resolved by H1 (#78)
 
-`new_resolver()` in `src/dns.rs` takes the system configuration or falls back to
-Google, and `AgentDnsOptions` exposes only `system` and `overrides`. So neither a
-test nor a bench row can currently make Faith query this helper. Wiring needs a
-nameserver-selection mechanism, and that is a decision for the user:
+This was previously a blocker — `new_resolver()` took the system configuration or
+fell back to Google, so nothing could make Faith query the helper. H1 landed
+`dns.servers`, an ordered list of resolver URLs, so the helper wires up directly:
 
-- a `dns.nameservers` agent option (real product surface, useful beyond testing), or
-- a test-only hook.
+```js
+new Agent({ dns: { servers: [`udp://127.0.0.1:${server.port}`] } })
+```
 
-An env var fits badly: [ENV](../../specs/environment/variables.md) is deliberately
-Node's own vocabulary plus the standard proxy and OpenSSL variables, not a
-Faith-specific namespace.
+`udp://` is conventional DNS, and a port in the URL overrides the conventional 53,
+which is what makes an ephemeral-port helper reachable. `dns.timeout` (5s default)
+bounds the lookup, so it needs raising above the helper's `delayMs` in any test that
+sets a large delay.
+
+Use a non-exempt name: `localhost` and `.local` are handed to the system resolver
+regardless of `dns.servers`, so the helper would never be asked. The helper's zone
+uses `.test` names for this reason.
 
 ## Finding: empty AAAA answers are not cached, so A-only names never hit the cache
 

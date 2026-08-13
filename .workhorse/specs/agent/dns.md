@@ -26,6 +26,7 @@ Set to `false`, an expired entry is discarded and the lookup blocks on a fresh a
 `dns.maxStale` bounds how far past expiry an answer is served and defaults to one hour.
 An entry older than that is discarded rather than served, because an answer stale enough stops being evidence about where the host is, and a refresh still failing after that long is the case where the address most likely did change.
 Under the system resolver there is no cache, so no answer is ever stale and neither option has anything to govern (see [System resolver](#system-resolver)).
+Exempt names reach that same resolver even when Faith's own client is in use, so `localhost`, `.local`, and the other exempt suffixes are never served stale either (see [Exempt names](#exempt-names)).
 
 The background refresh is single-flighted per name: while one is in flight, further lookups landing on that stale entry serve it rather than starting a second refresh.
 It outlives the request that triggered it, continuing on the runtime once that request has its addresses.
@@ -35,7 +36,7 @@ A refresh that fails with a network error, a server failure, or a timeout leaves
 A refresh that comes back authoritatively empty, whether because the name does not exist or because it holds no address of the family asked for, replaces the entry, so a host that has genuinely gone stops being served an address it no longer answers on.
 The refresh reaches only the resolver and no origin, so it moves none of the agent's request counters (see [OBS](observability.md)).
 
-A stale answer does not survive a network change: the signal flushes the cache, stale entries included, so the next request resolves against the new network rather than connecting to an address the old one gave (see [NETCHG](network-change.md)).
+A stale answer does not outlive a network change: cached answers go with the resolvers holding them, stale entries included, so no request after the signal connects to an address the old network gave (see [Network changes](#network-changes)).
 
 ### When a stale address is wrong
 
