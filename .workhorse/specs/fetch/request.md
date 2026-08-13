@@ -64,9 +64,7 @@ Following the fetch standard, a streaming request body is carried only over HTTP
 When a request with a streaming body runs over a connection that negotiates HTTP/1.x, it fails with a network error (code `Network`, see [ERR](../errors/errors.md)).
 A buffered body sends over any protocol and is never subject to this rule.
 
-The agent's `allowH1RequestStreaming` option lifts the restriction: with it on, a streaming request body sends over an HTTP/1.x connection like any other body (see [AGENT](../agent/overview.md)).
-It defaults to off, so the standard behaviour holds unless a caller opts in.
-It exists for callers who control the origin and have confirmed HTTP/1.1 full-duplex streaming works against it.
+The agent's `quirks.h1RequestStreaming` lifts the restriction, sending a streaming body over an HTTP/1.x connection like any other body (see [QUIRK](../agent/quirks.md)).
 
 ## Credentials
 

@@ -24,7 +24,6 @@ Node-compatible environment variables are read at construction and layer on top 
 `userAgent` sets the `User-Agent` for all requests; the default is `Faith/{version} reqwest/{version}`, and the `USER_AGENT` constant is exported so callers can prepend their own product token.
 `headers` sets default headers on every request, marked `sensitive` where appropriate (e.g. `Authorization`); per-request headers override them by name.
 `localAddress` forces the source IP for connections.
-`allowH1RequestStreaming` (default `false`) permits streaming request bodies over HTTP/1.x connections, which the fetch standard otherwise reserves for HTTP/2 and HTTP/3 (see [REQ](../fetch/request.md)).
 When unset, on hosts that cannot bind the IPv6 wildcard, the QUIC socket binds the IPv4 wildcard instead (probed once per process), so HTTP/3 works on IPv4-only hosts rather than silently falling back to TCP.
 Dual-stack hosts are unaffected.
 
@@ -39,4 +38,4 @@ Requests already in flight when `close()` is called run to completion; new reque
 
 ## Sub-configuration
 
-Nested option groups are specified in their own areas: [POOL](connection-pool.md), [COOK](cookies.md), [DNS](dns.md), [TLS](tls.md), [OBS](observability.md), [FLOW](flow-control.md), [CACHE](../cache/http-cache.md), [H3UP](../http3/upgrade.md), [QUIC](../http3/transport.md), and [REDIR](../fetch/redirects.md) and [CANCEL](../fetch/cancellation-and-timeouts.md) for the `redirect` and `timeout` groups.
+Nested option groups are specified in their own areas: [POOL](connection-pool.md), [COOK](cookies.md), [DNS](dns.md), [TLS](tls.md), [OBS](observability.md), [FLOW](flow-control.md), [QUIRK](quirks.md), [CACHE](../cache/http-cache.md), [H3UP](../http3/upgrade.md), [QUIC](../http3/transport.md), and [REDIR](../fetch/redirects.md) and [CANCEL](../fetch/cancellation-and-timeouts.md) for the `redirect` and `timeout` groups.
