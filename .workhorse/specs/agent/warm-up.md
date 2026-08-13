@@ -75,5 +75,6 @@ Preconnecting an origin already at its cap closes the newly opened connection an
 A TCP warm-up connection appears in `connections()` with an expiry derived from the idle timeout, like any pooled TCP connection; QUIC warm-ups are not listed there (see [OBS](observability.md)).
 A request that lands on a TCP warm-up connection reports `reused` in its timing breakdown, which is how a caller confirms a warm-up was actually spent rather than having lapsed (see [RESP](../response/response.md)).
 
-A warm-up stays out of the agent's request accounting: the `stats()` counters track requests the caller made through the agent, and a warm-up's own request is not one of those, so neither method moves them (see [OBS](observability.md)).
+A warm-up stays out of the agent's caller-request accounting: those `stats()` counters track requests the caller made through the agent, and a warm-up's own request is not one of those, so neither method moves them.
+A `preconnect` moves `backgroundRequests` instead, which is where the agent's self-initiated wire traffic is counted; `prefetchDns` reaches only the resolver and so moves nothing (see [OBS](observability.md)).
 They coalesce with work already in progress: a `preconnect` for an origin that already holds an idle pooled connection, or a `prefetchDns` for a host already fresh in the cache, does no new work, and concurrent warm-ups for the same target are single-flighted rather than opening duplicates.

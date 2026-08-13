@@ -9,10 +9,15 @@ Both exist so operational problems (connection leaks, retransmission storms, poo
 
 ## stats()
 
-`stats()` returns cumulative counters: `requestsSent`, `responsesReceived`, `bodiesStarted`, `bodiesFinished`.
-They count requests made through the agent rather than exchanges on the wire, so a request served from the HTTP cache counts like any other (see [CACHE](../cache/http-cache.md)).
+`stats()` returns cumulative counters: `requestsSent`, `responsesReceived`, `bodiesStarted`, `bodiesFinished`, and `backgroundRequests`.
+The first four count requests made through the agent rather than exchanges on the wire, so a request served from the HTTP cache counts like any other (see [CACHE](../cache/http-cache.md)).
 `bodiesStarted` counts bodies opened for reading, which a discarded body is not.
 A persistent gap between `bodiesStarted` and `bodiesFinished` is the designed leak indicator for response bodies that were opened but never consumed or discarded.
+
+`backgroundRequests` counts the requests the agent made on its own initiative rather than ones the caller asked for, which is why they are absent from the other four counters.
+It covers the synthetic `HEAD` a `preconnect` sends (see [WARM](warm-up.md)), an eager HTTP/3 probe (see [PROBE](../http3/probing.md)), and a background cache revalidation (see [CACHE](../cache/http-cache.md)).
+Counting them together gives an operator the wire traffic the agent generates beyond the caller's own requests, which is otherwise invisible: the caller's counters and the origin's logs disagree by exactly this number.
+A background request is counted when it is made, whatever its outcome, since these requests swallow their failures and a counter that moved only on success would hide the case worth seeing.
 
 ## connections()
 
