@@ -161,6 +161,8 @@ if the request body has not finished sending. Most HTTP servers will not send re
 they have finished receiving the body, so the distinction usually doesn't matter, but some do, and
 you can take advantage of that for lower latency. You can also vary the request body stream based on
 what you read from the response body stream, exchanging messages both ways over a single request.
+That last part needs a streaming request body, so over HTTP/1.x it also needs
+[`quirks.h1RequestStreaming`](#agentoptionsquirksh1requeststreaming-bool) on the agent.
 
 Browsers are half duplex: there, the promise resolves only once the request body has been fully sent.
 Node and Deno are full duplex like Faith. See [`duplex`](#fetchoptionsduplex-string) for what this

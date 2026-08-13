@@ -497,7 +497,13 @@ impl FaithResolver {
 	}
 
 	/// Keep a successful answer for `host`, so a later lookup past its TTL has something to serve.
-	fn remember(&self, generation: &Generation, host: &str, addrs: &[IpAddr], valid_until: Instant) {
+	fn remember(
+		&self,
+		generation: &Generation,
+		host: &str,
+		addrs: &[IpAddr],
+		valid_until: Instant,
+	) {
 		if !self.inner.settings.serve_stale || addrs.is_empty() {
 			return;
 		}

@@ -8,8 +8,9 @@
  * here: a stack upgrade that took it away would otherwise pass silently.
  *
  * Both protocols are covered, because they reach full duplex by different routes.
- * HTTP/1.1 gets there only because Faith allows a streaming request body at all, which
- * the fetch standard rules out on HTTP/1.x; HTTP/2 gets there because the transport
+ * HTTP/1.1 gets there only through a streaming request body, which the fetch standard
+ * rules out on HTTP/1.x and Faith therefore refuses unless the agent opts in with
+ * `quirks.h1RequestStreaming` (spec:QUIRK); HTTP/2 gets there because the transport
  * multiplexes, which is the case the standard would be describing if it defined `full`.
  * A regression could take one without the other, so neither stands in for the other.
  *
@@ -90,7 +91,9 @@ async function h1Origin() {
 	return {
 		version: "HTTP/1.1",
 		url: `http://127.0.0.1:${port}`,
-		agent: new Agent(),
+		// Full duplex over HTTP/1.1 rides on a streaming request body, which is exactly what
+		// the standard rules out there, so this origin is only reachable through the quirk.
+		agent: new Agent({ quirks: { h1RequestStreaming: true } }),
 		close,
 	};
 }

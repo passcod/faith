@@ -20,12 +20,17 @@ The httpbin origin the suite runs against is plain HTTP/1.1, so it serves as the
 - [x] The quirk applies only to the agent it is set on: a second agent without it still refuses (verifies spec: QUIRK)
 - [x] The quirk leaves an already-eligible HTTP/2 origin behaving as it did (verifies spec: QUIRK)
 
+## Releasing the stream on a refusal
+
+- [x] After a refusal, a process whose stream keeps producing chunks still exits on its own, rather than the chunk pump stranding on a channel nobody reads (verifies spec: REQ)
+
 ## Bodies the rule does not touch
 
 - [x] A string body still posts over HTTP/1.1, body intact (verifies spec: REQ)
 - [x] A body supplied through a `Request` object posts over HTTP/1.1, being buffered during conversion (verifies spec: REQ)
 - [x] The existing streaming coverage still passes with the quirk on: chunking, large payloads, async chunks, binary data, empty streams, header preservation, abort mid-stream (`test/stream-body.test.js`, `test/duplex.test.js`)
 - [x] The `priority` option still applies to a streaming request (`test/priority.test.js`, verifies spec: REQ)
+- [x] Full duplex over HTTP/1.1 still holds for an agent with the quirk on, across all three sequencing cases (`test/duplex-sequencing.test.js`, verifies spec: REQ)
 
 ## Notes
 

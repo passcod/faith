@@ -52,6 +52,7 @@ A `ReadableStream` body requires `duplex: "half"`, matching the fetch standard; 
 Faith operates in full duplex.
 A response is surfaced as soon as its headers arrive, so a request streaming its body sees the response while the body is still going out, and the response body can be read in the meantime.
 A caller can drive the request body from what it reads off the response body, exchanging messages both ways over one request.
+Exchanging messages both ways needs a streaming request body, so over HTTP/1.x it needs the agent's `quirks.h1RequestStreaming` as well (see [Streaming a request body](#streaming-a-request-body)).
 
 The `duplex` option is required when the body is a `ReadableStream` and carries no meaning beyond that.
 `half` is the only value the fetch standard defines and so the only value accepted; a request that sets it still runs full duplex.

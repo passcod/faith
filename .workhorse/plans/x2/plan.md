@@ -18,7 +18,13 @@ The HTTP/3 path needs no change: the upgrade attempt is already skipped for a bo
   - [x] Plaintext, both directions, asserting the origin saw nothing on a refusal
   - [x] TLS pinned to one ALPN protocol, covering both the HTTP/1.1 refusal and the HTTP/2 success
 - [x] Document the option in the README
+- [x] Release the stream on a refusal, so the chunk pump cannot strand and hold the process open
+- [x] Point the full-duplex HTTP/1.1 sequencing tests at the quirk, and say so in the duplex docs
 
 ## Notes
 
 The existing streaming tests all target the httpbin origin over plain HTTP/1.1, so they exercise the very thing now refused. They keep their coverage of the streaming machinery by opting into the quirk, and the rule gets its own tests.
+
+Refusing has to take the receiving end of the chunk channel and drop it. The JS side pumps chunks into that channel from the caller's stream as soon as the request starts, so a refusal that left the receiver in place stranded the pump: it filled the channel, blocked on the next push, and held the process open with no way out. That is what turned the failure into a hang rather than a test failure, and it is covered by a test that runs a refusal in a child process and asserts the child exits.
+
+Full duplex over HTTP/1.1 rides on a streaming request body, so it now needs the quirk. That is the trade the card asks for, and the duplex documentation says so rather than leaving the promise unqualified.

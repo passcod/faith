@@ -265,6 +265,40 @@ test("the quirk leaves an HTTP/2 origin working as it did", async (t) => {
 	}
 });
 
+test("a refusal releases the stream, so the process can still exit", async (t) => {
+	t.plan(2);
+
+	// Refusing has to close the channel the JS side pumps chunks into. Leaving it open
+	// stranded that pump on a channel nobody would ever read: it blocked once the channel
+	// filled and held the process open indefinitely. A hang doesn't fail a tape run, it wedges
+	// it, so this runs in a child and asserts it exits.
+	const script = `
+		const { fetch } = require(${JSON.stringify(require.resolve("../wrapper.js"))});
+		const http = require("node:http");
+		const server = http.createServer((req, res) => res.writeHead(200).end("ok"));
+		server.listen(0, "127.0.0.1", async () => {
+			// Always ready with another chunk, so the pump will outrun the channel's capacity.
+			const stream = new ReadableStream({ pull: (c) => c.enqueue(new Uint8Array(16)) });
+			try {
+				await fetch(\`http://127.0.0.1:\${server.address().port}/\`, {
+					method: "POST", body: stream, duplex: "half",
+				});
+			} catch {}
+			server.close();
+		});
+	`;
+
+	const { execFile } = require("node:child_process");
+	const exited = await new Promise((resolve) => {
+		execFile(process.execPath, ["-e", script], { timeout: 15_000 }, (err) =>
+			resolve(err ?? null),
+		);
+	});
+
+	t.equal(exited, null, "the child exited on its own");
+	t.notOk(exited?.killed, "rather than being killed for running over time");
+});
+
 test("a buffered body over HTTP/1.1 is unaffected", async (t) => {
 	t.plan(2);
 
