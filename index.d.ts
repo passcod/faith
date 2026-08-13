@@ -1167,7 +1167,8 @@ export interface DnsOverride {
  * This option must be present when `body` is a `ReadableStream`.
  */
 export declare const enum DuplexOption {
-  Half = 'half'
+  Half = 'half',
+  Full = 'full'
 }
 
 export declare function errorCodes(): Array<string>

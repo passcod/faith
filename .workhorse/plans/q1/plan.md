@@ -39,14 +39,38 @@ No test covers duplex sequencing. `test/duplex.test.js` covers the `duplex` opti
 Faith is a server-side library, so undici and Deno are the relevant precedent, and Faith already matches them.
 The README's framing that browsers lack full duplex is still correct; what changed is that Faith turns out to be on the implemented side of that line already.
 
+## Feasibility: both modes are supportable
+
+Established by a working spike on this branch, not by reasoning.
+Half duplex is a gate on when the response is surfaced, not a change to how the transport runs: the stack stays duplex underneath and Faith withholds the response until the request body has gone out.
+
+Mechanism: a drop guard rides along with the request body stream (`SentGuard` in src/stream_body.rs) and fires a oneshot when the stack finishes with the body. `fetch.rs` awaits that signal after `send()` resolves, before surfacing the response, unless the caller asked for `full`.
+
+Measured against an origin that answers without reading the request body:
+
+| | HTTP/1.1 | HTTP/2 |
+|---|---|---|
+| `duplex: "full"` | response at +19ms | +53ms |
+| `duplex: "half"` | +1200ms, matching the body close | +1203ms |
+
+The whole JS suite (1795 assertions) and the Rust tests (125) pass with the gate in place.
+
+### What the spike does not yet cover
+
+- **Buffered bodies are not gated.** A 32MiB `Buffer` body with `duplex: "half"` surfaced its response at +18ms against an origin that never read it, so the body cannot have been sent. Only streaming bodies carry the completion signal. Closing this means wrapping the buffered body in a stream and setting `Content-Length` explicitly, since `wrap_stream` otherwise drops to chunked encoding.
+- **The gate is not covered by `timeout`.** Against a raw origin that answers and then never reads, a half-duplex request stalled for 30.5s before failing, with a 4s `timeout` set. The per-request timeout is handed to reqwest and stops applying once `send()` resolves, so the wait for the body needs to sit under the timeout and the abort signal itself. The spike races the gate against the signal but not the timeout.
+- **A stalled origin cannot be distinguished from a slow one.** The guard fires when the stack finishes with the body, which includes the case where the exchange ended with the body undelivered. An origin that replied and ignored the body resolved at +78ms having sent 4MiB of 64MiB. So the guarantee half duplex can offer is "the stack is done with the request body", not "every byte reached the origin".
+
 ## Open decisions
 
-1. Does `duplex: "full"` become an accepted value?
-   Accepting it lets callers state intent and makes the capability discoverable, at the cost of a non-standard enum value.
-   Leaving the enum at `half` alone matches undici, where the option is inert and the docs carry the explanation.
+1. Which mode is the default?
+   Today's behaviour is full duplex for streaming bodies, so defaulting to half is a behaviour change for anyone already relying on it, and defaulting to full leaves `duplex: "half"` naming a mode the caller does not get unless they know to ask. The spike currently defaults to half, which is what makes the existing suite exercise the gate.
 
-2. Does `duplex: "half"` keep meaning nothing?
-   Honouring it literally, by withholding the response until the body is sent, would be spec-conformant and would make the option meaningful, but it changes today's behaviour, costs the capability by default, and matches no other server-side runtime.
+2. Is `duplex: "full"` the way a caller asks for it?
+   It reads naturally and matches the value the standard reserves, at the cost of accepting a value no browser accepts. The alternative is a Faith-specific option that does not collide with the standard's enum.
 
-3. How much of this is guaranteed rather than incidental?
-   Full duplex currently holds because of how the stack composes, not because Faith asks for it. Committing to it in a spec means tests that would catch a stack upgrade taking it away.
+3. How strict is the half-duplex guarantee?
+   See the third gap above: "the stack is done with the body" is deliverable, "every byte reached the origin" is not.
+
+4. Does the guarantee need locking in with tests?
+   Full duplex currently holds because of how the stack composes rather than because Faith asks for it, so a stack upgrade could take it away silently. Nothing in the suite covers duplex sequencing today.

@@ -127,6 +127,9 @@ impl Default for CredentialsOption {
 pub enum DuplexOption {
 	#[napi(value = "half")]
 	Half,
+
+	#[napi(value = "full")]
+	Full,
 }
 
 /// The RFC 9218 header the `priority` option maps onto.
@@ -169,6 +172,7 @@ pub struct FaithOptionsAndBody {
 pub(crate) struct FaithOptions {
 	pub(crate) cache: RequestCacheMode,
 	pub(crate) credentials: CredentialsOption,
+	pub(crate) duplex: Option<DuplexOption>,
 	pub(crate) headers: Option<Vec<(String, String)>>,
 	pub(crate) integrity: Option<String>,
 	pub(crate) method: Option<String>,
@@ -191,6 +195,7 @@ impl FaithOptions {
 			Self {
 				cache: opts.cache.unwrap_or_default(),
 				credentials,
+				duplex: opts.duplex,
 				headers: opts.headers,
 				integrity: opts.integrity,
 				method: opts.method,
