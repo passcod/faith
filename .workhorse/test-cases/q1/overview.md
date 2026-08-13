@@ -5,10 +5,11 @@ The behaviour holds because of how reqwest and hyper compose rather than because
 
 ## Duplex sequencing
 
-- [x] The response is surfaced while the request body is still open, over HTTP/1.1 (verifies spec: REQ)
+Each case runs over both HTTP/1.1 and HTTP/2, since the two reach full duplex by different routes and a regression could take one without the other. Each asserts the negotiated version so a silent downgrade cannot pass.
+
+- [x] The response is surfaced while the request body is still open (verifies spec: REQ)
 - [x] The response body can be read while the request body is still open (verifies spec: REQ)
 - [x] The request body can be driven from what is read off the response body, over one request (verifies spec: REQ)
-- [ ] The same three cases over HTTP/2, where the transport multiplexes rather than relying on the HTTP/1.1 divergence
 - [ ] A buffered (non-stream) body also surfaces its response before the body has finished being written
 
 ## The duplex option
@@ -20,8 +21,8 @@ The behaviour holds because of how reqwest and hyper compose rather than because
 
 ## Interactions
 
-- [ ] A request whose origin answers and then stops reading the body fails rather than hanging
+- [ ] A request whose origin answers and then stops reading the body surfaces its response rather than hanging
 - [ ] `signal` aborts a request whose body is still streaming and whose response has already been surfaced
-- [ ] `timeout` applies to a request whose body is still streaming after the response was surfaced
+- [ ] `timeout` ends a request whose origin neither reads the body nor answers (verifies spec: CANCEL)
 
-Notes: the last item is the one to watch. A stalled origin was measured taking 30.5s to fail with a 4s `timeout` set, because the per-request timeout is handed to reqwest and stops applying once the response head is in. That is present behaviour rather than something this card introduced, and it wants confirming as a separate concern.
+Notes: the timeout case was checked by hand while the spike was being unwound and behaves correctly, rejecting with `Timeout` at +4009ms against a 4s deadline. It is left unticked because no automated test covers it.

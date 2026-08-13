@@ -93,7 +93,7 @@ Faith's `half` would also have been unable to mean what the standard says it mea
 The spike is reverted. Recorded here so it is not rebuilt from scratch, along with what it would still have needed:
 
 - Buffered bodies were never gated. A 32MiB `Buffer` body surfaced its response at +18ms against an origin that never read it, because only streaming bodies carried the signal. Closing that means wrapping the buffer in a stream and setting `Content-Length` explicitly, since `wrap_stream` otherwise drops to chunked encoding.
-- The gate escaped `timeout`. A stalled origin took 30.5s to fail with a 4s `timeout` set, because the timeout is handed to reqwest and stops applying once the response head is in. This is present behaviour rather than a fault of the gate, and it is worth confirming separately.
+- The gate escaped `timeout`, and only the gate did. A stalled origin took 30.5s to fail against a 4s `timeout`, because the gate waited on the body after `send()` had resolved, which is past the point reqwest's timeout applies. Re-measured once the spike was reverted: the same origin surfaces its response at +13ms and reads its body at +14ms, and an origin that also withholds its response rejects with `Timeout` at +4009ms. So `timeout` is intact and this was the gate's own defect, not something it exposed.
 - The guard fired when the stack was *done* with the body, which includes giving up on it. An origin that replied and ignored the body resolved at +78ms having sent 4MiB of 64MiB, so "every byte reached the origin" was never on offer.
 
 ## Decision
