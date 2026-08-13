@@ -1,10 +1,10 @@
 # Upstream limitations
 
-Some of Fáith's specified behaviour is shaped by what the underlying HTTP stack can express rather than by a choice Fáith made.
+Some of Faith's specified behaviour is shaped by what the underlying HTTP stack can express rather than by a choice Faith made.
 The specs state the behaviour plainly, because a caller depends on it either way and a spec is not the place to narrate a dependency's internals.
 This register is where the causes are recorded, so that a behaviour that looks arbitrary can be traced, and so that a stack upgrade can be checked against the list to see what has become fixable.
 
-An entry names the behaviour, the spec section that carries it, and the reason it is not simply a Fáith decision.
+An entry names the behaviour, the spec section that carries it, and the reason it is not simply a Faith decision.
 Removing an entry means the constraint is gone, which usually means the spec section changes too.
 
 ## A TLS client certificate is presented under `credentials: "omit"`
@@ -15,7 +15,7 @@ The client identity is configured on the HTTP client, not per request, so a sing
 ## The cookie jar ingests `Set-Cookie` under `credentials: "omit"`
 
 Spec: [REQ](specs/fetch/request.md), Credentials, and [COOK](specs/agent/cookies.md).
-Cookie storage happens inside the HTTP stack before Fáith sees the response headers, so Fáith can strip the header from what the caller reads but cannot stop the store from having taken it.
+Cookie storage happens inside the HTTP stack before Faith sees the response headers, so Faith can strip the header from what the caller reads but cannot stop the store from having taken it.
 
 ## QUIC connections are absent from `connections()`
 
@@ -32,11 +32,11 @@ Redirects followed inside the HTTP stack do not surface per-hop response events 
 Spec: [ERR](specs/errors/errors.md), The code contract.
 A failure inside the stream travels back through the binding's error channel, which carries a status and a message and cannot construct a JavaScript error object to hang properties on, unlike a failure raised from a call.
 
-## A request written into a closed connection is replayed by Fáith, up to a bound
+## A request written into a closed connection is replayed by Faith, up to a bound
 
 Spec: [POOL](specs/agent/connection-pool.md), Reusing a connection that has died.
 The HTTP stack replays a request on a reused pooled connection only while it still owns the request message, which is the case where nothing reached the wire at all; a request written into a socket the origin had already closed is classified as a send that got no complete response, and is not replayed.
-The stack also does not report whether the connection that failed came from the pool or had just been opened, which is the bound its own replay uses, so Fáith bounds the number of attempts instead of the kind of connection.
+The stack also does not report whether the connection that failed came from the pool or had just been opened, which is the bound its own replay uses, so Faith bounds the number of attempts instead of the kind of connection.
 
 ## `preconnect()` sends a request to the origin
 
@@ -49,7 +49,7 @@ This is also why the HTTP/3 probe is a synthetic `HEAD` rather than a bare hands
 Spec: [WARM](specs/agent/warm-up.md), What preconnect sends.
 The HTTP stack's redirect policy is fixed per client and has no per-request override, and its connection pool is per client too, so the raw client `preconnect` shares to land its connection in the foreground pool cannot follow a different redirect policy from foreground requests.
 A warm-up therefore follows the agent's redirect policy, so a redirecting root can warm the redirect's target in addition to the origin asked for.
-Moving redirect-following into Fáith's own layer would let the shared client stop at the first response; it is tracked as its own card.
+Moving redirect-following into Faith's own layer would let the shared client stop at the first response; it is tracked as its own card.
 
 ## An advertised HTTP/3 port cannot be honoured while keeping the origin's authority
 

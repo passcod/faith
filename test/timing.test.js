@@ -65,7 +65,7 @@ test("Response.timing derives responseStart from the final headers", async (t) =
 	);
 });
 
-test("Response.timing reads 0 for the phases Fáith does not observe", async (t) => {
+test("Response.timing reads 0 for the phases Faith does not observe", async (t) => {
 	const unobserved = [
 		"redirectStart",
 		"redirectEnd",

@@ -36,7 +36,7 @@ test("Agent with localAddress 0.0.0.0 still makes requests", {
 }, async (t) => {
 	t.plan(1);
 	// Binding the IPv4 wildcard must not break ordinary requests. (This is also
-	// the address fáith selects automatically on IPv4-only hosts so that the
+	// the address Faith selects automatically on IPv4-only hosts so that the
 	// HTTP/3 QUIC socket, which otherwise binds the IPv6 wildcard, can be
 	// created instead of silently falling back to TCP.)
 	const agent = new Agent({ localAddress: "0.0.0.0" });

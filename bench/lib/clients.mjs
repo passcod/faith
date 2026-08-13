@@ -6,7 +6,7 @@
  *   makeContext(server, variant)   fresh client state (agent/pool/session);
  *                                  called per scenario, or per request in cold
  *                                  mode. `variant` may carry agentOptions
- *                                  overrides (fáith only) and a
+ *                                  overrides (Faith only) and a
  *                                  prepare(agent, server) hook.
  *   request(ctx, url, consume)     issue a GET, resolve when response HEADERS
  *                                  are in; returns { status, drain() }
@@ -15,7 +15,7 @@
  *
  * The clients cover three transport stacks: undici's own engine (native
  * fetch, undici.request), node's libuv http core (node:http2, got,
- * node-fetch), and native bindings (fáith → reqwest/hyper, libcurl). Two
+ * node-fetch), and native bindings (Faith → reqwest/hyper, libcurl). Two
  * wrappers over the same stack mostly measure wrapper overhead, so the set is
  * chosen to have at most one representative per (stack, API-style).
  *
@@ -196,8 +196,8 @@ export async function loadImpls({ ca }) {
 
 	// --- native bindings -------------------------------------------------
 
-	// libcurl (node-libcurl). fáith's closest architectural cousin: the other
-	// native-bindings client, so it answers whether fáith's NAPI overhead is
+	// libcurl (node-libcurl). Faith's closest architectural cousin: the other
+	// native-bindings client, so it answers whether Faith's NAPI overhead is
 	// competitive with libcurl's. curly buffers the whole body, so its ttfb
 	// equals total.
 	//
@@ -249,7 +249,7 @@ export async function loadImpls({ ca }) {
 		);
 	}
 
-	// fáith. All protocols.
+	// Faith. All protocols.
 	const faith = require(path.join(rootDir, "wrapper.js"));
 	impls.set("faith", {
 		name: "faith",

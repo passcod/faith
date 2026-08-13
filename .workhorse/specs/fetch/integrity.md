@@ -4,7 +4,7 @@ id: SRI
 
 # Subresource integrity
 
-The `integrity` request option carries a subresource integrity value, and Fáith verifies the response body against it.
+The `integrity` request option carries a subresource integrity value, and Faith verifies the response body against it.
 On a server there is no document to protect, but the same mechanism guards artefact downloads and API responses against tampering and corruption.
 
 ## Accepted values
@@ -18,7 +18,7 @@ Unknown algorithms are silently ignored when picking the strongest; if every lis
 ## When verification happens
 
 Verification runs when the body is consumed through `bytes()`, `json()`, `text()`, `arrayBuffer()`, or `blob()`: the paths where the whole body is in hand.
-The digest is taken over the bytes the caller receives, which are the encoded bytes on a response Fáith does not decode (see [ENC](content-encoding.md)).
+The digest is taken over the bytes the caller receives, which are the encoded bytes on a response Faith does not decode (see [ENC](content-encoding.md)).
 A mismatch throws an integrity-mismatch error from that call.
 Reading through the `body` stream does not verify: the consumer sees bytes before the digest can be known, so stream consumers take on their own verification.
 Because the body is not available at `fetch()` resolution time, a mismatch surfaces at the body-reading call, not at `fetch()`.

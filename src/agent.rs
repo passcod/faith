@@ -175,8 +175,8 @@ pub struct DnsOverride {
 #[napi(object)]
 #[derive(Debug, Clone, Default)]
 pub struct AgentDnsOptions {
-	/// Use the system's DNS (via `getaddrinfo` or equivalent) rather than Fáith's own DNS client (based on
-	/// [Hickory]). If you experience issues with DNS where Fáith does not work but e.g. curl or native
+	/// Use the system's DNS (via `getaddrinfo` or equivalent) rather than Faith's own DNS client (based on
+	/// [Hickory]). If you experience issues with DNS where Faith does not work but e.g. curl or native
 	/// fetch does, this should be your first port of call.
 	///
 	/// Enabling this also disables Happy Eyeballs (for IPv6 / IPv4 best-effort resolution), the in-memory
@@ -246,7 +246,7 @@ pub struct AgentHttp3Options {
 	///
 	/// In some networks, BBR can lead to pathological degradation of overall network conditions, by
 	/// flooding the network by up to **100 times** more retransmissions. This is fixed in BBRv2 and BBRv3,
-	/// but Fáith (or rather its underlying QUIC library quinn, [does not implement those yet][2]).
+	/// but Faith (or rather its underlying QUIC library quinn, [does not implement those yet][2]).
 	///
 	/// [2]: https://github.com/quinn-rs/quinn/issues/1254
 	///
@@ -254,7 +254,7 @@ pub struct AgentHttp3Options {
 	pub congestion: Option<Http3Congestion>,
 	/// Maximum duration of inactivity to accept before timing out the connection, in seconds. Note that
 	/// this only sets the timeout on this side of the connection: the true idle timeout is the _minimum_
-	/// of this and the peer's own max idle timeout. While the underlying library has no limits, Fáith
+	/// of this and the peer's own max idle timeout. While the underlying library has no limits, Faith
 	/// defines bounds for safety: minimum 1 second, maximum 2 minutes (120 seconds).
 	///
 	/// Default: 30.
@@ -303,7 +303,7 @@ pub struct AgentHttp3Options {
 	/// Demote an origin off HTTP/3 when its QUIC path is provenly slower than
 	/// its TCP path by this factor. Set to 0 to disable path-time demotion.
 	///
-	/// Fáith keeps a per-origin moving average of time-to-response-headers for
+	/// Faith keeps a per-origin moving average of time-to-response-headers for
 	/// each protocol family. HTTP/3 is preferred at parity and when moderately
 	/// slower — its advantages (no head-of-line blocking, connection migration)
 	/// pay off beyond the average — so this factor should stay well above 1.
@@ -353,7 +353,7 @@ pub struct AgentHttp3Options {
 	/// How many consecutive cancelled HTTP/3 attempts, within a 60-second window,
 	/// demote an origin back to TCP.
 	///
-	/// Fáith normally learns that HTTP/3 is broken from a failed attempt. A request
+	/// Faith normally learns that HTTP/3 is broken from a failed attempt. A request
 	/// cancelled via `AbortSignal` never produces that signal, so without this an
 	/// origin whose UDP path breaks keeps being retried over HTTP/3 for as long as
 	/// the Alt-Svc entry lives. Cancellations are treated as weak evidence: only a
@@ -414,7 +414,7 @@ pub struct AgentHttp3Options {
 	/// sending the *origin's* authority. reqwest cannot express that — it derives
 	/// the HTTP/3 connect target from the request URI's authority (tracked
 	/// upstream as [reqwest#1138](https://github.com/seanmonstar/reqwest/issues/1138)).
-	/// So by default Fáith does not upgrade at all when the advertised port
+	/// So by default Faith does not upgrade at all when the advertised port
 	/// differs, rather than guessing that the origin's own port also speaks
 	/// HTTP/3.
 	///
@@ -462,10 +462,10 @@ pub struct AgentPoolOptions {
 /// Determines the behavior in case the server replies with a redirect status.
 /// One of the following values:
 ///
-/// - `follow`: automatically follow redirects. Fáith limits this to 10 redirects.
+/// - `follow`: automatically follow redirects. Faith limits this to 10 redirects.
 /// - `error`: reject the promise with a network error when a redirect status is returned.
 /// - ~~`manual`~~: not supported.
-/// - `stop`: (Fáith custom) don't follow any redirects, return the responses.
+/// - `stop`: (Faith custom) don't follow any redirects, return the responses.
 ///
 /// Defaults to `follow`.
 #[napi(string_enum)]
@@ -604,7 +604,7 @@ pub struct AgentOptions {
 	///
 	/// This also selects the address family of the HTTP/3 (QUIC) socket. By default that
 	/// socket binds the IPv6 wildcard (`[::]`), which fails on hosts without usable IPv6 —
-	/// there, HTTP/3 silently falls back to TCP. Fáith detects that case automatically and
+	/// there, HTTP/3 silently falls back to TCP. Faith detects that case automatically and
 	/// binds `0.0.0.0` instead, so you normally don't need to set this; provide it only to
 	/// force a specific source address. Throws if the value does not parse as an IP address.
 	///
@@ -645,7 +645,7 @@ pub struct AgentStats {
 	pub bodies_finished: i64,
 }
 
-/// The `Agent` interface of the Fáith API represents an instance of an HTTP client. Each `Agent` has
+/// The `Agent` interface of the Faith API represents an instance of an HTTP client. Each `Agent` has
 /// its own options, connection pool, caches, etc. There are also conveniences such as `headers` for
 /// setting default headers on all requests done with the agent, and statistics collected by the agent.
 ///
@@ -656,7 +656,7 @@ pub struct AgentStats {
 /// this can not only speed up requests on average, but also reduce system load.
 ///
 /// For this reason, and also because in browsers this behaviour is standard, **all** requests with
-/// Fáith use an `Agent`. For `fetch()` calls that don't specify one explicitly, a global agent with
+/// Faith use an `Agent`. For `fetch()` calls that don't specify one explicitly, a global agent with
 /// default options is created on first use.
 ///
 /// There are a lot more options that could be exposed here; if you want one, open an issue.
@@ -673,7 +673,7 @@ pub struct Agent {
 	/// request accounting), while still pooling the connection foreground requests reuse. `None`
 	/// once the agent is closed. (spec:WARM)
 	pub(crate) raw_client: Option<Client>,
-	/// Fáith's DNS resolver, shared with [`Self::client`] so `prefetchDns` warms the cache requests
+	/// Faith's DNS resolver, shared with [`Self::client`] so `prefetchDns` warms the cache requests
 	/// read. `None` under the system resolver, where there is no such cache. (spec:WARM)
 	pub(crate) dns_resolver: Option<FaithResolver>,
 	/// Origins with a warm-up connection opened within the pool idle window, so a repeat
@@ -758,7 +758,7 @@ impl Agent {
 
 		let dns = options.dns.unwrap_or_default();
 		let dns_resolver = if dns.system.unwrap_or(false) {
-			// The system resolver (getaddrinfo) has no in-process cache Fáith can warm, so no
+			// The system resolver (getaddrinfo) has no in-process cache Faith can warm, so no
 			// resolver is installed and `prefetchDns` resolves as a no-op (spec:WARM).
 			client = client.no_hickory_dns();
 			None
@@ -785,7 +785,7 @@ impl Agent {
 				)
 			}
 
-			// Fáith owns the hickory resolver rather than leaving it to reqwest's built-in one, so
+			// Faith owns the hickory resolver rather than leaving it to reqwest's built-in one, so
 			// `prefetchDns` can warm the very cache reqwest's requests read (spec:WARM). reqwest
 			// still layers `dns.overrides` on top, so the overrides applied above keep working.
 			let resolver = FaithResolver::default();

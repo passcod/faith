@@ -39,7 +39,7 @@ function mimeEssence(value) {
  * request.
  *
  * The platform's class implements an older revision of the interface, so the attributes it
- * lacks — and Fáith's two additions — are defined on the entry as own properties, which shadow
+ * lacks — and Faith's two additions — are defined on the entry as own properties, which shadow
  * the prototype's accessors and leave `instanceof` intact. The built-in `toJSON` only knows the
  * attributes the class carries, so it is shadowed too, or a serialised entry would silently
  * lose every field added here.
@@ -88,7 +88,7 @@ function mintResourceTiming(response, fetchStart, measurements) {
 		measurements.fromCache ? "cache" : "",
 	);
 
-	// Every attribute Fáith states a value for, so the entry reads the same whatever revision
+	// Every attribute Faith states a value for, so the entry reads the same whatever revision
 	// of the interface the platform's class happens to implement.
 	const fields = {
 		startTime: fetchStart,

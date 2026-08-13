@@ -2,7 +2,7 @@
 name = "faith"
 version = "0.5.0"
 edition = "2024"
-description = "fáith: a Rust-powered JS fetch"
+description = "Faith: a Rust-powered JS fetch"
 publish = false
 
 [lib]

@@ -1,4 +1,4 @@
-# fáith benchmarks
+# Faith benchmarks
 
 ## Implementations
 
@@ -32,7 +32,7 @@ Notes:
   measure `ttfb` (we record it the same as `total`). Every other client resolves
   at response headers, so `ttfb` is really time-to-end-of-headers.
 - libcurl and the node core / undici stacks only load the TLS trust store once per
-  process, while **fáith** does this on every `new Agent()` construction. This
+  process, while **Faith** does this on every `new Agent()` construction. This
   completely kills our "cold" benchmark numbers by an order of magnitude or more.
   This is not the usual pattern, though.
 
@@ -45,7 +45,7 @@ npm install --prefix bench
 node bench/run.mjs                      # quick suite: h1+h2, 1k/64k, c1/c16
 node bench/run.mjs --suite full         # full matrix incl. h3, cold+warm
 node bench/run.mjs --suite concurrency  # concurrency sweep: c1…c128, warm, for the throughput curve
-node bench/run.mjs --suite features     # fáith vs fáith across feature knobs
+node bench/run.mjs --suite features     # Faith vs Faith across feature knobs
 
 # advanced / custom scenarios
 node bench/run.mjs --delay 20           # +20ms server-side response delay

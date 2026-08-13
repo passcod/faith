@@ -5,7 +5,7 @@ id: H3UP
 # HTTP/3 upgrade
 
 HTTP/3 cannot be negotiated on an existing connection: a server advertises it via the `Alt-Svc` header, and the client chooses to try UDP.
-Fáith keeps per-origin knowledge of those advertisements and their outcomes, so requests upgrade when HTTP/3 is genuinely reachable and never hang on paths where it is not.
+Faith keeps per-origin knowledge of those advertisements and their outcomes, so requests upgrade when HTTP/3 is genuinely reachable and never hang on paths where it is not.
 The whole mechanism is on by default and disabled entirely with `http3.upgradeEnabled: false`.
 
 ## Origin knowledge
@@ -18,7 +18,7 @@ An origin is in one of three states, each with its own lifetime.
 
 ## Failure backoff
 
-An origin whose UDP path is blocked for good would otherwise be retried at a fixed rate forever, so Fáith keeps a consecutive-failure count per origin and derives the cooldown from it.
+An origin whose UDP path is blocked for good would otherwise be retried at a fixed rate forever, so Faith keeps a consecutive-failure count per origin and derives the cooldown from it.
 The first failure holds the origin for `upgradeFailedTtl` (default 5 minutes) and each consecutive one doubles that, up to `upgradeFailedMaxTtl` (default 1 hour): on the defaults, 5 minutes, then 10, 20, 40, and an hour thereafter.
 The cap is never less than `upgradeFailedTtl`, so setting it at or below the base gives a flat cooldown.
 Every failure counts the same however it arrives, whether a foreground attempt failed, a background probe failed, or a run of cancellation strikes demoted the origin.
@@ -30,7 +30,7 @@ Counts are held per origin within the same `upgradeCacheCapacity` bound as the r
 ## Reading advertisements
 
 The first `h3`-family service in an `Alt-Svc` header counts (draft versions like `h3-29` included); its `ma` parameter sets the advertisement lifetime, and the literal value `clear` erases knowledge as the standard requires.
-An advertisement naming a different host is ignored: Fáith only upgrades to the same host.
+An advertisement naming a different host is ignored: Faith only upgrades to the same host.
 IPv6 authorities are parsed correctly (the port split respects brackets).
 A cached response is not a network exchange and neither records nor confirms anything (the HTTP cache sits outside the upgrade layer; a replayed HTTP/3-versioned cache hit must not fake a confirmation; see [CACHE](../cache/http-cache.md)).
 

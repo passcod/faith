@@ -39,7 +39,7 @@ impl HeadersStamp {
 	}
 }
 
-/// What Fáith measures of a request, filled in as the request progresses.
+/// What Faith measures of a request, filled in as the request progresses.
 #[derive(Clone, Debug, Default)]
 pub struct RequestTiming {
 	/// Milliseconds from the start of the request to the response headers arriving.

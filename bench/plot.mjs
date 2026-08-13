@@ -359,8 +359,8 @@ function plotFeatures(records, outDir) {
 		}
 	};
 
-	build("features-latency", `fáith feature comparison — total p50 (ms) @ ${humanSize(size)}, c${conc}`, "ms", (r) => r.total.p50);
-	build("features-rps", `fáith feature comparison — throughput (req/s) @ ${humanSize(size)}, c${conc}`, "req/s", (r) => r.rps);
+	build("features-latency", `Faith feature comparison — total p50 (ms) @ ${humanSize(size)}, c${conc}`, "ms", (r) => r.total.p50);
+	build("features-rps", `Faith feature comparison — throughput (req/s) @ ${humanSize(size)}, c${conc}`, "req/s", (r) => r.rps);
 
 	return { written, note: `features slice: size=${humanSize(size)} conc=${conc} (override with --size/--conc)` };
 }

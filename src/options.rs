@@ -38,7 +38,7 @@ use crate::agent::Agent;
 ///   - If there is a match, fresh or stale, it will be returned from the cache.
 ///   - If there is no match, a network error is returned.
 ///
-/// - `ignore-rules`: Custom to Fáith. Overrides the check that determines if a response can be cached
+/// - `ignore-rules`: Custom to Faith. Overrides the check that determines if a response can be cached
 ///   to always return true on 200. Uses any response in the HTTP cache matching the request, not
 ///   paying attention to staleness. If there was no response, it creates a normal request and updates
 ///   the HTTP cache with the response.
@@ -88,16 +88,16 @@ impl From<RequestCacheMode> for CacheMode {
 /// following values:
 ///
 /// - `omit`: Never send credentials in the request or include credentials in the response.
-/// - ~~`same-origin`~~: Fáith does not implement this, as there is no concept of "origin" on the server.
+/// - ~~`same-origin`~~: Faith does not implement this, as there is no concept of "origin" on the server.
 /// - `include`: Always include credentials, ~~even for cross-origin requests.~~
 ///
-/// Fáith ignores the `Access-Control-Allow-Credentials` and `Access-Control-Allow-Origin` headers.
+/// Faith ignores the `Access-Control-Allow-Credentials` and `Access-Control-Allow-Origin` headers.
 ///
-/// Fáith currently does not `omit` the TLS client certificate when the request's `Agent` has one
+/// Faith currently does not `omit` the TLS client certificate when the request's `Agent` has one
 /// configured. This is an upstream limitation.
 ///
 /// If the request's `Agent` has cookies enabled, new cookies from the response will be added to the
-/// cookie jar, even as Fáith strips them from the request and response headers returned to the user.
+/// cookie jar, even as Faith strips them from the request and response headers returned to the user.
 /// This is an upstream limitation.
 ///
 /// Defaults to `include` (browsers default to `same-origin`).
@@ -119,7 +119,7 @@ impl Default for CredentialsOption {
 }
 
 /// Controls duplex behavior of the request. If this is present it must have the value `half`, meaning
-/// that Fáith will send the entire request before processing the response.
+/// that Faith will send the entire request before processing the response.
 ///
 /// This option must be present when `body` is a `ReadableStream`.
 #[napi(string_enum)]
@@ -136,7 +136,7 @@ pub(crate) const PRIORITY: &str = "priority";
 ///
 /// Urgency runs from 0 (most urgent) to 7 (least urgent), and a request that sends no header
 /// is served at the default urgency of 3. `high` and `low` sit either side of that default.
-/// `auto`, a value Fáith does not recognise, and no option at all send no header, which is how
+/// `auto`, a value Faith does not recognise, and no option at all send no header, which is how
 /// a request asks for the default urgency.
 fn priority_urgency(priority: Option<&str>) -> Option<&'static str> {
 	// spec:REQ#request-priority
@@ -160,7 +160,7 @@ pub struct FaithOptionsAndBody {
 	/// The relative priority of this request: `high`, `low`, or `auto`.
 	///
 	/// Taken as a string rather than an enum so that an unrecognised value is ignored like any
-	/// other option Fáith does not recognise, rather than rejected.
+	/// other option Faith does not recognise, rather than rejected.
 	pub priority: Option<String>,
 	pub timeout: Option<u32>,
 }

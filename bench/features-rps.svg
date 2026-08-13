@@ -41,7 +41,7 @@
 </defs>
 <g fill="none" color="#FFFFFF" stroke="currentColor" stroke-width="1.00" stroke-linecap="butt" stroke-linejoin="miter">
 	<g transform="translate(720.00,22.88)" stroke="none" fill="black" font-family="sans" font-size="15.00"  text-anchor="middle">
-		<text><tspan font-family="sans" >fáith feature comparison — throughput (req/s) </tspan><tspan font-family="sans" > </tspan><tspan font-family="sans"  dx="-0.50em">64KiB, c1</tspan></text>
+		<text><tspan font-family="sans" >Faith feature comparison — throughput (req/s) </tspan><tspan font-family="sans" > </tspan><tspan font-family="sans"  dx="-0.50em">64KiB, c1</tspan></text>
 	</g>
 </g>
 <g fill="none" color="black" stroke="currentColor" stroke-width="1.00" stroke-linecap="butt" stroke-linejoin="miter">

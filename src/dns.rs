@@ -1,9 +1,9 @@
-//! Fáith's own DNS resolver.
+//! Faith's own DNS resolver.
 //!
 //! `reqwest`'s built-in hickory resolver and its in-memory cache are `pub(crate)`, so the only
 //! way to warm that cache is to make a request through it — which is `preconnect`'s job, not
 //! `prefetchDns`'s (that verb must not touch the origin). To let `prefetchDns` populate the cache
-//! a later request reads, Fáith owns the resolver instead: this type is installed on the `reqwest`
+//! a later request reads, Faith owns the resolver instead: this type is installed on the `reqwest`
 //! client with `ClientBuilder::dns_resolver`, so reqwest routes every lookup through it, and
 //! `prefetch` calls the same resolver directly. Both share one `TokioResolver`, so a name warmed
 //! by `prefetchDns` is already cached when a request looks it up.
@@ -24,7 +24,7 @@ use hickory_resolver::{
 use reqwest::dns::{Addrs, Name, Resolve, Resolving};
 use tokio::sync::OnceCell;
 
-/// A hickory resolver Fáith owns, shared between reqwest's request path and `prefetchDns`.
+/// A hickory resolver Faith owns, shared between reqwest's request path and `prefetchDns`.
 #[derive(Clone, Default)]
 pub struct FaithResolver {
 	/// Built lazily inside a tokio runtime (hickory needs one), then shared: reqwest's

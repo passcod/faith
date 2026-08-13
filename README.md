@@ -1,40 +1,37 @@
-# fáith - Rust-powered fetch API for Node.js
+# Faith - Rust-powered fetch API for Node.js
 
-/ˈɸaːθj/ — pronounced FATH, like FATHER without the ER. This is an old irish word that is a folk
-etymology of "fetch", and means _poet_, _soothsayer_, _seer_, and later, _prophet_.
-
-Fáith is of course a pun with _faith_, and is meant to be a _faithful_ implementation of the fetch
-API for Node.js, but using a Rust-based network stack instead of undici + libuv.
+Faith is meant to be a _faithful_ implementation of the fetch API for Node.js, but using a Rust-based
+network stack instead of undici + libuv.
 
 Most `fetch` implementations for Node.js are based on the Node.js TCP stack (via libuv) and cannot
 easily work around its limitations. The native fetch implementation, `undici`, explicitly targets
 HTTP/1.1, and doesn't support HTTP/2+, among many other complaints (of course, for HTTP/1, undici
 is a very good effort! it just feels like a bit of an outdated choice today).
 
-Fáith tries to bring a Node.js fetch that is closer to the browser's fetch, notably by having
+Faith tries to bring a Node.js fetch that is closer to the browser's fetch, notably by having
 transparent support for HTTP/2 and HTTP/3, IPv6 and IPv4 using the "Happy Eyeballs" algorithm, a
 DNS cache, an optional cookie jar, and your choice of two HTTP caches.
 
 ### 📐 Is it faster?
 
 Yes, except if you create one `Agent` for every new request. This is something that we deliberately
-do not optimise for, and you do need to go out of your way to use it like that. Additionally, fáith
+do not optimise for, and you do need to go out of your way to use it like that. Additionally, Faith
 does have the real cost of not being built-in, and being a native module, not pure JS: so you can't
 use it outside of Node.js and in constrained environments.
 
-[![charts of concurrency vs throughput, with fáith handily beating all of the competition](./bench/concurrency-throughput.svg)](./bench/concurrency-throughput.svg)
+[![charts of concurrency vs throughput, with Faith handily beating all of the competition](./bench/concurrency-throughput.svg)](./bench/concurrency-throughput.svg)
 
-[![charts of latency vs payload size, with fáith consistently performing better or equivalent](./bench/latency-vs-size.svg)](./bench/latency-vs-size.svg)
+[![charts of latency vs payload size, with Faith consistently performing better or equivalent](./bench/latency-vs-size.svg)](./bench/latency-vs-size.svg)
 
-[![charts of latency spread by implementation, with fáith being faster and less variable](./bench/latency-by-impl.svg)](./bench/latency-by-impl.svg)
+[![charts of latency spread by implementation, with Faith being faster and less variable](./bench/latency-by-impl.svg)](./bench/latency-by-impl.svg)
 
-[![the relative costs of enabling various fáith features](./bench/features-rps.svg)](./bench/features-rps.svg)
+[![the relative costs of enabling various Faith features](./bench/features-rps.svg)](./bench/features-rps.svg)
 
 ### 🧪 Is it correct?
 
 Yes. We maintain a suite of tests across actual servers and topologies, exercising the different
-protocol features fáith will encounter in real-life usage. Few servers support the full list, but
-whatever servers emit, fáith must correctly handle. So far, everything we've tested works:
+protocol features Faith will encounter in real-life usage. Few servers support the full list, but
+whatever servers emit, Faith must correctly handle. So far, everything we've tested works:
 
 <!-- conformance:start -->
 
@@ -121,10 +118,10 @@ const response = await fetch('https://httpbin.org/post', {
 Conforms to the [fetch API](https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API).
 
 In the following documentation, italics are parts that are *identical to how native fetch works*
-(as per MDN), and non-italics document where behaviour varies and is specific to fáith (unless
+(as per MDN), and non-italics document where behaviour varies and is specific to Faith (unless
 otherwise specified).
 
-This reference describes how to use the API. For what fáith requires of itself, including the
+This reference describes how to use the API. For what Faith requires of itself, including the
 standards it answers to and the points where it knowingly diverges from them, see the
 [specs](./.workhorse/specs/overview.md).
 
@@ -153,7 +150,7 @@ fetch(resource, options);
 
 *A `RequestInit` object containing any custom settings that you want to apply to the request.* In
 practice the `RequestInit` class does not exist in browsers or Node.js, and so this is always a
-"plain object" or "dictionary". The fields supported by Fáith are documented below.
+"plain object" or "dictionary". The fields supported by Faith are documented below.
 
 ### Return value
 
@@ -161,7 +158,7 @@ practice the `RequestInit` class does not exist in browsers or Node.js, and so t
 
 <!-- //full duplex mode is not yet implemented//
 In `half` duplex mode (the default), the promise resolves when the request body has been fully sent
-and the response headers have been received. In `full` duplex mode (supported by Fáith but not yet
+and the response headers have been received. In `full` duplex mode (supported by Faith but not yet
 browsers), the promise resolves as soon as response headers have been received, even if the request
 body has not yet finished sending. Most HTTP servers will not send response headers until they've
 finished receiving the body so this distinction doesn't matter, but some do, and it is possible to
@@ -171,7 +168,7 @@ You may even be able to vary the request body stream based on the response body 
 
 ## `Request`
 
-Fáith does not implement its own `Request` object. Instead, you can pass a Web API `Request` object
+Faith does not implement its own `Request` object. Instead, you can pass a Web API `Request` object
 to `fetch()`, and it will internally be converted to the right options.
 
 ## `RequestInit` object
@@ -180,18 +177,18 @@ to `fetch()`, and it will internally be converted to the right options.
 configure a fetch request.*
 
 *You can pass a `RequestInit` object into the `Request()` constructor, or directly into the
-`fetch()` function call.* Note that Fáith has additional options available, and those will not
+`fetch()` function call.* Note that Faith has additional options available, and those will not
 survive a trip through `Request`. Prefer to supply `RequestInit` directly to `fetch()`.
 
 *You can also construct a `Request` with a `RequestInit`, and pass the `Request` to a `fetch()`
 call along with another `RequestInit`. If you do this, and the same option is set in both places,
 then the value passed directly into `fetch()` is used.*
 
-Note that you can include options that Fáith does not support; they will simply be ignored.
+Note that you can include options that Faith does not support; they will simply be ignored.
 
 ### `FetchOptions.agent: Agent`
 
-This is custom to Fáith.
+This is custom to Faith.
 
 You can create an `Agent`, and pass it here to have the request executed by the `Agent`. See the
 documentation for the `Agent` options you can set with this, and the agent data you can access.
@@ -201,7 +198,7 @@ When not provided, a global default `Agent` is created on first use.
 
 ### `FetchOptions.attributionReporting`
 
-Fáith deliberately does not implement this.
+Faith deliberately does not implement this.
 
 ### `FetchOptions.body`
 
@@ -222,7 +219,7 @@ It is specified as an instance of any of the following types:*
 
 ### `FetchOptions.browsingTopics`
 
-Fáith deliberately does not implement this.
+Faith deliberately does not implement this.
 
 ### `FetchOptions.cache`
 
@@ -258,7 +255,7 @@ Fáith deliberately does not implement this.
   - *If there is a match, fresh or stale, it will be returned from the cache.*
   - *If there is no match, a network error is returned.*
 
-- `ignore-rules`: Custom to Fáith. Overrides the check that determines if a response can be cached
+- `ignore-rules`: Custom to Faith. Overrides the check that determines if a response can be cached
   to always return true on 200. Uses any response in the HTTP cache matching the request, not
   paying attention to staleness. If there was no response, it creates a normal request and updates
   the HTTP cache with the response.
@@ -271,16 +268,16 @@ or authentication headers containing a username and password. This option may be
 following values:*
 
 - *`omit`: Never send credentials in the request or include credentials in the response.*
-- ~~`same-origin`~~: Fáith does not implement this, as there is no concept of "origin" on the server.
+- ~~`same-origin`~~: Faith does not implement this, as there is no concept of "origin" on the server.
 - *`include`: Always include credentials,* ~~even for cross-origin requests.~~
 
-Fáith ignores the `Access-Control-Allow-Credentials` and `Access-Control-Allow-Origin` headers.
+Faith ignores the `Access-Control-Allow-Credentials` and `Access-Control-Allow-Origin` headers.
 
-Fáith currently does not `omit` the TLS client certificate when the request's `Agent` has one
+Faith currently does not `omit` the TLS client certificate when the request's `Agent` has one
 configured. This is an upstream limitation.
 
 If the request's `Agent` has cookies enabled, new cookies from the response will be added to the
-cookie jar, even as Fáith strips them from the request and response headers returned to the user.
+cookie jar, even as Faith strips them from the request and response headers returned to the user.
 This is an upstream limitation.
 
 Defaults to `include` (browsers default to `same-origin`).
@@ -288,7 +285,7 @@ Defaults to `include` (browsers default to `same-origin`).
 ### `FetchOptions.duplex: string`
 
 *Controls duplex behavior of the request. If this is present it must have the value `half`, meaning
-that Fáith will send the entire request before processing the response.*
+that Faith will send the entire request before processing the response.*
 
 *This option must be present when `body` is a `ReadableStream`.*
 
@@ -297,7 +294,7 @@ that Fáith will send the entire request before processing the response.*
 *Any headers you want to add to your request, contained within a `Headers` object or an object
 literal whose keys are the names of headers and whose values are the header values.*
 
-Fáith allows all request headers to be set (unlike browsers, which [forbid][1] a number of them).
+Faith allows all request headers to be set (unlike browsers, which [forbid][1] a number of them).
 
 [1]: https://developer.mozilla.org/en-US/docs/Glossary/Forbidden_request_header
 
@@ -314,17 +311,17 @@ Fáith allows all request headers to be set (unlike browsers, which [forbid][1] 
 Multiple space-separated values are supported; if any matches, verification passes. Unknown
 algorithms are silently ignored (but if all algorithms are unknown, an error is thrown).
 
-Fáith only checks the integrity when using `bytes()`, `json()`, `text()`, `arrayBuffer()`, and
+Faith only checks the integrity when using `bytes()`, `json()`, `text()`, `arrayBuffer()`, and
 `blob()`. Verification when reading through the `body` stream is not currently supported.
 
-Note that browsers will throw at the `fetch()` call when integrity fails, but Fáith will only throw
+Note that browsers will throw at the `fetch()` call when integrity fails, but Faith will only throw
 when the above methods are called, as until then the body contents are not available.
 
 ### `FetchOptions.keepalive`
 
 Not supported.
 
-Note that this is different from `Connection: keep-alive`; Fáith connections are pooled within each
+Note that this is different from `Connection: keep-alive`; Faith connections are pooled within each
 single `Agent`, so subsequent requests to the same endpoint are faster until the pooled connection
 times out. The `keepalive` option in browsers is instead a way to send a `fetch()` right before the
 page is unloaded, for tracking or analytics purposes. This concept does not exist in Node.js.
@@ -335,13 +332,13 @@ page is unloaded, for tracking or analytics purposes. This concept does not exis
 
 ### `FetchOptions.mode`
 
-Fáith deliberately does not implement this, as there is no CORS/origin.
+Faith deliberately does not implement this, as there is no CORS/origin.
 
 ### `FetchOptions.priority: "high" | "low" | "auto"`
 
 *A hint of how this request ranks against others.*
 
-Browsers use this option to prioritise streams. Fáith sends it as the [RFC 9218] `Priority` header
+Browsers use this option to prioritise streams. Faith sends it as the [RFC 9218] `Priority` header
 and lets the server schedule, which is what HTTP/2 and HTTP/3 servers act on.
 
 Urgency runs from 0 (most urgent) to 7 (least urgent), and a request without the header is served at
@@ -358,20 +355,20 @@ written and no value is derived from this option.
 
 ### `FetchOptions.redirect`
 
-Fáith does not respect this option on the `RequestInit` dictionary. Instead, the option is present
+Faith does not respect this option on the `RequestInit` dictionary. Instead, the option is present
 on `Agent` and applies to all requests made with that `Agent`.
 
 ### `FetchOptions.referrer`
 
-Fáith deliberately does not implement this, as there is no origin.
+Faith deliberately does not implement this, as there is no origin.
 
-However, Fáith does set the `Referer` header when redirecting automatically.
+However, Faith does set the `Referer` header when redirecting automatically.
 
 ### `FetchOptions.referrerPolicy`
 
-Fáith deliberately does not implement this, as there is no origin.
+Faith deliberately does not implement this, as there is no origin.
 
-However, Fáith does set the `Referer` header when redirecting automatically.
+However, Faith does set the `Referer` header when redirecting automatically.
 
 ### `FetchOptions.signal: AbortSignal`
 
@@ -380,7 +377,7 @@ corresponding `AbortController`.*
 
 ### `FetchOptions.timeout: number`
 
-Custom to Fáith. Cancels the request after this many milliseconds.
+Custom to Faith. Cancels the request after this many milliseconds.
 
 This will give a different error to using `signal` with a timeout, which might be preferable in
 some cases. It also has a slightly different internal behaviour: `signal` may abort the request
@@ -391,7 +388,7 @@ response receipt.
 
 *The `Response` interface of the Fetch API represents the response to a request.*
 
-Fáith does not allow its `Response` object to be constructed. If you need to, you may use the
+Faith does not allow its `Response` object to be constructed. If you need to, you may use the
 `webResponse()` method to convert one into a Web API `Response` object; note the caveats.
 
 ### `Response.body: ReadableStream | null`
@@ -401,7 +398,7 @@ contents,* or `null` for any actual HTTP response that has no body, such as `HEA
 `204 No Content` responses.
 
 Note that browsers currently do not return `null` for those responses, but the spec requires it.
-Fáith chooses to respect the spec rather than the browsers in this case.
+Faith chooses to respect the spec rather than the browsers in this case.
 
 A response has one body stream: it is built on first access and the same stream is returned
 thereafter, so reading through it advances a single position. Use `clone()` to get a second full
@@ -412,7 +409,7 @@ read of the body.
 *The `bodyUsed` read-only property of the `Response` interface is a boolean value that indicates
 whether the body has been read yet.*
 
-In Fáith, this indicates whether the body stream has ever been read from or canceled, as defined
+In Faith, this indicates whether the body stream has ever been read from or canceled, as defined
 [in the spec](https://streams.spec.whatwg.org/#is-readable-stream-disturbed). Note that accessing
 the `.body` property counts as a read, even if you don't actually consume any bytes of content.
 
@@ -421,8 +418,8 @@ the `.body` property counts as a read, even if you don't actually consume any by
 *The `headers` read-only property of the `Response` interface contains the `Headers` object
 associated with the response.*
 
-Note that Fáith does not provide a custom `Headers` class; instead the Web API `Headers` structure
-is used directly and constructed by Fáith when needed.
+Note that Faith does not provide a custom `Headers` class; instead the Web API `Headers` structure
+is used directly and constructed by Faith when needed.
 
 ### `Response.ok: boolean`
 
@@ -431,7 +428,7 @@ response was successful (status in the range 200-299) or not.*
 
 ### `Response.peer: object`
 
-Custom to Fáith.
+Custom to Faith.
 
 The `peer` read-only property of the `Response` interface contains an object with information about
 the remote peer that sent this response:
@@ -452,7 +449,7 @@ response is the result of a request you made which was redirected.*
 *Note that by the time you read this property, the redirect will already have happened, and you
 cannot prevent it by aborting the fetch at this point.*
 
-One caveat specific to Fáith: with the agent's
+One caveat specific to Faith: with the agent's
 [`http3.upgradeFollowAdvertisedPort`](#agentoptionshttp3upgradefollowadvertisedport-bool) enabled,
 HTTP/3 responses compare URLs ignoring the port, because the port was rewritten to the advertised
 one and would otherwise register as a redirect. A genuine redirect differing only in port therefore
@@ -469,7 +466,7 @@ response. For example, 200 for success, 404 if the resource could not be found.*
 corresponding to the HTTP status code in `Response.status`. For example, this would be `OK` for a
 status code `200`, `Continue` for `100`, `Not Found` for `404`.*
 
-Fáith always returns the canonical status message for the code. In HTTP/1, servers can send custom
+Faith always returns the canonical status message for the code. In HTTP/1, servers can send custom
 status text, but that text is not surfaced here; in HTTP/2 and HTTP/3, custom status text is not
 supported at all. For status codes with no well-known message, this is an empty string.
 
@@ -490,13 +487,13 @@ const trailers = await res.trailers; // resolves
 
 Awaiting the trailers on their own, without ever reading the body, waits forever: there is nothing
 to end the body and produce them. That is the behaviour the current spec proposal describes
-([whatwg/fetch#1940](https://github.com/whatwg/fetch/pull/1940)), not a quirk of Fáith. Holding the
+([whatwg/fetch#1940](https://github.com/whatwg/fetch/pull/1940)), not a quirk of Faith. Holding the
 promise while something else reads the body is fine, and costs nothing while it is pending.
 
 `discard()` counts as consuming the body, but discards its trailers along with it: the promise then
 resolves to `null` rather than waiting for trailers that can no longer arrive.
 
-Custom to Fáith. This was once in the spec but was removed as it wasn't implemented by any browser;
+Custom to Faith. This was once in the spec but was removed as it wasn't implemented by any browser;
 the proposal above is the current effort to bring it back.
 
 ### `Response.type: string`
@@ -504,7 +501,7 @@ the proposal above is the current effort to bring it back.
 *The `type` read-only property of the `Response` interface contains the type of the response. The
 type determines whether scripts are able to access the response body and headers.*
 
-In Fáith, this is always set to `basic`.
+In Faith, this is always set to `basic`.
 
 ### `Response.url: string`
 
@@ -516,7 +513,7 @@ value of the `url` property will be the final URL obtained after any redirects.*
 The `version` read-only property of the `Response` interface contains the HTTP version of the
 response. The value will be the final HTTP version after any redirects and protocol upgrades.
 
-This is custom to Fáith.
+This is custom to Faith.
 
 ### `Response.arrayBuffer(): Promise<ArrayBuffer>`
 
@@ -535,7 +532,7 @@ completion. It returns a promise that resolves with a `Blob`.*
 *The `bytes()` method of the `Response` interface takes a `Response` stream and reads it to
 completion. It returns a promise that resolves with a `Uint8Array`.*
 
-In Fáith, this returns a Node.js `Buffer`, which can be used as (and is a subclass of) a `Uint8Array`.
+In Faith, this returns a Node.js `Buffer`, which can be used as (and is a subclass of) a `Uint8Array`.
 
 ### `Response.clone(): Response`
 
@@ -556,11 +553,11 @@ explicit and won't do unnecessary work in those cases.
 
 The returned promise resolves when the body has been fully discarded.
 
-This is custom to Fáith.
+This is custom to Faith.
 
 ### `Response.formData(): !`
 
-Fáith deliberately does not implement this. The method exists so the types work out, but it will
+Faith deliberately does not implement this. The method exists so the types work out, but it will
 always throw.
 
 ### `Response.json(): Promise<unknown>`
@@ -572,7 +569,7 @@ completion. It returns a promise which resolves with the result of parsing the b
 *Note that despite the method being named `json()`, the result is not JSON but is instead the
 result of taking JSON as input and parsing it to produce a JavaScript object.*
 
-Further note that, at least in Fáith, this method first reads the entire response body as bytes,
+Further note that, at least in Faith, this method first reads the entire response body as bytes,
 and then parses that as JSON. This can use up to double the amount of memory. If you need more
 efficient access, consider handling the response body as a stream.
 
@@ -586,9 +583,9 @@ using UTF-8.*
 
 ### `Response.webResponse(): globalThis.Response`
 
-This is entirely custom to Fáith. It returns a Web API `Response` instead of Fáith's custom
+This is entirely custom to Faith. It returns a Web API `Response` instead of Faith's custom
 `Response` class. However, it's not possible to construct a Web API `Response` that has all the
-properties of a Fáith Response (or of another Web Response, for that matter). So this method only
+properties of a Faith Response (or of another Web Response, for that matter). So this method only
 returns a Response from:
 
 - the `body` stream
@@ -602,7 +599,7 @@ from it is fine.
 
 ## `Agent`
 
-The `Agent` interface of the Fáith API represents an instance of an HTTP client. Each `Agent` has
+The `Agent` interface of the Faith API represents an instance of an HTTP client. Each `Agent` has
 its own options, connection pool, caches, etc. There are also conveniences such as `headers` for
 setting default headers on all requests done with the agent, and statistics collected by the agent.
 
@@ -613,7 +610,7 @@ DNS technology (DoH and DoT add a whole separate handshake to the process) and o
 this can not only speed up requests on average, but also reduce system load.
 
 For this reason, and also because in browsers this behaviour is standard, **all** requests with
-Fáith use an `Agent`. For `fetch()` calls that don't specify one explicitly, a global agent with
+Faith use an `Agent`. For `fetch()` calls that don't specify one explicitly, a global agent with
 default options is created on first use.
 
 There are a lot more options that could be exposed here; if you want one, open an issue.
@@ -679,8 +676,8 @@ Settings related to DNS. This is a nested object.
 
 #### `AgentOptions.dns.system: boolean`
 
-Use the system's DNS (via `getaddrinfo` or equivalent) rather than Fáith's own DNS client (based on
-[Hickory]). If you experience issues with DNS where Fáith does not work but e.g. curl or native
+Use the system's DNS (via `getaddrinfo` or equivalent) rather than Faith's own DNS client (based on
+[Hickory]). If you experience issues with DNS where Faith does not work but e.g. curl or native
 fetch does, this should be your first port of call.
 
 Enabling this also disables Happy Eyeballs (for IPv6 / IPv4 best-effort resolution), the in-memory
@@ -725,7 +722,7 @@ bandwidth use and optimises for round-trip time, while ignoring packet loss.
 
 In some networks, BBR can lead to pathological degradation of overall network conditions, by
 flooding the network by up to **100 times** more retransmissions. This is fixed in BBRv2 and BBRv3,
-but Fáith (or rather its underlying QUIC library quinn, [does not implement those yet][2]).
+but Faith (or rather its underlying QUIC library quinn, [does not implement those yet][2]).
 
 Note that this only controls the "upload" congestion window (the server controls the "download"
 side), so this setting only makes a difference for upload-heavy (large bodies) applications.
@@ -738,14 +735,14 @@ Default: `cubic`. Accepted values: `cubic`, `bbr1`.
 
 Maximum duration of inactivity to accept before timing out the connection, in seconds. Note that
 this only sets the timeout on this side of the connection: the true idle timeout is the _minimum_
-of this and the peer’s own max idle timeout. While the underlying library has no limits, Fáith
+of this and the peer’s own max idle timeout. While the underlying library has no limits, Faith
 defines bounds for safety: minimum 1 second, maximum 2 minutes (120 seconds).
 
 Default: 30.
 
 #### `AgentOptions.http3.upgradeEnabled: bool`
 
-Fáith keeps track of "Alt-Svc" advertisements from the servers, which indicate if and how HTTP/3 is
+Faith keeps track of "Alt-Svc" advertisements from the servers, which indicate if and how HTTP/3 is
 available. It then uses those advertisements to attempt connection over HTTP/3, and also keeps
 track of failures, so it doesn't waste time retrying HTTP/3 for hosts that don't actually support
 it even if they did advertise it.
@@ -792,7 +789,7 @@ Default: 5000 (5 seconds).
 Demote an origin off HTTP/3 when its QUIC path is provenly slower than its TCP path by this
 factor. Set to 0 to disable path-time demotion.
 
-Fáith keeps a per-origin moving average of time-to-response-headers for each protocol family.
+Faith keeps a per-origin moving average of time-to-response-headers for each protocol family.
 HTTP/3 is preferred at parity and when moderately slower — its advantages (no head-of-line
 blocking, connection migration) pay off beyond the average — so this factor should stay well
 above 1. Only a sustained gap acts: at least 8 samples on each side, and the QUIC average must
@@ -846,9 +843,9 @@ at or below `upgradeFailedTtl` for a flat cooldown that never backs off.
 #### `AgentOptions.http3.upgradeCancelStrikes: number`
 
 When an HTTP/3 connection becomes unviable midway through, or when it's cancelled via
-`AbortSignal`, Fáith will initially retry using HTTP/3. However, it could be that the HTTP/3 path
+`AbortSignal`, Faith will initially retry using HTTP/3. However, it could be that the HTTP/3 path
 has now broken transiently or permanently. This setting defines how many strikes it takes for
-Fáith to downgrade to HTTP/2 (or lower, as available) instead of getting stuck on HTTP/3 for as
+Faith to downgrade to HTTP/2 (or lower, as available) instead of getting stuck on HTTP/3 for as
 long as that origin's `Alt-Svc` entry lives (or forever, for hinted origins).
 
 Strikes must land within about a minute of each other to count towards a run. A retry loop whose
@@ -887,7 +884,7 @@ origin's *own* port speaks HTTP/3. Honouring one correctly therefore means conne
 endpoint while still sending the origin's authority, and reqwest can't express that: it derives the
 HTTP/3 connect target from the request URI's authority. The upstream issue for this is
 [reqwest#1138](https://github.com/seanmonstar/reqwest/issues/1138). So by default, when a server
-advertises `h3=":8443"` for an origin served on `:443`, Fáith doesn't upgrade at all, rather than
+advertises `h3=":8443"` for an origin served on `:443`, Faith doesn't upgrade at all, rather than
 guessing that `:443` also speaks HTTP/3.
 
 Setting this to `true` upgrades anyway, by rewriting the request's port to the advertised one. That
@@ -912,7 +909,7 @@ if the value does not parse as an IP address.
 
 This also selects the address family of the HTTP/3 (QUIC) socket. By default that socket binds
 the IPv6 wildcard (`[::]`), which fails on hosts without usable IPv6 — there, HTTP/3 would
-silently fall back to TCP. Fáith detects that case automatically (probed once per process) and
+silently fall back to TCP. Faith detects that case automatically (probed once per process) and
 binds `0.0.0.0` instead, so you normally don't need to set this; provide it only to force a
 specific source address.
 
@@ -940,10 +937,10 @@ Default: `null` (no limit).
 *Determines the behavior in case the server replies with a redirect status.
 One of the following values:*
 
-- *`follow`: automatically follow redirects.* Fáith limits this to 10 redirects.
+- *`follow`: automatically follow redirects.* Faith limits this to 10 redirects.
 - *`error`: reject the promise with a network error when a redirect status is returned.*
 - ~~*`manual`*:~~ not supported.
-- `stop`: (Fáith custom) don't follow any redirects, return the responses.
+- `stop`: (Faith custom) don't follow any redirects, return the responses.
 
 *Defaults to `follow`.*
 
@@ -1111,7 +1108,7 @@ holds an idle pooled connection does nothing, and concurrent calls for the same 
 single-flighted rather than opening duplicates.
 
 One caveat worth knowing: because a warm-up leaves a connection idle for longer than a just-used
-one, it meets the pool's existing risk of an origin closing a connection silently more often. Fáith
+one, it meets the pool's existing risk of an origin closing a connection silently more often. Faith
 sends such a request again on another connection, but a `POST`, a `PATCH`, or a request with a
 `ReadableStream` body is not replayed, so for those the dead connection surfaces as a failure. An
 origin known to close idle connections aggressively is a poor candidate for warming ahead of an
@@ -1207,8 +1204,8 @@ Returns statistics gathered by this agent:
 
 ## Error mapping
 
-Fáith produces fine-grained errors, but maps them to a few javascript error types for fetch
-compatibility. The `.code` property on errors thrown from Fáith is set to a stable name for each
+Faith produces fine-grained errors, but maps them to a few javascript error types for fetch
+compatibility. The `.code` property on errors thrown from Faith is set to a stable name for each
 error kind, documented in this comprehensive mapping:
 
 - JS `AbortError`:
@@ -1244,7 +1241,7 @@ will not have a `code` property.
 
 ## Environment variables
 
-Fáith reads a handful of environment variables when an `Agent` is created (including the implicit
+Faith reads a handful of environment variables when an `Agent` is created (including the implicit
 global default agent), so that `fetch()` behaves like Node's built-in fetch without extra
 configuration. They are read once, at `Agent` construction; changing them afterwards only affects
 agents created later.
@@ -1271,11 +1268,11 @@ private CA.
 ### `NODE_USE_ENV_PROXY`
 
 When set to exactly `0`, the agent ignores the ambient proxy configuration (`HTTP_PROXY`,
-`HTTPS_PROXY`, `ALL_PROXY`, `NO_PROXY`, and the operating system's proxy settings) that Fáith
+`HTTPS_PROXY`, `ALL_PROXY`, `NO_PROXY`, and the operating system's proxy settings) that Faith
 otherwise reads automatically.
 
 Note that this is inverted from Node, where proxy support is opt-*in* and this variable turns it
-*on*. Fáith reads the proxy environment by default, so the variable acts purely as an opt-*out*
+*on*. Faith reads the proxy environment by default, so the variable acts purely as an opt-*out*
 switch: unset (or `1`) keeps proxying enabled.
 
 ### `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`, `NO_PROXY`
@@ -1303,17 +1300,17 @@ to decrypt the agent's TLS traffic, so only set it when debugging.
 
 ### Not honoured
 
-- `NODE_USE_SYSTEM_CA`: Fáith bundles no root certificate set of its own — the platform trust store
+- `NODE_USE_SYSTEM_CA`: Faith bundles no root certificate set of its own — the platform trust store
   is its only default source of roots, and is always used. There is nothing for this variable to
   toggle, so it is ignored.
-- `OPENSSL_CONF`: Fáith uses [rustls](https://github.com/rustls/rustls), not OpenSSL, so OpenSSL's
+- `OPENSSL_CONF`: Faith uses [rustls](https://github.com/rustls/rustls), not OpenSSL, so OpenSSL's
   configuration file does not apply.
 
 ## Versions
 
 Two version constants are exposed:
 
-- `FAITH_VERSION` is the version of the Fáith library itself
+- `FAITH_VERSION` is the version of the Faith library itself
 - `REQWEST_VERSION` is the version of the underlying [reqwest](https://github.com/seanmonstar/reqwest) library
 
 These can be used to construct your own user agent strings, in logging, or for seeking help.

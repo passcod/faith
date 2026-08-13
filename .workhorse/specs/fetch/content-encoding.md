@@ -4,7 +4,7 @@ id: ENC
 
 # Content encoding
 
-Fáith negotiates compressed transfer and decodes a response encoded in a coding the request accepted, before the caller sees any bytes.
+Faith negotiates compressed transfer and decodes a response encoded in a coding the request accepted, before the caller sees any bytes.
 A caller who sets `Accept-Encoding` themselves chooses what that is, and a body encoded outside that choice arrives as it came off the wire.
 
 ## Negotiation
@@ -26,12 +26,12 @@ Decoding applies to every way of reading the body, the `body` stream included (s
 ## Bodies delivered as received
 
 Every other response is delivered as received, with `Content-Encoding` and `Content-Length` intact, leaving the caller to decode the bytes.
-That covers a response in a coding Fáith cannot decode, and a response in a coding the request's `Accept-Encoding` did not accept.
-It also covers a `Content-Encoding` naming more than one coding: Fáith decodes a single coding, and a representation encoded repeatedly is the caller's to unwind.
+That covers a response in a coding Faith cannot decode, and a response in a coding the request's `Accept-Encoding` did not accept.
+It also covers a `Content-Encoding` naming more than one coding: Faith decodes a single coding, and a representation encoded repeatedly is the caller's to unwind.
 The codings a response names are counted across every `Content-Encoding` it carries, whether they arrive comma-joined on one line or split across several, those being the same list.
 
 ## Where decoding sits
 
-Fáith owns content coding itself rather than leaving it to the HTTP stack underneath, which is what allows the decision to rest on the `Accept-Encoding` of the request in hand.
+Faith owns content coding itself rather than leaving it to the HTTP stack underneath, which is what allows the decision to rest on the `Accept-Encoding` of the request in hand.
 Decoding happens outside the HTTP cache, so a stored response holds the bytes as they came off the wire with its `Content-Encoding` and `Content-Length` as received (see [CACHE](../cache/http-cache.md)).
 A response served from the cache is decoded on its way to the caller under the `Accept-Encoding` of the request being served, so one stored entry answers callers who negotiated different codings, and a cache holds compressed bodies at the size the origin sent them.
