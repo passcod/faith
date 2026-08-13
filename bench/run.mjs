@@ -380,15 +380,15 @@ async function runFeatures() {
 		{ name: "proto:h2", proto: "h2" },
 		{ name: "proto:h3", proto: "h3" },
 
-		// DNS. Cold mode so a lookup is on the measured path of every request
-		// rather than amortised by the cache. The name (`bench.test`) is not
-		// exempt, so hickory rows resolve it through a nameserver the harness
-		// controls (see `dns` below and startDnsServer); `localhost` would be
-		// handed to the system resolver whatever `dns.servers` says, which is the
-		// bug this restores. `hickory` and `slow` are identical but for the
-		// nameserver's answer delay, so the distance between them is the DNS cost
-		// and nothing else. `system` is the reference for handing off to the OS
-		// resolver, which cannot be pointed at the controlled nameserver.
+		// DNS. The `hickory`/`slow`/`system` rows run cold so a lookup is on the
+		// measured path of every request rather than amortised by the cache. The
+		// name (`bench.test`) is not exempt, so hickory rows resolve it through a
+		// nameserver the harness controls (see `dns` below and startDnsServer);
+		// `localhost` would be handed to the system resolver whatever `dns.servers`
+		// says, which is the bug this restores. `hickory` and `slow` are identical
+		// but for the nameserver's answer delay, so the distance between them is
+		// the DNS cost and nothing else. `system` is the reference for handing off
+		// to the OS resolver, which cannot be pointed at the controlled nameserver.
 		{
 			name: "dns:hickory",
 			proto: "h1",
@@ -409,6 +409,37 @@ async function runFeatures() {
 			urlHost: "localhost",
 			mode: "cold",
 			agentOptions: { dns: { system: true } },
+		},
+
+		// Serving stale DNS answers. A Faith-vs-Faith pair over the same slow
+		// nameserver, identical but for `dns.serveStale`, so the distance between
+		// them is the whole DNS cost that serving stale removes from the request
+		// path. Serving stale needs a cache that persists, which cold mode (a fresh
+		// agent per request) has nothing in, so these run warm. A `ttl` of 0 makes
+		// every answer expired the instant it lands: the warmup populates the cache
+		// (so the measured requests are not cold) and nothing ever stays fresh (so
+		// they are not fresh either), leaving every measured request on an expired
+		// entry. `/close` opens a new connection per request so the resolver is
+		// actually consulted rather than the lookup being skipped by a reused
+		// connection. `no-stale` is the control: it must pay the slow resolver and
+		// `stale` must not, and the win is that distance. Read on its own `stale` is
+		// no evidence, being fast whether or not serving stale did any work; a run
+		// where `no-stale` is not slow means the DNS cost never reached the path.
+		{
+			name: "dns:stale",
+			proto: "h1",
+			urlHost: DNS_BENCH_HOST,
+			route: "/close",
+			dns: { delayMs: SLOW_DNS_MS, ttl: 0 },
+			agentOptions: { dns: { serveStale: true } },
+		},
+		{
+			name: "dns:no-stale",
+			proto: "h1",
+			urlHost: DNS_BENCH_HOST,
+			route: "/close",
+			dns: { delayMs: SLOW_DNS_MS, ttl: 0 },
+			agentOptions: { dns: { serveStale: false } },
 		},
 
 		// Address family (loopback; measures the stack, not routing)
@@ -457,11 +488,16 @@ async function runFeatures() {
 			// the variant's delay decide how slowly it answers. Pin the search list
 			// and dots threshold so `bench.test` becomes a query the same way on
 			// every machine, and lift the lookup timeout clear of the answer delay
-			// so the slow row measures the resolver instead of tripping it.
+			// so the slow row measures the resolver instead of tripping it. A `ttl`
+			// on the variant sets how long an answer stays fresh: the stale pair asks
+			// for 0, so every answer is expired the instant it lands (see the DNS
+			// variant list).
 			let nameserver = null;
 			if (variant.dns) {
 				nameserver = await startDnsServer({
-					zone: { [DNS_BENCH_HOST]: { a: [server.host] } },
+					zone: {
+						[DNS_BENCH_HOST]: { a: [server.host], ttl: variant.dns.ttl },
+					},
 					delayMs: variant.dns.delayMs,
 				});
 				variant.agentOptions = {
