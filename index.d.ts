@@ -543,6 +543,27 @@ export interface AgentDnsOptions {
    * Default: no extra exemptions.
    */
   exemptDomains?: Array<string>
+  /**
+   * Serve an expired cache entry immediately and refresh it in the background, rather than making
+   * the lookup wait for a fresh answer. A host's address changes rarely, so an expired answer is
+   * almost always still correct, and a connect failure against one that has moved re-resolves and
+   * attempts the request again.
+   *
+   * Set `false` for an agent that must never connect to an address it knows to be out of date: an
+   * expired entry is discarded and the lookup blocks on a fresh answer.
+   *
+   * Default: true.
+   */
+  serveStale?: boolean
+  /**
+   * How far past expiry an answer may still be served, in milliseconds. An entry older than this
+   * is discarded rather than served: an answer stale enough stops being evidence about where the
+   * host is, and a refresh still failing after that long is the case where the address most likely
+   * did change.
+   *
+   * Default: 3600000 (one hour).
+   */
+  maxStale?: number
 }
 
 /** Settings related to HTTP flow control, shared by HTTP/2 and HTTP/3. This is a nested object. */

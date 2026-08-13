@@ -20,9 +20,10 @@
 //! spec:WARM spec:DNS
 
 use std::{
+	collections::HashSet,
 	net::{IpAddr, SocketAddr},
 	sync::{Arc, Mutex},
-	time::Duration,
+	time::{Duration, Instant},
 };
 
 use hickory_resolver::{
@@ -31,7 +32,7 @@ use hickory_resolver::{
 		ConnectionConfig, GOOGLE, LookupIpStrategy, NameServerConfig, OpportunisticEncryption,
 		ProtocolConfig, ResolveHosts, ResolverConfig, ServerOrderingStrategy,
 	},
-	net::{NetError, runtime::TokioRuntimeProvider},
+	net::{DnsError, NetError, runtime::TokioRuntimeProvider},
 	proto::rr::Name,
 	system_conf::read_system_conf,
 };
@@ -235,8 +236,16 @@ pub struct ResolverReport {
 	pub source: String,
 }
 
+/// `dns.maxStale`'s default: how far past expiry an answer may still be served.
+///
+/// An hour is long enough that a resolver outage does not stop an agent reaching hosts it already
+/// knows, and short enough that a host which really has moved stops being served a dead address for
+/// the life of a long-running process. The recovery path bounds the cost of being wrong to one
+/// re-resolve, so the window can be generous (spec:DNS#serving-stale-answers).
+pub const DEFAULT_MAX_STALE: Duration = Duration::from_secs(3600);
+
 /// Everything `dns.*` configures about Faith's resolver, resolved from options at construction.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct ResolverSettings {
 	/// The `dns.servers` list, in order. Empty means system discovery.
 	pub servers: Vec<ServerSpec>,
@@ -250,7 +259,36 @@ pub struct ResolverSettings {
 	pub hosts_file: Option<bool>,
 	/// `dns.exemptDomains`, added to the always-exempt `localhost`, `.local`, and system suffix.
 	pub exempt_domains: Vec<Name>,
+	/// `dns.serveStale`: whether an expired answer is served while a refresh runs behind it.
+	pub serve_stale: bool,
+	/// `dns.maxStale`: how far past expiry an answer may still be served.
+	pub max_stale: Duration,
 }
+
+impl Default for ResolverSettings {
+	fn default() -> Self {
+		Self {
+			servers: Vec::new(),
+			timeout: None,
+			ndots: None,
+			search_domains: None,
+			hosts_file: None,
+			exempt_domains: Vec::new(),
+			// Defaulted here as well as in the option parsing, so a resolver built directly (in tests,
+			// and for the global default agent) serves stale like a configured one.
+			serve_stale: true,
+			max_stale: DEFAULT_MAX_STALE,
+		}
+	}
+}
+
+/// How many names the stale cache holds before evicting the least recently used.
+///
+/// Matched to hickory's own default answer-cache size, since the two hold an entry for the same set
+/// of names: a stale entry only earns its place while hickory still plausibly holds, or recently
+/// held, the answer it came from. Evicting one early costs a blocking lookup rather than a wrong
+/// answer, so the bound is about memory rather than correctness.
+const STALE_CACHE_SIZE: u64 = 8_192;
 
 /// The resolver and the report of its servers, built together the first time the resolver is used.
 struct Built {
@@ -258,12 +296,22 @@ struct Built {
 	reports: Vec<ResolverReport>,
 }
 
+/// A resolved answer kept past its TTL, so an expired lookup is served from it while a refresh runs
+/// behind (spec:DNS#serving-stale-answers).
+#[derive(Clone)]
+struct StaleEntry {
+	/// Shared rather than cloned per hit: a hit reads it and hands out a copy of the addresses.
+	addrs: Arc<Vec<IpAddr>>,
+	/// When the answer stopped being fresh, taken from the lookup rather than computed, so it is the
+	/// TTL the resolver actually gave.
+	valid_until: Instant,
+}
+
 /// Everything the resolver reads off the network, held together so a network change can drop it in
 /// one go (spec:NETCHG). Each field describes the network the agent was on when it was read: which
 /// servers discovery found, which suffixes are local to it, and which of its servers answered an
 /// encryption probe. The caller's [`ResolverSettings`] deliberately sit outside, being options the
 /// agent was constructed with rather than a reading of any network.
-#[derive(Default)]
 struct Generation {
 	/// The configured (or discovered) resolver, built lazily inside a tokio runtime.
 	built: OnceCell<Arc<Built>>,
@@ -271,6 +319,25 @@ struct Generation {
 	system: OnceCell<Arc<TokioResolver>>,
 	/// The exempt suffixes, including the system's own, computed once per generation.
 	exempt: OnceCell<Arc<Vec<Name>>>,
+	/// Answers held past their TTL, keyed by the host as looked up. Sits in the generation rather
+	/// than beside the settings so a network change drops it along with the resolvers that produced
+	/// it: an address learned on the old network is exactly what must not be served on the new one.
+	stale: moka::sync::Cache<String, StaleEntry>,
+	/// Hosts with a refresh already in flight, so a second stale hit serves the entry rather than
+	/// starting another lookup (spec:DNS#serving-stale-answers).
+	refreshing: Mutex<HashSet<String>>,
+}
+
+impl Default for Generation {
+	fn default() -> Self {
+		Self {
+			built: OnceCell::new(),
+			system: OnceCell::new(),
+			exempt: OnceCell::new(),
+			stale: moka::sync::Cache::new(STALE_CACHE_SIZE),
+			refreshing: Mutex::new(HashSet::new()),
+		}
+	}
 }
 
 struct Inner {
@@ -387,12 +454,136 @@ impl FaithResolver {
 	async fn lookup(&self, host: &str) -> Result<Vec<IpAddr>, NetError> {
 		let generation = self.generation();
 		if self.is_exempt(&generation, host).await {
+			// The system resolver keeps no cache Faith can hold answers in, so an exempt name has
+			// nothing to go stale and is always resolved for real (spec:DNS#serving-stale-answers).
 			let resolver = self.system(&generation).await?;
-			Ok(resolver.lookup_ip(host).await?.iter().collect())
-		} else {
-			let built = self.built(&generation).await?;
-			Ok(built.resolver.lookup_ip(host).await?.iter().collect())
+			return Ok(resolver.lookup_ip(host).await?.iter().collect());
 		}
+
+		if let Some(addrs) = self.stale_addrs(&generation, host) {
+			self.spawn_refresh(&generation, host);
+			return Ok(addrs);
+		}
+
+		let built = self.built(&generation).await?;
+		let lookup = built.resolver.lookup_ip(host).await?;
+		let addrs: Vec<IpAddr> = lookup.iter().collect();
+		self.remember(&generation, host, &addrs, lookup.valid_until());
+		Ok(addrs)
+	}
+
+	/// The addresses to serve for `host` without waiting, when its answer has expired but is still
+	/// inside `dns.maxStale`.
+	///
+	/// `None` covers the three cases that must go to the resolver: no entry at all, an entry still
+	/// fresh (which hickory's own cache answers without a network round trip anyway), and an entry so
+	/// old it has stopped being evidence about the host.
+	fn stale_addrs(&self, generation: &Generation, host: &str) -> Option<Vec<IpAddr>> {
+		if !self.inner.settings.serve_stale {
+			return None;
+		}
+		let entry = generation.stale.get(host)?;
+		let now = Instant::now();
+		if now <= entry.valid_until {
+			return None;
+		}
+		if now.saturating_duration_since(entry.valid_until) > self.inner.settings.max_stale {
+			// Dropped rather than left to sit: keeping it would let a refresh that has been failing
+			// for hours go on being consulted, and the entry can only get older from here.
+			generation.stale.invalidate(host);
+			return None;
+		}
+		Some(entry.addrs.as_ref().clone())
+	}
+
+	/// Keep a successful answer for `host`, so a later lookup past its TTL has something to serve.
+	fn remember(&self, generation: &Generation, host: &str, addrs: &[IpAddr], valid_until: Instant) {
+		if !self.inner.settings.serve_stale || addrs.is_empty() {
+			return;
+		}
+		generation.stale.insert(
+			host.to_owned(),
+			StaleEntry {
+				addrs: Arc::new(addrs.to_vec()),
+				valid_until,
+			},
+		);
+	}
+
+	/// Refresh `host` behind a stale answer that has already been served.
+	///
+	/// Single-flighted per host: the claim is taken before the task is spawned, so concurrent stale
+	/// hits serve the entry rather than each starting a lookup. The task outlives the request that
+	/// triggered it, and its outcome belongs to the cache rather than that request, so nothing here
+	/// is reported to a caller (spec:DNS#serving-stale-answers).
+	fn spawn_refresh(&self, generation: &Arc<Generation>, host: &str) {
+		{
+			let mut refreshing = generation
+				.refreshing
+				.lock()
+				.expect("the DNS refresh lock is only held to insert or remove a host");
+			if !refreshing.insert(host.to_owned()) {
+				return;
+			}
+		}
+
+		let this = self.clone();
+		let generation = Arc::clone(generation);
+		let host = host.to_owned();
+		tokio::spawn(async move {
+			match this.refresh(&generation, &host).await {
+				Ok(()) => {}
+				Err(err) if is_authoritatively_empty(&err) => {
+					// The name resolves to nothing now, so the old address is not a stale answer for
+					// it any more but a wrong one. Dropping the entry makes the next lookup fail
+					// rather than hand out an address the host no longer answers on.
+					generation.stale.invalidate(&host);
+				}
+				Err(_) => {
+					// A network error, a server failure, or a timeout says nothing about where the
+					// host is, so the entry stays and can be served again while this persists.
+				}
+			}
+			generation
+				.refreshing
+				.lock()
+				.expect("the DNS refresh lock is only held to insert or remove a host")
+				.remove(&host);
+		});
+	}
+
+	/// One refresh lookup, replacing the stale entry when it resolves.
+	async fn refresh(&self, generation: &Generation, host: &str) -> Result<(), NetError> {
+		let built = self.built(generation).await?;
+		let lookup = built.resolver.lookup_ip(host).await?;
+		let addrs: Vec<IpAddr> = lookup.iter().collect();
+		self.remember(generation, host, &addrs, lookup.valid_until());
+		Ok(())
+	}
+
+	/// Drop any stale answer held for `host`, so the next lookup waits for a fresh one.
+	///
+	/// Called when connecting to a served address failed, which is the one piece of evidence that the
+	/// address was wrong rather than merely old (spec:DNS#when-a-stale-address-is-wrong).
+	pub fn invalidate_stale(&self, host: &str) {
+		self.generation().stale.invalidate(host);
+	}
+
+	/// Whether a lookup of `host` right now would be served from an expired entry, and so would hand
+	/// out an address that is assumed rather than confirmed.
+	///
+	/// Deliberately the same window [`Self::stale_addrs`] serves from, rather than merely "an expired
+	/// entry exists": an entry past `dns.maxStale` is resolved for real, and treating that as stale
+	/// would spend a second connection attempt on an address that was already confirmed.
+	pub fn served_stale(&self, host: &str) -> bool {
+		if !self.inner.settings.serve_stale {
+			return false;
+		}
+		self.generation().stale.get(host).is_some_and(|entry| {
+			let now = Instant::now();
+			now > entry.valid_until
+				&& now.saturating_duration_since(entry.valid_until) <= self.inner.settings.max_stale
+		})
 	}
 
 	/// Resolve `host` and leave the answer in the shared cache, so a later request skips the
@@ -450,6 +641,17 @@ impl Resolve for FaithResolver {
 			Ok(Box::new(addrs.into_iter()) as Addrs)
 		})
 	}
+}
+
+/// Whether a failed lookup was the resolver answering that the name holds nothing, rather than the
+/// resolver failing to answer.
+///
+/// The distinction decides what happens to a stale entry: an authoritative "nothing here" retires
+/// it, while a failure to reach an answer leaves it in place. Hickory draws the same line, producing
+/// `NoRecordsFound` only for `NXDOMAIN` and for `NOERROR` with no answer records, and reporting
+/// `SERVFAIL` and the other failure codes as `ResponseCode` instead.
+fn is_authoritatively_empty(err: &NetError) -> bool {
+	matches!(err, NetError::Dns(DnsError::NoRecordsFound(_)))
 }
 
 /// Apply the options common to every resolver Faith builds: race both families for Happy Eyeballs,
@@ -773,6 +975,124 @@ mod tests {
 			resolver.resolvers().len(),
 			1,
 			"the rebuilt generation resolves through the configured servers again"
+		);
+	}
+
+	/// A resolver with a stale entry for `host` whose freshness ended `ago`.
+	fn with_stale_entry(settings: ResolverSettings, host: &str, ago: Duration) -> FaithResolver {
+		let resolver = FaithResolver::new(settings);
+		resolver.generation().stale.insert(
+			host.to_owned(),
+			StaleEntry {
+				addrs: Arc::new(vec![IpAddr::from([127, 0, 0, 1])]),
+				valid_until: Instant::now() - ago,
+			},
+		);
+		resolver
+	}
+
+	#[test]
+	fn only_an_expired_entry_inside_the_window_is_served_stale() {
+		// spec:DNS#serving-stale-answers
+		let settings = || ResolverSettings {
+			max_stale: Duration::from_secs(60),
+			..ResolverSettings::default()
+		};
+
+		// Still fresh: the lookup goes through hickory, which answers from its own cache.
+		let fresh = FaithResolver::new(settings());
+		fresh.generation().stale.insert(
+			"fresh.test".to_owned(),
+			StaleEntry {
+				addrs: Arc::new(vec![IpAddr::from([127, 0, 0, 1])]),
+				valid_until: Instant::now() + Duration::from_secs(60),
+			},
+		);
+		let generation = fresh.generation();
+		assert!(
+			fresh.stale_addrs(&generation, "fresh.test").is_none(),
+			"a fresh entry is not a stale hit"
+		);
+
+		// Expired but inside `dns.maxStale`: served immediately.
+		let stale = with_stale_entry(settings(), "stale.test", Duration::from_secs(5));
+		let generation = stale.generation();
+		assert!(
+			stale.stale_addrs(&generation, "stale.test").is_some(),
+			"an entry expired inside the window is served"
+		);
+
+		// Past the window: no longer evidence about the host, so the lookup blocks.
+		let old = with_stale_entry(settings(), "old.test", Duration::from_secs(120));
+		let generation = old.generation();
+		assert!(
+			old.stale_addrs(&generation, "old.test").is_none(),
+			"an entry past `dns.maxStale` is not served"
+		);
+		assert!(
+			generation.stale.get("old.test").is_none(),
+			"and is dropped rather than left to age further"
+		);
+	}
+
+	#[test]
+	fn serve_stale_off_never_serves_an_expired_entry() {
+		// spec:DNS#serving-stale-answers — the switch for a caller that must not connect to an
+		// address it knows to be out of date.
+		let resolver = with_stale_entry(
+			ResolverSettings {
+				serve_stale: false,
+				..ResolverSettings::default()
+			},
+			"strict.test",
+			Duration::from_secs(5),
+		);
+		let generation = resolver.generation();
+		assert!(resolver.stale_addrs(&generation, "strict.test").is_none());
+		assert!(
+			!resolver.served_stale("strict.test"),
+			"and nothing is reported as stale-served, so no retry is armed"
+		);
+	}
+
+	#[test]
+	fn served_stale_tracks_the_window_it_serves_from() {
+		// The retry layer arms itself from this, so it must not claim an address was assumed when
+		// the lookup actually blocked on a fresh one (spec:DNS#when-a-stale-address-is-wrong).
+		let settings = || ResolverSettings {
+			max_stale: Duration::from_secs(60),
+			..ResolverSettings::default()
+		};
+
+		let inside = with_stale_entry(settings(), "inside.test", Duration::from_secs(5));
+		assert!(inside.served_stale("inside.test"));
+
+		let outside = with_stale_entry(settings(), "outside.test", Duration::from_secs(120));
+		assert!(
+			!outside.served_stale("outside.test"),
+			"an entry past the window is resolved for real, so its address is confirmed"
+		);
+
+		let absent = FaithResolver::new(settings());
+		assert!(!absent.served_stale("absent.test"));
+	}
+
+	#[test]
+	fn a_network_change_drops_stale_answers() {
+		// Addresses read off the old network are exactly what must not be served on the new one
+		// (spec:NETCHG#reach-across-the-subsystems).
+		let resolver = with_stale_entry(
+			ResolverSettings::default(),
+			"netchg.test",
+			Duration::from_secs(5),
+		);
+		assert!(resolver.served_stale("netchg.test"));
+
+		resolver.reset();
+
+		assert!(
+			!resolver.served_stale("netchg.test"),
+			"the stale answer goes with the generation that held it"
 		);
 	}
 
