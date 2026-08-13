@@ -62,6 +62,25 @@ The standard requires HTTP/2 or later for a streaming request body: "If connecti
 Faith streams request bodies over HTTP/1.1 without complaint, and full duplex works there (measured above).
 This is a deliberate-looking capability rather than a bug, but it is undocumented, and it bears on this card: whichever duplex modes Faith offers, it offers them on a protocol the standard rules out for streaming uploads at all.
 
+## The standard's reading is not reachable on this stack
+
+Spiked and measured, not reasoned about.
+
+The gate delays handing the response to the caller. It does not stop the stack processing it, and the processing is observable from outside while the request body is still open:
+
+- **Cookies.** With a jar enabled and an origin that answers with `Set-Cookie` without reading the body, `agent.getCookie()` returned `probe=1` at +752ms, with the body held open to +1500ms.
+- **Redirects.** An origin that answers `302` before reading the body had its redirect followed mid-flight: the server saw `GET /landed` at +755ms while the original request's body was still streaming.
+
+Both happen inside reqwest before `send()` resolves, so no gate placed after `send()` can precede them.
+This is the same root cause as two entries already in [the upstream limitations register](../../upstream-limitations.md): cookie storage happening inside the stack before Faith sees the headers, and redirect policy being fixed per client.
+
+Buffering the request body first does not rescue it either. A 32MiB buffered body against an origin that never read it still had its response processed at +18ms, because the stack writes the body and reads the response concurrently regardless of where the body came from.
+
+Reaching the standard's reading would mean moving redirect following and cookie ingestion into Faith's own layer, and even then response headers are parsed by the stack the moment they arrive.
+That is a much larger change than this card, and it is bounded by what the stack exposes rather than by effort.
+
+So the answer to "can we support both" does not change, but what `half` can promise does: Faith can offer the gate, and cannot offer "no response processing until the request is sent".
+
 ## Feasibility: both modes are supportable
 
 Established by a working spike on this branch, not by reasoning.
@@ -94,9 +113,10 @@ The whole JS suite (1795 assertions) and the Rust tests (125) pass with the gate
 2. Is `duplex: "full"` the way a caller asks for it?
    It reads naturally and matches the value the standard reserves, at the cost of accepting a value no browser accepts. The alternative is a Faith-specific option that does not collide with the standard's enum.
 
-3. How strict is the half-duplex guarantee?
-   Two axes. On delivery: "the stack is done with the request body" is deliverable, "every byte reached the origin" is not (see the third gap above).
-   On processing: a gate delays handing the response over but does not stop the stack reading it, so response headers are parsed and body bytes buffer while the caller waits. Matching the standard's prose would mean not reading the response until the request is sent, which the stack does not expose a way to ask for.
+3. What does Faith's `half` promise, given the standard's reading is out of reach?
+   Deliverable: the response is not surfaced until the stack is done with the request body.
+   Not deliverable: that every byte reached the origin, and that nothing about the response was processed first (cookies stored and redirects followed both precede the gate, measured above).
+   The wording needs to describe the gate honestly rather than borrow the standard's phrasing, which Faith would not be meeting.
 
 4. Does the guarantee need locking in with tests?
    Full duplex currently holds because of how the stack composes rather than because Faith asks for it, so a stack upgrade could take it away silently. Nothing in the suite covers duplex sequencing today.
