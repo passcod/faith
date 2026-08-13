@@ -27,10 +27,40 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 jobs:
+  # The guard's artefact-cleanup commit is a new head SHA over a tree this matrix
+  # already ran against. See .github/scripts/cleanup-only-gate.sh for why this is a
+  # job and not a `paths-ignore` entry. Confined to pull_request, so the nightly
+  # cron and workflow_dispatch always run.
+  gate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: read
+    outputs:
+      skip: ${{ steps.decide.outputs.skip }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # The branch head, not the merge ref: the comparison is against this
+          # branch's previous commit. Depth 2 covers both and carries the script.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 2
+      - id: decide
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUIRED_CHECK: conformance matrix
+        run: .github/scripts/cleanup-only-gate.sh
+
   matrix:
     # Linux only. Every row is either an apt package or a build that expects a
     # Unix prefix layout, and the matrix covers faith's behaviour against server
     # implementations -- which is not an axis that varies by client OS.
+    needs: gate
+    # No alls-green wrapper here, so this job's own skipped result is what branch
+    # protection sees. A job skipped by `if:` reports success, unlike a workflow
+    # skipped by a trigger filter, which never reports at all.
+    if: needs.gate.outputs.skip != 'true'
     runs-on: ubuntu-latest
     name: conformance matrix
     steps:
