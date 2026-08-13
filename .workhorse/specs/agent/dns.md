@@ -13,6 +13,40 @@ The system resolver remains available as an escape hatch for environments where 
 Resolution uses Faith's own client with an in-memory cache; repeat requests to a host skip the lookup entirely (connection reuse skips it further still).
 `prefetchDns(host)` populates this cache ahead of the first request (see [WARM](warm-up.md)).
 IPv4 and IPv6 answers race with the Happy Eyeballs algorithm, so a broken family degrades latency rather than breaking connectivity.
+A name is looked up for both families and the outcome of each is cached, including the finding that a host holds no address of one family, so a host with only an IPv4 address is not re-queried for IPv6 on every lookup.
+
+## Serving stale answers
+
+An expired entry is served immediately and refreshed in the background, so the caller starts connecting instead of waiting for a fresh answer.
+The trade is deliberate: a host's address changes rarely, so an expired answer is almost always still correct, and the rare wrong one costs a re-resolve on that one request where resolving fresh costs a round trip on every expiry to every caller.
+The gain is only visible against a slow resolver, which is where a lookup is a meaningful part of what a request pays.
+
+`dns.serveStale` governs this and defaults to `true`.
+Set to `false`, an expired entry is discarded and the lookup blocks on a fresh answer, which is the behaviour of an agent that never connects to an address it knows to be out of date.
+`dns.maxStale` bounds how far past expiry an answer is served and defaults to one hour.
+An entry older than that is discarded rather than served, because an answer stale enough stops being evidence about where the host is, and a refresh still failing after that long is the case where the address most likely did change.
+Under the system resolver there is no cache, so no answer is ever stale and neither option has anything to govern (see [System resolver](#system-resolver)).
+
+The background refresh is single-flighted per name: while one is in flight, further lookups landing on that stale entry serve it rather than starting a second refresh.
+It outlives the request that triggered it, continuing on the runtime once that request has its addresses.
+Its outcome belongs to the cache rather than the caller, so a refresh failure never surfaces to the request that triggered it, just as an advisory warm-up's failure does not (see [WARM](warm-up.md)).
+A refresh that resolves replaces the entry.
+A refresh that fails with a network error, a server failure, or a timeout leaves the stale entry in place, so a later lookup is still served from it while the resolver is unreachable.
+A refresh that comes back authoritatively empty, whether because the name does not exist or because it holds no address of the family asked for, replaces the entry, so a host that has genuinely gone stops being served an address it no longer answers on.
+The refresh reaches only the resolver and no origin, so it moves none of the agent's request counters (see [OBS](observability.md)).
+
+A stale answer does not survive a network change: the signal flushes the cache, stale entries included, so the next request resolves against the new network rather than connecting to an address the old one gave (see [NETCHG](network-change.md)).
+
+### When a stale address is wrong
+
+A stale address that has moved fails to connect, and recovering from that is part of what serving stale means rather than something the caller is left with.
+A connect failure against an address that came from an expired entry re-resolves the name, waits for the fresh answer, and attempts the request again against it.
+This covers a refused connection, an unreachable host, and a connect timeout, which are the shapes a wrong address takes.
+It happens once per request: a request that also fails to connect on the fresh answer surfaces that failure, the address having by then been confirmed rather than assumed.
+
+Because the connection was never established, no part of the request reached an origin, so the second attempt is safe whatever the request is.
+It therefore applies to every method and body, including the `POST`, `PATCH`, and `ReadableStream` cases that are never sent again on a new connection (see [POOL](connection-pool.md)).
+A failure after a connection is established is an answer about the origin rather than about the address, and is returned to the caller as it came.
 
 ## Transports
 

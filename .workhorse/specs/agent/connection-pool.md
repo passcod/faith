@@ -24,6 +24,7 @@ A request written into such a connection never reaches the origin, so Faith send
 
 A request is sent again only when the connection ended before any part of a response arrived.
 A refused connection, a failed handshake, a timeout, and any response at all are answers about the origin, and are returned to the caller as they are.
+A connect failure is answered first by re-resolving the name when the address came from an expired DNS entry, that address having been assumed rather than confirmed; the failure reaches the caller once the fresh address has failed too (see [DNS](dns.md)).
 An origin that closes idle connections closes all of them, so the pool can hold several that are already gone and a fresh attempt can draw another one; a request is therefore sent up to five further times before the failure reaches the caller.
 
 Only requests that can be sent again without changing what the origin has done are sent again.
