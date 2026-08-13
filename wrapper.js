@@ -51,8 +51,27 @@ function disturbedResponseError(cause) {
  */
 function destinationPath(destination) {
 	if (destination instanceof URL || /^file:/i.test(destination)) {
+		let parsed;
 		try {
-			return fileURLToPath(destination);
+			parsed = destination instanceof URL ? destination : new URL(destination);
+		} catch (cause) {
+			throw invalidPathError(
+				`toFile destination is not a local path: ${cause.message}`,
+			);
+		}
+
+		// A host names a machine other than this one, so the URL does not name a local path.
+		// Checked here rather than left to the platform: Windows' own conversion turns a host
+		// into a UNC path instead of refusing it, and a network share is not a local file.
+		// `localhost` normalises to an empty host, so this accepts it as the spec requires.
+		if (parsed.host) {
+			throw invalidPathError(
+				`toFile destination is not a local path: file URL host "${parsed.host}" names another machine`,
+			);
+		}
+
+		try {
+			return fileURLToPath(parsed);
 		} catch (cause) {
 			throw invalidPathError(
 				`toFile destination is not a local path: ${cause.message}`,

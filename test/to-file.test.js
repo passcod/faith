@@ -55,14 +55,14 @@ test("toFile: relative path resolves against cwd and returns absolute", async (t
 	const previous = process.cwd();
 	process.chdir(tmpRoot);
 	try {
+		// Resolve the expectation against the working directory actually in effect: on macOS
+		// the temp dir sits behind a symlink, so process.cwd() after chdir is the resolved
+		// path rather than the one mkdtemp handed back.
+		const expected = path.resolve("relative-out.bin");
 		const res = await fetch(url(TEXT_PATH));
 		const result = await res.toFile("relative-out.bin");
 		t.ok(path.isAbsolute(result.path), "returned path is absolute");
-		t.equal(
-			result.path,
-			path.join(tmpRoot, "relative-out.bin"),
-			"resolves against the working directory",
-		);
+		t.equal(result.path, expected, "resolves against the working directory");
 		t.ok(fs.existsSync(result.path), "file exists at the resolved path");
 	} finally {
 		process.chdir(previous);
@@ -252,9 +252,23 @@ test("toFile: mode sets the permissions of a new file", async (t) => {
 test("toFile: a file:// URL that is not a local path throws InvalidPath at the call", async (t) => {
 	t.plan(3);
 	const res = await fetch(url(TEXT_PATH));
-	t.throws(
-		() => res.toFile(new URL("file://example.com/tmp/out.bin")),
-		(err) => err.code === ERROR_CODES.InvalidPath,
+
+	// A host names another machine, so the URL is not a local path. Windows' own conversion
+	// would turn it into a UNC path rather than refusing it, which the wrapper catches first.
+	let thrown;
+	let pending;
+	try {
+		pending = res.toFile(new URL("file://example.com/tmp/out.bin"));
+	} catch (err) {
+		thrown = err;
+	}
+	// Should the call ever stop throwing, swallow the rejection so this fails the assertion
+	// below rather than killing the run with an unhandled rejection.
+	pending?.catch(() => {});
+
+	t.equal(
+		thrown?.code,
+		ERROR_CODES.InvalidPath,
 		"throws InvalidPath synchronously",
 	);
 	t.equal(res.bodyUsed, false, "body is untouched");
