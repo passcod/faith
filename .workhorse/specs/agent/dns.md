@@ -4,7 +4,8 @@ id: DNS
 
 # DNS resolution
 
-Faith resolves names with its own DNS client by default, which is what enables the in-memory DNS cache and Happy Eyeballs.
+Faith resolves names with its own DNS client by default, which is what enables the in-memory DNS cache, Happy Eyeballs, and the encrypted transports.
+A caller who wants a particular resolver reached a particular way configures it; a caller who does not gets the system's own resolvers, encrypted wherever Faith can manage it.
 The system resolver remains available as an escape hatch for environments where the built-in client misbehaves.
 
 ## Built-in resolver
@@ -46,19 +47,36 @@ With `dns.servers` unset, the built-in resolver configures itself from the syste
 Discovery never substitutes a different DNS provider: it changes how Faith talks to the system's resolvers, not which resolvers answer, so split-horizon and corporate resolvers keep working.
 No public resolver is baked into the library as a discovery target, because choosing a caller's DNS provider for them is not a library's decision to make.
 
-Two sources are consulted, and the operating system's own configuration wins over what a resolver advertises about itself.
-Where the platform exposes its encrypted DNS settings, Faith reads them and uses the endpoints configured there.
-Otherwise Faith asks each discovered plaintext resolver whether it designates an encrypted endpoint of its own, following Discovery of Designated Resolvers, and upgrades to that endpoint when one is designated.
-A resolver that designates nothing, on a platform that configures nothing, is queried over conventional DNS.
+Discovery works down a ladder, taking the first source that yields an encrypted endpoint for a given resolver.
+The operating system's own encrypted DNS settings come first, where the platform exposes them to be read.
+A resolver that designates an encrypted endpoint of its own comes next, found by asking it directly, following Discovery of Designated Resolvers.
+Both of these authenticate the resolver against a name, so either is preferred over probing.
+A resolver that neither source covers is queried over conventional DNS, unless opportunistic encryption finds a way to encrypt it.
 
 Discovery is best-effort and never fails a lookup on its own: when an encrypted endpoint cannot be established, resolution proceeds over the transport the system configuration gives.
 
 A host with no readable resolver configuration at all falls back to Google Public DNS over conventional DNS.
 This is a last resort that keeps resolution working on a misconfigured host rather than a provider Faith chooses for callers, and it is reached only when the system names no resolver of its own.
 
+## Opportunistic encryption
+
+Where discovery leaves a resolver on conventional DNS, Faith probes it for an encrypted transport it has not advertised, following the unilateral probing described in RFC 9539.
+Probes run in the background rather than in the path of a lookup, so a resolver that ignores them costs no latency, and a cap on concurrent probes keeps the background work bounded.
+A resolver that answers a probe is used over the encrypted transport from then on, and its plaintext connection is retired rather than reused.
+Successful and failed probes are both remembered, for the periods RFC 9539 suggests, so a resolver is neither re-probed constantly nor retried immediately after refusing.
+This remembering lives in memory for the life of the agent; Faith writes no probe state to disk.
+Closing the agent stops probes still in flight, alongside the resolver itself (see [AGENT](overview.md)).
+The transports probed are DNS over TLS and DNS over QUIC, which are the ones a resolver can offer without advertising a path.
+
+Probing does not authenticate the resolver's certificate, which is what the standard requires of it.
+This tier therefore protects against passive observation of DNS traffic and not against an attacker able to intercept and alter it, which is why it sits below the two authenticated sources rather than beside them.
+For the same reason it is used only when discovery has found no authenticated encrypted endpoint for any resolver: an unauthenticated probe must never weaken the checks made on a resolver reached through the operating system or through Discovery of Designated Resolvers.
+Servers listed in `dns.servers` are never probed, since an explicit list is a statement of how the caller wants each resolver reached.
+
 ## System resolver
 
 `dns.servers` and discovery configure Faith's built-in resolver only; the system's own resolver is not Faith's to configure.
+Setting both `dns.servers` and `dns.system: true` is a contradiction rather than a preference, and throws a configuration error at agent construction (see [ERR](../errors/errors.md)).
 `dns.system: true` switches to the system's resolver.
 This also disables Happy Eyeballs and the DNS cache; the trade is compatibility for performance, and it is the first thing to try when Faith fails to resolve something other clients can.
 
