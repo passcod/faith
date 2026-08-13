@@ -19,6 +19,8 @@ async-compression = { version = "0.4", default-features = false, features = [
 async-stream = "0.3.6"
 async-trait = "0.1.89"
 bytes = "1.9.0"
+cookie = "0.18.1"
+cookie_store = { version = "0.22.0", default-features = false }
 futures = "0.3.31"
 hickory-resolver = "0.26"
 moka = { version = "0.12", features = ["sync"] }
@@ -47,6 +49,7 @@ stream_shared = { version = "0.8.5", features = ["stats"] }
 strum = { version = "0.27.2", features = ["derive"] }
 tokio = { version = "1.48.0", features = ["full"] }
 tokio-stream = "0.1.16"
+time = "0.3.53"
 tokio-util = { version = "0.7.10", features = ["io"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]

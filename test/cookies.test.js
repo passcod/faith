@@ -335,3 +335,156 @@ test("Complex cookie value with special characters", async (t) => {
 	const cookies = getCookies(data);
 	t.ok(cookies.data, "Cookie with encoded value should be sent");
 });
+
+// RFC 6265bis storage rules (spec: COOK)
+
+test("__Host- cookie is rejected without a secure transport", (t) => {
+	t.plan(2);
+
+	const agent = new Agent({ cookies: true });
+	const insecure = url("/cookies");
+
+	agent.addCookie(insecure, "__Host-session=abc; Secure; Path=/");
+	t.equal(agent.getCookie(insecure), null, "http URL should reject __Host-");
+
+	agent.addCookie("https://example.com/", "__Host-session=abc; Secure; Path=/");
+	t.equal(
+		agent.getCookie("https://example.com/"),
+		"__Host-session=abc",
+		"https URL should accept a fully qualified __Host- cookie",
+	);
+});
+
+test("__Host- cookie is rejected when it carries a Domain", (t) => {
+	t.plan(1);
+
+	const agent = new Agent({ cookies: true });
+	agent.addCookie(
+		"https://example.com/",
+		"__Host-a=1; Secure; Path=/; Domain=example.com",
+	);
+
+	t.equal(agent.getCookie("https://example.com/"), null, "Domain disqualifies __Host-");
+});
+
+test("__Secure- cookie is rejected without the Secure attribute", (t) => {
+	t.plan(2);
+
+	const agent = new Agent({ cookies: true });
+
+	agent.addCookie("https://example.com/", "__Secure-a=1");
+	t.equal(agent.getCookie("https://example.com/"), null, "missing Secure is rejected");
+
+	agent.addCookie("https://example.com/", "__Secure-b=2; Secure");
+	t.equal(
+		agent.getCookie("https://example.com/"),
+		"__Secure-b=2",
+		"Secure over https is accepted",
+	);
+});
+
+test("Prefix rules do not touch ordinary cookie names", async (t) => {
+	t.plan(2);
+
+	const agent = new Agent({ cookies: true });
+	const testUrl = url("/cookies");
+
+	agent.addCookie(testUrl, "session=plain");
+
+	const response = await faithFetch(testUrl, { agent });
+	t.ok(response.ok, "Should successfully fetch");
+
+	const cookies = getCookies(await response.json());
+	t.equal(cookies.session, "plain", "Unprefixed cookie is stored and sent");
+});
+
+test("cookies option object enables the jar", async (t) => {
+	t.plan(2);
+
+	const agent = new Agent({ cookies: {} });
+	const testUrl = url("/cookies");
+
+	agent.addCookie(testUrl, "session=viaobject");
+	t.equal(
+		agent.getCookie(testUrl),
+		"session=viaobject",
+		"An empty options object should enable the jar",
+	);
+
+	const response = await faithFetch(testUrl, { agent });
+	const cookies = getCookies(await response.json());
+	t.equal(cookies.session, "viaobject", "Server should receive the cookie");
+});
+
+test("maxSize rejects a cookie larger than the cap", (t) => {
+	t.plan(2);
+
+	const agent = new Agent({ cookies: { maxSize: 32 } });
+	const testUrl = url("/cookies");
+
+	agent.addCookie(testUrl, `big=${"x".repeat(64)}`);
+	t.equal(agent.getCookie(testUrl), null, "Oversized cookie should be rejected");
+
+	agent.addCookie(testUrl, "small=ok");
+	t.equal(agent.getCookie(testUrl), "small=ok", "Cookie under the cap is stored");
+});
+
+test("maxPerHost evicts the oldest cookies for a host", (t) => {
+	t.plan(3);
+
+	const agent = new Agent({ cookies: { maxPerHost: 2 } });
+	const testUrl = url("/cookies");
+
+	agent.addCookie(testUrl, "first=1");
+	agent.addCookie(testUrl, "second=2");
+	agent.addCookie(testUrl, "third=3");
+
+	const cookie = agent.getCookie(testUrl);
+	t.notOk(cookie.includes("first="), "Oldest cookie should have been evicted");
+	t.ok(cookie.includes("second=2"), "Second cookie should remain");
+	t.ok(cookie.includes("third=3"), "Newest cookie should remain");
+});
+
+test("maxTotal bounds cookies across hosts", (t) => {
+	t.plan(2);
+
+	const agent = new Agent({ cookies: { maxPerHost: 10, maxTotal: 1 } });
+
+	agent.addCookie("https://one.example/", "a=1");
+	agent.addCookie("https://two.example/", "b=2");
+
+	t.equal(
+		agent.getCookie("https://one.example/"),
+		null,
+		"Cookie on the older host should have been evicted",
+	);
+	t.equal(agent.getCookie("https://two.example/"), "b=2", "Newest cookie remains");
+});
+
+test("Server-set cookies go through the same rules", async (t) => {
+	t.plan(2);
+
+	// The jar holds one cookie at a time, so the second Set-Cookie evicts the first.
+	const agent = new Agent({ cookies: { maxPerHost: 1 } });
+
+	await faithFetch(url("/cookies/set?first=1"), { agent });
+	await faithFetch(url("/cookies/set?second=2"), { agent });
+
+	const cookie = agent.getCookie(url("/cookies"));
+	t.notOk(cookie.includes("first="), "Oldest server-set cookie should be evicted");
+	t.ok(cookie.includes("second=2"), "Newest server-set cookie should remain");
+});
+
+test("Expiry is capped at maxAge", async (t) => {
+	t.plan(2);
+
+	// A one-second cap: a cookie asking for a day is cut down to it and dies.
+	const agent = new Agent({ cookies: { maxAge: 1 } });
+	const testUrl = url("/cookies");
+
+	agent.addCookie(testUrl, "short=lived; Max-Age=86400");
+	t.equal(agent.getCookie(testUrl), "short=lived", "Cookie is stored");
+
+	await new Promise((resolve) => setTimeout(resolve, 1100));
+	t.equal(agent.getCookie(testUrl), null, "Cookie should have expired at the cap");
+});

@@ -21,7 +21,7 @@ use napi::{Either, Env, bindgen_prelude::Buffer};
 use napi_derive::napi;
 use reqwest::{
 	Certificate, Client, Identity, Url,
-	cookie::{CookieStore, Jar},
+	cookie::CookieStore as _,
 	header::{HeaderMap, HeaderName, HeaderValue},
 	redirect::Policy,
 };
@@ -34,6 +34,10 @@ use crate::alt_svc::{AltSvcCache, AltSvcCacheConfig, AltSvcMiddleware, H3Prober}
 use crate::{
 	async_task::faith_promise,
 	conn_tracker::{ConnectionInfo, ConnectionTracker},
+	cookies::{
+		CookieLimits, DEFAULT_MAX_AGE, DEFAULT_MAX_PER_HOST, DEFAULT_MAX_SIZE, DEFAULT_MAX_TOTAL,
+		FaithJar,
+	},
 	dns::FaithResolver,
 	error::{FaithError, FaithErrorKind},
 	options::{PRIORITY, RequestCacheMode},
@@ -162,6 +166,52 @@ pub struct AgentCacheOptions {
 	///
 	/// Default: true.
 	pub shared: Option<bool>,
+}
+
+/// Limits the cookie store enforces, from RFC 6265bis. Each is a cap; a caller who needs more room
+/// raises the number.
+///
+/// The `__Host-` and `__Secure-` name prefix rules are what those prefixes mean, so they always
+/// apply and are not settable here: a cookie that shouldn't carry them is named without one.
+#[napi(object)]
+#[derive(Debug, Clone, Default)]
+pub struct AgentCookieOptions {
+	/// How far ahead of receipt a cookie may expire, in seconds. A cookie asking for longer, via
+	/// `Max-Age` or `Expires`, has its expiry reduced to this; a shorter one is left alone and a
+	/// session cookie stays a session cookie.
+	///
+	/// Default: 34_560_000 (400 days).
+	pub max_age: Option<u32>,
+	/// The largest cookie stored, as the combined length of its name and value in bytes. A larger
+	/// cookie is not stored.
+	///
+	/// Default: 4096.
+	pub max_size: Option<u32>,
+	/// How many cookies are kept for any one domain, which is a cookie's `Domain` attribute when it
+	/// has one and the host that set it otherwise.
+	///
+	/// Default: 180.
+	pub max_per_host: Option<u32>,
+	/// How many cookies are kept across the whole store, bounding a server that spreads cookies
+	/// across subdomains to escape `maxPerHost`.
+	///
+	/// Default: 3000.
+	pub max_total: Option<u32>,
+}
+
+impl From<&AgentCookieOptions> for CookieLimits {
+	fn from(options: &AgentCookieOptions) -> Self {
+		Self {
+			max_age: options
+				.max_age
+				.map_or(DEFAULT_MAX_AGE, |secs| Duration::from_secs(secs.into())),
+			max_size: options.max_size.map_or(DEFAULT_MAX_SIZE, |n| n as usize),
+			max_per_host: options
+				.max_per_host
+				.map_or(DEFAULT_MAX_PER_HOST, |n| n as usize),
+			max_total: options.max_total.map_or(DEFAULT_MAX_TOTAL, |n| n as usize),
+		}
+	}
 }
 
 #[napi(object)]
@@ -711,11 +761,14 @@ pub struct AgentOptions {
 	/// Enable a persistent cookie store for the agent. Cookies received in responses will be preserved and
 	/// included in additional requests.
 	///
+	/// `true` enables the store with the default limits; an options object enables it and tunes them,
+	/// so `{}` means the same as `true`.
+	///
 	/// Default: `false`.
 	///
 	/// You may use `agent.getCookie(url: string)` and `agent.addCookie(url: string, value: string)` to add
 	/// and retrieve cookies from the store.
-	pub cookies: Option<bool>,
+	pub cookies: Option<Either<bool, AgentCookieOptions>>,
 	/// Settings related to DNS. This is a nested object.
 	pub dns: Option<AgentDnsOptions>,
 	/// Flow-control windows shared by HTTP/2 and HTTP/3. This is a nested object.
@@ -818,7 +871,7 @@ pub struct Agent {
 	/// Single-flight claims for in-flight `preconnect` warm-ups, so concurrent calls for the same
 	/// origin do not open duplicate connections. (spec:WARM)
 	pub(crate) warming: MokaCache<String, ()>,
-	pub(crate) cookie_jar: Option<Arc<Jar>>,
+	pub(crate) cookie_jar: Option<Arc<FaithJar>>,
 	pub(crate) stats: Arc<InnerAgentStats>,
 	pub(crate) conn_tracker: Arc<ConnectionTracker>,
 	#[cfg(feature = "http3")]
@@ -883,13 +936,15 @@ impl Agent {
 			client = client.local_address(ip);
 		}
 
-		let cookie_jar = if options.cookies.unwrap_or(false) {
-			let jar = Arc::new(Jar::default());
-			client = client.cookie_provider(jar.clone());
-			Some(jar)
-		} else {
-			None
+		// `cookies: true` takes the default limits; an options object tunes them. (spec:COOK)
+		let cookie_jar = match options.cookies.as_ref() {
+			None | Some(Either::A(false)) => None,
+			Some(Either::A(true)) => Some(Arc::new(FaithJar::new(CookieLimits::default()))),
+			Some(Either::B(options)) => Some(Arc::new(FaithJar::new(options.into()))),
 		};
+		if let Some(jar) = &cookie_jar {
+			client = client.cookie_provider(jar.clone());
+		}
 
 		let dns = options.dns.unwrap_or_default();
 		let dns_resolver = if dns.system.unwrap_or(false) {
@@ -1364,9 +1419,13 @@ impl Agent {
 
 	/// Add a cookie into the agent.
 	///
-	/// Does nothing if:
+	/// The cookie goes through the same rules a `Set-Cookie` header would, with the url supplying
+	/// the scheme and host they read, so this does nothing if:
 	/// - the cookie store is disabled
 	/// - the url is malformed
+	/// - the cookie does not parse
+	/// - a `__Host-` or `__Secure-` name prefix is not satisfied
+	/// - the cookie is larger than `cookies.maxSize`
 	#[napi]
 	pub fn add_cookie(&self, url: String, cookie: String) {
 		let Some(jar) = &self.cookie_jar else {
