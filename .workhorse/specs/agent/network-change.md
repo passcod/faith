@@ -47,7 +47,8 @@ The reset leaves every HTTP/3 origin either advertised or unknown, so the demoti
 - [ ] The reset takes effect for work that starts after the call: it reshapes the state the next request draws on, not the state the requests already running depend on.
 
 - [ ] A request that outlives the signal records its outcome when it completes, like any other request. Its evidence came from the path that has gone, so an HTTP/3 response landing just after the signal re-confirms an origin the signal had demoted. The alternative is discarding the outcome of a request that succeeded, and the window is one request's remaining lifetime, so the outcome is kept.
-- [ ] Background HTTP/3 probes are the exception: the agent started them itself, so it abandons them rather than letting them answer for a path that no longer exists, and the origins they were verifying are free to be probed again at once (see [PROBE](../http3/probing.md)).
+- [ ] Work the agent started for itself is kept or abandoned by what it produces rather than by who asked for it. Work that produces something the caller can still use survives the signal: a background cache revalidation finishes and refreshes its stored entry, because a response body is content rather than a claim about a path (see [CACHE](../cache/http-cache.md)).
+- [ ] Background HTTP/3 probes are therefore the exception, being the one background request whose only product is a verdict about a path. That verdict is worthless the moment the path goes, so open probes are abandoned rather than allowed to answer, and the origins they were verifying can be probed again at once (see [PROBE](../http3/probing.md)).
 
 A caller who needs in-flight requests abandoned on a network change aborts them through their `signal` as usual (see [CANCEL](../fetch/cancellation-and-timeouts.md)).
 

@@ -114,6 +114,36 @@ test("networkChanged keeps working through a streaming body", async (t) => {
 	}
 });
 
+test("networkChanged does not interrupt a body being written to file", async (t) => {
+	t.plan(2);
+
+	const tracker = createConnectionTracker();
+	await tracker.listen();
+	const dest = path.join(
+		os.tmpdir(),
+		`faith-netchange-tofile-${Date.now()}.bin`,
+	);
+
+	try {
+		const agent = new Agent();
+
+		// toFile() streams the body straight to disk, so the signal lands part way
+		// through a write rather than part way through a read.
+		const response = await fetch(tracker.url("/stream/5/40"), { agent });
+		const writing = response.toFile(dest);
+		agent.networkChanged();
+
+		const result = await writing;
+		t.equal(result.bytesWritten, 500, "the whole body reaches the file");
+		t.ok(
+			tracker.stats().totalRequests >= 1,
+			"having been served by the origin",
+		);
+	} finally {
+		await tracker.close();
+	}
+});
+
 test("networkChanged re-resolves names after flushing the DNS cache", async (t) => {
 	t.plan(2);
 
@@ -240,14 +270,15 @@ test("networkChanged keeps the stats counters", async (t) => {
 
 	const before = agent.stats();
 	agent.networkChanged();
-	const after = agent.stats();
 
-	t.equal(
-		after.requestsSent,
-		before.requestsSent,
+	// Compared whole rather than counter by counter, so a counter added later is
+	// covered too: the rebuild must not reset any of them.
+	t.deepEqual(
+		agent.stats(),
+		before,
 		"the counters record what the agent has done, which the signal does not edit",
 	);
-	t.equal(after.responsesReceived, before.responsesReceived, "for each counter");
+	t.ok(before.requestsSent >= 1, "and there was something to preserve");
 });
 
 test("networkChanged keeps agent configuration in force", async (t) => {
