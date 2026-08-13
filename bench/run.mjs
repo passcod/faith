@@ -30,7 +30,12 @@ import { monitorEventLoopDelay, performance } from "node:perf_hooks";
 import { fileURLToPath } from "node:url";
 
 import { loadImpls } from "./lib/clients.mjs";
-import { ensureCert, ipv6Available, startServer } from "./lib/servers.mjs";
+import {
+	ensureCert,
+	ipv6Available,
+	startDnsServer,
+	startServer,
+} from "./lib/servers.mjs";
 import { fmtMs, summarise } from "./lib/stats.mjs";
 
 const args = process.argv.slice(2);
@@ -351,6 +356,14 @@ async function runMatrix() {
 	}
 }
 
+// The non-exempt name the DNS rows resolve, and how slowly the `slow` row's
+// nameserver answers. `bench.test` avoids the `localhost`/`.local` exemptions
+// that would bypass a configured resolver; the delay is well above a local
+// answer (sub-millisecond) so a slow lookup is unmistakable, without being so
+// large that the cold row's per-request cost dominates the run.
+const DNS_BENCH_HOST = "bench.test";
+const SLOW_DNS_MS = 50;
+
 /**
  * Faith-vs-Faith feature comparisons. Variants sharing a `group` are meant to
  * be read against each other; each row differs from its group's baseline by
@@ -367,14 +380,28 @@ async function runFeatures() {
 		{ name: "proto:h2", proto: "h2" },
 		{ name: "proto:h3", proto: "h3" },
 
-		// DNS: hickory (Faith default, with its cache) vs the system resolver.
-		// Cold mode so resolution is actually on the measured path; the server
-		// is reached via the `localhost` name rather than an IP literal.
+		// DNS. Cold mode so a lookup is on the measured path of every request
+		// rather than amortised by the cache. The name (`bench.test`) is not
+		// exempt, so hickory rows resolve it through a nameserver the harness
+		// controls (see `dns` below and startDnsServer); `localhost` would be
+		// handed to the system resolver whatever `dns.servers` says, which is the
+		// bug this restores. `hickory` and `slow` are identical but for the
+		// nameserver's answer delay, so the distance between them is the DNS cost
+		// and nothing else. `system` is the reference for handing off to the OS
+		// resolver, which cannot be pointed at the controlled nameserver.
 		{
 			name: "dns:hickory",
 			proto: "h1",
-			urlHost: "localhost",
+			urlHost: DNS_BENCH_HOST,
 			mode: "cold",
+			dns: { delayMs: 0 },
+		},
+		{
+			name: "dns:slow",
+			proto: "h1",
+			urlHost: DNS_BENCH_HOST,
+			mode: "cold",
+			dns: { delayMs: SLOW_DNS_MS },
 		},
 		{
 			name: "dns:system",
@@ -425,6 +452,29 @@ async function runFeatures() {
 				variant.proto,
 				variant.serverHost ?? "127.0.0.1",
 			);
+			// A DNS variant resolves its non-exempt name through a nameserver the
+			// harness controls: point it at the HTTP server's own address, and let
+			// the variant's delay decide how slowly it answers. Pin the search list
+			// and dots threshold so `bench.test` becomes a query the same way on
+			// every machine, and lift the lookup timeout clear of the answer delay
+			// so the slow row measures the resolver instead of tripping it.
+			let nameserver = null;
+			if (variant.dns) {
+				nameserver = await startDnsServer({
+					zone: { [DNS_BENCH_HOST]: { a: [server.host] } },
+					delayMs: variant.dns.delayMs,
+				});
+				variant.agentOptions = {
+					...variant.agentOptions,
+					dns: {
+						servers: nameserver.servers.map((s) => `udp://${s}`),
+						timeout: Math.max(5000, variant.dns.delayMs * 3 + 1000),
+						searchDomains: [],
+						ndots: 0,
+						...variant.agentOptions?.dns,
+					},
+				};
+			}
 			try {
 				for (const size of sizes) {
 					for (const concurrency of concurrencies) {
@@ -447,6 +497,7 @@ async function runFeatures() {
 					}
 				}
 			} finally {
+				if (nameserver) await nameserver.close();
 				await server.close();
 			}
 		}
