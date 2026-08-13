@@ -156,15 +156,15 @@ practice the `RequestInit` class does not exist in browsers or Node.js, and so t
 
 *A `Promise` that resolves to a `Response` object.*
 
-<!-- //full duplex mode is not yet implemented//
-In `half` duplex mode (the default), the promise resolves when the request body has been fully sent
-and the response headers have been received. In `full` duplex mode (supported by Faith but not yet
-browsers), the promise resolves as soon as response headers have been received, even if the request
-body has not yet finished sending. Most HTTP servers will not send response headers until they've
-finished receiving the body so this distinction doesn't matter, but some do, and it is possible to
-take advantage of this behaviour with `full` duplex mode for decreased latency in specific cases.
-You may even be able to vary the request body stream based on the response body stream.
--->
+Faith is full duplex. The promise resolves as soon as the response headers have been received, even
+if the request body has not finished sending. Most HTTP servers will not send response headers until
+they have finished receiving the body, so the distinction usually doesn't matter, but some do, and
+you can take advantage of that for lower latency. You can also vary the request body stream based on
+what you read from the response body stream, exchanging messages both ways over a single request.
+
+Browsers are half duplex: there, the promise resolves only once the request body has been fully sent.
+Node and Deno are full duplex like Faith. See [`duplex`](#fetchoptionsduplex-string) for what this
+means for the `duplex` option.
 
 ## `Request`
 
@@ -284,10 +284,21 @@ Defaults to `include` (browsers default to `same-origin`).
 
 ### `FetchOptions.duplex: string`
 
-*Controls duplex behavior of the request. If this is present it must have the value `half`, meaning
-that Faith will send the entire request before processing the response.*
+*Declares the duplex behaviour of the request. If this is present it must have the value `half`,
+which is the only value the fetch standard defines.*
 
 *This option must be present when `body` is a `ReadableStream`.*
+
+Faith does not act on the value: every request runs full duplex regardless. The standard obliges
+every streaming upload to carry `duplex: "half"`, so it is a token rather than a preference, and
+acting on it would break code written against Node or Deno, which also run full duplex while
+requiring the same token.
+
+Faith cannot offer half duplex as the standard describes it, which is the user agent sending the
+entire request before *processing* the response. Cookie storage and redirect following both happen
+inside the HTTP stack before Faith is handed a response, so they are already done while a request
+body is still streaming. Withholding the response from you would not undo that, so it would promise
+more than it delivers.
 
 ### `FetchOptions.headers: Headers | object`
 

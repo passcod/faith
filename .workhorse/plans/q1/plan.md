@@ -81,42 +81,34 @@ That is a much larger change than this card, and it is bounded by what the stack
 
 So the answer to "can we support both" does not change, but what `half` can promise does: Faith can offer the gate, and cannot offer "no response processing until the request is sent".
 
-## Feasibility: both modes are supportable
+## Half duplex was spiked and dropped
 
-Established by a working spike on this branch, not by reasoning.
-The spike implements half duplex as a gate on when the response is surfaced: the stack stays duplex underneath, and Faith withholds the response until the request body has gone out.
-That is the cheap reading of half duplex, and it is weaker than the standard's prose gloss, which would have Faith not process the response at all until the request was sent.
-Whether the weaker reading is the one to ship is an open decision below.
+A gate was built and measured: a drop guard riding along with the request body stream fired a oneshot when the stack finished with the body, and the response was withheld until it settled.
+It worked on both protocols, `full` surfacing at +19ms (h1) and +53ms (h2) against `half` at +1200ms and +1203ms, with the whole suite passing.
 
-Mechanism: a drop guard rides along with the request body stream (`SentGuard` in src/stream_body.rs) and fires a oneshot when the stack finishes with the body. `fetch.rs` awaits that signal after `send()` resolves, before surfacing the response, unless the caller asked for `full`.
+It was dropped anyway, because honouring `half` breaks working code.
+`half` is a token the standard obliges every streaming upload to carry, not a preference: a bidirectional client written against Node passes it because it must, and gating deadlocked exactly such a client where Node completed three round-trips.
+Faith's `half` would also have been unable to mean what the standard says it means, so it would have cost portability to buy a promise Faith could not keep.
 
-Measured against an origin that answers without reading the request body:
+The spike is reverted. Recorded here so it is not rebuilt from scratch, along with what it would still have needed:
 
-| | HTTP/1.1 | HTTP/2 |
-|---|---|---|
-| `duplex: "full"` | response at +19ms | +53ms |
-| `duplex: "half"` | +1200ms, matching the body close | +1203ms |
+- Buffered bodies were never gated. A 32MiB `Buffer` body surfaced its response at +18ms against an origin that never read it, because only streaming bodies carried the signal. Closing that means wrapping the buffer in a stream and setting `Content-Length` explicitly, since `wrap_stream` otherwise drops to chunked encoding.
+- The gate escaped `timeout`. A stalled origin took 30.5s to fail with a 4s `timeout` set, because the timeout is handed to reqwest and stops applying once the response head is in. This is present behaviour rather than a fault of the gate, and it is worth confirming separately.
+- The guard fired when the stack was *done* with the body, which includes giving up on it. An origin that replied and ignored the body resolved at +78ms having sent 4MiB of 64MiB, so "every byte reached the origin" was never on offer.
 
-The whole JS suite (1795 assertions) and the Rust tests (125) pass with the gate in place.
+## Decision
 
-### What the spike does not yet cover
+Faith runs full duplex, always.
+The `duplex` option stays required for a `ReadableStream` body, and stays limited to `half`, so a caller writing to the standard is neither surprised nor rejected; Faith does not act on the value.
+No Faith-specific option is added to ask for gating, since the gate cannot mean what the standard's `half` means and a second name for a partial version of it would mislead.
+Faith implements no `Request` of its own, so there is no `duplex` getter to keep consistent.
 
-- **Buffered bodies are not gated.** A 32MiB `Buffer` body with `duplex: "half"` surfaced its response at +18ms against an origin that never read it, so the body cannot have been sent. Only streaming bodies carry the completion signal. Closing this means wrapping the buffered body in a stream and setting `Content-Length` explicitly, since `wrap_stream` otherwise drops to chunked encoding.
-- **The gate is not covered by `timeout`.** Against a raw origin that answers and then never reads, a half-duplex request stalled for 30.5s before failing, with a 4s `timeout` set. The per-request timeout is handed to reqwest and stops applying once `send()` resolves, so the wait for the body needs to sit under the timeout and the abort signal itself. The spike races the gate against the signal but not the timeout.
-- **A stalled origin cannot be distinguished from a slow one.** The guard fires when the stack finishes with the body, which includes the case where the exchange ended with the body undelivered. An origin that replied and ignored the body resolved at +78ms having sent 4MiB of 64MiB. So the guarantee half duplex can offer is "the stack is done with the request body", not "every byte reached the origin".
+Landed:
 
-## Open decisions
-
-1. Which mode is the default?
-   Today's behaviour is full duplex for streaming bodies, so defaulting to half is a behaviour change for anyone already relying on it, and defaulting to full leaves `duplex: "half"` naming a mode the caller does not get unless they know to ask. The spike currently defaults to half, which is what makes the existing suite exercise the gate.
-
-2. Is `duplex: "full"` the way a caller asks for it?
-   It reads naturally and matches the value the standard reserves, at the cost of accepting a value no browser accepts. The alternative is a Faith-specific option that does not collide with the standard's enum.
-
-3. What does Faith's `half` promise, given the standard's reading is out of reach?
-   Deliverable: the response is not surfaced until the stack is done with the request body.
-   Not deliverable: that every byte reached the origin, and that nothing about the response was processed first (cookies stored and redirects followed both precede the gate, measured above).
-   The wording needs to describe the gate honestly rather than borrow the standard's phrasing, which Faith would not be meeting.
-
-4. Does the guarantee need locking in with tests?
-   Full duplex currently holds because of how the stack composes rather than because Faith asks for it, so a stack upgrade could take it away silently. Nothing in the suite covers duplex sequencing today.
+- [x] Spike reverted, leaving `src/fetch.rs`, `src/options.rs` and `src/stream_body.rs` as they were
+- [x] REQ gains a Duplex section stating full duplex and what the option does and does not do
+- [x] [The upstream limitations register](../../upstream-limitations.md) records why the standard's half duplex is not on offer
+- [x] README replaces the commented-out "not yet implemented" block with the behaviour, and the `duplex` option entry explains why the value is inert
+- [x] `src/options.rs` doc comment corrected, which regenerates `index.d.ts`; `wrapper.d.ts` matched by hand
+- [x] `test/duplex-sequencing.test.js` pins the three sequencing properties, which nothing covered before
+- [x] Full suite green: 1801 JS assertions, 125 Rust

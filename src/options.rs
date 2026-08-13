@@ -118,18 +118,20 @@ impl Default for CredentialsOption {
 	}
 }
 
-/// Controls duplex behavior of the request. If this is present it must have the value `half`, meaning
-/// that Faith will send the entire request before processing the response.
+/// Declares the duplex behaviour of the request. If this is present it must have the value `half`,
+/// which is the only value the fetch standard defines.
 ///
 /// This option must be present when `body` is a `ReadableStream`.
+///
+/// Faith does not act on the value: every request runs full duplex, so the response is available
+/// as soon as its headers arrive, even while the request body is still being sent. `half` is a
+/// token the standard obliges every streaming upload to carry rather than a preference, so
+/// honouring it would strand code written against runtimes that also run full duplex.
 #[napi(string_enum)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DuplexOption {
 	#[napi(value = "half")]
 	Half,
-
-	#[napi(value = "full")]
-	Full,
 }
 
 /// The RFC 9218 header the `priority` option maps onto.
@@ -172,7 +174,6 @@ pub struct FaithOptionsAndBody {
 pub(crate) struct FaithOptions {
 	pub(crate) cache: RequestCacheMode,
 	pub(crate) credentials: CredentialsOption,
-	pub(crate) duplex: Option<DuplexOption>,
 	pub(crate) headers: Option<Vec<(String, String)>>,
 	pub(crate) integrity: Option<String>,
 	pub(crate) method: Option<String>,
@@ -195,7 +196,6 @@ impl FaithOptions {
 			Self {
 				cache: opts.cache.unwrap_or_default(),
 				credentials,
-				duplex: opts.duplex,
 				headers: opts.headers,
 				integrity: opts.integrity,
 				method: opts.method,

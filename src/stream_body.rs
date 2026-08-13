@@ -43,40 +43,17 @@ pub struct StreamBodyReceiver {
 	rx: mpsc::Receiver<Bytes>,
 }
 
-/// Fires when the request body has been handed over in full.
-///
-/// The stack drops the body once it has finished writing it, so a drop guard riding along with
-/// the stream is what marks the request as sent. This is what a half-duplex request waits on
-/// before its response is surfaced.
-struct SentGuard(Option<tokio::sync::oneshot::Sender<()>>);
-
-impl Drop for SentGuard {
-	fn drop(&mut self) {
-		if let Some(tx) = self.0.take() {
-			let _ = tx.send(());
-		}
-	}
-}
-
 impl StreamBodyReceiver {
-	/// Convert this receiver into a Stream suitable for reqwest::Body, paired with a signal
-	/// that resolves once the whole body has been written.
+	/// Convert this receiver into a Stream suitable for reqwest::Body
 	pub fn into_stream(
 		self,
-	) -> (
-		impl futures::Stream<Item = std::result::Result<Bytes, std::io::Error>> + Send,
-		tokio::sync::oneshot::Receiver<()>,
-	) {
-		let (tx, rx_sent) = tokio::sync::oneshot::channel();
-		let stream = async_stream::stream! {
-			let guard = SentGuard(Some(tx));
+	) -> impl futures::Stream<Item = std::result::Result<Bytes, std::io::Error>> + Send {
+		async_stream::stream! {
 			let mut rx = self.rx;
 			while let Some(bytes) = rx.recv().await {
 				yield std::result::Result::<Bytes, std::io::Error>::Ok(bytes);
 			}
-			drop(guard);
-		};
-		(stream, rx_sent)
+		}
 	}
 }
 

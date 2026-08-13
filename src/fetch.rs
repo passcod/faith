@@ -25,7 +25,7 @@ use crate::{
 	body::{Body, BodyHolder},
 	encoding::{self, AcceptEncoding, DEFAULT_ACCEPT_ENCODING},
 	error::{FaithError, FaithErrorKind},
-	options::{CredentialsOption, DuplexOption, FaithOptions, FaithOptionsAndBody, PRIORITY},
+	options::{CredentialsOption, FaithOptions, FaithOptionsAndBody, PRIORITY},
 	response::{FaithResponse, PeerInformation},
 	stream_body::StreamBody,
 	timing::{HeadersStamp, RequestTiming, TimingSlot, alpn_protocol_id},
@@ -162,10 +162,6 @@ pub fn faith_fetch<'env>(
 			);
 		}
 
-		// Settles once a streaming request body has been written in full; `None` when the
-		// request carries no streaming body, which has nothing to wait for.
-		let mut body_sent = None;
-
 		// Handle body: prefer streaming body over buffered body
 		if let Some(receiver_arc) = stream_receiver {
 			// Take the receiver from the Arc<Mutex<Option<...>>>
@@ -176,8 +172,7 @@ pub fn faith_fetch<'env>(
 
 			if let Some(receiver) = receiver {
 				// Convert the receiver into a stream for reqwest
-				let (byte_stream, sent) = receiver.into_stream();
-				body_sent = Some(sent);
+				let byte_stream = receiver.into_stream();
 				request = request.body(reqwest::Body::wrap_stream(byte_stream));
 			}
 		} else if let Some(body) = &body {
@@ -204,24 +199,6 @@ pub fn faith_fetch<'env>(
 		} else {
 			request.send().await?
 		};
-
-		// A half-duplex request does not surface its response until the whole request has gone
-		// out, even where the origin answered sooner. The transport is duplex either way; this
-		// is the sequencing the caller asked for.
-		if options.duplex != Some(DuplexOption::Full)
-			&& let Some(sent) = body_sent.take()
-		{
-			if has_signal {
-				tokio::select! {
-					_ = sent => {}
-					_ = abort.recv() => {
-						return Err(FaithErrorKind::Aborted.into());
-					}
-				}
-			} else {
-				let _ = sent.await;
-			}
-		}
 
 		agent
 			.stats

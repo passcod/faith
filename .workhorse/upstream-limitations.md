@@ -17,6 +17,14 @@ The client identity is configured on the HTTP client, not per request, so a sing
 Spec: [REQ](specs/fetch/request.md), Credentials, and [COOK](specs/agent/cookies.md).
 Cookie storage happens inside the HTTP stack before Faith sees the response headers, so Faith can strip the header from what the caller reads but cannot stop the store from having taken it.
 
+## Half duplex as the fetch standard describes it is not on offer
+
+Spec: [REQ](specs/fetch/request.md), Duplex.
+The standard describes a half-duplex fetch as one where the user agent sends the entire request before *processing* the response, which is more than withholding it from the caller.
+Cookie ingestion and redirect following both happen inside the HTTP stack before it hands back a response, so a request whose body is still streaming has already had `Set-Cookie` stored and a redirect followed; delaying what Faith surfaces cannot come before either.
+Buffering the request body first does not change this, because the stack writes the body and reads the response concurrently whatever the body was built from.
+Offering the weaker reading under the standard's name would promise more than Faith delivers, which is why the option is documented as carrying no meaning rather than as a supported mode.
+
 ## QUIC connections are absent from `connections()`
 
 Spec: [OBS](specs/agent/observability.md), connections().
