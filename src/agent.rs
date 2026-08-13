@@ -442,6 +442,133 @@ pub struct AgentHttp3Options {
 	/// Hints for hosts that are known to support HTTP/3. These are added to the Alt-Svc cache
 	/// on agent initialization, so the first request to these hosts will attempt HTTP/3.
 	pub hints: Option<Vec<Http3Hint>>,
+	/// Maximum bytes an origin may send on any one HTTP/3 stream before it must wait for
+	/// Faith to acknowledge them. Overrides `flowControl.streamWindow` for HTTP/3 only.
+	///
+	/// Default: unset (`flowControl.streamWindow`, itself 6 MiB by default).
+	pub stream_window: Option<u32>,
+	/// Maximum bytes an origin may send across all streams of one HTTP/3 connection before it
+	/// must wait for Faith to acknowledge them. Overrides `flowControl.connectionWindow` for
+	/// HTTP/3 only.
+	///
+	/// Default: unset (`flowControl.connectionWindow`, itself 15 MiB by default).
+	pub connection_window: Option<u32>,
+	/// Maximum bytes Faith transmits to an origin without acknowledgement, bounding upload
+	/// throughput the way the receive windows bound download. The origin's own flow control
+	/// applies on top of this, so it is a ceiling rather than a grant.
+	///
+	/// This has no HTTP/2 counterpart: HTTP/2's send side is governed entirely by the window
+	/// the peer advertises, with no local cap to set.
+	///
+	/// Default: 10 MB (quinn's own default).
+	pub send_window: Option<u32>,
+}
+
+/// Settings related to HTTP/2. This is a nested object.
+#[napi(object)]
+#[derive(Debug, Clone, Default)]
+pub struct AgentHttp2Options {
+	/// Maximum bytes an origin may send on any one HTTP/2 stream before it must wait for
+	/// Faith to acknowledge them. Overrides `flowControl.streamWindow` for HTTP/2 only.
+	///
+	/// Ignored when `adaptiveWindow` is on.
+	///
+	/// Default: unset (`flowControl.streamWindow`, itself 6 MiB by default).
+	pub stream_window: Option<u32>,
+	/// Maximum bytes an origin may send across all streams of one HTTP/2 connection before it
+	/// must wait for Faith to acknowledge them. Overrides `flowControl.connectionWindow` for
+	/// HTTP/2 only.
+	///
+	/// Ignored when `adaptiveWindow` is on.
+	///
+	/// Default: unset (`flowControl.connectionWindow`, itself 15 MiB by default).
+	pub connection_window: Option<u32>,
+	/// Replace HTTP/2's static windows with windows that start small and grow towards a
+	/// bandwidth-delay estimate sampled from connection pings, capped at 16 MiB.
+	///
+	/// This is off by default, and turning it on is usually the wrong move. A fresh connection
+	/// opens at 64 KiB, 96 times below the static default, and doubles only when a ping sample
+	/// reaches two thirds of the current estimate — so it takes many round trips to ramp up and
+	/// carries *less* throughput than the static window for all but the largest transfers. It
+	/// also takes over both windows, so `streamWindow` and `connectionWindow` stop applying.
+	///
+	/// Its one real advantage is memory: it holds a large window open only on connections that
+	/// demonstrably need one. Since it caps at 16 MiB anyway, a static window near that ceiling
+	/// buys the same throughput from the first byte.
+	///
+	/// HTTP/3 is unaffected either way, and keeps whichever windows apply to it.
+	///
+	/// Default: `false`.
+	pub adaptive_window: Option<bool>,
+}
+
+/// Settings related to HTTP flow control, shared by HTTP/2 and HTTP/3. This is a nested object.
+#[napi(object)]
+#[derive(Debug, Clone, Default)]
+pub struct AgentFlowControlOptions {
+	/// Maximum bytes an origin may send on any one stream before it must wait for Faith to
+	/// acknowledge them, for HTTP/2 and HTTP/3 alike.
+	///
+	/// Larger windows keep a high-latency link full, at the cost of buffering more per stream.
+	/// The default follows browser practice, and is deliberately at the conservative end of it:
+	/// a pooled server-side client can hold many connections across many origins, so
+	/// per-connection memory multiplies harder here than in a browser.
+	///
+	/// Set `http2.streamWindow` or `http3.streamWindow` to tune one protocol against the other.
+	///
+	/// Default: 6 MiB.
+	pub stream_window: Option<u32>,
+	/// Maximum bytes an origin may send across all streams of one connection before it must
+	/// wait for Faith to acknowledge them, for HTTP/2 and HTTP/3 alike.
+	///
+	/// This is larger than `streamWindow` so concurrent streams on one connection share the
+	/// connection's headroom, while still bounding the worst-case buffering of a connection
+	/// carrying many concurrent requests.
+	///
+	/// Set `http2.connectionWindow` or `http3.connectionWindow` to tune one protocol against
+	/// the other.
+	///
+	/// Default: 15 MiB.
+	pub connection_window: Option<u32>,
+}
+
+/// Per-stream receive window applied to both protocols when nothing overrides it (spec:FLOW).
+///
+/// Chrome's shape: 6 MiB stream inside a 15 MiB connection. Picked over a larger window that
+/// measured faster because it is what browsers have proven at scale, and because a pooled
+/// server-side client multiplies per-connection memory across far more connections.
+pub(crate) const DEFAULT_STREAM_WINDOW: u32 = 6 * 1024 * 1024;
+
+/// Whole-connection receive window applied to both protocols when nothing overrides it (spec:FLOW).
+pub(crate) const DEFAULT_CONNECTION_WINDOW: u32 = 15 * 1024 * 1024;
+
+// Concurrent streams share the connection's headroom, so the asymmetry is the point of the
+// defaults rather than an accident of the numbers (spec:FLOW#common-windows).
+const _: () = assert!(DEFAULT_CONNECTION_WINDOW > DEFAULT_STREAM_WINDOW);
+
+/// The flow-control windows to apply, once the common group, the per-protocol overrides, and the
+/// defaults have been reconciled (spec:FLOW#per-protocol-windows).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ResolvedWindows {
+	pub stream: u32,
+	pub connection: u32,
+}
+
+/// Reconcile one protocol's windows: its own setting wins over the common one, which wins over the
+/// default (spec:FLOW#per-protocol-windows).
+pub(crate) fn resolve_windows(
+	common: Option<&AgentFlowControlOptions>,
+	protocol_stream: Option<u32>,
+	protocol_connection: Option<u32>,
+) -> ResolvedWindows {
+	ResolvedWindows {
+		stream: protocol_stream
+			.or_else(|| common.and_then(|c| c.stream_window))
+			.unwrap_or(DEFAULT_STREAM_WINDOW),
+		connection: protocol_connection
+			.or_else(|| common.and_then(|c| c.connection_window))
+			.unwrap_or(DEFAULT_CONNECTION_WINDOW),
+	}
 }
 
 /// Settings related to the connection pool. This is a nested object.
@@ -591,6 +718,12 @@ pub struct AgentOptions {
 	pub cookies: Option<bool>,
 	/// Settings related to DNS. This is a nested object.
 	pub dns: Option<AgentDnsOptions>,
+	/// Flow-control windows shared by HTTP/2 and HTTP/3. This is a nested object.
+	///
+	/// Setting these is the normal way to tune windows: one value applies to whichever protocol
+	/// a request negotiates, so throughput doesn't change when an origin upgrades from one to
+	/// the other. The `http2` and `http3` groups override them per protocol.
+	pub flow_control: Option<AgentFlowControlOptions>,
 	/// Sets the default headers for every request.
 	///
 	/// If header names or values are invalid, they are silently omitted.
@@ -598,6 +731,8 @@ pub struct AgentOptions {
 	///
 	/// Default: none.
 	pub headers: Option<Vec<Header>>,
+	/// Settings related to HTTP/2. This is a nested object.
+	pub http2: Option<AgentHttp2Options>,
 	/// Settings related to HTTP/3. This is a nested object.
 	pub http3: Option<AgentHttp3Options>,
 	/// Bind outgoing sockets to this local IP address before connecting.
@@ -824,6 +959,24 @@ impl Agent {
 			client = client.default_headers(map);
 		}
 
+		// HTTP/2 flow control (spec:FLOW). Adaptive windowing takes over both windows itself, so
+		// the explicit sizes are not applied at all when it's on: reqwest would let the later
+		// `http2_adaptive_window` call win regardless, but leaving the calls out makes the
+		// precedence visible here rather than depending on hyper's internal ordering.
+		let http2 = options.http2.unwrap_or_default();
+		if http2.adaptive_window.unwrap_or(false) {
+			client = client.http2_adaptive_window(true);
+		} else {
+			let windows = resolve_windows(
+				options.flow_control.as_ref(),
+				http2.stream_window,
+				http2.connection_window,
+			);
+			client = client
+				.http2_initial_stream_window_size(windows.stream)
+				.http2_initial_connection_window_size(windows.connection);
+		}
+
 		#[cfg(feature = "http3")]
 		{
 			let idle_timeout = options
@@ -834,9 +987,26 @@ impl Agent {
 			client = client
 				.http3_max_idle_timeout(Duration::from_secs(idle_timeout.min(120).max(1).into()));
 
+			// QUIC flow control (spec:FLOW). quinn's own defaults are a ~1.25MB stream window
+			// inside an unbounded connection window: the stream window is the binding constraint
+			// on a high-latency link, and the unbounded connection window means a connection with
+			// many concurrent requests has no ceiling on what it buffers. Both are set here.
+			let windows = resolve_windows(
+				options.flow_control.as_ref(),
+				options.http3.as_ref().and_then(|h| h.stream_window),
+				options.http3.as_ref().and_then(|h| h.connection_window),
+			);
+			client = client
+				.http3_stream_receive_window(windows.stream.into())
+				.http3_conn_receive_window(windows.connection.into());
+
 			if let Some(ref http3) = options.http3 {
 				if let Some(Http3Congestion::Bbr1) = http3.congestion {
 					client = client.http3_congestion_bbr();
+				}
+
+				if let Some(send_window) = http3.send_window {
+					client = client.http3_send_window(send_window.into());
 				}
 			}
 		}
@@ -1611,5 +1781,97 @@ mod tests {
 				"{input:?} is not a connectable origin"
 			);
 		}
+	}
+
+	fn common(stream: Option<u32>, connection: Option<u32>) -> AgentFlowControlOptions {
+		AgentFlowControlOptions {
+			stream_window: stream,
+			connection_window: connection,
+		}
+	}
+
+	#[test]
+	fn windows_fall_back_to_the_defaults() {
+		// An agent configured with nothing at all still gets the large static windows
+		// (spec:FLOW#common-windows).
+		assert_eq!(
+			resolve_windows(None, None, None),
+			ResolvedWindows {
+				stream: 6 * 1024 * 1024,
+				connection: 15 * 1024 * 1024,
+			}
+		);
+	}
+
+	#[test]
+	fn the_common_windows_apply_when_a_protocol_says_nothing() {
+		assert_eq!(
+			resolve_windows(Some(&common(Some(1024), Some(4096))), None, None),
+			ResolvedWindows {
+				stream: 1024,
+				connection: 4096,
+			}
+		);
+	}
+
+	#[test]
+	fn a_protocol_window_beats_the_common_one() {
+		// The whole point of the per-protocol group: tune one protocol against the other
+		// (spec:FLOW#per-protocol-windows).
+		assert_eq!(
+			resolve_windows(
+				Some(&common(Some(1024), Some(4096))),
+				Some(2048),
+				Some(8192)
+			),
+			ResolvedWindows {
+				stream: 2048,
+				connection: 8192,
+			}
+		);
+	}
+
+	#[test]
+	fn each_window_falls_back_on_its_own() {
+		// Overriding the stream window for one protocol leaves that protocol's connection
+		// window on the common value, rather than dropping it to the default.
+		assert_eq!(
+			resolve_windows(Some(&common(Some(1024), Some(4096))), Some(2048), None),
+			ResolvedWindows {
+				stream: 2048,
+				connection: 4096,
+			}
+		);
+		assert_eq!(
+			resolve_windows(Some(&common(None, None)), None, Some(8192)),
+			ResolvedWindows {
+				stream: DEFAULT_STREAM_WINDOW,
+				connection: 8192,
+			}
+		);
+	}
+
+	#[test]
+	fn a_protocol_window_applies_without_the_common_group() {
+		assert_eq!(
+			resolve_windows(None, Some(2048), None),
+			ResolvedWindows {
+				stream: 2048,
+				connection: DEFAULT_CONNECTION_WINDOW,
+			}
+		);
+	}
+
+	#[test]
+	fn the_two_protocols_resolve_independently() {
+		// One `flowControl` value covers both protocols, and overriding it for HTTP/3 leaves
+		// HTTP/2 where it was (spec:FLOW#per-protocol-windows).
+		let flow = common(Some(1024), Some(4096));
+		let http2 = resolve_windows(Some(&flow), None, None);
+		let http3 = resolve_windows(Some(&flow), Some(2048), None);
+
+		assert_eq!(http2.stream, 1024);
+		assert_eq!(http3.stream, 2048);
+		assert_eq!(http2.connection, http3.connection);
 	}
 }
