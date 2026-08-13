@@ -581,6 +581,44 @@ using UTF-8.*
 
 *Invalid UTF-8 sequences are replaced with U+FFFD (the replacement character) rather than throwing.*
 
+### `Response.toFile(destination, options?): Promise<{ path, bytesWritten }>`
+
+This is entirely custom to Faith. It writes the response body straight to a file on disk, the
+bytes travelling from the network to the filesystem inside Faith without crossing into JavaScript.
+A caller wanting a file on disk therefore has no reason to route the body through a `ReadableStream`
+and Node's filesystem APIs.
+
+It is a whole-body read alongside `bytes()` and its siblings: the first consumer wins, `bodyUsed`
+becomes true once the read begins, and `integrity` is verified when set. It resolves to
+`{ path, bytesWritten }`, where `path` is the absolute filesystem path written to and `bytesWritten`
+counts the bytes that landed there.
+
+The `destination` is a string path or a `file://` URL, with a relative path resolved against the
+process's working directory. A URL that does not name a local path throws `InvalidPath` at the call,
+before the body is touched.
+
+The `options` are:
+
+- `overwrite` (boolean, default `false`): governs an occupied destination. The default refuses it
+  with `FileExists` and leaves the file already there as it was; `true` truncates it instead.
+- `mode` (number): the permissions a newly created file is given, defaulting to what Node's own
+  filesystem writes use. Ignored on platforms without Unix file modes.
+
+The parent directory must already exist. A response that cannot carry a body throws `ResponseBodyNull`
+without creating a file. Every other failure to open or write is a `FileWrite` error carrying the
+operating system's own detail.
+
+A failure part way through leaves the bytes written so far at the destination and throws; Faith does
+not tidy up after itself here. A caller who needs the destination to hold either a whole body or
+nothing writes to a temporary path and renames on success. An integrity mismatch is one of these
+failures: the digest is only known once the last byte has been written, so the file that fails
+verification is on disk when the error arrives.
+
+Where the response advertised a `Content-Length`, Faith holds the server to it as the body arrives
+and fails with `ContentLengthOverrun` if the body exceeds it. The number constrained is the wire
+length rather than the size on disk, so a caller wanting the two to be the same requests
+`Accept-Encoding: identity`, which also stops Faith decoding.
+
 ### `Response.webResponse(): globalThis.Response`
 
 This is entirely custom to Faith. It returns a Web API `Response` instead of Faith's custom
@@ -591,11 +629,11 @@ returns a Response from:
 - the `body` stream
 - the `status`, `statusCode`, and `headers` properties
 
-Note that if `json()`, `bytes()`, etc has been called on the original response, the body stream
-of the new Web `Response` will be empty or inaccessible. The new `Response` is built over the same
-body stream, so convert before reading from or locking that stream: a Web `Response` cannot be
-constructed over a stream that has been read from or locked. Accessing `.body` without reading
-from it is fine.
+The new `Response` is built over the same body stream, so convert before reading from or locking
+that stream: a Web `Response` cannot be constructed over a stream that has been read from or locked.
+A whole-body read (`json()`, `bytes()`, `toFile()`, and kin) closes the window too, spending the
+body even though the stream was never handed out; the conversion is then refused with the
+already-disturbed error. Accessing `.body` without reading from it is fine.
 
 ## `Agent`
 
@@ -1214,6 +1252,7 @@ error kind, documented in this comprehensive mapping:
 - JS `NetworkError`:
   - `Network` — network error
   - `Redirect` — when the agent is configured to error on redirects
+  - `ContentLengthOverrun` — a body written with `response.toFile()` exceeded the advertised `Content-Length`
 - JS `SyntaxError`:
   - `AddressParse` — IP parse error for `AgentOptions.dns.overrides`
   - `InvalidIntegrity` — SRI parse error for `RequestInit.integrity`
@@ -1223,11 +1262,15 @@ error kind, documented in this comprehensive mapping:
   - `Closed` — a request was made on an agent that has been closed
   - `InvalidHeader` — invalid header name or value
   - `InvalidMethod` — invalid HTTP method
+  - `InvalidPath` — a `response.toFile()` destination that does not name a local path
   - `InvalidUrl` — invalid URL string
   - `ResponseAlreadyDisturbed` — body already read (mutually exclusive operations)
+  - `ResponseBodyNull` — `response.toFile()` on a response that cannot carry a body
 - JS generic `Error`:
   - `BodyStream` — internal stream handling error
   - `Config` — invalid agent configuration
+  - `FileExists` — a `response.toFile()` write refusing an occupied destination
+  - `FileWrite` — the filesystem refusing a `response.toFile()` write
   - `IntegrityMismatch` — SRI checksum mismatch (with `RequestInit.integrity`)
 
 The library exports an `ERROR_CODES` object which has every error code the library throws, and

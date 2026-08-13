@@ -16,10 +16,13 @@ use futures::{StreamExt, TryStreamExt, stream};
 use http_body_util::BodyStream;
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
-use reqwest::{StatusCode, Url, Version, header::HeaderMap};
+use reqwest::{
+	StatusCode, Url, Version,
+	header::{CONTENT_LENGTH, HeaderMap},
+};
 use serde_json;
 use stream_shared::SharedStream;
-use tokio::sync::watch;
+use tokio::{io::AsyncWriteExt, sync::watch};
 
 use crate::{
 	agent::InnerAgentStats,
@@ -27,7 +30,7 @@ use crate::{
 	body::{Body, BodyHolder, DynStream, drain_body_inner},
 	encoding::{Coding, decode_stream},
 	error::{FaithError, FaithErrorKind},
-	integrity::verify_integrity,
+	integrity::{finish_integrity, integrity_checker, verify_integrity},
 	timing::{TimingBreakdown, TimingSlot},
 };
 
@@ -67,6 +70,69 @@ pub struct FaithResponse {
 pub struct PeerInformation {
 	pub address: Option<SocketAddr>,
 	pub certificate: Option<Vec<u8>>,
+}
+
+/// Options for `toFile()`.
+#[napi(object)]
+#[derive(Debug, Default)]
+pub struct ToFileOptions {
+	/// Whether to truncate and replace an occupied destination. Defaults to false, which
+	/// refuses an occupied destination with a `FileExists` error and leaves it untouched.
+	pub overwrite: Option<bool>,
+	/// The permissions a newly created file is given, defaulting to what Node's own
+	/// filesystem writes use. Ignored on platforms without Unix file modes.
+	pub mode: Option<u32>,
+}
+
+/// What `toFile()` resolves to.
+#[napi(object)]
+#[derive(Debug)]
+pub struct ToFileResult {
+	/// The absolute filesystem path written to.
+	pub path: String,
+	/// The number of bytes that landed at the destination.
+	pub bytes_written: i64,
+}
+
+/// Open the destination file for a body write, mapping filesystem refusals to the errors
+/// `toFile()` surfaces (spec:BODY#tofile).
+async fn open_destination(
+	path: &str,
+	options: &ToFileOptions,
+) -> Result<tokio::fs::File, FaithError> {
+	let mut open = tokio::fs::OpenOptions::new();
+	open.write(true);
+	if options.overwrite.unwrap_or(false) {
+		// An occupied destination is truncated and replaced.
+		open.create(true).truncate(true);
+	} else {
+		// The safe default refuses an occupied destination outright.
+		open.create_new(true);
+	}
+	#[cfg(unix)]
+	if let Some(mode) = options.mode {
+		open.mode(mode);
+	}
+
+	match open.open(path).await {
+		Ok(file) => Ok(file),
+		Err(err) => Err(classify_open_error(path, err).await),
+	}
+}
+
+/// Classify a failure to open the destination. An occupied destination is `FileExists`,
+/// unless what occupies it is a directory: a directory is well-formed but cannot be written
+/// to, which is a `FileWrite`. Every other refusal is a `FileWrite` carrying the OS detail.
+async fn classify_open_error(path: &str, err: std::io::Error) -> FaithError {
+	let kind = if err.kind() == std::io::ErrorKind::AlreadyExists {
+		match tokio::fs::symlink_metadata(path).await {
+			Ok(meta) if meta.is_dir() => FaithErrorKind::FileWrite,
+			_ => FaithErrorKind::FileExists,
+		}
+	} else {
+		FaithErrorKind::FileWrite
+	};
+	FaithError::new(kind, Some(err.to_string()))
 }
 
 #[derive(Clone, Debug, Default)]
@@ -532,6 +598,123 @@ impl FaithResponse {
 			let value = serde_json::from_slice(&bytes)
 				.map_err(|e| FaithError::new(FaithErrorKind::JsonParse, Some(e.to_string())))?;
 			Ok(Value(value))
+		})
+	}
+
+	/// Custom to Faith.
+	///
+	/// `toFile(path, options)` writes the response body to a file on disk, the bytes
+	/// travelling from the network to the filesystem inside Faith without crossing into
+	/// JavaScript. It is a whole-body read alongside `bytes()` and its siblings: the first
+	/// consumer wins, `bodyUsed` becomes true once the read begins, and `integrity` is
+	/// verified when set.
+	///
+	/// Resolves to `{ path, bytesWritten }`, where `path` is the absolute filesystem path
+	/// written to and `bytesWritten` counts the bytes that landed there.
+	///
+	/// The `file://` URL to path conversion and the `InvalidPath` rejection happen in the
+	/// wrapper, so this receives a resolved string path.
+	///
+	/// spec:BODY#tofile
+	#[napi]
+	pub fn to_file<'env>(
+		&self,
+		env: &'env Env,
+		path: String,
+		options: Option<ToFileOptions>,
+	) -> Result<PromiseRaw<'env, ToFileResult>, napi::Error> {
+		let this = Clone::clone(self);
+		let options = options.unwrap_or_default();
+		faith_promise(env, async move { this.write_to_file(path, options).await })
+	}
+
+	async fn write_to_file(
+		&self,
+		path: String,
+		options: ToFileOptions,
+	) -> Result<ToFileResult, FaithError> {
+		// A response that cannot carry a body has nothing to write, and this is settled
+		// before any file is created (spec:BODY#tofile).
+		let Some(lock) = self.body.body.clone() else {
+			return Err(FaithErrorKind::ResponseBodyNull.into());
+		};
+
+		// A body already read, or whose stream was handed out, has no second read to give.
+		// Checked without committing so an open failure below still leaves the body
+		// undisturbed and the caller free to retry to another path.
+		if self.disturbed.load(Ordering::SeqCst) {
+			return Err(FaithErrorKind::ResponseAlreadyDisturbed.into());
+		}
+
+		// Reject a malformed integrity value up front, before the body is touched, the same
+		// as the other verified reads reject it when the whole body is in hand.
+		let mut checker = integrity_checker(self.integrity.as_deref())?;
+
+		// The advertised length, when the server sent one. It is only visible here for a body
+		// delivered as received: a decoded body has had its Content-Length stripped, so the
+		// bytes written equal the wire bytes wherever this is Some (spec:BODY#tofile, ENC).
+		let content_length = self
+			.headers
+			.get(CONTENT_LENGTH)
+			.and_then(|value| value.to_str().ok())
+			.and_then(|value| value.trim().parse::<u64>().ok());
+
+		// The destination is opened before any of the body is read, so a failure to open it
+		// leaves the body unread and undisturbed.
+		let mut file = open_destination(&path, &options).await?;
+
+		// Commit the read now the destination is in hand. A concurrent read that slipped in
+		// since the load above wins, and this one finds the body already spent.
+		self.check_stream_disturbed()?;
+
+		let stream = {
+			let mut body = lock.lock().await;
+			let stream = self.ensure_stream(&mut body, self.body.drained.clone())?;
+			drop(body); // release lock before consuming stream
+			stream
+		};
+
+		let mut written: u64 = 0;
+		futures::pin_mut!(stream);
+		while let Some(result) = stream.next().await {
+			let chunk =
+				result.map_err(|err| FaithError::new(FaithErrorKind::BodyStream, Some(err)))?;
+			if let Some(checker) = checker.as_mut() {
+				checker.input(&chunk);
+			}
+			file.write_all(&chunk)
+				.await
+				.map_err(|err| FaithError::new(FaithErrorKind::FileWrite, Some(err.to_string())))?;
+			written += chunk.len() as u64;
+			// A server cannot send more than it promised: once the bytes off the wire exceed
+			// the advertised length, the write fails and the bytes so far stay on disk
+			// (spec:BODY#tofile).
+			if let Some(limit) = content_length {
+				if written > limit {
+					return Err(FaithErrorKind::ContentLengthOverrun.into());
+				}
+			}
+		}
+
+		file.flush()
+			.await
+			.map_err(|err| FaithError::new(FaithErrorKind::FileWrite, Some(err.to_string())))?;
+
+		// The digest is only known once the last byte has been written, so the file that
+		// fails verification is on disk when the error arrives (spec:SRI).
+		if let Some(checker) = checker {
+			finish_integrity(checker)?;
+		}
+
+		self.body.mark_drained();
+
+		Ok(ToFileResult {
+			// A relative path resolves against the process's working directory; the caller
+			// is handed the absolute path the bytes landed at.
+			path: std::path::absolute(&path)
+				.map(|abs| abs.to_string_lossy().into_owned())
+				.unwrap_or(path),
+			bytes_written: written as i64,
 		})
 	}
 

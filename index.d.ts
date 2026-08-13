@@ -257,6 +257,24 @@ json(): Promise<any>
 /**
  * Custom to Faith.
  *
+ * `toFile(path, options)` writes the response body to a file on disk, the bytes
+ * travelling from the network to the filesystem inside Faith without crossing into
+ * JavaScript. It is a whole-body read alongside `bytes()` and its siblings: the first
+ * consumer wins, `bodyUsed` becomes true once the read begins, and `integrity` is
+ * verified when set.
+ *
+ * Resolves to `{ path, bytesWritten }`, where `path` is the absolute filesystem path
+ * written to and `bytesWritten` counts the bytes that landed there.
+ *
+ * The `file://` URL to path conversion and the `InvalidPath` rejection happen in the
+ * wrapper, so this receives a resolved string path.
+ *
+ * spec:BODY#tofile
+ */
+toFile(path: string, options?: ToFileOptions | undefined | null): Promise<ToFileResult>
+/**
+ * Custom to Faith.
+ *
  * The measurements behind the `timing` property, which the wrapper turns into a
  * `PerformanceResourceTiming`.
  *
@@ -922,6 +940,7 @@ export const FAITH_VERSION: string
  * - JS `NetworkError`:
  *   - `Network` — network error
  *   - `Redirect` — when the agent is configured to error on redirects
+ *   - `ContentLengthOverrun` — a body written with `response.toFile()` exceeded the advertised `Content-Length`
  * - JS `SyntaxError`:
  *   - `AddressParse` — IP parse error for `AgentOptions.dns.overrides`
  *   - `InvalidIntegrity` — SRI parse error for `RequestInit.integrity`
@@ -931,11 +950,15 @@ export const FAITH_VERSION: string
  *   - `Closed` — a request was made on an agent that has been closed
  *   - `InvalidHeader` — invalid header name or value
  *   - `InvalidMethod` — invalid HTTP method
+ *   - `InvalidPath` — a `response.toFile()` destination that does not name a local path
  *   - `InvalidUrl` — invalid URL string
  *   - `ResponseAlreadyDisturbed` — body already read (mutually exclusive operations)
+ *   - `ResponseBodyNull` — `response.toFile()` on a response that cannot carry a body
  * - JS generic `Error`:
  *   - `BodyStream` — internal stream handling error
  *   - `Config` — invalid agent configuration
+ *   - `FileExists` — a `response.toFile()` write refusing an occupied destination
+ *   - `FileWrite` — the filesystem refusing a `response.toFile()` write
  *   - `IntegrityMismatch` — SRI checksum mismatch (with `RequestInit.integrity`)
  *
  * The library exports an `ERROR_CODES` object which has every error code the library throws, and
@@ -953,16 +976,21 @@ export declare const enum FaithErrorKind {
   BodyStream = 'BodyStream',
   Closed = 'Closed',
   Config = 'Config',
+  ContentLengthOverrun = 'ContentLengthOverrun',
+  FileExists = 'FileExists',
+  FileWrite = 'FileWrite',
   IntegrityMismatch = 'IntegrityMismatch',
   InvalidHeader = 'InvalidHeader',
   InvalidIntegrity = 'InvalidIntegrity',
   InvalidMethod = 'InvalidMethod',
+  InvalidPath = 'InvalidPath',
   InvalidUrl = 'InvalidUrl',
   JsonParse = 'JsonParse',
   Network = 'Network',
   PemParse = 'PemParse',
   Redirect = 'Redirect',
   ResponseAlreadyDisturbed = 'ResponseAlreadyDisturbed',
+  ResponseBodyNull = 'ResponseBodyNull',
   Timeout = 'Timeout'
 }
 
@@ -1051,6 +1079,28 @@ export interface TimingBreakdown {
   nextHopProtocol: string
   contentEncoding?: string
   fromCache: boolean
+}
+
+/** Options for `toFile()`. */
+export interface ToFileOptions {
+  /**
+   * Whether to truncate and replace an occupied destination. Defaults to false, which
+   * refuses an occupied destination with a `FileExists` error and leaves it untouched.
+   */
+  overwrite?: boolean
+  /**
+   * The permissions a newly created file is given, defaulting to what Node's own
+   * filesystem writes use. Ignored on platforms without Unix file modes.
+   */
+  mode?: number
+}
+
+/** What `toFile()` resolves to. */
+export interface ToFileResult {
+  /** The absolute filesystem path written to. */
+  path: string
+  /** The number of bytes that landed at the destination. */
+  bytesWritten: number
 }
 
 /**
