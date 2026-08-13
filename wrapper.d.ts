@@ -45,7 +45,7 @@ export const ERROR_CODES: {
 
 export interface FetchOptions {
 	/**
-	 * This is custom to Fáith.
+	 * This is custom to Faith.
 	 *
 	 * You can create an `Agent`, and pass it here to have the request executed by the `Agent`. See the
 	 * documentation for the `Agent` options you can set with this, and the agent data you can access.
@@ -113,7 +113,7 @@ export interface FetchOptions {
 	 *   - If there is a match, fresh or stale, it will be returned from the cache.
 	 *   - If there is no match, a network error is returned.
 	 *
-	 * - `ignore-rules`: Custom to Fáith. Overrides the check that determines if a response can be cached
+	 * - `ignore-rules`: Custom to Faith. Overrides the check that determines if a response can be cached
 	 *   to always return true on 200. Uses any response in the HTTP cache matching the request, not
 	 *   paying attention to staleness. If there was no response, it creates a normal request and updates
 	 *   the HTTP cache with the response.
@@ -133,16 +133,16 @@ export interface FetchOptions {
 	 * following values:
 	 *
 	 * - `omit`: Never send credentials in the request or include credentials in the response.
-	 * - ~~`same-origin`~~: Fáith does not implement this, as there is no concept of "origin" on the server.
+	 * - ~~`same-origin`~~: Faith does not implement this, as there is no concept of "origin" on the server.
 	 * - `include`: Always include credentials, ~~even for cross-origin requests.~~
 	 *
-	 * Fáith ignores the `Access-Control-Allow-Credentials` and `Access-Control-Allow-Origin` headers.
+	 * Faith ignores the `Access-Control-Allow-Credentials` and `Access-Control-Allow-Origin` headers.
 	 *
-	 * Fáith currently does not `omit` the TLS client certificate when the request's `Agent` has one
+	 * Faith currently does not `omit` the TLS client certificate when the request's `Agent` has one
 	 * configured. This is an upstream limitation.
 	 *
 	 * If the request's `Agent` has cookies enabled, new cookies from the response will be added to the
-	 * cookie jar, even as Fáith strips them from the request and response headers returned to the user.
+	 * cookie jar, even as Faith strips them from the request and response headers returned to the user.
 	 * This is an upstream limitation.
 	 *
 	 * Defaults to `include` (browsers default to `same-origin`).
@@ -150,7 +150,7 @@ export interface FetchOptions {
 	credentials?: "omit" | "same-origin" | "include";
 	/**
 	 * Controls duplex behavior of the request. If this is present it must have the value `half`, meaning
-	 * that Fáith will send the entire request before processing the response.
+	 * that Faith will send the entire request before processing the response.
 	 *
 	 * This option must be present when `body` is a `ReadableStream`.
 	 */
@@ -167,10 +167,10 @@ export interface FetchOptions {
 	 * Multiple space-separated values are supported; if any matches, verification passes. Unknown
 	 * algorithms are silently ignored (but if all algorithms are unknown, an error is thrown).
 	 *
-	 * Fáith only checks the integrity when using `bytes()`, `json()`, `text()`, `arrayBuffer()`, and
+	 * Faith only checks the integrity when using `bytes()`, `json()`, `text()`, `arrayBuffer()`, and
 	 * `blob()`. Verification when reading through the `body` stream is not currently supported.
 	 *
-	 * Note that browsers will throw at the `fetch()` call when integrity fails, but Fáith will only
+	 * Note that browsers will throw at the `fetch()` call when integrity fails, but Faith will only
 	 * throw when the above methods are called, as until then the body contents are not available.
 	 */
 	integrity?: string;
@@ -178,7 +178,7 @@ export interface FetchOptions {
 	 * Any headers you want to add to your request, contained within a `Headers` object or an object
 	 * literal whose keys are the names of headers and whose values are the header values.
 	 *
-	 * Fáith allows all request headers to be set (unlike browsers, which [forbid][1] a number of them).
+	 * Faith allows all request headers to be set (unlike browsers, which [forbid][1] a number of them).
 	 *
 	 * [1]: https://developer.mozilla.org/en-US/docs/Glossary/Forbidden_request_header
 	 */
@@ -189,7 +189,7 @@ export interface FetchOptions {
 	method?: string;
 	/**
 	 * A hint of how this request ranks against others, sent as the [RFC 9218][1] `Priority`
-	 * header. Browsers use this option to prioritise streams; Fáith sends the header and lets
+	 * header. Browsers use this option to prioritise streams; Faith sends the header and lets
 	 * the server schedule, which is what HTTP/2 and HTTP/3 servers act on.
 	 *
 	 * Urgency runs from 0 (most urgent) to 7 (least urgent), and a request without the header
@@ -211,7 +211,7 @@ export interface FetchOptions {
 	 */
 	signal?: AbortSignal;
 	/**
-	 * Custom to Fáith. Cancels the request after this many milliseconds.
+	 * Custom to Faith. Cancels the request after this many milliseconds.
 	 *
 	 * This will give a different error to using `signal` with a timeout, which might be preferable in
 	 * some cases. It also has a slightly different internal behaviour: `signal` may abort the request
@@ -237,7 +237,7 @@ export class Response {
 	 * The `bodyUsed` read-only property of the `Response` interface is a boolean value that indicates
 	 * whether the body has been read yet.
 	 *
-	 * In Fáith, this indicates whether the body stream has ever been read from or canceled, as defined
+	 * In Faith, this indicates whether the body stream has ever been read from or canceled, as defined
 	 * [in the spec](https://streams.spec.whatwg.org/#is-readable-stream-disturbed). Note that accessing
 	 * the `.body` property counts as a read, even if you don't actually consume any bytes of content.
 	 */
@@ -246,8 +246,8 @@ export class Response {
 	 * The `headers` read-only property of the `Response` interface contains the `Headers` object
 	 * associated with the response.
 	 *
-	 * Note that Fáith does not provide a custom `Headers` class; instead the Web API `Headers` structure
-	 * is used directly and constructed by Fáith when needed.
+	 * Note that Faith does not provide a custom `Headers` class; instead the Web API `Headers` structure
+	 * is used directly and constructed by Faith when needed.
 	 */
 	readonly headers: Headers;
 	/**
@@ -256,7 +256,7 @@ export class Response {
 	 */
 	readonly ok: boolean;
 	/**
-	 * Custom to Fáith.
+	 * Custom to Faith.
 	 *
 	 * The `peer` read-only property of the `Response` interface contains an object with information about
 	 * the remote peer that sent this response:
@@ -280,7 +280,7 @@ export class Response {
 	 * corresponding to the HTTP status code in `Response.status`. For example, this would be `OK` for a
 	 * status code `200`, `Continue` for `100`, `Not Found` for `404`.
 	 *
-	 * Fáith always returns the canonical status message for the code. In HTTP/1, servers can send
+	 * Faith always returns the canonical status message for the code. In HTTP/1, servers can send
 	 * custom status text, but that text is not surfaced here; in HTTP/2 and HTTP/3, custom status
 	 * text is not supported at all. For status codes with no well-known message, this is an empty
 	 * string.
@@ -290,7 +290,7 @@ export class Response {
 	 * The `type` read-only property of the `Response` interface contains the type of the response. The
 	 * type determines whether scripts are able to access the response body and headers.
 	 *
-	 * In Fáith, this is always set to `basic`.
+	 * In Faith, this is always set to `basic`.
 	 */
 	readonly type: "basic";
 	/**
@@ -302,7 +302,7 @@ export class Response {
 	 * The `version` read-only property of the `Response` interface contains the HTTP version of the
 	 * response. The value will be the final HTTP version after any redirects and protocol upgrades.
 	 *
-	 * This is custom to Fáith.
+	 * This is custom to Faith.
 	 */
 	readonly version: string;
 
@@ -312,7 +312,7 @@ export class Response {
 	 * `204 No Content` responses.
 	 *
 	 * Note that browsers currently do not return `null` for those responses, but the spec requires
-	 * it. Fáith chooses to respect the spec rather than the browsers in this case.
+	 * it. Faith chooses to respect the spec rather than the browsers in this case.
 	 *
 	 * A response has one body stream: this is built on first access and the same stream is
 	 * returned thereafter, so reading through it advances a single position. Use `clone()` to
@@ -345,7 +345,7 @@ export class Response {
 	readonly trailers: Promise<Headers | null>;
 
 	/**
-	 * Custom to Fáith.
+	 * Custom to Faith.
 	 *
 	 * The `timing` read-only property of the `Response` interface is a promise of the request's
 	 * timing breakdown, as a `PerformanceResourceTiming`.
@@ -358,7 +358,7 @@ export class Response {
 	 * a `PerformanceObserver` watching `resource` entries receives it. The entry is minted once
 	 * per request and shared with clones, so a request contributes at most one.
 	 *
-	 * Phases Fáith does not observe read 0, as they do in a browser.
+	 * Phases Faith does not observe read 0, as they do in a browser.
 	 */
 	readonly timing: Promise<FaithResourceTiming>;
 
@@ -369,7 +369,7 @@ export class Response {
 	 * can be reused for subsequent requests. If you don't call this and don't consume
 	 * the body, the connection may be held open until the response is garbage collected.
 	 *
-	 * This is custom to Fáith.
+	 * This is custom to Faith.
 	 *
 	 * @returns {Promise<void>} Resolves when the body has been fully discarded
 	 */
@@ -386,7 +386,7 @@ export class Response {
 	 * The `bytes()` method of the `Response` interface takes a `Response` stream and reads it to
 	 * completion. It returns a promise that resolves with a `Uint8Array`.
 	 *
-	 * In Fáith, this returns a Node.js `Buffer`, which can be used as (and is a subclass of) a `Uint8Array`.
+	 * In Faith, this returns a Node.js `Buffer`, which can be used as (and is a subclass of) a `Uint8Array`.
 	 */
 	bytes(): Promise<Uint8Array>;
 
@@ -404,7 +404,7 @@ export class Response {
 	 * Note that despite the method being named `json()`, the result is not JSON but is instead the
 	 * result of taking JSON as input and parsing it to produce a JavaScript object.
 	 *
-	 * Further note that, at least in Fáith, this method first reads the entire response body as bytes,
+	 * Further note that, at least in Faith, this method first reads the entire response body as bytes,
 	 * and then parses that as JSON. This can use up to double the amount of memory. If you need more
 	 * efficient access, consider handling the response body as a stream.
 	 */
@@ -419,7 +419,7 @@ export class Response {
 	blob(): Promise<Blob>;
 
 	/**
-	 * Fáith deliberately does not implement this. It will always throw.
+	 * Faith deliberately does not implement this. It will always throw.
 	 */
 	formData(): Promise<FormData>;
 
@@ -432,9 +432,9 @@ export class Response {
 	clone(): Response;
 
 	/**
-	 * This is entirely custom to Fáith. It returns a Web API `Response` instead of Fáith's custom
+	 * This is entirely custom to Faith. It returns a Web API `Response` instead of Faith's custom
 	 * `Response` class. However, it's not possible to construct a Web API `Response` that has all the
-	 * properties of a Fáith Response (or of another Web Response, for that matter). So this method only
+	 * properties of a Faith Response (or of another Web Response, for that matter). So this method only
 	 * returns a Response from:
 	 *
 	 * - the `body` stream
@@ -451,7 +451,7 @@ export class Response {
 
 /**
  * A request's timing breakdown: the platform's `PerformanceResourceTiming`, carrying the
- * attributes of the current revision of the interface alongside two of Fáith's own.
+ * attributes of the current revision of the interface alongside two of Faith's own.
  *
  * The entry is a genuine `PerformanceResourceTiming`, so `instanceof` holds and anything that
  * consumes performance entries takes it unmodified. The attributes below are the ones the
@@ -490,7 +490,7 @@ export interface FaithResourceTiming extends PerformanceResourceTiming {
 	readonly workerFinalRouterSource: string;
 
 	/**
-	 * Custom to Fáith.
+	 * Custom to Faith.
 	 *
 	 * Whether the request travelled on a connection that was already in the pool rather than one
 	 * established for it.
@@ -498,7 +498,7 @@ export interface FaithResourceTiming extends PerformanceResourceTiming {
 	readonly reused: boolean;
 
 	/**
-	 * Custom to Fáith.
+	 * Custom to Faith.
 	 *
 	 * The moment the request head and body finished being written to the connection, where the
 	 * standard's `requestStart` marks the start of writing.

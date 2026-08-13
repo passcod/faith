@@ -4,7 +4,7 @@ id: TLS
 
 # TLS
 
-Trust defaults to the platform's certificate store (Fáith bundles no roots of its own), with programmatic and environment-level ways to extend or override it.
+Trust defaults to the platform's certificate store (Faith bundles no roots of its own), with programmatic and environment-level ways to extend or override it.
 
 ## Trust roots
 

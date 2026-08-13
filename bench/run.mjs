@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * fáith benchmark runner.
+ * Faith benchmark runner.
  *
  * Principles (see bench/README.md for the full methodology):
  *  - measure inside a long-lived process; process/module startup is excluded
@@ -18,7 +18,7 @@
  *     [--consume bytes|text|discard] [--samples 200] [--warmup 50]
  *     [--delay 0] [--out bench/results]
  *
- * The `features` suite benchmarks fáith against itself across its feature
+ * The `features` suite benchmarks Faith against itself across its feature
  * set: HTTP versions, DNS resolvers, IPv4/IPv6, HTTP caching, cookies.
  */
 
@@ -352,7 +352,7 @@ async function runMatrix() {
 }
 
 /**
- * fáith-vs-fáith feature comparisons. Variants sharing a `group` are meant to
+ * Faith-vs-Faith feature comparisons. Variants sharing a `group` are meant to
  * be read against each other; each row differs from its group's baseline by
  * exactly one feature knob.
  */
@@ -367,7 +367,7 @@ async function runFeatures() {
 		{ name: "proto:h2", proto: "h2" },
 		{ name: "proto:h3", proto: "h3" },
 
-		// DNS: hickory (fáith default, with its cache) vs the system resolver.
+		// DNS: hickory (Faith default, with its cache) vs the system resolver.
 		// Cold mode so resolution is actually on the measured path; the server
 		// is reached via the `localhost` name rather than an IP literal.
 		{

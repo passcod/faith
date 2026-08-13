@@ -17,7 +17,7 @@ Aborting mid-flight during an HTTP/3 attempt counts a cancellation strike agains
 
 ## Per-request timeout
 
-`timeout` (milliseconds, Fáith-specific) cancels the request with a timeout error (code `Timeout`), distinguishable from a signal abort.
+`timeout` (milliseconds, Faith-specific) cancels the request with a timeout error (code `Timeout`), distinguishable from a signal abort.
 Unlike `signal`, it applies through the entire response receipt, including the body.
 
 ## Agent-level timeouts

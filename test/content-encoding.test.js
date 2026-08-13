@@ -1,10 +1,10 @@
 /**
- * Content coding: which responses Fáith decodes, and which it hands over as sent.
+ * Content coding: which responses Faith decodes, and which it hands over as sent.
  *
  * The decode decision rests on the `Accept-Encoding` the request carried, not on a static
  * client setting (spec: ENC). So a caller who advertises `identity` gets the bytes as sent
  * with `Content-Encoding` and `Content-Length` intact, and a caller who advertises nothing
- * gets the decoded body Fáith negotiated for.
+ * gets the decoded body Faith negotiated for.
  *
  * These use an origin of ours rather than go-httpbin, which compresses on its own terms and
  * has no route for a layered coding, a cacheable coded response, or a `HEAD` describing a
@@ -45,14 +45,14 @@ async function withOrigin(t, body) {
 
 const GZIP_MAGIC = [0x1f, 0x8b];
 
-test("encoding: the default request advertises the four codings Fáith decodes", async (t) => {
+test("encoding: the default request advertises the four codings Faith decodes", async (t) => {
 	await withOrigin(t, async ({ origin }) => {
 		const res = await fetch(origin.url("/echo"), { timeout: 10000 });
 		const seen = await res.json();
 		t.equal(
 			seen.headers["accept-encoding"],
 			"zstd,gzip,deflate,br",
-			"the value the stack sent before Fáith took over the codings",
+			"the value the stack sent before Faith took over the codings",
 		);
 	});
 });
@@ -157,9 +157,9 @@ test("encoding: a coding named outright settles it over a wildcard", async (t) =
 	});
 });
 
-test("encoding: a coding Fáith cannot decode is delivered as received", async (t) => {
+test("encoding: a coding Faith cannot decode is delivered as received", async (t) => {
 	await withOrigin(t, async ({ origin }) => {
-		// `Content-Encoding: compress` over bytes that are not actually compressed. Fáith has
+		// `Content-Encoding: compress` over bytes that are not actually compressed. Faith has
 		// no decoder for it, so the bytes must come through untouched -- which is exactly why
 		// the body reads back as the payload. Decoding anything here would error instead.
 		const res = await fetch(origin.url("/mislabelled/compress"), { timeout: 10000 });
@@ -266,7 +266,7 @@ test("encoding: an agent whose defaults do not name Accept-Encoding still sends 
 		t.equal(
 			seen.headers["accept-encoding"],
 			"zstd,gzip,deflate,br",
-			"other default headers do not displace the Accept-Encoding Fáith sends",
+			"other default headers do not displace the Accept-Encoding Faith sends",
 		);
 		t.equal(seen.headers["x-marker"], "set", "and the agent's own default still goes out");
 	});
@@ -284,7 +284,7 @@ test("encoding: layered codings on one header line are delivered as received", a
 		t.equal(
 			res.headers.get("content-encoding"),
 			"gzip, br",
-			"Fáith decodes a single coding, so both survive on the header",
+			"Faith decodes a single coding, so both survive on the header",
 		);
 		t.ok(res.headers.get("content-length"), "and Content-Length survives with them");
 

@@ -5,7 +5,7 @@
  * origin's own port speaks HTTP/3. Honouring one properly means connecting to
  * that endpoint while still sending the origin's authority, which reqwest cannot
  * express — it derives the HTTP/3 connect target from the request URI's authority
- * (https://github.com/seanmonstar/reqwest/issues/1138). So by default Fáith does
+ * (https://github.com/seanmonstar/reqwest/issues/1138). So by default Faith does
  * not upgrade at all on a mismatch, and `http3.upgradeFollowAdvertisedPort` opts
  * into rewriting the request's port instead, which is not standards-compliant.
  *

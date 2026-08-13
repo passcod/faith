@@ -49,7 +49,7 @@ The agent's connect and request timeouts bound it, so a silent path fails the wa
 ## Warming an origin that closes idle connections
 
 A warm-up connection can die in the pool before the first request claims it, and an origin that closes idle connections does so without signalling it, so the request is written into a socket that is already gone (see [POOL](connection-pool.md)).
-Fáith sends such a request again on another connection, which is what keeps the warm-up invisible in the usual case.
+Faith sends such a request again on another connection, which is what keeps the warm-up invisible in the usual case.
 
 That recovery does not cover every request.
 A `POST` or `PATCH`, or a request carrying a `ReadableStream` body, is not sent again, so for those the dead warm-up connection surfaces as a failure the caller sees.

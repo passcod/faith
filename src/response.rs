@@ -33,7 +33,7 @@ use crate::{
 
 /// The `Response` interface of the Fetch API represents the response to a request.
 ///
-/// Fáith does not allow its `Response` object to be constructed. If you need to, you may use the
+/// Faith does not allow its `Response` object to be constructed. If you need to, you may use the
 /// `webResponse()` method to convert one into a Web API `Response` object; note the caveats.
 #[napi]
 #[derive(Debug, Clone)]
@@ -56,7 +56,7 @@ pub struct FaithResponse {
 	pub(crate) version: Version,
 }
 
-/// Custom to Fáith.
+/// Custom to Faith.
 ///
 /// The `peer` read-only property of the `Response` interface contains an object with information about
 /// the remote peer that sent this response:
@@ -137,8 +137,8 @@ impl FaithResponse {
 	/// The `headers` read-only property of the `Response` interface contains the `Headers` object
 	/// associated with the response.
 	///
-	/// Note that Fáith does not provide a custom `Headers` class; instead the Web API `Headers` structure
-	/// is used directly and constructed by Fáith when needed.
+	/// Note that Faith does not provide a custom `Headers` class; instead the Web API `Headers` structure
+	/// is used directly and constructed by Faith when needed.
 	///
 	/// This is a function as an internal implementation detail and the wrapper makes it a property.
 	#[napi]
@@ -161,7 +161,7 @@ impl FaithResponse {
 		self.status_code.is_success()
 	}
 
-	/// Custom to Fáith.
+	/// Custom to Faith.
 	///
 	/// The `peer` read-only property of the `Response` interface contains an object with information about
 	/// the remote peer that sent this response:
@@ -185,7 +185,7 @@ impl FaithResponse {
 	/// Note that by the time you read this property, the redirect will already have happened, and you
 	/// cannot prevent it by aborting the fetch at this point.
 	///
-	/// One caveat specific to Fáith: with the agent's `http3.upgradeFollowAdvertisedPort`
+	/// One caveat specific to Faith: with the agent's `http3.upgradeFollowAdvertisedPort`
 	/// enabled, HTTP/3 responses compare URLs ignoring the port, because the port
 	/// was rewritten to the advertised one and would otherwise register as a
 	/// redirect. A genuine redirect differing only in port therefore reads as
@@ -208,7 +208,7 @@ impl FaithResponse {
 	/// corresponding to the HTTP status code in `Response.status`. For example, this would be `OK` for a
 	/// status code `200`, `Continue` for `100`, `Not Found` for `404`.
 	///
-	/// Fáith always returns the canonical status message for the code. In HTTP/1, servers can send
+	/// Faith always returns the canonical status message for the code. In HTTP/1, servers can send
 	/// custom status text, but that text is not surfaced here; in HTTP/2 and HTTP/3, custom status
 	/// text is not supported at all. For status codes with no well-known message, this is an empty
 	/// string.
@@ -220,7 +220,7 @@ impl FaithResponse {
 	/// The `type` read-only property of the `Response` interface contains the type of the response. The
 	/// type determines whether scripts are able to access the response body and headers.
 	///
-	/// In Fáith, this is always set to `basic`.
+	/// In Faith, this is always set to `basic`.
 	#[napi(getter, js_name = "type")]
 	pub fn typ(&self) -> &'static str {
 		"basic"
@@ -236,7 +236,7 @@ impl FaithResponse {
 	/// The `version` read-only property of the `Response` interface contains the HTTP version of the
 	/// response. The value will be the final HTTP version after any redirects and protocol upgrades.
 	///
-	/// This is custom to Fáith.
+	/// This is custom to Faith.
 	#[napi(getter)]
 	pub fn version(&self) -> String {
 		format!("{:?}", self.version)
@@ -245,7 +245,7 @@ impl FaithResponse {
 	/// The `bodyUsed` read-only property of the `Response` interface is a boolean value that indicates
 	/// whether the body has been read yet.
 	///
-	/// In Fáith, this indicates whether the body stream has ever been read from or canceled, as defined
+	/// In Faith, this indicates whether the body stream has ever been read from or canceled, as defined
 	/// [in the spec](https://streams.spec.whatwg.org/#is-readable-stream-disturbed). Note that accessing
 	/// the `.body` property counts as a read, even if you don't actually consume any bytes of content.
 	#[napi(getter)]
@@ -258,7 +258,7 @@ impl FaithResponse {
 	/// `204 No Content` responses.
 	///
 	/// Note that browsers currently do not return `null` for those responses, but the spec requires
-	/// it. Fáith chooses to respect the spec rather than the browsers in this case.
+	/// it. Faith chooses to respect the spec rather than the browsers in this case.
 	///
 	/// An important consideration exists in conjunction with the connection pool: if you start the
 	/// body stream, this will hold the connection until the stream is fully consumed. If another
@@ -488,7 +488,7 @@ impl FaithResponse {
 	/// The `bytes()` method of the `Response` interface takes a `Response` stream and reads it to
 	/// completion. It returns a promise that resolves with a `Uint8Array`.
 	///
-	/// In Fáith, this returns a Node.js `Buffer`, which can be used as (and is a subclass of) a `Uint8Array`.
+	/// In Faith, this returns a Node.js `Buffer`, which can be used as (and is a subclass of) a `Uint8Array`.
 	#[napi]
 	pub fn bytes<'env>(&self, env: &'env Env) -> Result<PromiseRaw<'env, Buffer>, napi::Error> {
 		let this = Clone::clone(self);
@@ -520,7 +520,7 @@ impl FaithResponse {
 	/// Note that despite the method being named `json()`, the result is not JSON but is instead the
 	/// result of taking JSON as input and parsing it to produce a JavaScript object.
 	///
-	/// Further note that, at least in Fáith, this method first reads the entire response body as bytes,
+	/// Further note that, at least in Faith, this method first reads the entire response body as bytes,
 	/// and then parses that as JSON. This can use up to double the amount of memory. If you need more
 	/// efficient access, consider handling the response body as a stream.
 	#[napi]
@@ -535,7 +535,7 @@ impl FaithResponse {
 		})
 	}
 
-	/// Custom to Fáith.
+	/// Custom to Faith.
 	///
 	/// The measurements behind the `timing` property, which the wrapper turns into a
 	/// `PerformanceResourceTiming`.
@@ -567,7 +567,7 @@ impl FaithResponse {
 	/// has been consumed — by `text()`, `bytes()`, `json()`, `blob()`, or reading the `body`
 	/// stream. Awaiting it first, on its own, waits forever: that is the behaviour the fetch
 	/// spec's trailers proposal describes (<https://github.com/whatwg/fetch/pull/1940>), not
-	/// a quirk of Fáith. Holding the promise while something else reads the body is fine, and
+	/// a quirk of Faith. Holding the promise while something else reads the body is fine, and
 	/// costs nothing while it is pending.
 	///
 	/// `discard()` counts as consuming the body but discards its trailers with it, so this
@@ -598,7 +598,7 @@ impl FaithResponse {
 	///
 	/// `clone()` throws an `Error` if the response body has already been used.
 	///
-	/// (In-spec, this should throw a `TypeError`, but for technical reasons this is not possible with Fáith.)
+	/// (In-spec, this should throw a `TypeError`, but for technical reasons this is not possible with Faith.)
 	#[napi]
 	pub fn clone(&self, env: Env) -> Result<Self, napi::Error> {
 		if self.disturbed.load(Ordering::SeqCst) {

@@ -115,11 +115,11 @@ pub fn faith_fetch<'env>(
 			}
 		}
 
-		// The request's `Accept-Encoding` governs which codings Fáith decodes on the way
+		// The request's `Accept-Encoding` governs which codings Faith decodes on the way
 		// back (spec: ENC): a value on the request, else one inherited from the agent's
-		// default headers, else the default Fáith sends itself. Neither the request nor the
-		// agent advertising a value means nothing beneath Fáith adds one now that it owns
-		// the codings, so Fáith sends the default explicitly.
+		// default headers, else the default Faith sends itself. Neither the request nor the
+		// agent advertising a value means nothing beneath Faith adds one now that it owns
+		// the codings, so Faith sends the default explicitly.
 		let request_accept_encoding = options.headers.as_ref().and_then(|headers| {
 			headers
 				.iter()
@@ -282,7 +282,7 @@ pub fn faith_fetch<'env>(
 				.is_some_and(|value| value.eq_ignore_ascii_case("HIT")),
 		};
 
-		// Decode only a body Fáith negotiated the coding for; a bodyless response keeps its
+		// Decode only a body Faith negotiated the coding for; a bodyless response keeps its
 		// `Content-Encoding` and `Content-Length` describing the representation (spec: ENC).
 		let decode = if empty {
 			None

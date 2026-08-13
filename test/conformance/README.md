@@ -1,6 +1,6 @@
 # Conformance testing
 
-Tests Fáith against a matrix of compatibility tests × server stacks.
+Tests Faith against a matrix of compatibility tests × server stacks.
 
 ## Input
 

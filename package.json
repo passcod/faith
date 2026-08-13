@@ -1,7 +1,7 @@
 {
 	"name": "@passcod/faith",
 	"version": "0.5.0",
-	"description": "fáith: a Rust-powered fetch",
+	"description": "Faith: a Rust-powered fetch",
 	"repository": "https://github.com/passcod/faith",
 	"author": {
 		"name": "Félix Saparelli",

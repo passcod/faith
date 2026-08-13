@@ -7,8 +7,8 @@ use napi::bindgen_prelude::*;
 use napi_derive::napi;
 use strum::{EnumIter, IntoEnumIterator};
 
-/// Fáith produces fine-grained errors, but maps them to a few javascript error types for fetch
-/// compatibility. The `.code` property on errors thrown from Fáith is set to a stable name for each
+/// Faith produces fine-grained errors, but maps them to a few javascript error types for fetch
+/// compatibility. The `.code` property on errors thrown from Faith is set to a stable name for each
 /// error kind, documented in this comprehensive mapping:
 ///
 /// - JS `AbortError`:

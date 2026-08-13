@@ -5,7 +5,7 @@ id: AGENT
 # Agent
 
 An `Agent` is an instance of the HTTP client: it owns a connection pool, a DNS resolver and cache, optional cookie jar and HTTP cache, HTTP/3 knowledge, and statistics.
-Every request runs on an agent: reusing connections and DNS answers across requests is where most of Fáith's performance comes from, so there is no agentless path.
+Every request runs on an agent: reusing connections and DNS answers across requests is where most of Faith's performance comes from, so there is no agentless path.
 
 ## The default agent
 

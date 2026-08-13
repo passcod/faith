@@ -1,10 +1,10 @@
 /**
- * Content coding across the release that moved it into Fáith (spec: ENC).
+ * Content coding across the release that moved it into Faith (spec: ENC).
  *
  * Before that change the decode sat at the innermost layer of the HTTP stack, below the
  * cache: bodies were decoded whatever the request advertised, `Content-Encoding` and
  * `Content-Length` were always stripped, and the cache therefore stored decoded bodies with
- * no record of the coding they arrived in. Afterwards Fáith owns the coding, decodes outside
+ * no record of the coding they arrived in. Afterwards Faith owns the coding, decodes outside
  * the cache, and stores bodies as they came off the wire.
  *
  * Two things have to hold across that boundary, and neither can be checked from one build
@@ -30,7 +30,7 @@ const { spawn } = require("node:child_process");
 const { fetch, Agent } = require("../../wrapper.js");
 const { createEncodingOrigin, PAYLOAD } = require("../fixtures/encoding-origin.js");
 
-/** The last release before Fáith took over content coding. */
+/** The last release before Faith took over content coding. */
 const LEGACY_VERSION = "0.4.0";
 const LEGACY_DIR = path.join(os.tmpdir(), `faith-legacy-${LEGACY_VERSION}`);
 
@@ -85,7 +85,7 @@ async function ensureLegacyFaith() {
 
 /**
  * Run `body` inside the previous release, in its own process. `body` is source text, not a
- * closure: it is compiled by a different build of Fáith than the one running these tests.
+ * closure: it is compiled by a different build of Faith than the one running these tests.
  */
 async function inLegacyFaith(body) {
 	const script = path.join(LEGACY_DIR, "probe.js");

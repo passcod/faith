@@ -7,7 +7,7 @@
  * off the request rather than the response, so the origin has to be ours.
  *
  * Every route picks its coding without consulting `Accept-Encoding`. That is the point: a
- * server is free to compress in the face of `identity`, and Fáith has to hand those bytes
+ * server is free to compress in the face of `identity`, and Faith has to hand those bytes
  * over as sent rather than decoding them.
  *
  * Cleartext HTTP/1.1 on an OS-assigned port, following `test/trailers.test.js`: coding has

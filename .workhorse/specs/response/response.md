@@ -4,20 +4,20 @@ id: RESP
 
 # Response
 
-`fetch()` resolves to Fáith's own `Response` class.
+`fetch()` resolves to Faith's own `Response` class.
 It is not constructible by callers; it mirrors the Web API `Response` surface and adds server-side information a browser response cannot carry.
 `webResponse()` converts to a genuine Web `Response` when an API demands one (see [BODY](reading-the-body.md)).
 
 ## Standard properties
 
 `status`, `ok` (status in 200-299), `url` (final URL after redirects), and `redirected` behave as in the fetch standard (see [REDIR](../fetch/redirects.md) for the `redirected` port caveat).
-`headers` is a Web API `Headers` object, built lazily and memoised; Fáith ships no custom `Headers` class.
+`headers` is a Web API `Headers` object, built lazily and memoised; Faith ships no custom `Headers` class.
 A header whose value is not valid UTF-8 is dropped rather than surfaced in a lossy form.
 `statusText` carries the canonical reason phrase for the status code.
 HTTP/2 and HTTP/3 have no reason phrases on the wire, so the phrase is simulated from well-known codes there; unknown codes yield an empty string.
 `type` is always `basic`.
 
-## Fáith-specific properties
+## Faith-specific properties
 
 `version` is the HTTP version of the response, the final one after any redirects and protocol upgrades (e.g. `HTTP/1.1`, `HTTP/2.0`, `HTTP/3.0`).
 `peer` describes the remote peer: `address` (IP and port, when available) and `certificate` (the DER-encoded leaf certificate when the connection was TLS, as a Buffer).
@@ -37,10 +37,10 @@ A response that cannot carry a body has finished as soon as it arrives.
 Taking a response's breakdown also contributes the entry to the process's resource timeline, where a `PerformanceObserver` watching `resource` entries receives it and the resource timing buffer bounds how many are retained.
 A request contributes at most one entry: the breakdown is built once and shared by the response and its clones, so asking repeatedly, or from a clone, yields that same entry.
 
-The interface Fáith exposes is the current one, which runs ahead of the platform's class: the attributes that class does not carry, along with two Fáith-specific fields, are own properties of the entry, and `toJSON()` covers them so a serialised entry is complete.
+The interface Faith exposes is the current one, which runs ahead of the platform's class: the attributes that class does not carry, along with two Faith-specific fields, are own properties of the entry, and `toJSON()` covers them so a serialised entry is complete.
 
 Timestamps are fractional milliseconds on the same clock as `performance.now()`, so they are comparable with other performance entries, and consumers subtract one from another to obtain a duration.
-A phase that did not occur, or whose boundary Fáith does not observe, reads 0, as it does in a browser; the fields typed as strings, sizes, and lists read empty on the same basis.
+A phase that did not occur, or whose boundary Faith does not observe, reads 0, as it does in a browser; the fields typed as strings, sizes, and lists read empty on the same basis.
 Consumers therefore check a field for a non-zero value before differencing it.
 Where a timestamp is non-zero, `fetchStart` is the earliest and the rest are no earlier than it.
 
@@ -69,4 +69,4 @@ The two measure from different origins: the surfaced timing runs from the start 
 
 ## Threading
 
-Response work (body reads, trailer waits) runs on Fáith's own async runtime, not the libuv worker pool: concurrency is not bounded by `UV_THREADPOOL_SIZE`, and a saturated worker pool does not stall in-flight responses.
+Response work (body reads, trailer waits) runs on Faith's own async runtime, not the libuv worker pool: concurrency is not bounded by `UV_THREADPOOL_SIZE`, and a saturated worker pool does not stall in-flight responses.

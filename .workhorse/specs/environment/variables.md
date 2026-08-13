@@ -4,8 +4,8 @@ id: ENV
 
 # Environment variables
 
-Fáith reads a set of environment variables so that `fetch()` behaves like Node's built-in fetch without extra configuration.
-The set is deliberately Node's own vocabulary plus the standard proxy and OpenSSL variables, not a Fáith-specific namespace.
+Faith reads a set of environment variables so that `fetch()` behaves like Node's built-in fetch without extra configuration.
+The set is deliberately Node's own vocabulary plus the standard proxy and OpenSSL variables, not a Faith-specific namespace.
 
 ## Read-at-construction semantics
 
@@ -30,7 +30,7 @@ This matches Node's semantics and exists only for that compatibility; trusting a
 `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`, and `NO_PROXY` (and their lowercase spellings) are honoured automatically: per-scheme proxy selection, a fallback for both schemes, and a comma-separated direct-connection list of hosts, domains, and CIDR ranges.
 The operating system's proxy settings are also read automatically.
 `NODE_USE_ENV_PROXY` set to exactly `0` turns ambient proxy configuration off.
-Fáith proxies by default, so unlike Node (where the same variable opts in), it acts purely as an opt-out.
+Faith proxies by default, so unlike Node (where the same variable opts in), it acts purely as an opt-out.
 
 ## Debugging
 
@@ -38,5 +38,5 @@ Fáith proxies by default, so unlike Node (where the same variable opts in), it 
 
 ## Variables with nothing to control
 
-`NODE_USE_SYSTEM_CA` is ignored because the platform trust store is Fáith's only default source of roots; there is no bundled set to toggle away from.
+`NODE_USE_SYSTEM_CA` is ignored because the platform trust store is Faith's only default source of roots; there is no bundled set to toggle away from.
 `OPENSSL_CONF` is ignored because the TLS stack is not OpenSSL, so OpenSSL's configuration file has nothing to configure.

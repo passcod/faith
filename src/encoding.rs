@@ -1,4 +1,4 @@
-//! Content coding: Fáith owns the decode decision rather than the HTTP stack
+//! Content coding: Faith owns the decode decision rather than the HTTP stack
 //! underneath, so it can rest on the `Accept-Encoding` of the request in hand.
 //!
 //! spec: ENC
@@ -12,13 +12,13 @@ use tokio_util::io::{ReaderStream, StreamReader};
 
 use crate::body::DynStream;
 
-/// The `Accept-Encoding` Fáith advertises when the caller advertises none.
+/// The `Accept-Encoding` Faith advertises when the caller advertises none.
 ///
-/// Matches the value reqwest's decompression stack sent before Fáith took over the
+/// Matches the value reqwest's decompression stack sent before Faith took over the
 /// codings, so the wire is unchanged for the default request.
 pub(crate) const DEFAULT_ACCEPT_ENCODING: &str = "zstd,gzip,deflate,br";
 
-/// A content coding Fáith can decode. Wire tokens: `gzip`, `deflate`, `br`, `zstd`.
+/// A content coding Faith can decode. Wire tokens: `gzip`, `deflate`, `br`, `zstd`.
 ///
 /// `deflate` is the zlib-wrapped form (RFC 1950), matching what reqwest and every
 /// other mainstream client decode it as.
@@ -32,7 +32,7 @@ pub(crate) enum Coding {
 
 impl Coding {
 	/// Match a single content-coding token, case-insensitively. `None` for
-	/// `identity`, an unknown coding, or a coding Fáith cannot decode.
+	/// `identity`, an unknown coding, or a coding Faith cannot decode.
 	fn from_token(token: &str) -> Option<Self> {
 		let token = token.trim();
 		if token.eq_ignore_ascii_case("gzip") || token.eq_ignore_ascii_case("x-gzip") {
@@ -52,7 +52,7 @@ impl Coding {
 /// Decide whether and how to decode a response body.
 ///
 /// Returns the coding to decode under when the response's `Content-Encoding` names a
-/// single coding Fáith can decode and the request's `Accept-Encoding` accepted it.
+/// single coding Faith can decode and the request's `Accept-Encoding` accepted it.
 /// A `Content-Encoding` naming more than one coding, an unknown coding, or a coding the
 /// request did not accept yields `None`, and the body is delivered as received.
 pub(crate) fn decision(headers: &HeaderMap, accept: &AcceptEncoding) -> Option<Coding> {
@@ -61,7 +61,7 @@ pub(crate) fn decision(headers: &HeaderMap, accept: &AcceptEncoding) -> Option<C
 	// the same list either way, so both forms are gathered together before counting.
 	let mut codings = Vec::new();
 	for value in headers.get_all(CONTENT_ENCODING) {
-		// A line that is not valid ASCII names nothing Fáith can match; deliver as received
+		// A line that is not valid ASCII names nothing Faith can match; deliver as received
 		// rather than decoding whatever line sits beside it.
 		let value = value.to_str().ok()?;
 		codings.extend(value.split(',').map(str::trim).filter(|c| !c.is_empty()));

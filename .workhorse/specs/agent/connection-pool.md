@@ -20,7 +20,7 @@ A connection opened by `preconnect(origin)` lands in the pool the same way, so t
 ## Reusing a connection that has died
 
 An origin may close a pooled connection without signalling it in the response, and the close can land after the connection has already been returned to the pool.
-A request written into such a connection never reaches the origin, so Fáith sends it again on another connection rather than failing the caller.
+A request written into such a connection never reaches the origin, so Faith sends it again on another connection rather than failing the caller.
 
 A request is sent again only when the connection ended before any part of a response arrived.
 A refused connection, a failed handshake, a timeout, and any response at all are answers about the origin, and are returned to the caller as they are.

@@ -7,12 +7,12 @@ id: BODY
 The response body is read from the network once and delivered either as a stream or through a whole-body reading method.
 The whole-body methods follow the fetch standard's disturbed-stream semantics: the first consumer wins and later ones are refused.
 `clone()` is the sanctioned way to obtain a second consumer, and `discard()` gives explicit control over the connection cost of not reading.
-A body Fáith decodes is delivered decoded whichever path reads it (see [ENC](../fetch/content-encoding.md)).
+A body Faith decodes is delivered decoded whichever path reads it (see [ENC](../fetch/content-encoding.md)).
 
 ## The body stream
 
 `body` is a `ReadableStream` of the body contents, or `null` for responses that cannot carry a body (HEAD requests, `204 No Content`).
-Browsers return a stream there anyway; Fáith follows the specification.
+Browsers return a stream there anyway; Faith follows the specification.
 Accessing `body` marks the response disturbed (`bodyUsed` becomes true), even before any bytes are consumed.
 A response has one body stream: `body` builds it on first access and returns that same `ReadableStream` object thereafter.
 Consumption therefore advances a single position, and a handle taken after part of the body has been read continues from where the earlier one left off.
@@ -47,6 +47,6 @@ An unread, undiscarded HTTP/1 response holds its connection until the response i
 ## webResponse()
 
 `webResponse()` returns a Web API `Response` built from the body stream, `status`, `statusText`, and `headers`: the properties a Web `Response` can be constructed with.
-Fáith-specific properties (`url`, `version`, `peer`, `trailers`, `redirected`) do not carry over.
+Faith-specific properties (`url`, `version`, `peer`, `trailers`, `redirected`) do not carry over.
 It is built over the response's own body stream rather than a copy, so the conversion is available until that stream is read from or locked and refused after, as the standard does not build a `Response` over one.
 Accessing `body` without reading from it does not stand in the way.

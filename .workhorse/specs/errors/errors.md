@@ -4,12 +4,12 @@ id: ERR
 
 # Errors
 
-Fáith produces fine-grained internal errors and maps them onto a small set of JavaScript error shapes for fetch compatibility, while preserving the precise kind as a stable `code` property.
+Faith produces fine-grained internal errors and maps them onto a small set of JavaScript error shapes for fetch compatibility, while preserving the precise kind as a stable `code` property.
 Callers match on `error.code` against the exported `ERROR_CODES` map rather than string-matching messages or relying on coarse `instanceof` checks.
 
 ## The code contract
 
-Every error Fáith throws carries a `code` set to a stable name for its kind.
+Every error Faith throws carries a `code` set to a stable name for its kind.
 `ERROR_CODES` is exported and enumerates the library's error codes; it is generated from the same source as the errors themselves, so the two cannot drift.
 Every code in `ERROR_CODES` is reachable: each one names a kind that some failure surfaces to the caller, so a branch written for any code in the map can fire.
 Error messages are prefixed with the kind name and may embed underlying detail; the message is for humans, the code is the API.
