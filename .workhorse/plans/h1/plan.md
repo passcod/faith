@@ -38,12 +38,9 @@ Enabling it without persistence matches the spec's "in memory for the life of th
 - [x] Expose `resolvers()` reporting each server's address, transport, and source in query order
 - [x] Rust unit tests for URL parsing and exemption matching; JS tests for the config surface and validation
 
-### Stage 2 — discovery ladder (follow-up card candidate)
+### Not done in this card
 
-Reading the operating system's own encrypted-DNS settings (Windows per-interface DoH, systemd-resolved DoT with pinned names) and Discovery of Designated Resolvers (RFC 9462) are platform-specific subsystems hickory does not provide.
-They sit above opportunistic encryption on the discovery ladder and each want their own platform work and tests.
-Until they land, discovery reads the system's servers and reaches them over conventional DNS or hickory's opportunistic encryption, which is the bottom of the ladder the spec describes.
+Three pieces of the DNS spec are spun out as breakdown entries rather than built here: reading the operating system's encrypted DNS settings, Discovery of Designated Resolvers, and live transport state in `resolvers()`.
+See the card breakdown for their scope; this plan does not carry it, since plans are removed at merge and the breakdown is what becomes cards.
 
-### Stage 2 — live `resolvers()` transport state (follow-up)
-
-Reporting an entry's transport changing when a probe succeeds depends on reading hickory's `NameServerTransportState` at runtime; `resolvers()` reports the configured/negotiated servers until that live state is surfaced.
+Until those land, discovery reads the system's servers and reaches them over conventional DNS or hickory's opportunistic encryption, which is the bottom of the ladder the spec describes, and `resolvers()` reports the servers the resolver was built from.
