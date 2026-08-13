@@ -104,23 +104,17 @@ test("trailers: pending until the body is consumed, and idle while pending", asy
 		// Held, not awaited: awaiting here is the deadlock the spec describes.
 		const pending = res.trailers;
 
-		const before = process.cpuUsage();
 		const raced = await Promise.race([
 			pending.then(() => "resolved"),
 			new Promise((resolve) => setTimeout(() => resolve("pending"), 500)),
 		]);
-		const spentMs = (process.cpuUsage(before).user + process.cpuUsage(before).system) / 1000;
 
 		t.equal(raced, "pending", "does not resolve before the body is consumed, per the spec");
-		// The bug this replaces was a `yield_now` loop: half a second of waiting cost half
-		// a second of CPU, kept Node's event loop alive, and survived a test timeout. A
-		// parked future spends about a millisecond, so the threshold is loose on purpose:
-		// it only has to sit well under the ~500ms a spin costs, and stay clear of what a
-		// slow or noisy runner might attribute to this process.
-		t.ok(
-			spentMs < 200,
-			`waiting is idle, not a spin: ${spentMs.toFixed(0)}ms of CPU across 500ms of waiting`,
-		);
+		// That the wait is parked rather than a `yield_now` spin -- the bug this replaces --
+		// is asserted in the Rust unit test `waiting_for_trailers_parks_rather_than_spinning`,
+		// which counts wake-ups instead of sampling CPU. Timing the process measures the
+		// machine as much as the code, and said more about how busy a CI runner was than
+		// about whether the future parks.
 
 		// And the same promise settles as soon as the body ends.
 		t.equal(await res.text(), PAYLOAD, "the body is still there to read");

@@ -69,4 +69,4 @@ The two measure from different origins: the surfaced timing runs from the start 
 
 ## Threading
 
-Response work (body reads, trailer waits) runs on Faith's own async runtime, not the libuv worker pool: concurrency is not bounded by `UV_THREADPOOL_SIZE`, and a saturated worker pool does not stall in-flight responses.
+Response work (body reads, file writes, trailer waits) runs on Faith's own async runtime, not the libuv worker pool: concurrency is not bounded by `UV_THREADPOOL_SIZE`, and a saturated worker pool does not stall in-flight responses.

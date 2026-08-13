@@ -1,4 +1,4 @@
-use ssri::Integrity;
+use ssri::{Integrity, IntegrityChecker};
 
 use crate::error::{FaithError, FaithErrorKind};
 
@@ -16,24 +16,51 @@ fn normalize_integrity(integrity: &str) -> String {
 		.join(" ")
 }
 
+fn parse_integrity(integrity: &str) -> Result<Integrity, FaithError> {
+	let normalized = normalize_integrity(integrity);
+	normalized.parse().map_err(|e| {
+		FaithError::new(
+			FaithErrorKind::InvalidIntegrity,
+			Some(format!("failed to parse integrity value: {e}")),
+		)
+	})
+}
+
 pub fn verify_integrity(data: &[u8], integrity: &str) -> Result<(), FaithError> {
 	if integrity.trim().is_empty() {
 		return Ok(());
 	}
 
-	let normalized = normalize_integrity(integrity);
-	let parsed: Integrity = normalized.parse().map_err(|e| {
-		FaithError::new(
-			FaithErrorKind::InvalidIntegrity,
-			Some(format!("failed to parse integrity value: {e}")),
-		)
-	})?;
-
-	parsed
+	parse_integrity(integrity)?
 		.check(data)
 		.map_err(|_| FaithErrorKind::IntegrityMismatch)?;
 
 	Ok(())
+}
+
+/// Build a streaming integrity checker for a body read that hashes as it goes.
+///
+/// `None` when there is nothing to verify (no value, or an empty one), matching
+/// [`verify_integrity`]. A malformed value is rejected up front with `InvalidIntegrity`,
+/// before any of the body is touched. Feed each chunk to the returned checker with
+/// [`IntegrityChecker::input`] and finish with [`finish_integrity`].
+pub fn integrity_checker(integrity: Option<&str>) -> Result<Option<IntegrityChecker>, FaithError> {
+	let Some(integrity) = integrity else {
+		return Ok(None);
+	};
+	if integrity.trim().is_empty() {
+		return Ok(None);
+	}
+
+	Ok(Some(IntegrityChecker::new(parse_integrity(integrity)?)))
+}
+
+/// Finish a streaming integrity check, mapping a mismatch to `IntegrityMismatch`.
+pub fn finish_integrity(checker: IntegrityChecker) -> Result<(), FaithError> {
+	checker
+		.result()
+		.map(|_| ())
+		.map_err(|_| FaithErrorKind::IntegrityMismatch.into())
 }
 
 #[cfg(test)]

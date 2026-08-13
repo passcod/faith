@@ -30,16 +30,21 @@ export const ERROR_CODES: {
 	readonly BodyStream: "BodyStream";
 	readonly Closed: "Closed";
 	readonly Config: "Config";
+	readonly ContentLengthOverrun: "ContentLengthOverrun";
+	readonly FileExists: "FileExists";
+	readonly FileWrite: "FileWrite";
 	readonly IntegrityMismatch: "IntegrityMismatch";
 	readonly InvalidHeader: "InvalidHeader";
 	readonly InvalidIntegrity: "InvalidIntegrity";
 	readonly InvalidMethod: "InvalidMethod";
+	readonly InvalidPath: "InvalidPath";
 	readonly InvalidUrl: "InvalidUrl";
 	readonly JsonParse: "JsonParse";
 	readonly Network: "Network";
 	readonly PemParse: "PemParse";
 	readonly Redirect: "Redirect";
 	readonly ResponseAlreadyDisturbed: "ResponseAlreadyDisturbed";
+	readonly ResponseBodyNull: "ResponseBodyNull";
 	readonly Timeout: "Timeout";
 };
 
@@ -167,8 +172,9 @@ export interface FetchOptions {
 	 * Multiple space-separated values are supported; if any matches, verification passes. Unknown
 	 * algorithms are silently ignored (but if all algorithms are unknown, an error is thrown).
 	 *
-	 * Faith only checks the integrity when using `bytes()`, `json()`, `text()`, `arrayBuffer()`, and
-	 * `blob()`. Verification when reading through the `body` stream is not currently supported.
+	 * Faith only checks the integrity when using `bytes()`, `json()`, `text()`, `arrayBuffer()`,
+	 * `blob()`, and `toFile()`. Verification when reading through the `body` stream is not currently
+	 * supported.
 	 *
 	 * Note that browsers will throw at the `fetch()` call when integrity fails, but Faith will only
 	 * throw when the above methods are called, as until then the body contents are not available.
@@ -424,6 +430,49 @@ export class Response {
 	formData(): Promise<FormData>;
 
 	/**
+	 * Custom to Faith. Writes the response body straight to a file on disk, the bytes travelling
+	 * from the network to the filesystem inside Faith without crossing into JavaScript. A caller
+	 * wanting a file on disk therefore has no reason to route the body through a `ReadableStream`
+	 * and Node's filesystem APIs.
+	 *
+	 * It is a whole-body read alongside `bytes()` and its siblings: the first consumer wins,
+	 * `bodyUsed` becomes true once the read begins, and `integrity` is verified when set. It
+	 * resolves to `{ path, bytesWritten }`, where `path` is the absolute filesystem path written
+	 * to and `bytesWritten` counts the bytes that landed there.
+	 *
+	 * The destination is a string path or a `file://` URL, with a relative path resolved against
+	 * the process's working directory. A URL that does not name a local path throws `InvalidPath`
+	 * at the call, before the body is touched.
+	 *
+	 * `overwrite` governs an occupied destination and defaults to false: the write fails with
+	 * `FileExists` and the file already there is left as it was. `overwrite: true` truncates it
+	 * instead. `mode` sets the permissions a newly created file is given, defaulting to what
+	 * Node's own filesystem writes use. The parent directory must already exist.
+	 *
+	 * `onProgress` is called as the bytes land, and once more when the last byte is written.
+	 * Reports are rate limited rather than one per chunk, so a large body does not cross into
+	 * JavaScript thousands of times. `contentLength` is the advertised total when the response
+	 * sent one and Faith is not decoding the body, and absent when the total is not known
+	 * ahead of time. Progress is observational: it does not affect the write, and a body Faith
+	 * could not size still reports the bytes written so far.
+	 *
+	 * A failure part way through leaves the bytes written so far at the destination and throws;
+	 * Faith does not tidy up. A caller who needs the destination to hold either a whole body or
+	 * nothing writes to a temporary path and renames on success.
+	 */
+	toFile(
+		destination: string | URL,
+		options?: {
+			overwrite?: boolean;
+			mode?: number;
+			onProgress?: (progress: {
+				bytesWritten: number;
+				contentLength?: number;
+			}) => void;
+		},
+	): Promise<{ path: string; bytesWritten: number }>;
+
+	/**
 	 * The `clone()` method of the `Response` interface creates a clone of a response object, identical
 	 * in every way, but stored in a different variable.
 	 *
@@ -440,11 +489,12 @@ export class Response {
 	 * - the `body` stream
 	 * - the `status`, `statusCode`, and `headers` properties
 	 *
-	 * Note that if `json()`, `bytes()`, etc has been called on the original response, the body stream
-	 * of the new Web `Response` will be empty or inaccessible. The new `Response` is built over the
-	 * same body stream, so convert before reading from or locking that stream: a Web `Response`
-	 * cannot be constructed over a stream that has been read from or locked. Accessing `body`
-	 * without reading from it is fine.
+	 * The new `Response` is built over the same body stream, so convert before reading from or
+	 * locking that stream: a Web `Response` cannot be constructed over a stream that has been read
+	 * from or locked. A whole-body read (`json()`, `bytes()`, `toFile()`, and kin) closes the
+	 * window too, spending the body even though the stream was never handed out; the conversion is
+	 * then refused with the already-disturbed error. Accessing `body` without reading from it is
+	 * fine.
 	 */
 	webResponse(): globalThis.Response;
 }

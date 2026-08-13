@@ -17,6 +17,7 @@ use strum::{EnumIter, IntoEnumIterator};
 /// - JS `NetworkError`:
 ///   - `Network` — network error
 ///   - `Redirect` — when the agent is configured to error on redirects
+///   - `ContentLengthOverrun` — a body written with `response.toFile()` exceeded the advertised `Content-Length`
 /// - JS `SyntaxError`:
 ///   - `AddressParse` — IP parse error for `AgentOptions.dns.overrides`
 ///   - `InvalidIntegrity` — SRI parse error for `RequestInit.integrity`
@@ -26,11 +27,15 @@ use strum::{EnumIter, IntoEnumIterator};
 ///   - `Closed` — a request was made on an agent that has been closed
 ///   - `InvalidHeader` — invalid header name or value
 ///   - `InvalidMethod` — invalid HTTP method
+///   - `InvalidPath` — a `response.toFile()` destination that does not name a local path
 ///   - `InvalidUrl` — invalid URL string
 ///   - `ResponseAlreadyDisturbed` — body already read (mutually exclusive operations)
+///   - `ResponseBodyNull` — `response.toFile()` on a response that cannot carry a body
 /// - JS generic `Error`:
 ///   - `BodyStream` — internal stream handling error
 ///   - `Config` — invalid agent configuration
+///   - `FileExists` — a `response.toFile()` write refusing an occupied destination
+///   - `FileWrite` — the filesystem refusing a `response.toFile()` write
 ///   - `IntegrityMismatch` — SRI checksum mismatch (with `RequestInit.integrity`)
 ///
 /// The library exports an `ERROR_CODES` object which has every error code the library throws, and
@@ -49,16 +54,21 @@ pub enum FaithErrorKind {
 	BodyStream,
 	Closed,
 	Config,
+	ContentLengthOverrun,
+	FileExists,
+	FileWrite,
 	IntegrityMismatch,
 	InvalidHeader,
 	InvalidIntegrity,
 	InvalidMethod,
+	InvalidPath,
 	InvalidUrl,
 	JsonParse,
 	Network,
 	PemParse,
 	Redirect,
 	ResponseAlreadyDisturbed,
+	ResponseBodyNull,
 	Timeout,
 }
 
@@ -78,33 +88,46 @@ impl FaithErrorKind {
 			Self::BodyStream => "internal response body stream copy error",
 			Self::Closed => "the agent has been closed",
 			Self::Config => "invalid agent configuration",
+			Self::ContentLengthOverrun => "response body exceeded the advertised Content-Length",
+			Self::FileExists => "the destination file already exists",
+			Self::FileWrite => "could not write the destination file",
 			Self::IntegrityMismatch => "resource integrity check failed",
 			Self::InvalidHeader => "invalid header name or value",
 			Self::InvalidIntegrity => "invalid integrity value",
 			Self::InvalidMethod => "invalid HTTP method",
+			Self::InvalidPath => "destination does not name a local path",
 			Self::InvalidUrl => "invalid URL",
 			Self::JsonParse => "invalid json in response body",
 			Self::Network => "network error",
 			Self::PemParse => "invalid client certificate or key",
 			Self::Redirect => "got a redirect",
 			Self::ResponseAlreadyDisturbed => "response body already disturbed",
+			Self::ResponseBodyNull => "response cannot carry a body to write",
 			Self::Timeout => "timed out",
 		}
 	}
 
 	fn js_type(self) -> JsErrorType {
 		match self {
-			Self::BodyStream | Self::Config | Self::IntegrityMismatch => JsErrorType::GenericError,
+			Self::BodyStream
+			| Self::Config
+			| Self::FileExists
+			| Self::FileWrite
+			| Self::IntegrityMismatch => JsErrorType::GenericError,
 			Self::Aborted | Self::Timeout => JsErrorType::NamedError("AbortError"),
-			Self::Network | Self::Redirect => JsErrorType::NamedError("NetworkError"),
+			Self::Network | Self::Redirect | Self::ContentLengthOverrun => {
+				JsErrorType::NamedError("NetworkError")
+			}
 			Self::AddressParse | Self::InvalidIntegrity | Self::JsonParse | Self::PemParse => {
 				JsErrorType::SyntaxError
 			}
 			Self::Closed
 			| Self::InvalidHeader
 			| Self::InvalidMethod
+			| Self::InvalidPath
 			| Self::InvalidUrl
-			| Self::ResponseAlreadyDisturbed => JsErrorType::TypeError,
+			| Self::ResponseAlreadyDisturbed
+			| Self::ResponseBodyNull => JsErrorType::TypeError,
 		}
 	}
 }

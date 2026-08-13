@@ -7,6 +7,8 @@
  * instead of `FetchResponse`.
  */
 
+const { fileURLToPath } = require("node:url");
+
 const native = require("./index.js");
 const { faithFetch } = native;
 
@@ -16,6 +18,73 @@ const ERROR_CODES = native.errorCodes().reduce((acc, code) => {
 	acc[code] = code;
 	return acc;
 }, {});
+
+/**
+ * A `TypeError` naming a `toFile()` destination that does not name a local path.
+ * @param {string} message
+ * @returns {TypeError}
+ */
+function invalidPathError(message) {
+	const error = new TypeError(message);
+	error.code = ERROR_CODES.InvalidPath;
+	return error;
+}
+
+/**
+ * A `TypeError` for a conversion or read refused because the body is already disturbed,
+ * carrying the same `code` the native layer sets.
+ * @param {unknown} [cause]
+ * @returns {TypeError}
+ */
+function disturbedResponseError(cause) {
+	const error = new TypeError("response body already disturbed", { cause });
+	error.code = ERROR_CODES.ResponseAlreadyDisturbed;
+	return error;
+}
+
+/**
+ * Resolve a `toFile()` destination to a string path. A `file://` URL is converted here, by
+ * the platform's own conversion, before the request reaches the native layer; a URL that
+ * does not name a local path throws `InvalidPath`. A plain string is taken as a path.
+ * @param {string | URL} destination
+ * @returns {string}
+ */
+function destinationPath(destination) {
+	if (destination instanceof URL || /^file:/i.test(destination)) {
+		let parsed;
+		try {
+			parsed = destination instanceof URL ? destination : new URL(destination);
+		} catch (cause) {
+			throw invalidPathError(
+				`toFile destination is not a local path: ${cause.message}`,
+			);
+		}
+
+		// A host names a machine other than this one, so the URL does not name a local path.
+		// Checked here rather than left to the platform: Windows' own conversion turns a host
+		// into a UNC path instead of refusing it, and a network share is not a local file.
+		// `localhost` normalises to an empty host, so this accepts it as the spec requires.
+		if (parsed.host) {
+			throw invalidPathError(
+				`toFile destination is not a local path: file URL host "${parsed.host}" names another machine`,
+			);
+		}
+
+		try {
+			return fileURLToPath(parsed);
+		} catch (cause) {
+			throw invalidPathError(
+				`toFile destination is not a local path: ${cause.message}`,
+			);
+		}
+	}
+	if (typeof destination === "string") {
+		return destination;
+	}
+	throw invalidPathError(
+		"toFile destination must be a string path or file:// URL",
+	);
+}
 
 /**
  * The MIME essence of a `Content-Type`: type and subtype, lower cased, parameters dropped.
@@ -159,6 +228,13 @@ class Response {
 	/** @type {ReadableStream<Uint8Array> | null | undefined} */
 	#body;
 	/**
+	 * Whether a whole-body read (text/bytes/arrayBuffer/json/blob/toFile) has spent the body.
+	 * These spend it without ever handing out the stream, so they close the `webResponse()`
+	 * window too. Merely accessing `body` does not set this.
+	 * @type {boolean}
+	 */
+	#bodyConsumed = false;
+	/**
 	 * The request's timing, shared with any clone: one request, one entry.
 	 * @type {{ fetchStart: number, entry: Promise<PerformanceResourceTiming> | undefined }}
 	 */
@@ -244,7 +320,9 @@ class Response {
 	 * @returns {Promise<string>}
 	 */
 	async text() {
-		return await this.#nativeResponse.text();
+		const text = await this.#nativeResponse.text();
+		this.#bodyConsumed = true;
+		return text;
 	}
 
 	/**
@@ -252,7 +330,9 @@ class Response {
 	 * @returns {Promise<Uint8Array>}
 	 */
 	async bytes() {
-		return await this.#nativeResponse.bytes();
+		const bytes = await this.#nativeResponse.bytes();
+		this.#bodyConsumed = true;
+		return bytes;
 	}
 
 	/**
@@ -261,6 +341,7 @@ class Response {
 	 */
 	async arrayBuffer() {
 		const buffer = await this.#nativeResponse.bytes();
+		this.#bodyConsumed = true;
 		// Slice out exactly this view's bytes: Buffers can be views into a
 		// larger shared ArrayBuffer, so returning .buffer directly could leak
 		// unrelated memory and have the wrong byteLength.
@@ -275,7 +356,9 @@ class Response {
 	 * @returns {Promise<any>}
 	 */
 	async json() {
-		return await this.#nativeResponse.json();
+		const value = await this.#nativeResponse.json();
+		this.#bodyConsumed = true;
+		return value;
 	}
 
 	/**
@@ -284,6 +367,7 @@ class Response {
 	 */
 	async blob() {
 		const bytes = await this.#nativeResponse.bytes();
+		this.#bodyConsumed = true;
 		const contentType = this.headers.get("content-type") || "";
 		return new Blob([bytes], { type: contentType });
 	}
@@ -291,6 +375,34 @@ class Response {
 	/** Not supported. Will throw. */
 	async formData() {
 		throw new Error("not supported");
+	}
+
+	/**
+	 * Write the response body straight to a file on disk, bypassing JavaScript. A whole-body
+	 * read alongside `bytes()`: the first consumer wins and `integrity` is verified when set.
+	 * @param {string | URL} destination A string path or `file://` URL to write to
+	 * @param {{ overwrite?: boolean, mode?: number }} [options]
+	 * @returns {Promise<{ path: string, bytesWritten: number }>}
+	 * @throws {TypeError} `InvalidPath` if the destination does not name a local path
+	 */
+	toFile(destination, options) {
+		// Resolve (and validate) the destination synchronously, so a bad path throws at the
+		// call before the body is touched. The native write is the returned promise.
+		const path = destinationPath(destination);
+
+		// The callback travels as its own argument: a threadsafe function cannot be a field
+		// of the native options object. The rest of the options carry through untouched.
+		const { onProgress, ...rest } = options ?? {};
+		if (onProgress !== undefined && typeof onProgress !== "function") {
+			throw new TypeError("toFile onProgress must be a function");
+		}
+
+		// The body is spent once the write completes. An open failure leaves it undisturbed
+		// and retryable, so only mark it consumed when the write resolves.
+		return this.#nativeResponse.toFile(path, rest, onProgress).then((result) => {
+			this.#bodyConsumed = true;
+			return result;
+		});
 	}
 
 	async discard() {
@@ -321,12 +433,24 @@ class Response {
 			);
 		}
 
-		// Create and return a Web API Response object
-		return new globalThis.Response(this.body, {
-			status: this.status,
-			statusText: this.statusText,
-			headers: this.headers,
-		});
+		// A whole-body read spends the body even though the stream was never handed out, so
+		// the conversion is refused once one has happened (see toFile(), bytes(), and kin).
+		if (this.#bodyConsumed) {
+			throw disturbedResponseError();
+		}
+
+		// Otherwise build over the body stream. Accessing `body` without reading from it does
+		// not stand in the way; a stream that has been read from or locked does, which the
+		// Web `Response` constructor surfaces and we normalise to the already-disturbed error.
+		try {
+			return new globalThis.Response(this.body, {
+				status: this.status,
+				statusText: this.statusText,
+				headers: this.headers,
+			});
+		} catch (cause) {
+			throw disturbedResponseError(cause);
+		}
 	}
 }
 
