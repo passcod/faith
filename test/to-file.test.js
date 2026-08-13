@@ -40,7 +40,11 @@ test("toFile: writes body and resolves { path, bytesWritten }", async (t) => {
 	const dest = tmpPath("robots.txt");
 	const res = await fetch(url(TEXT_PATH));
 	const result = await res.toFile(dest);
-	t.equal(result.path, dest, "resolves the absolute path written to");
+	t.equal(
+		fs.realpathSync.native(result.path),
+		fs.realpathSync.native(dest),
+		"resolves the absolute path written to",
+	);
 	t.equal(result.bytesWritten, expected.length, "bytesWritten counts the bytes");
 	t.deepEqual(
 		new Uint8Array(fs.readFileSync(dest)),
@@ -55,15 +59,21 @@ test("toFile: relative path resolves against cwd and returns absolute", async (t
 	const previous = process.cwd();
 	process.chdir(tmpRoot);
 	try {
-		// Resolve the expectation against the working directory actually in effect: on macOS
-		// the temp dir sits behind a symlink, so process.cwd() after chdir is the resolved
-		// path rather than the one mkdtemp handed back.
-		const expected = path.resolve("relative-out.bin");
 		const res = await fetch(url(TEXT_PATH));
 		const result = await res.toFile("relative-out.bin");
 		t.ok(path.isAbsolute(result.path), "returned path is absolute");
-		t.equal(result.path, expected, "resolves against the working directory");
-		t.ok(fs.existsSync(result.path), "file exists at the resolved path");
+		t.ok(
+			fs.existsSync(path.resolve("relative-out.bin")),
+			"file landed in the working directory",
+		);
+		// Compare the files rather than the spellings: Node and the native side can name
+		// the same working directory differently (macOS /var against /private/var, Windows
+		// short names against long ones), so canonicalise both before comparing.
+		t.equal(
+			fs.realpathSync.native(result.path),
+			fs.realpathSync.native(path.resolve("relative-out.bin")),
+			"the returned path names that file",
+		);
 	} finally {
 		process.chdir(previous);
 	}
@@ -75,7 +85,11 @@ test("toFile: writes to a file:// URL destination", async (t) => {
 	const dest = tmpPath("via-url.bin");
 	const res = await fetch(url(TEXT_PATH));
 	const result = await res.toFile(pathToFileURL(dest));
-	t.equal(result.path, dest, "resolves the file URL to its path");
+	t.equal(
+		fs.realpathSync.native(result.path),
+		fs.realpathSync.native(dest),
+		"resolves the file URL to its path",
+	);
 	t.deepEqual(
 		new Uint8Array(fs.readFileSync(dest)),
 		new Uint8Array(expected),
