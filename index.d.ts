@@ -33,9 +33,13 @@ export declare class Agent {
   /**
    * Add a cookie into the agent.
    *
-   * Does nothing if:
+   * The cookie goes through the same rules a `Set-Cookie` header would, with the url supplying
+   * the scheme and host they read, so this does nothing if:
    * - the cookie store is disabled
    * - the url is malformed
+   * - the cookie does not parse
+   * - a `__Host-` or `__Secure-` name prefix is not satisfied
+   * - the cookie is larger than `cookies.maxSize`
    */
   addCookie(url: string, cookie: string): void
   /**
@@ -387,6 +391,45 @@ export interface AgentCacheOptions {
    * Default: true.
    */
   shared?: boolean
+}
+
+/**
+ * Limits the cookie store enforces, from RFC 6265bis. Each is a cap; a caller who needs more room
+ * raises the number.
+ *
+ * The `__Host-` and `__Secure-` name prefix rules are what those prefixes mean, so they always
+ * apply and are not settable here: a cookie that shouldn't carry them is named without one.
+ */
+export interface AgentCookieOptions {
+  /**
+   * How far ahead of receipt a cookie may expire, in seconds. A cookie asking for longer, via
+   * `Max-Age` or `Expires`, has its expiry reduced to this; a shorter one is left alone and a
+   * session cookie stays a session cookie.
+   *
+   * Default: 34_560_000 (400 days).
+   */
+  maxAge?: number
+  /**
+   * The largest cookie stored, as the combined length of its name and value in bytes. A larger
+   * cookie is not stored.
+   *
+   * Default: 4096.
+   */
+  maxSize?: number
+  /**
+   * How many cookies are kept for any one domain, which is a cookie's `Domain` attribute when it
+   * has one and the host that set it otherwise.
+   *
+   * Default: 180.
+   */
+  maxPerHost?: number
+  /**
+   * How many cookies are kept across the whole store, bounding a server that spreads cookies
+   * across subdomains to escape `maxPerHost`.
+   *
+   * Default: 3000.
+   */
+  maxTotal?: number
 }
 
 /** Settings related to DNS. This is a nested object. */
@@ -765,12 +808,15 @@ export interface AgentOptions {
    * Enable a persistent cookie store for the agent. Cookies received in responses will be preserved and
    * included in additional requests.
    *
+   * `true` enables the store with the default limits; an options object enables it and tunes them,
+   * so `{}` means the same as `true`.
+   *
    * Default: `false`.
    *
    * You may use `agent.getCookie(url: string)` and `agent.addCookie(url: string, value: string)` to add
    * and retrieve cookies from the store.
    */
-  cookies?: boolean
+  cookies?: boolean | AgentCookieOptions
   /** Settings related to DNS. This is a nested object. */
   dns?: AgentDnsOptions
   /**
