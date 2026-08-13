@@ -54,6 +54,7 @@ An integrity mismatch is one of these failures: the digest is only known once th
 The bytes written are the bytes any other read path would deliver, so a body Faith decodes is written decoded (see [ENC](../fetch/content-encoding.md)).
 Where the response advertised a `Content-Length`, Faith holds the server to it as the body arrives, measuring the encoded bytes off the wire before decoding and failing with `ContentLengthOverrun` once they exceed the advertisement.
 So a caller reads the advertised length from the response headers, decides whether it is willing to spend that much disk, and knows a server cannot then send more than it promised.
+The check is `toFile()`'s alone: the other read paths hand the body back as a value the caller can size and drop, while a file write spends a resource on the caller's behalf that outlives the process.
 The number constrained is the wire length rather than the size on disk, so a caller wanting the two to be the same requests `Accept-Encoding: identity`, which also stops Faith decoding (see [ENC](../fetch/content-encoding.md)).
 
 `signal` does not reach a file write, the same as it does not reach any other body read; the per-request `timeout` and the agent's read and total timeouts bound it (see [CANCEL](../fetch/cancellation-and-timeouts.md)).
@@ -71,7 +72,7 @@ Trailers settle once, for original and clones alike.
 
 `discard()` disposes of the body so the connection can be reused, resolving when disposal is done: on HTTP/1 the body is drained; on HTTP/2 and HTTP/3 the stream is cancelled outright, since the connection is reusable regardless.
 It is idempotent, and calling it on a body that has already been read is accepted rather than an error.
-A discarded body cannot be read afterwards: the whole-body methods and `clone()` reject with the already-disturbed error, while `bodyUsed` stays false because no stream was ever handed out.
+A discarded body cannot be read afterwards: the whole-body methods and `clone()` reject with the already-disturbed error, while `bodyUsed` stays false because disposing of a body is not reading it.
 After `discard()`, the trailers promise resolves to `null` (see [TRL](trailers.md)).
 An unread, undiscarded HTTP/1 response holds its connection until the response is garbage collected, at which point the body is drained and the connection returned to the pool on a best-effort basis, or closed when that is not possible.
 `discard()` is the deterministic path; the collector is only the safety net.

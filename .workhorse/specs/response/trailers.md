@@ -10,7 +10,7 @@ Faith implements the semantics of the fetch specification's trailers proposal (w
 ## Resolution ordering
 
 The promise resolves only after the body has been consumed, because trailers arrive on the wire after the body ends.
-Reading the body to completion (via `text()`, `bytes()`, `json()`, `blob()`, `arrayBuffer()`, or draining the `body` stream) is what allows resolution.
+Reading the body to completion (via `text()`, `bytes()`, `json()`, `blob()`, `arrayBuffer()`, `toFile()`, or draining the `body` stream) is what allows resolution.
 Awaiting the trailers without anything consuming the body never resolves, as the proposal specifies.
 Holding the pending promise while something else reads the body is supported and costs nothing.
 Waiting for trailers consumes no CPU while pending: the wait parks on body completion rather than polling.
