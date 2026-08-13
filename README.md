@@ -708,9 +708,96 @@ Sensitive headers (e.g. `Authorization`) should be marked.
 
 Default: none.
 
+### `AgentOptions.flowControl: object`
+
+Flow-control windows shared by HTTP/2 and HTTP/3. This is a nested object.
+
+Flow-control windows bound how much data an origin may send before Faith acknowledges it, trading
+connection memory for throughput. Larger windows keep a high-latency link full, so the receiver is
+not the bottleneck; smaller windows hold less buffered data per connection.
+
+Setting these is the normal way to tune windows: one value applies to whichever protocol a request
+negotiates, so throughput doesn't change when an origin upgrades from one to the other. The
+`http2` and `http3` groups override them per protocol, for tuning one protocol against the other.
+
+HTTP/1 has no flow control of its own, and is governed by the operating system's TCP receive
+window, which is not configurable here.
+
+#### `AgentOptions.flowControl.streamWindow: number`
+
+Maximum bytes an origin may send on any one stream before it must wait for Faith to acknowledge
+them, for HTTP/2 and HTTP/3 alike.
+
+The default follows browser practice (Chrome uses 6 MiB inside a 15 MiB connection), and is
+deliberately at the conservative end of it: a pooled server-side client can hold many connections
+across many origins, so per-connection memory multiplies harder here than in a browser holding a
+few connections to a few origins.
+
+Default: 6291456 (6 MiB).
+
+#### `AgentOptions.flowControl.connectionWindow: number`
+
+Maximum bytes an origin may send across all streams of one connection before it must wait for
+Faith to acknowledge them, for HTTP/2 and HTTP/3 alike.
+
+This is larger than `streamWindow` so concurrent streams on one connection share the connection's
+headroom, while still bounding the worst-case buffering of a connection carrying many concurrent
+requests.
+
+Default: 15728640 (15 MiB).
+
+### `AgentOptions.http2: object`
+
+Settings related to HTTP/2. This is a nested object.
+
+#### `AgentOptions.http2.streamWindow: number`
+#### `AgentOptions.http2.connectionWindow: number`
+
+Override `flowControl.streamWindow` and `flowControl.connectionWindow` for HTTP/2 only, in bytes.
+Ignored when `adaptiveWindow` is on.
+
+Default: unset (the `flowControl` values).
+
+#### `AgentOptions.http2.adaptiveWindow: bool`
+
+Replace HTTP/2's static windows with windows that start small and grow towards a bandwidth-delay
+estimate sampled from connection pings, capped at 16 MiB.
+
+This is off by default, and turning it on is usually the wrong move. A fresh connection opens at
+64 KiB, 96 times below the static default, and doubles only when a ping sample reaches two thirds
+of the current estimate — so it takes many round trips to ramp up and carries _less_ throughput
+than the static window for all but the largest transfers. It also takes over both windows, so
+`streamWindow` and `connectionWindow` stop applying.
+
+Its one real advantage is memory: it holds a large window open only on connections that
+demonstrably need one. Since it caps at 16 MiB anyway, a static window near that ceiling buys the
+same throughput from the first byte.
+
+HTTP/3 is unaffected either way, and keeps whichever windows apply to it.
+
+Default: `false`.
+
 ### `AgentOptions.http3: object`
 
 Settings related to HTTP/3. This is a nested object.
+
+#### `AgentOptions.http3.streamWindow: number`
+#### `AgentOptions.http3.connectionWindow: number`
+
+Override `flowControl.streamWindow` and `flowControl.connectionWindow` for HTTP/3 only, in bytes.
+
+Default: unset (the `flowControl` values).
+
+#### `AgentOptions.http3.sendWindow: number`
+
+Maximum bytes Faith transmits to an origin without acknowledgement, bounding upload throughput the
+way the receive windows bound download. The origin's own flow control applies on top of this, so
+it is a ceiling rather than a grant.
+
+This has no HTTP/2 counterpart: HTTP/2's send side is governed entirely by the window the peer
+advertises, with no local cap to set.
+
+Default: 10000000 (10 MB).
 
 #### `AgentOptions.http3.congestion: string`
 
