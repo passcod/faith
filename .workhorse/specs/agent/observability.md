@@ -4,8 +4,8 @@ id: OBS
 
 # Agent observability
 
-Agents expose two views of their own activity: cumulative request counters (`stats()`) and live per-connection network statistics (`connections()`).
-Both exist so operational problems (connection leaks, retransmission storms, pool churn) can be diagnosed from inside the process, without packet captures.
+Agents expose three views of their own activity: cumulative request counters (`stats()`), live per-connection network statistics (`connections()`), and the DNS servers in use (`resolvers()`).
+They exist so operational problems (connection leaks, retransmission storms, pool churn, DNS silently falling back to plaintext) can be diagnosed from inside the process, without packet captures.
 
 ## stats()
 
@@ -31,3 +31,13 @@ Cross-platform fields: `rttUs`, `rttVarUs`, `retransmits`, `totalRetransmits`, `
 `lostPackets` and `deliveryRateBps` are Linux-only.
 Other fields may be missing per platform, and no forward guarantee is made on field availability; on wholly unsupported platforms the list is empty.
 Statistics come from the operating system's own TCP introspection, so sampling stays passive against the real kernel state.
+
+## resolvers()
+
+`resolvers()` lists the DNS servers the agent resolves through, so "are my lookups actually encrypted" is answerable from inside the process (see [DNS](dns.md)).
+Each entry gives the server's address, the transport in use, and how that transport was arrived at: configured by the caller, read from the operating system's encrypted DNS settings, designated by the resolver itself, established by probing, or conventional DNS.
+Entries appear in the order the resolver queries them.
+The list reports live state rather than configuration, so an entry's transport changes when a probe succeeds and a server dropped for failing to bootstrap does not appear.
+An agent whose resolver has not yet been used lists nothing, because the resolver reads its configuration when first needed.
+A network change returns it to that state until the next lookup, the servers it listed having been read off the network that has gone (see [NETCHG](network-change.md)).
+`resolvers()` is empty for an agent using the system resolver, which does not report what it does internally.
