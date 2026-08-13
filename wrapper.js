@@ -389,9 +389,17 @@ class Response {
 		// Resolve (and validate) the destination synchronously, so a bad path throws at the
 		// call before the body is touched. The native write is the returned promise.
 		const path = destinationPath(destination);
+
+		// The callback travels as its own argument: a threadsafe function cannot be a field
+		// of the native options object. The rest of the options carry through untouched.
+		const { onProgress, ...rest } = options ?? {};
+		if (onProgress !== undefined && typeof onProgress !== "function") {
+			throw new TypeError("toFile onProgress must be a function");
+		}
+
 		// The body is spent once the write completes. An open failure leaves it undisturbed
 		// and retryable, so only mark it consumed when the write resolves.
-		return this.#nativeResponse.toFile(path, options).then((result) => {
+		return this.#nativeResponse.toFile(path, rest, onProgress).then((result) => {
 			this.#bodyConsumed = true;
 			return result;
 		});

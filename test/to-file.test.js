@@ -341,6 +341,94 @@ test("toFile: writes a body within the advertised Content-Length", async (t) => 
 	t.equal(result.bytesWritten, 2048, "wrote the advertised number of bytes");
 });
 
+test("toFile: onProgress reports the bytes as they land", async (t) => {
+	t.plan(4);
+	const dest = tmpPath("progress.bin");
+	const reports = [];
+	const res = await fetch(url(TEXT_PATH));
+	const result = await res.toFile(dest, {
+		onProgress: (progress) => reports.push(progress),
+	});
+
+	t.ok(reports.length >= 1, "reports at least once");
+	const last = reports[reports.length - 1];
+	t.equal(
+		last.bytesWritten,
+		result.bytesWritten,
+		"the final report totals the whole body",
+	);
+	t.equal(
+		last.contentLength,
+		result.bytesWritten,
+		"and carries the advertised total",
+	);
+	t.ok(
+		reports.every((r) => r.bytesWritten <= result.bytesWritten),
+		"no report overcounts",
+	);
+});
+
+test("toFile: onProgress reports repeatedly across a slow body", async (t) => {
+	t.plan(3);
+	const dest = tmpPath("progress-drip.bin");
+	const reports = [];
+	// Dripped over well beyond the reporting interval, so the write spans several of them.
+	const res = await fetch(url("/drip?duration=0.6&numbytes=120&delay=0"));
+	const result = await res.toFile(dest, {
+		onProgress: (progress) => reports.push(progress),
+	});
+
+	t.equal(result.bytesWritten, 120, "wrote the whole body");
+	t.ok(reports.length > 1, `reports more than once (${reports.length} reports)`);
+	const counts = reports.map((r) => r.bytesWritten);
+	t.deepEqual(
+		counts,
+		[...counts].sort((a, b) => a - b),
+		"the counts only ever climb",
+	);
+});
+
+test("toFile: onProgress reports no total for a decoded body", async (t) => {
+	t.plan(2);
+	const dest = tmpPath("progress-decoded.json");
+	const reports = [];
+	// Faith decodes this, so the wire length says nothing about the size on disk.
+	const res = await fetch(url("/gzip"));
+	const result = await res.toFile(dest, {
+		onProgress: (progress) => reports.push(progress),
+	});
+
+	t.ok(reports.length >= 1, "reports at least once");
+	t.equal(
+		reports[reports.length - 1].contentLength,
+		undefined,
+		"no advertised total for a body Faith decodes",
+	);
+	void result;
+});
+
+test("toFile: onProgress reports once for an empty body", async (t) => {
+	t.plan(2);
+	const dest = tmpPath("progress-empty.bin");
+	const reports = [];
+	const res = await fetch(url("/bytes/0"));
+	await res.toFile(dest, { onProgress: (progress) => reports.push(progress) });
+
+	t.equal(reports.length, 1, "a write with nothing to report still reports once");
+	t.equal(reports[0].bytesWritten, 0, "having written nothing");
+});
+
+test("toFile: a non-function onProgress is refused", async (t) => {
+	t.plan(2);
+	const res = await fetch(url(TEXT_PATH));
+	t.throws(
+		() => res.toFile(tmpPath(), { onProgress: "not a function" }),
+		TypeError,
+		"throws a TypeError",
+	);
+	t.equal(res.bodyUsed, false, "body is untouched");
+});
+
 test("ERROR_CODES exposes the toFile error codes", async (t) => {
 	t.plan(5);
 	t.equal(ERROR_CODES.ContentLengthOverrun, "ContentLengthOverrun");

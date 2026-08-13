@@ -22,6 +22,21 @@ Source of truth is the spec diff on this branch: `response/reading-the-body.md` 
 - [x] Tests: `test/to-file.test.js` covering the scenarios in the test-cases file.
 - [x] `webResponse()` refuses after any whole-body read (per the reading-the-body spec line added on this branch) — added a wrapper-level consumed-body flag.
 
+## Progress reporting (`onProgress`)
+
+Added after the initial implementation, on request.
+
+- [x] `ToFileProgress` object and a `ProgressCallback` threadsafe-function alias in `response.rs`.
+- [x] Rate-limited reporting (50ms floor) inside the write loop, plus a guaranteed final report.
+- [x] `onProgress` taken from the options object in `wrapper.js` and passed as its own native
+      argument — a threadsafe function cannot be a field of a `#[napi(object)]`.
+- [x] `ts_args_type` on `to_file`, because napi emits a dangling type name for a
+      `ThreadsafeFunction` alias otherwise.
+- [x] Spec paragraph in the `toFile()` section, README section with an example, typings, tests.
+
+`content_length` is `Option<i64>`, which napi surfaces as an absent property rather than `null`
+— the docs and tests say absent to match what callers actually see.
+
 ## Note on ContentLengthOverrun
 
 The transport (hyper) already caps a length-delimited HTTP/1 body at its `Content-Length`, so

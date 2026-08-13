@@ -449,13 +449,27 @@ export class Response {
 	 * instead. `mode` sets the permissions a newly created file is given, defaulting to what
 	 * Node's own filesystem writes use. The parent directory must already exist.
 	 *
+	 * `onProgress` is called as the bytes land, and once more when the last byte is written.
+	 * Reports are rate limited rather than one per chunk, so a large body does not cross into
+	 * JavaScript thousands of times. `contentLength` is the advertised total when the response
+	 * sent one and Faith is not decoding the body, and absent when the total is not known
+	 * ahead of time. Progress is observational: it does not affect the write, and a body Faith
+	 * could not size still reports the bytes written so far.
+	 *
 	 * A failure part way through leaves the bytes written so far at the destination and throws;
 	 * Faith does not tidy up. A caller who needs the destination to hold either a whole body or
 	 * nothing writes to a temporary path and renames on success.
 	 */
 	toFile(
 		destination: string | URL,
-		options?: { overwrite?: boolean; mode?: number },
+		options?: {
+			overwrite?: boolean;
+			mode?: number;
+			onProgress?: (progress: {
+				bytesWritten: number;
+				contentLength?: number;
+			}) => void;
+		},
 	): Promise<{ path: string; bytesWritten: number }>;
 
 	/**

@@ -266,12 +266,17 @@ json(): Promise<any>
  * Resolves to `{ path, bytesWritten }`, where `path` is the absolute filesystem path
  * written to and `bytesWritten` counts the bytes that landed there.
  *
+ * `onProgress` is reported to as the bytes land, at most every
+ * [`PROGRESS_INTERVAL`], with a final report once the last byte is written. The
+ * wrapper takes it from the options object; it arrives here as its own argument
+ * because a threadsafe function cannot be a field of a `#[napi(object)]`.
+ *
  * The `file://` URL to path conversion and the `InvalidPath` rejection happen in the
  * wrapper, so this receives a resolved string path.
  *
  * spec:BODY#tofile
  */
-toFile(path: string, options?: ToFileOptions | undefined | null): Promise<ToFileResult>
+toFile(path: string, options?: ToFileOptions | undefined | null, onProgress?: ((progress: ToFileProgress) => void) | undefined | null): Promise<ToFileResult>
 /**
  * Custom to Faith.
  *
@@ -1093,6 +1098,18 @@ export interface ToFileOptions {
    * filesystem writes use. Ignored on platforms without Unix file modes.
    */
   mode?: number
+}
+
+/** A progress report from a `toFile()` write in flight. */
+export interface ToFileProgress {
+  /** The number of bytes written to the file so far. */
+  bytesWritten: number
+  /**
+   * What the response advertised in `Content-Length`, when it sent one and Faith is
+   * not decoding the body. Absent when the total is not known ahead of time, which is
+   * the case for a chunked response and for one Faith decodes.
+   */
+  contentLength?: number
 }
 
 /** What `toFile()` resolves to. */

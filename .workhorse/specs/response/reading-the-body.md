@@ -60,6 +60,11 @@ So a caller reads the advertised length from the response headers, decides wheth
 The check is `toFile()`'s alone: the other read paths hand the body back as a value the caller can size and drop, while a file write spends a resource on the caller's behalf that outlives the process.
 The number constrained is the wire length rather than the size on disk, so a caller wanting the two to be the same requests `Accept-Encoding: identity`, which also stops Faith decoding (see [ENC](../fetch/content-encoding.md)).
 
+`onProgress` is a function the write reports to as the bytes land, receiving the count written so far and the total the response advertised, or nothing for a total that cannot be known ahead of time: a chunked response, or one Faith decodes, where the size on disk is not the length on the wire.
+Reports are rate limited rather than one per chunk, because a body large enough to be worth watching is one whose chunks are numerous enough that reporting each would spend more crossing into JavaScript than the write saves by staying out of it.
+The last report is always delivered, so a caller's final view of a completed write is the whole body rather than wherever the rate limit last landed, and a write with nothing to report still reports once.
+Progress is observational: it does not pace, pause, or fail the write, and a write with no callback behaves the same in every other respect.
+
 `signal` does not reach a file write, the same as it does not reach any other body read; the per-request `timeout` and the agent's read and total timeouts bound it (see [CANCEL](../fetch/cancellation-and-timeouts.md)).
 `clone()` gives a second entitlement to the body, so an original and its clone each write their own file.
 `discard()` on a body already written to a file is accepted, as it is after any other read.

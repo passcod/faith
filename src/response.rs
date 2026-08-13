@@ -9,12 +9,16 @@ use std::{
 		Arc,
 		atomic::{AtomicBool, Ordering},
 	},
+	time::{Duration, Instant},
 };
 
 use bytes::Bytes;
 use futures::{StreamExt, TryStreamExt, stream};
 use http_body_util::BodyStream;
-use napi::bindgen_prelude::*;
+use napi::{
+	bindgen_prelude::*,
+	threadsafe_function::{ThreadsafeFunction, ThreadsafeFunctionCallMode},
+};
 use napi_derive::napi;
 use reqwest::{
 	StatusCode, Url, Version,
@@ -93,6 +97,32 @@ pub struct ToFileResult {
 	/// The number of bytes that landed at the destination.
 	pub bytes_written: i64,
 }
+
+/// A progress report from a `toFile()` write in flight.
+#[napi(object)]
+#[derive(Debug)]
+pub struct ToFileProgress {
+	/// The number of bytes written to the file so far.
+	pub bytes_written: i64,
+	/// What the response advertised in `Content-Length`, when it sent one and Faith is
+	/// not decoding the body. Absent when the total is not known ahead of time, which is
+	/// the case for a chunked response and for one Faith decodes.
+	pub content_length: Option<i64>,
+}
+
+/// The callback `toFile()` reports progress to.
+///
+/// `CalleeHandled = false`: progress is not an error-first callback, so the JavaScript
+/// side receives the report on its own rather than as the second argument.
+pub type ProgressCallback =
+	ThreadsafeFunction<ToFileProgress, Unknown<'static>, ToFileProgress, Status, false>;
+
+/// The shortest gap between progress reports.
+///
+/// Reporting every chunk would cross into JavaScript thousands of times for a large body,
+/// which is the cost `toFile()` exists to avoid. A caller driving a progress bar cannot use
+/// updates faster than this anyway, and the final report is always delivered regardless.
+const PROGRESS_INTERVAL: Duration = Duration::from_millis(50);
 
 /// Open the destination file for a body write, mapping filesystem refusals to the errors
 /// `toFile()` surfaces (spec:BODY#tofile).
@@ -612,26 +642,37 @@ impl FaithResponse {
 	/// Resolves to `{ path, bytesWritten }`, where `path` is the absolute filesystem path
 	/// written to and `bytesWritten` counts the bytes that landed there.
 	///
+	/// `onProgress` is reported to as the bytes land, at most every
+	/// [`PROGRESS_INTERVAL`], with a final report once the last byte is written. The
+	/// wrapper takes it from the options object; it arrives here as its own argument
+	/// because a threadsafe function cannot be a field of a `#[napi(object)]`.
+	///
 	/// The `file://` URL to path conversion and the `InvalidPath` rejection happen in the
 	/// wrapper, so this receives a resolved string path.
 	///
 	/// spec:BODY#tofile
-	#[napi]
+	#[napi(
+		ts_args_type = "path: string, options?: ToFileOptions | undefined | null, onProgress?: ((progress: ToFileProgress) => void) | undefined | null"
+	)]
 	pub fn to_file<'env>(
 		&self,
 		env: &'env Env,
 		path: String,
 		options: Option<ToFileOptions>,
+		on_progress: Option<ProgressCallback>,
 	) -> Result<PromiseRaw<'env, ToFileResult>, napi::Error> {
 		let this = Clone::clone(self);
 		let options = options.unwrap_or_default();
-		faith_promise(env, async move { this.write_to_file(path, options).await })
+		faith_promise(env, async move {
+			this.write_to_file(path, options, on_progress).await
+		})
 	}
 
 	async fn write_to_file(
 		&self,
 		path: String,
 		options: ToFileOptions,
+		on_progress: Option<ProgressCallback>,
 	) -> Result<ToFileResult, FaithError> {
 		// A response that cannot carry a body has nothing to write, and this is settled
 		// before any file is created (spec:BODY#tofile).
@@ -674,7 +715,24 @@ impl FaithResponse {
 			stream
 		};
 
+		// Reporting is rate limited rather than per chunk, so a large body does not cross
+		// into JavaScript thousands of times (spec:BODY#tofile).
+		let report = |written: u64| {
+			if let Some(callback) = &on_progress {
+				callback.call(
+					ToFileProgress {
+						bytes_written: written as i64,
+						content_length: content_length.map(|len| len as i64),
+					},
+					// Progress is observational: a report the queue cannot take is dropped
+					// rather than made to hold up the write it is describing.
+					ThreadsafeFunctionCallMode::NonBlocking,
+				);
+			}
+		};
+
 		let mut written: u64 = 0;
+		let mut reported_at = Instant::now();
 		futures::pin_mut!(stream);
 		while let Some(result) = stream.next().await {
 			let chunk =
@@ -694,11 +752,20 @@ impl FaithResponse {
 					return Err(FaithErrorKind::ContentLengthOverrun.into());
 				}
 			}
+			if reported_at.elapsed() >= PROGRESS_INTERVAL {
+				reported_at = Instant::now();
+				report(written);
+			}
 		}
 
 		file.flush()
 			.await
 			.map_err(|err| FaithError::new(FaithErrorKind::FileWrite, Some(err.to_string())))?;
+
+		// The last report always lands, whatever the rate limit allowed along the way, so a
+		// caller's final view of a completed write is the whole body rather than the last
+		// interval boundary. An empty body reports once, with nothing written.
+		report(written);
 
 		// The digest is only known once the last byte has been written, so the file that
 		// fails verification is on disk when the error arrives (spec:SRI).
@@ -794,5 +861,89 @@ impl FaithResponse {
 			disturbed: Arc::new(AtomicBool::new(false)),
 			..Clone::clone(self)
 		})
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use std::{
+		future::Future,
+		pin::pin,
+		sync::atomic::AtomicUsize,
+		task::{Context, Poll, Wake, Waker},
+	};
+
+	use super::*;
+
+	/// A waker that counts how many times the task asks to be polled again.
+	struct CountingWaker(AtomicUsize);
+
+	impl CountingWaker {
+		fn wakes(&self) -> usize {
+			self.0.load(Ordering::SeqCst)
+		}
+	}
+
+	impl Wake for CountingWaker {
+		fn wake(self: Arc<Self>) {
+			self.wake_by_ref();
+		}
+
+		fn wake_by_ref(self: &Arc<Self>) {
+			self.0.fetch_add(1, Ordering::SeqCst);
+		}
+	}
+
+	/// Waiting for trailers parks until the body settles the question, rather than polling
+	/// for it.
+	///
+	/// The bug this guards against was a `yield_now` loop, which is visible here as the shape
+	/// of the wait rather than as a quantity of CPU: a spin re-arms its own waker on every
+	/// poll, so it is scheduled again immediately, while a parked wait asks for nothing until
+	/// something else moves. Asserting the wake count keeps this deterministic -- timing how
+	/// much CPU the process burns measures the machine as much as the code.
+	#[test]
+	fn waiting_for_trailers_parks_rather_than_spinning() {
+		let slot = TrailersSlot::default();
+		let counter = Arc::new(CountingWaker(AtomicUsize::new(0)));
+		let waker = Waker::from(counter.clone());
+		let mut cx = Context::from_waker(&waker);
+		let mut settled = pin!(slot.settled());
+
+		// Nothing has settled the question, so the wait parks...
+		assert!(matches!(settled.as_mut().poll(&mut cx), Poll::Pending));
+		// ...without scheduling itself to be polled again, which is what a spin does.
+		assert_eq!(counter.wakes(), 0, "a parked wait asks for no wake-up");
+
+		// Polling again changes nothing: still parked, still asking for nothing.
+		assert!(matches!(settled.as_mut().poll(&mut cx), Poll::Pending));
+		assert_eq!(counter.wakes(), 0, "polling again does not arm a wake-up");
+
+		// The body ending is what wakes it, and it resolves on the next poll.
+		slot.ended();
+		assert!(counter.wakes() >= 1, "the body ending wakes the waiter");
+		assert!(matches!(
+			settled.as_mut().poll(&mut cx),
+			Poll::Ready(Trailers::None)
+		));
+	}
+
+	/// Trailers that arrived before anyone asked resolve without parking at all.
+	#[test]
+	fn trailers_already_there_resolve_on_the_first_poll() {
+		let slot = TrailersSlot::default();
+		let mut headers = HeaderMap::new();
+		headers.insert("x-checksum", "abc123".parse().unwrap());
+		slot.arrived(headers);
+
+		let counter = Arc::new(CountingWaker(AtomicUsize::new(0)));
+		let waker = Waker::from(counter.clone());
+		let mut cx = Context::from_waker(&waker);
+		let mut settled = pin!(slot.settled());
+
+		assert!(matches!(
+			settled.as_mut().poll(&mut cx),
+			Poll::Ready(Trailers::Some(_))
+		));
 	}
 }

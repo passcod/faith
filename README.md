@@ -603,6 +603,27 @@ The `options` are:
   with `FileExists` and leaves the file already there as it was; `true` truncates it instead.
 - `mode` (number): the permissions a newly created file is given, defaulting to what Node's own
   filesystem writes use. Ignored on platforms without Unix file modes.
+- `onProgress` (function): called with `{ bytesWritten, contentLength }` as the bytes land, and
+  once more when the last byte is written.
+
+Progress reports are rate limited rather than one per chunk, so a large body does not cross into
+JavaScript thousands of times — which is the cost `toFile()` exists to avoid. The final report is
+always delivered, so a completed write's last report covers the whole body, and a write with
+nothing to report still reports once. `contentLength` is the advertised total when the response
+sent one and Faith is not decoding the body, and absent when the total cannot be known ahead of
+time (a chunked response, or one Faith decodes, where the size on disk is not the length on the
+wire). Progress is observational: it does not pace, pause, or fail the write.
+
+```js
+const res = await fetch("https://example.com/big.iso");
+await res.toFile("big.iso", {
+  onProgress({ bytesWritten, contentLength }) {
+    if (contentLength) {
+      console.log(`${Math.round((bytesWritten / contentLength) * 100)}%`);
+    }
+  },
+});
+```
 
 The parent directory must already exist. A response that cannot carry a body throws `ResponseBodyNull`
 without creating a file. Every other failure to open or write is a `FileWrite` error carrying the

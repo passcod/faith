@@ -39,6 +39,16 @@ Scenarios verifying the `toFile()` body-read path. Spec ids: BODY, SRI, ERR.
 - [x] A body within the advertised `Content-Length` writes successfully (verifies spec: BODY)
 - [ ] A server sending more than the advertised `Content-Length` fails with `ContentLengthOverrun` (verifies spec: BODY, ERR) — the transport caps a length-delimited body at its `Content-Length`, so this isn't reliably triggerable through an HTTP server
 
+## Progress reporting
+
+- [x] `onProgress` reports at least once, and the final report totals the whole body (verifies spec: BODY)
+- [x] The final report carries the advertised `contentLength` for a body delivered as received (verifies spec: BODY)
+- [x] A slow (dripped) body produces more than one report, with counts that only climb (verifies spec: BODY)
+- [x] A body Faith decodes reports no `contentLength`, since the wire length is not the size on disk (verifies spec: BODY, ENC)
+- [x] An empty body still reports once, having written nothing (verifies spec: BODY)
+- [x] A non-function `onProgress` is refused and leaves the body untouched (verifies spec: BODY)
+- [ ] A callback that throws does not fail or corrupt the write (verifies spec: BODY)
+
 ## Error codes
 
 - [x] `ERROR_CODES` exposes `ContentLengthOverrun`, `FileExists`, `FileWrite`, `InvalidPath`, `ResponseBodyNull` (verifies spec: ERR)
