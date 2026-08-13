@@ -164,11 +164,36 @@ pub fn faith_fetch<'env>(
 
 		// Handle body: prefer streaming body over buffered body
 		if let Some(receiver_arc) = stream_receiver {
-			// Take the receiver from the Arc<Mutex<Option<...>>>
+			// Take the receiver from the Arc<Mutex<Option<...>>> before anything below can bail
+			// out. Whatever happens next, this owns the receiving end: dropping it closes the
+			// channel, which is what tells the JS side pumping chunks in to stop. Leaving it in
+			// place on a refusal would strand that pump on a channel nobody will ever read,
+			// blocking once it filled and holding the process open.
 			let receiver = {
 				let mut guard = receiver_arc.lock().await;
 				guard.take()
 			};
+
+			// A body read from a `ReadableStream` has no length to advertise, which the fetch
+			// standard allows only over HTTP/2 and HTTP/3 (spec:REQ#streaming-a-request-body).
+			if !agent.quirk_h1_request_streaming {
+				// Faith never negotiates h2c, so a plaintext origin is HTTP/1.x for certain and
+				// can be refused without opening a connection to find out.
+				if parsed_url.scheme() != "https" {
+					return Err(FaithError::new(
+						FaithErrorKind::Network,
+						Some(format!(
+							"a streaming request body requires HTTP/2 or HTTP/3, and {} is served over HTTP/1.1; set the agent's quirks.h1RequestStreaming to send it anyway",
+							parsed_url.as_str()
+						)),
+					));
+				}
+
+				// Over TLS the protocol is only known once ALPN has run. Asserting HTTP/2 on the
+				// request hands the check to the layer that finds out: the connection is chosen,
+				// and an HTTP/1.x one is refused there before any of the body is written.
+				request = request.version(http::Version::HTTP_2);
+			}
 
 			if let Some(receiver) = receiver {
 				// Convert the receiver into a stream for reqwest

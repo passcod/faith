@@ -23,6 +23,17 @@ function port() {
 	return parsed.port || (parsed.protocol === "https:" ? "443" : "80");
 }
 
+// An agent that will stream a request body over HTTP/1.1.
+//
+// The httpbin origin these tests run against is plain HTTP/1.1, where a streaming request body
+// is refused by default (spec:REQ#streaming-a-request-body). Tests exercising the streaming
+// machinery itself opt into the quirk so that rule isn't the thing they end up measuring; the
+// rule has its own tests in h1-request-streaming.test.js.
+function streamingAgent() {
+	const { Agent } = require("../wrapper.js");
+	return new Agent({ quirks: { h1RequestStreaming: true } });
+}
+
 // Skip tests if native fetch is not available
 const hasNativeFetch = typeof globalThis.fetch === "function";
 
@@ -161,6 +172,7 @@ async function compareResponses(t, path, options = {}) {
 module.exports = {
 	hasNativeFetch,
 	compareResponses,
+	streamingAgent,
 	url,
 	hostname,
 	port,

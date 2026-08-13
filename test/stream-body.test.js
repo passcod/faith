@@ -1,6 +1,8 @@
-const { url } = require("./helpers.js");
+const { streamingAgent, url } = require("./helpers.js");
 const test = require("tape");
 const { fetch: faithFetch } = require("../wrapper.js");
+
+const agent = streamingAgent();
 
 test("Streaming body with ReadableStream", async (t) => {
 	t.plan(3);
@@ -27,6 +29,7 @@ test("Streaming body with ReadableStream", async (t) => {
 		method: "POST",
 		body: stream,
 		duplex: "half",
+		agent,
 		headers: {
 			"Content-Type": "text/plain",
 		},
@@ -91,6 +94,7 @@ test("Streaming body with large payload", async (t) => {
 		method: "POST",
 		body: stream,
 		duplex: "half",
+		agent,
 		headers: {
 			"Content-Type": "application/octet-stream",
 		},
@@ -127,6 +131,7 @@ test("Streaming body with abort signal", async (t) => {
 			method: "POST",
 			body: stream,
 			duplex: "half",
+			agent,
 			signal: controller.signal,
 		});
 		t.fail("should throw AbortError");
@@ -152,6 +157,7 @@ test("Streaming body with empty stream", async (t) => {
 		method: "POST",
 		body: stream,
 		duplex: "half",
+		agent,
 	});
 
 	t.equal(response.status, 200, "should return 200");
@@ -182,6 +188,7 @@ test("Streaming body with async chunks", async (t) => {
 		method: "POST",
 		body: stream,
 		duplex: "half",
+		agent,
 		headers: {
 			"Content-Type": "text/plain",
 		},
@@ -213,6 +220,7 @@ test("Streaming body with binary data", async (t) => {
 		method: "POST",
 		body: stream,
 		duplex: "half",
+		agent,
 		headers: {
 			"Content-Type": "application/octet-stream",
 		},
@@ -238,6 +246,7 @@ test("Streaming body preserves headers", async (t) => {
 		method: "POST",
 		body: stream,
 		duplex: "half",
+		agent,
 		headers: {
 			"Content-Type": "text/plain",
 			"X-Custom-Header": "custom-value",

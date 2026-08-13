@@ -52,10 +52,20 @@ A `ReadableStream` body requires `duplex: "half"`, matching the fetch standard; 
 Faith operates in full duplex.
 A response is surfaced as soon as its headers arrive, so a request streaming its body sees the response while the body is still going out, and the response body can be read in the meantime.
 A caller can drive the request body from what it reads off the response body, exchanging messages both ways over one request.
+Exchanging messages both ways needs a streaming request body, so over HTTP/1.x it needs the agent's `quirks.h1RequestStreaming` as well (see [Streaming a request body](#streaming-a-request-body)).
 
 The `duplex` option is required when the body is a `ReadableStream` and carries no meaning beyond that.
 `half` is the only value the fetch standard defines and so the only value accepted; a request that sets it still runs full duplex.
 Faith takes this reading because `half` is a token the standard obliges every streaming upload to carry rather than a preference the caller expressed, so acting on it would strand code written against runtimes that also run full duplex (see [the upstream limitations register](../../upstream-limitations.md) for why the standard's own reading is not on offer).
+
+## Streaming a request body
+
+A streaming request body is one whose source is null because it came from a `ReadableStream`, as opposed to a buffered body whose bytes are known up front.
+Following the fetch standard, a streaming request body is carried only over HTTP/2 and HTTP/3; an HTTP/1.x connection cannot carry a body with a null source.
+When a request with a streaming body runs over a connection that negotiates HTTP/1.x, it fails with a network error (code `Network`, see [ERR](../errors/errors.md)) and nothing is written to that connection, so the origin sees no request at all.
+A buffered body sends over any protocol and is never subject to this rule, which includes a body that arrived through a `Request` object, since converting one reads its body to completion.
+
+The agent's `quirks.h1RequestStreaming` lifts the restriction, sending a streaming body over an HTTP/1.x connection like any other body (see [QUIRK](../agent/quirks.md)).
 
 ## Credentials
 

@@ -1,7 +1,7 @@
 const test = require("tape");
 const { ReadableStream } = require("stream/web");
 const { fetch: faithFetch, Agent } = require("../wrapper.js");
-const { url } = require("./helpers.js");
+const { streamingAgent, url } = require("./helpers.js");
 
 // Helper to get header value (handles both string and array)
 function getHeader(headers, name) {
@@ -105,6 +105,7 @@ test("priority applies to a request with a streaming body", async (t) => {
 		method: "POST",
 		body: stream,
 		duplex: "half",
+		agent: streamingAgent(),
 		priority: "high",
 	});
 	const data = await response.json();

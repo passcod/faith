@@ -1,7 +1,9 @@
-const { url } = require("./helpers.js");
+const { streamingAgent, url } = require("./helpers.js");
 const test = require("tape");
 const { fetch } = require("../wrapper.js");
 const { ReadableStream } = require("stream/web");
+
+const agent = streamingAgent();
 
 test("duplex: ReadableStream body without duplex option throws TypeError", async (t) => {
   t.plan(2);
@@ -47,6 +49,7 @@ test("duplex: ReadableStream body with duplex: 'half' works", async (t) => {
       headers: { "Content-Type": "application/json" },
       body: stream,
       duplex: "half",
+      agent,
     });
 
     t.equal(response.status, 200, "should return 200 status");
@@ -77,6 +80,7 @@ test("duplex: ReadableStream with multiple chunks", async (t) => {
       headers: { "Content-Type": "application/json" },
       body: stream,
       duplex: "half",
+      agent,
     });
 
     t.equal(response.status, 200, "should return 200 status");
@@ -173,6 +177,7 @@ test("duplex: ReadableStream with binary data", async (t) => {
       method: "POST",
       body: stream,
       duplex: "half",
+      agent,
     });
 
     t.equal(response.status, 200, "should return 200 status");
@@ -198,6 +203,7 @@ test("duplex: ReadableStream with empty stream", async (t) => {
       method: "POST",
       body: stream,
       duplex: "half",
+      agent,
     });
 
     t.equal(response.status, 200, "should work with empty stream");
@@ -284,6 +290,7 @@ test("duplex: ReadableStream with large payload", async (t) => {
       method: "POST",
       body: stream,
       duplex: "half",
+      agent,
     });
 
     t.equal(response.status, 200, "should handle large payload");

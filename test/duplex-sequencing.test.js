@@ -8,8 +8,9 @@
  * here: a stack upgrade that took it away would otherwise pass silently.
  *
  * Both protocols are covered, because they reach full duplex by different routes.
- * HTTP/1.1 gets there only because Faith allows a streaming request body at all, which
- * the fetch standard rules out on HTTP/1.x; HTTP/2 gets there because the transport
+ * HTTP/1.1 gets there only through a streaming request body, which the fetch standard
+ * rules out on HTTP/1.x and Faith therefore refuses unless the agent opts in with
+ * `quirks.h1RequestStreaming` (spec:QUIRK); HTTP/2 gets there because the transport
  * multiplexes, which is the case the standard would be describing if it defined `full`.
  * A regression could take one without the other, so neither stands in for the other.
  *
@@ -25,7 +26,7 @@ const { readFileSync } = require("node:fs");
 
 const { Agent } = require("../index.js");
 const { fetch } = require("../wrapper.js");
-const { ensureCert } = require("./fixtures/net.js");
+const { ensureCert, trackSockets } = require("./fixtures/net.js");
 
 /** How long a request body is held open while the response is examined. */
 const HOLD_MS = 1000;
@@ -50,22 +51,6 @@ function routes({ writeHead, write, end, onData, onEnd, path }) {
 	onEnd(() => end("done\n"));
 }
 
-/** Track sockets so a pooled connection cannot keep `close()` from settling. */
-function track(server) {
-	const sockets = new Set();
-	server.on("connection", (socket) => {
-		sockets.add(socket);
-		socket.on("close", () => sockets.delete(socket));
-	});
-	return () =>
-		new Promise((resolve) => {
-			for (const socket of sockets) socket.destroy();
-			sockets.clear();
-			server.close(resolve);
-			setTimeout(resolve, 500).unref();
-		});
-}
-
 async function listen(server) {
 	await new Promise((resolve, reject) => {
 		server.once("error", reject);
@@ -85,12 +70,14 @@ async function h1Origin() {
 			onEnd: (fn) => req.on("end", fn),
 		}),
 	);
-	const close = track(server);
+	const close = trackSockets(server);
 	const port = await listen(server);
 	return {
 		version: "HTTP/1.1",
 		url: `http://127.0.0.1:${port}`,
-		agent: new Agent(),
+		// Full duplex over HTTP/1.1 rides on a streaming request body, which is exactly what
+		// the standard rules out there, so this origin is only reachable through the quirk.
+		agent: new Agent({ quirks: { h1RequestStreaming: true } }),
 		close,
 	};
 }
@@ -101,7 +88,7 @@ async function h2Origin() {
 		key: readFileSync(keyPath),
 		cert: readFileSync(certPath),
 	});
-	const close = track(server);
+	const close = trackSockets(server);
 	server.on("stream", (stream, headers) =>
 		routes({
 			path: headers[":path"],
