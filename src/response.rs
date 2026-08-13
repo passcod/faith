@@ -367,6 +367,18 @@ impl FaithResponse {
 					None => bytes,
 				};
 
+				// A zero-length chunk carries no bytes, but the body's byte-oriented
+				// ReadableStream cannot take one: `ReadableByteStreamController.enqueue`
+				// rejects an empty buffer outright (`ERR_INVALID_STATE`). Some origins end a
+				// response with an empty DATA frame carrying END_STREAM, so drop empty chunks
+				// here, before the stream is built, letting it close cleanly. The byte count
+				// delivered is unchanged, and the collecting paths (`text()`, `bytes()`) never
+				// noticed the empties anyway.
+				let bytes = Box::pin(bytes.filter(|item| {
+					let empty = matches!(item, Ok(chunk) if chunk.is_empty());
+					async move { !empty }
+				})) as Pin<Box<DynStream>>;
+
 				// Chained onto the stream that is actually delivered, above any decoder: a
 				// decoder reaches the end of its own framing without necessarily polling the
 				// bytes underneath to completion, so bookkeeping chained below it would never
