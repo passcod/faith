@@ -13,7 +13,8 @@ use napi::bindgen_prelude::{PromiseRaw, within_runtime_if_available};
 
 use http::Version;
 use http_cache_reqwest::{
-	CACacheManager, Cache, CacheOptions, HttpCache, HttpCacheOptions, MokaCacheBuilder, MokaManager,
+	CACacheManager, Cache, CacheMode, CacheOptions, HttpCache, HttpCacheOptions, MokaCacheBuilder,
+	MokaManager,
 };
 use hyper_util::client::legacy::connect::HttpInfo;
 use moka::sync::Cache as MokaCache;
@@ -83,9 +84,9 @@ fn ipv6_wildcard_bindable() -> bool {
 	})
 }
 
-/// Applies the Node.js networking environment variables to a reqwest client
-/// builder, matching how Node.js honours them for its own clients. This runs for
-/// every agent, so `fetch()` behaves like Node's built-in fetch out of the box.
+/// What the Node.js networking environment variables asked for, to apply to a reqwest client
+/// builder as Node.js honours them for its own clients. This is read for every agent, so
+/// `fetch()` behaves like Node's built-in fetch out of the box.
 ///
 /// - `NODE_EXTRA_CA_CERTS`: a path to a PEM file whose certificates are added to
 ///   the trust store on top of the platform roots. As in Node.js, a value that
@@ -108,24 +109,51 @@ fn ipv6_wildcard_bindable() -> bool {
 /// root set, so its only default trust source is the platform store the variable
 /// would toggle. `=0` could therefore only mean "trust almost nothing", which is
 /// never what a caller wants, so the platform store is always used.
-fn apply_node_env(mut client: reqwest::ClientBuilder) -> reqwest::ClientBuilder {
-	if let Ok(path) = std::env::var("NODE_EXTRA_CA_CERTS")
-		&& !path.is_empty()
-		&& let Ok(bytes) = std::fs::read(&path)
-		&& let Ok(certs) = Certificate::from_pem_bundle(&bytes)
-	{
-		client = client.tls_certs_merge(certs);
+///
+/// Read once, at construction: AGENT has these layered on top of the explicit options when the
+/// agent is built, so a client rebuilt later (spec:NETCHG) replays what was read then rather than
+/// picking up an environment that has changed since.
+#[derive(Debug, Clone, Default)]
+struct NodeEnvRecipe {
+	extra_ca_certs: Vec<Certificate>,
+	accept_invalid_certs: bool,
+	no_proxy: bool,
+}
+
+impl NodeEnvRecipe {
+	fn read() -> Self {
+		let mut recipe = Self::default();
+
+		if let Ok(path) = std::env::var("NODE_EXTRA_CA_CERTS")
+			&& !path.is_empty()
+			&& let Ok(bytes) = std::fs::read(&path)
+			&& let Ok(certs) = Certificate::from_pem_bundle(&bytes)
+		{
+			recipe.extra_ca_certs = certs;
+		}
+
+		recipe.accept_invalid_certs =
+			std::env::var("NODE_TLS_REJECT_UNAUTHORIZED").as_deref() == Ok("0");
+		recipe.no_proxy = std::env::var("NODE_USE_ENV_PROXY").as_deref() == Ok("0");
+
+		recipe
 	}
 
-	if std::env::var("NODE_TLS_REJECT_UNAUTHORIZED").as_deref() == Ok("0") {
-		client = client.danger_accept_invalid_certs(true);
-	}
+	fn apply(&self, mut client: reqwest::ClientBuilder) -> reqwest::ClientBuilder {
+		if !self.extra_ca_certs.is_empty() {
+			client = client.tls_certs_merge(self.extra_ca_certs.iter().cloned());
+		}
 
-	if std::env::var("NODE_USE_ENV_PROXY").as_deref() == Ok("0") {
-		client = client.no_proxy();
-	}
+		if self.accept_invalid_certs {
+			client = client.danger_accept_invalid_certs(true);
+		}
 
-	client
+		if self.no_proxy {
+			client = client.no_proxy();
+		}
+
+		client
+	}
 }
 
 #[napi(string_enum)]
@@ -871,6 +899,10 @@ pub struct Agent {
 	/// Single-flight claims for in-flight `preconnect` warm-ups, so concurrent calls for the same
 	/// origin do not open duplicate connections. (spec:WARM)
 	pub(crate) warming: MokaCache<String, ()>,
+	/// Bumped by `networkChanged`, so a warm-up that was in flight across the signal does not
+	/// record its origin as warm: its connection went into the pool that was just dropped
+	/// (spec:NETCHG#reach-across-the-subsystems).
+	pub(crate) warm_generation: Arc<AtomicU64>,
 	pub(crate) cookie_jar: Option<Arc<FaithJar>>,
 	pub(crate) stats: Arc<InnerAgentStats>,
 	pub(crate) conn_tracker: Arc<ConnectionTracker>,
@@ -897,6 +929,314 @@ pub struct Agent {
 	/// Whether a `Priority` header sits among the agent's default headers. `fetch` consults
 	/// it so that default wins over the header the `priority` option would derive.
 	pub(crate) has_default_priority: bool,
+	/// How to build this agent's clients, so `networkChanged` can build them again
+	/// (spec:NETCHG). Shared rather than cloned per agent clone: every clone builds the same
+	/// client from the same recipe, and `fetch` clones the agent per request.
+	pub(crate) recipe: Arc<ClientRecipe>,
+}
+
+/// The HTTP cache store to install on a client, held as the built manager rather than as the
+/// options that produced it.
+///
+/// The manager *is* the store: `MokaManager` holds the cached entries behind an `Arc`, and
+/// `CACacheManager` names the directory holding them. So cloning one shares the cache, while
+/// building a fresh one from the same options would empty an in-memory cache — which is why a
+/// client rebuilt for a network change clones this (spec:NETCHG#what-the-signal-keeps).
+#[derive(Debug, Clone)]
+enum HttpCacheStore {
+	Disk(CACacheManager),
+	Memory(MokaManager),
+}
+
+/// The HTTP cache middleware to install.
+#[derive(Debug, Clone)]
+struct HttpCacheRecipe {
+	mode: CacheMode,
+	options: HttpCacheOptions,
+	store: HttpCacheStore,
+}
+
+/// The HTTP/3 upgrade settings a client's middleware needs. The origin knowledge itself is not
+/// here: it belongs to the agent and outlives any one client (spec:NETCHG).
+#[cfg(feature = "http3")]
+#[derive(Debug, Clone)]
+struct H3UpgradeRecipe {
+	enabled: bool,
+	attempt_timeout: Option<Duration>,
+	probe: bool,
+	probe_timeout: Option<Duration>,
+}
+
+/// Everything needed to build the agent's clients, validated once at construction.
+///
+/// This exists because `networkChanged` has to drop the connection pool, and reqwest offers no way
+/// to do that short of dropping the client, so the client has to be buildable more than once
+/// (spec:NETCHG). `AgentOptions` cannot serve: validating it consumes it, and it carries napi
+/// values belonging to the JS call that passed them. So validation happens once, into these
+/// Rust-native fields, and building a client is a pure function of them and the agent's shared
+/// state.
+#[derive(Debug, Clone)]
+pub(crate) struct ClientRecipe {
+	user_agent: String,
+	local_address: Option<IpAddr>,
+	default_headers: Option<HeaderMap>,
+	/// Under the system resolver no hickory resolver is installed at all (spec:DNS).
+	dns_system: bool,
+	/// Validated at construction, and applied whichever resolver is in use: reqwest layers
+	/// overrides on top of the resolver it was given (spec:DNS#overrides).
+	dns_overrides: Vec<(String, Vec<SocketAddr>)>,
+	http2_adaptive_window: bool,
+	/// `None` when adaptive windowing owns the windows itself (spec:FLOW#adaptive-windowing).
+	http2_windows: Option<ResolvedWindows>,
+	#[cfg(feature = "http3")]
+	http3_max_idle_timeout: Duration,
+	#[cfg(feature = "http3")]
+	http3_windows: ResolvedWindows,
+	#[cfg(feature = "http3")]
+	http3_congestion_bbr: bool,
+	#[cfg(feature = "http3")]
+	http3_send_window: Option<u32>,
+	pool_idle_timeout: Option<Duration>,
+	pool_max_idle_per_host: Option<usize>,
+	redirect: Option<Redirect>,
+	connect_timeout: Option<Duration>,
+	read_timeout: Option<Duration>,
+	total_timeout: Option<Duration>,
+	/// Only reachable over QUIC, so only applied when HTTP/3 is compiled in.
+	#[cfg(feature = "http3")]
+	tls_early_data: Option<bool>,
+	tls_identity: Option<Identity>,
+	tls_required: Option<bool>,
+	tls_extra_roots: Vec<Certificate>,
+	node_env: NodeEnvRecipe,
+	http_cache: Option<HttpCacheRecipe>,
+	#[cfg(feature = "http3")]
+	h3_upgrade: H3UpgradeRecipe,
+}
+
+/// The clients [`ClientRecipe::build`] produces, and the prober that sends on them.
+struct BuiltClients {
+	client: ClientWithMiddleware,
+	raw_client: Client,
+	#[cfg(feature = "http3")]
+	prober: Option<Arc<H3Prober>>,
+}
+
+impl ClientRecipe {
+	/// The window an idle pooled connection lives in, which is also how long a warm-up counts as
+	/// warm and how long a connection stays listed (spec:POOL, spec:WARM, spec:OBS).
+	fn conn_timeout(&self) -> Duration {
+		// reqwest's own default, mirrored because the pool timeout it applies is not readable.
+		self.pool_idle_timeout.unwrap_or(Duration::from_secs(90))
+	}
+
+	/// Build a fresh client and raw client, around state the agent already holds.
+	///
+	/// Everything passed in survives a rebuild by being shared rather than rebuilt: the cookie
+	/// jar, the resolver (and so its cache), and the HTTP/3 origin knowledge all belong to the
+	/// agent rather than to any one client (spec:NETCHG#what-the-signal-keeps).
+	fn build(
+		&self,
+		cookie_jar: Option<&Arc<FaithJar>>,
+		dns_resolver: Option<&FaithResolver>,
+		#[cfg(feature = "http3")] alt_svc_cache: Option<&Arc<AltSvcCache>>,
+	) -> Result<BuiltClients, FaithError> {
+		let mut client = Client::builder()
+			.tls_info(true)
+			.tls_sslkeylogfile(true)
+			.user_agent(self.user_agent.clone());
+
+		if let Some(ip) = self.local_address {
+			client = client.local_address(ip);
+		}
+
+		if let Some(jar) = cookie_jar {
+			client = client.cookie_provider(jar.clone());
+		}
+
+		// Registered whichever resolver is in use: reqwest layers overrides on top of the
+		// resolver it was given, so they take effect under the system resolver too
+		// (spec:DNS#overrides).
+		for (domain, addresses) in &self.dns_overrides {
+			client = client.resolve_to_addrs(domain, addresses);
+		}
+
+		if self.dns_system {
+			client = client.no_hickory_dns();
+		} else if let Some(resolver) = dns_resolver {
+			client = client.dns_resolver(resolver.clone());
+		}
+
+		if let Some(headers) = &self.default_headers {
+			client = client.default_headers(headers.clone());
+		}
+
+		if self.http2_adaptive_window {
+			client = client.http2_adaptive_window(true);
+		} else if let Some(windows) = self.http2_windows {
+			client = client
+				.http2_initial_stream_window_size(windows.stream)
+				.http2_initial_connection_window_size(windows.connection);
+		}
+
+		#[cfg(feature = "http3")]
+		{
+			client = client
+				.http3_max_idle_timeout(self.http3_max_idle_timeout)
+				.http3_stream_receive_window(self.http3_windows.stream.into())
+				.http3_conn_receive_window(self.http3_windows.connection.into());
+
+			if self.http3_congestion_bbr {
+				client = client.http3_congestion_bbr();
+			}
+
+			if let Some(send_window) = self.http3_send_window {
+				client = client.http3_send_window(send_window.into());
+			}
+		}
+
+		if let Some(timeout) = self.pool_idle_timeout {
+			client = client.pool_idle_timeout(Some(timeout));
+		}
+
+		if let Some(max_idle) = self.pool_max_idle_per_host {
+			client = client.pool_max_idle_per_host(max_idle);
+		}
+
+		match self.redirect {
+			// follow is the default, and we ignore manual
+			None | Some(Redirect::Follow | Redirect::Manual) => {}
+			Some(Redirect::Error) => {
+				client = client.redirect(Policy::custom(|attempt| {
+					// Hand reqwest the error unboxed: it boxes for us, and boxing first would
+					// put a `Box<FaithError>` in the source chain, which does not downcast
+					// back to `FaithError` when we come to recover the kind as a `code`.
+					attempt.error(FaithError::from(FaithErrorKind::Redirect))
+				}));
+			}
+			Some(Redirect::Stop) => {
+				client = client.redirect(Policy::none());
+			}
+		}
+
+		if let Some(timeout) = self.connect_timeout {
+			client = client.connect_timeout(timeout);
+		}
+
+		if let Some(timeout) = self.read_timeout {
+			client = client.read_timeout(timeout);
+		}
+
+		if let Some(timeout) = self.total_timeout {
+			client = client.timeout(timeout);
+		}
+
+		#[cfg(feature = "http3")]
+		if let Some(early_data) = self.tls_early_data {
+			client = client.tls_early_data(early_data);
+		}
+
+		if let Some(identity) = &self.tls_identity {
+			client = client.identity(identity.clone());
+		}
+
+		if let Some(https_only) = self.tls_required {
+			client = client.https_only(https_only);
+		}
+
+		if !self.tls_extra_roots.is_empty() {
+			client = client.tls_certs_merge(self.tls_extra_roots.iter().cloned());
+		}
+
+		client = self.node_env.apply(client);
+
+		let raw_client = client
+			.build()
+			.map_err(|e| FaithError::new(FaithErrorKind::Config, Some(format!("{e:?}"))))?;
+		let mut client = ClientBuilder::new(raw_client.clone());
+
+		#[cfg(feature = "http3")]
+		let prober = {
+			// The prober sends on the *raw* client, deliberately: it must skip
+			// the HTTP cache (a replayed cached response would fake a
+			// confirmation) and the Alt-Svc middleware (no recursion), while
+			// sharing the h3 connection pool so a successful probe leaves a warm
+			// connection for the foreground. Only built when both the upgrade
+			// machinery and probing are on.
+			alt_svc_cache
+				.filter(|_| self.h3_upgrade.enabled && self.h3_upgrade.probe)
+				.map(|cache| {
+					Arc::new(H3Prober::new(
+						raw_client.clone(),
+						cache.clone(),
+						self.h3_upgrade.probe_timeout,
+					))
+				})
+		};
+
+		if let Some(cache) = &self.http_cache {
+			// The two arms differ only in the manager's type, which `HttpCache` is generic over,
+			// so they cannot share a constructor without boxing the manager.
+			client = match &cache.store {
+				HttpCacheStore::Disk(manager) => client.with(Cache(HttpCache {
+					mode: cache.mode,
+					manager: manager.clone(),
+					options: cache.options.clone(),
+				})),
+				HttpCacheStore::Memory(manager) => client.with(Cache(HttpCache {
+					mode: cache.mode,
+					manager: manager.clone(),
+					options: cache.options.clone(),
+				})),
+			};
+		}
+
+		// Registered *after* the HTTP cache, so the Alt-Svc layer sits inside it:
+		// `reqwest-middleware` runs the first-registered middleware outermost. Being
+		// inside matters three times over.
+		//
+		// A cache hit is served without calling inward, so it never reaches this
+		// layer. From outside, it would: `http-cache` rebuilds a cached response with
+		// the *stored* HTTP version, so a response cached from an HTTP/3 exchange
+		// replays as HTTP/3 and would be taken for a live one — confirming HTTP/3,
+		// clearing cancellation strikes and refreshing the confirmed TTL on evidence
+		// that never touched the network.
+		//
+		// The cache middleware also buffers the whole response body inside its own
+		// call inward. From outside, the HTTP/3 attempt guarded here would span that
+		// buffering, so a cancellation during body download would count as a strike,
+		// and `upgradeAttemptTimeout` would bound body transfer rather than the wait
+		// for response headers.
+		//
+		// And cache keys are computed before this layer runs, so an advertised-port
+		// rewrite cannot split HTTP/3 and TCP responses across separate entries.
+		#[cfg(feature = "http3")]
+		if let Some(alt_svc_cache) = alt_svc_cache {
+			client = client.with(AltSvcMiddleware::new(
+				alt_svc_cache.clone(),
+				self.h3_upgrade.enabled,
+				self.h3_upgrade.attempt_timeout,
+				prober.clone(),
+			));
+		}
+
+		// Registered last, so it sits innermost and wraps nothing but the exchange
+		// itself. Inside the Alt-Svc layer rather than outside it, because each
+		// protocol attempt is its own connection and deserves its own retry: a
+		// failed HTTP/3 attempt is the fallback's business, and re-running the
+		// upgrade decision from out here would re-attempt HTTP/3 on a path already
+		// judged dead and record a second failure against the origin for it. Inside
+		// the HTTP cache for the same reason as the Alt-Svc layer -- a retry should
+		// re-send the request, not redo the cache lookup that led to it.
+		client = client.with(DeadConnectionRetry);
+
+		Ok(BuiltClients {
+			client: client.build(),
+			raw_client,
+			#[cfg(feature = "http3")]
+			prober,
+		})
+	}
 }
 
 #[napi]
@@ -912,17 +1252,33 @@ impl Agent {
 	}
 
 	fn with_options_inner(options: AgentOptions) -> Result<Self, FaithError> {
-		let mut client = Client::builder()
-			.tls_info(true)
-			.tls_sslkeylogfile(true)
-			.user_agent(options.user_agent.as_deref().unwrap_or(USER_AGENT));
+		// Destructured rather than read field by field so that a new option cannot be added
+		// without the compiler pointing here, where every option is turned into the recipe the
+		// agent's clients are built from (spec:NETCHG).
+		let AgentOptions {
+			cache,
+			cookies,
+			dns,
+			flow_control,
+			headers,
+			http2,
+			// Every use of the HTTP/3 options sits behind the feature.
+			#[cfg_attr(not(feature = "http3"), allow(unused_variables))]
+			http3,
+			local_address,
+			pool,
+			redirect,
+			timeout,
+			tls,
+			user_agent,
+		} = options;
 
 		// Local bind address. An explicit value is honoured as-is. Otherwise, on hosts
 		// without usable IPv6, bind 0.0.0.0: reqwest binds the QUIC (HTTP/3) socket to the
 		// IPv6 wildcard `[::]` by default, which fails to construct on IPv4-only hosts and
 		// makes HTTP/3 silently fall back to TCP. Binding 0.0.0.0 there costs nothing (such
 		// a host can't use IPv6 for TCP either) and keeps HTTP/3 working.
-		let local_address = match &options.local_address {
+		let local_address = match &local_address {
 			Some(addr) => Some(IpAddr::from_str(addr).map_err(|err| {
 				FaithError::new(
 					FaithErrorKind::AddressParse,
@@ -932,60 +1288,57 @@ impl Agent {
 			None if !ipv6_wildcard_bindable() => Some(IpAddr::V4(Ipv4Addr::UNSPECIFIED)),
 			None => None,
 		};
-		if let Some(ip) = local_address {
-			client = client.local_address(ip);
-		}
 
 		// `cookies: true` takes the default limits; an options object tunes them. (spec:COOK)
-		let cookie_jar = match options.cookies.as_ref() {
+		// The jar is installed on the client by the recipe, so it survives a rebuild
+		// (spec:NETCHG#what-the-signal-keeps).
+		let cookie_jar = match cookies.as_ref() {
 			None | Some(Either::A(false)) => None,
 			Some(Either::A(true)) => Some(Arc::new(FaithJar::new(CookieLimits::default()))),
-			Some(Either::B(options)) => Some(Arc::new(FaithJar::new(options.into()))),
+			Some(Either::B(cookies)) => Some(Arc::new(FaithJar::new(cookies.into()))),
 		};
-		if let Some(jar) = &cookie_jar {
-			client = client.cookie_provider(jar.clone());
-		}
 
-		let dns = options.dns.unwrap_or_default();
-		let dns_resolver = if dns.system.unwrap_or(false) {
-			// The system resolver (getaddrinfo) has no in-process cache Faith can warm, so no
-			// resolver is installed and `prefetchDns` resolves as a no-op (spec:WARM).
-			client = client.no_hickory_dns();
-			None
-		} else {
-			for DnsOverride { domain, addresses } in dns.overrides.unwrap_or_default() {
-				client = client.resolve_to_addrs(
-					&domain,
-					&addresses
-						.into_iter()
-						.map(|addr| match SocketAddr::from_str(&addr) {
-							Ok(addr) => Ok(addr),
-							Err(err) => match IpAddr::from_str(&addr) {
-								Ok(IpAddr::V4(ip)) => Ok(SocketAddr::V4(SocketAddrV4::new(ip, 0))),
-								Ok(IpAddr::V6(ip)) => {
-									Ok(SocketAddr::V6(SocketAddrV6::new(ip, 0, 0, 0)))
-								}
-								Err(_) => Err(FaithError::new(
-									FaithErrorKind::AddressParse,
-									Some(format!("{addr:?}: {err}")),
-								)),
-							},
-						})
-						.collect::<Result<Vec<_>, FaithError>>()?,
-				)
-			}
+		let dns = dns.unwrap_or_default();
+		let dns_system = dns.system.unwrap_or(false);
+		// Parsed whichever resolver is in use: overrides take effect under the system resolver
+		// too (spec:DNS#overrides), and an unparseable address is a construction error either
+		// way (spec:AGENT#construction).
+		let dns_overrides = dns
+			.overrides
+			.unwrap_or_default()
+			.into_iter()
+			.map(|DnsOverride { domain, addresses }| {
+				let addresses = addresses
+					.into_iter()
+					.map(|addr| match SocketAddr::from_str(&addr) {
+						Ok(addr) => Ok(addr),
+						Err(err) => match IpAddr::from_str(&addr) {
+							Ok(IpAddr::V4(ip)) => Ok(SocketAddr::V4(SocketAddrV4::new(ip, 0))),
+							Ok(IpAddr::V6(ip)) => {
+								Ok(SocketAddr::V6(SocketAddrV6::new(ip, 0, 0, 0)))
+							}
+							Err(_) => Err(FaithError::new(
+								FaithErrorKind::AddressParse,
+								Some(format!("{addr:?}: {err}")),
+							)),
+						},
+					})
+					.collect::<Result<Vec<_>, FaithError>>()?;
+				Ok((domain, addresses))
+			})
+			.collect::<Result<Vec<_>, FaithError>>()?;
 
-			// Faith owns the hickory resolver rather than leaving it to reqwest's built-in one, so
-			// `prefetchDns` can warm the very cache reqwest's requests read (spec:WARM). reqwest
-			// still layers `dns.overrides` on top, so the overrides applied above keep working.
-			let resolver = FaithResolver::default();
-			client = client.dns_resolver(resolver.clone());
-			Some(resolver)
-		};
+		// Faith owns the hickory resolver rather than leaving it to reqwest's built-in one, so
+		// `prefetchDns` can warm the very cache reqwest's requests read (spec:WARM) and
+		// `networkChanged` can flush it (spec:NETCHG). The system resolver (getaddrinfo) has no
+		// in-process cache Faith can warm, so no resolver is installed there and `prefetchDns`
+		// resolves as a no-op (spec:WARM).
+		let dns_resolver = (!dns_system).then(FaithResolver::default);
 
 		let mut default_accept_encoding = None;
 		let mut has_default_priority = false;
-		if let Some(headers) = options.headers
+		let mut default_headers = None;
+		if let Some(headers) = headers
 			&& !headers.is_empty()
 		{
 			let map = HeaderMap::from_iter(headers.into_iter().filter_map(
@@ -1011,165 +1364,161 @@ impl Agent {
 			));
 			default_accept_encoding = map.get(reqwest::header::ACCEPT_ENCODING).cloned();
 			has_default_priority = map.contains_key(PRIORITY);
-			client = client.default_headers(map);
+			default_headers = Some(map);
 		}
 
 		// HTTP/2 flow control (spec:FLOW). Adaptive windowing takes over both windows itself, so
-		// the explicit sizes are not applied at all when it's on: reqwest would let the later
-		// `http2_adaptive_window` call win regardless, but leaving the calls out makes the
-		// precedence visible here rather than depending on hyper's internal ordering.
-		let http2 = options.http2.unwrap_or_default();
-		if http2.adaptive_window.unwrap_or(false) {
-			client = client.http2_adaptive_window(true);
-		} else {
-			let windows = resolve_windows(
-				options.flow_control.as_ref(),
+		// the explicit sizes are not resolved at all when it's on: reqwest would let the later
+		// `http2_adaptive_window` call win regardless, but leaving them out makes the precedence
+		// visible here rather than depending on hyper's internal ordering.
+		let http2 = http2.unwrap_or_default();
+		let http2_adaptive_window = http2.adaptive_window.unwrap_or(false);
+		let http2_windows = (!http2_adaptive_window).then(|| {
+			resolve_windows(
+				flow_control.as_ref(),
 				http2.stream_window,
 				http2.connection_window,
-			);
-			client = client
-				.http2_initial_stream_window_size(windows.stream)
-				.http2_initial_connection_window_size(windows.connection);
-		}
+			)
+		});
 
 		#[cfg(feature = "http3")]
-		{
-			let idle_timeout = options
-				.http3
+		let http3_max_idle_timeout = Duration::from_secs(
+			http3
 				.as_ref()
 				.and_then(|h| h.max_idle_timeout)
-				.unwrap_or(30);
-			client = client
-				.http3_max_idle_timeout(Duration::from_secs(idle_timeout.min(120).max(1).into()));
+				.unwrap_or(30)
+				.clamp(1, 120)
+				.into(),
+		);
 
-			// QUIC flow control (spec:FLOW). quinn's own defaults are a ~1.25MB stream window
-			// inside an unbounded connection window: the stream window is the binding constraint
-			// on a high-latency link, and the unbounded connection window means a connection with
-			// many concurrent requests has no ceiling on what it buffers. Both are set here.
-			let windows = resolve_windows(
-				options.flow_control.as_ref(),
-				options.http3.as_ref().and_then(|h| h.stream_window),
-				options.http3.as_ref().and_then(|h| h.connection_window),
-			);
-			client = client
-				.http3_stream_receive_window(windows.stream.into())
-				.http3_conn_receive_window(windows.connection.into());
+		// QUIC flow control (spec:FLOW). quinn's own defaults are a ~1.25MB stream window
+		// inside an unbounded connection window: the stream window is the binding constraint
+		// on a high-latency link, and the unbounded connection window means a connection with
+		// many concurrent requests has no ceiling on what it buffers. Both are set here.
+		#[cfg(feature = "http3")]
+		let http3_windows = resolve_windows(
+			flow_control.as_ref(),
+			http3.as_ref().and_then(|h| h.stream_window),
+			http3.as_ref().and_then(|h| h.connection_window),
+		);
 
-			if let Some(ref http3) = options.http3 {
-				if let Some(Http3Congestion::Bbr1) = http3.congestion {
-					client = client.http3_congestion_bbr();
-				}
+		#[cfg(feature = "http3")]
+		let http3_congestion_bbr = matches!(
+			http3.as_ref().and_then(|h| h.congestion),
+			Some(Http3Congestion::Bbr1)
+		);
 
-				if let Some(send_window) = http3.send_window {
-					client = client.http3_send_window(send_window.into());
-				}
-			}
-		}
+		#[cfg(feature = "http3")]
+		let http3_send_window = http3.as_ref().and_then(|h| h.send_window);
 
-		let mut conn_timeout = Duration::from_secs(90); // default from reqwest
-		if let Some(pool) = options.pool {
-			if let Some(seconds) = pool.idle_timeout {
-				let dur = Duration::from_secs(seconds.max(0).into());
-				conn_timeout = dur;
-				client = client.pool_idle_timeout(Some(dur));
-			}
+		let pool_idle_timeout = pool
+			.as_ref()
+			.and_then(|pool| pool.idle_timeout)
+			.map(|seconds| Duration::from_secs(seconds.into()));
+		// A pool group with no cap set means no limit, which is reqwest's own default (spec:POOL).
+		let pool_max_idle_per_host = pool.as_ref().map(|pool| {
+			pool.max_idle_per_host
+				.and_then(|n| n.try_into().ok())
+				.unwrap_or(usize::MAX)
+		});
 
-			client = client.pool_max_idle_per_host(
-				pool.max_idle_per_host
-					.and_then(|n| n.try_into().ok())
-					.unwrap_or(usize::MAX),
-			)
-		}
+		let connect_timeout = timeout
+			.and_then(|t| t.connect)
+			.map(|millis| Duration::from_millis(millis.into()));
+		let read_timeout = timeout
+			.and_then(|t| t.read)
+			.map(|millis| Duration::from_millis(millis.into()));
+		let total_timeout = timeout
+			.and_then(|t| t.total)
+			.map(|millis| Duration::from_millis(millis.into()));
 
-		if let Some(redir) = options.redirect {
-			match redir {
-				// follow is the default, and we ignore manual
-				Redirect::Follow | Redirect::Manual => {}
-				Redirect::Error => {
-					client = client.redirect(Policy::custom(|attempt| {
-						// Hand reqwest the error unboxed: it boxes for us, and boxing first would
-						// put a `Box<FaithError>` in the source chain, which does not downcast
-						// back to `FaithError` when we come to recover the kind as a `code`.
-						attempt.error(FaithError::from(FaithErrorKind::Redirect))
-					}));
-				}
-				Redirect::Stop => {
-					client = client.redirect(Policy::none());
-				}
-			}
-		}
+		#[cfg(feature = "http3")]
+		let tls_early_data = tls.as_ref().and_then(|tls| tls.early_data);
+		let tls_required = tls.as_ref().and_then(|tls| tls.required);
+		// PEM inputs are parsed here rather than kept as bytes: the parsed forms are what a
+		// rebuilt client needs, and a syntax error belongs to construction (spec:AGENT#construction).
+		let (tls_identity, tls_extra_roots) = match tls {
+			None => (None, Vec::new()),
+			Some(tls) => {
+				let identity = match &tls.identity {
+					None => None,
+					Some(identity) => Some(
+						Identity::from_pem(match identity {
+							Either::A(buf) => buf.as_ref(),
+							Either::B(string) => string.as_bytes(),
+						})
+						.map_err(|err| {
+							FaithError::new(FaithErrorKind::PemParse, Some(err.to_string()))
+						})?,
+					),
+				};
 
-		if let Some(timeouts) = options.timeout {
-			if let Some(millis) = timeouts.connect {
-				client = client.connect_timeout(Duration::from_millis(millis.into()));
-			}
-
-			if let Some(millis) = timeouts.read {
-				client = client.read_timeout(Duration::from_millis(millis.into()));
-			}
-
-			if let Some(millis) = timeouts.total {
-				client = client.timeout(Duration::from_millis(millis.into()));
-			}
-		}
-
-		if let Some(tls) = options.tls {
-			#[cfg(feature = "http3")]
-			if let Some(early_data) = tls.early_data {
-				client = client.tls_early_data(early_data);
-			}
-
-			if let Some(identity) = tls.identity {
-				client = client.identity(
-					Identity::from_pem(match &identity {
-						Either::A(buf) => buf.as_ref(),
-						Either::B(string) => string.as_bytes(),
-					})
-					.map_err(|err| {
-						FaithError::new(FaithErrorKind::PemParse, Some(err.to_string()))
-					})?,
-				);
-			}
-
-			if let Some(https_only) = tls.required {
-				client = client.https_only(https_only);
-			}
-
-			if let Some(extra_roots) = tls.extra_roots {
-				for pem in &extra_roots {
+				let mut extra_roots = Vec::new();
+				for pem in tls.extra_roots.iter().flatten() {
 					let bytes = match pem {
 						Either::A(buf) => buf.as_ref(),
 						Either::B(string) => string.as_bytes(),
 					};
-					let certs = Certificate::from_pem_bundle(bytes).map_err(|err| {
+					extra_roots.extend(Certificate::from_pem_bundle(bytes).map_err(|err| {
 						FaithError::new(FaithErrorKind::PemParse, Some(err.to_string()))
-					})?;
-					client = client.tls_certs_merge(certs);
+					})?);
 				}
+
+				(identity, extra_roots)
 			}
-		}
+		};
 
-		client = apply_node_env(client);
+		let http_cache = if let Some(cache) = cache
+			&& let Some(store) = cache.store
+		{
+			let mode = cache.mode.unwrap_or_default().into();
+			let options = HttpCacheOptions {
+				cache_options: Some(CacheOptions {
+					shared: cache.shared.unwrap_or(true),
+					ignore_cargo_cult: true,
+					..Default::default()
+				}),
+				..Default::default()
+			};
+			let store = match store {
+				CacheStore::Disk => HttpCacheStore::Disk(CACacheManager {
+					path: cache
+						.path
+						.ok_or_else(|| {
+							FaithError::new(FaithErrorKind::Config, Some("missing cache.path"))
+						})?
+						.into(),
+					remove_opts: Default::default(),
+				}),
+				CacheStore::Memory => HttpCacheStore::Memory(MokaManager::new(
+					MokaCacheBuilder::new(cache.capacity.map_or(10_000, |n| n.into())).build(),
+				)),
+			};
 
-		let reqwest_client = client
-			.build()
-			.map_err(|e| FaithError::new(FaithErrorKind::Config, Some(format!("{e:?}"))))?;
-		let mut client = ClientBuilder::new(reqwest_client.clone());
+			Some(HttpCacheRecipe {
+				mode,
+				options,
+				store,
+			})
+		} else {
+			None
+		};
 
 		// Read outside the `alt_svc_cache` block below because `fetch` needs it too,
 		// to keep a rewritten port from looking like a redirect.
 		#[cfg(feature = "http3")]
-		let h3_follow_advertised_port = options
-			.http3
+		let h3_follow_advertised_port = http3
 			.as_ref()
 			.and_then(|o| o.upgrade_follow_advertised_port)
 			.unwrap_or(false);
 		#[cfg(not(feature = "http3"))]
 		let h3_follow_advertised_port = false;
 
+		// The origin knowledge is built once and outlives every client the agent builds: it is
+		// the agent's own, and a network change edits it rather than replacing it (spec:NETCHG).
 		#[cfg(feature = "http3")]
-		let (alt_svc_cache, alt_svc_middleware, h3_prober, h3_upgrade_enabled) = {
-			let http3_opts = options.http3.as_ref();
+		let (alt_svc_cache, h3_upgrade) = {
+			let http3_opts = http3.as_ref();
 			let enabled = http3_opts.and_then(|o| o.upgrade_enabled).unwrap_or(true);
 
 			let advertised_ttl = Duration::from_secs(
@@ -1252,108 +1601,61 @@ impl Agent {
 				}
 			}
 
-			// The prober sends on the *raw* client, deliberately: it must skip
-			// the HTTP cache (a replayed cached response would fake a
-			// confirmation) and this very middleware (no recursion), while
-			// sharing the h3 connection pool so a successful probe leaves a warm
-			// connection for the foreground. Only built when both the upgrade
-			// machinery and probing are on.
-			let prober = (enabled && probe).then(|| {
-				Arc::new(H3Prober::new(
-					reqwest_client.clone(),
-					cache.clone(),
+			(
+				Some(cache),
+				H3UpgradeRecipe {
+					enabled,
+					attempt_timeout,
+					probe,
 					probe_timeout,
-				))
-			});
-
-			let middleware =
-				AltSvcMiddleware::new(cache.clone(), enabled, attempt_timeout, prober.clone());
-
-			// Registered below rather than here — see the note at the registration.
-			(Some(cache), middleware, prober, enabled)
+				},
+			)
 		};
 
-		if let Some(cache) = options.cache
-			&& let Some(store) = cache.store
-		{
-			let mode = cache.mode.unwrap_or_default().into();
-			let cache_options = HttpCacheOptions {
-				cache_options: Some(CacheOptions {
-					shared: cache.shared.unwrap_or(true),
-					ignore_cargo_cult: true,
-					..Default::default()
-				}),
-				..Default::default()
-			};
-			match store {
-				CacheStore::Disk => {
-					client = client.with(Cache(HttpCache {
-						mode,
-						manager: CACacheManager {
-							path: cache
-								.path
-								.ok_or_else(|| {
-									FaithError::new(
-										FaithErrorKind::Config,
-										Some("missing cache.path"),
-									)
-								})?
-								.into(),
-							remove_opts: Default::default(),
-						},
-						options: cache_options,
-					}));
-				}
-				CacheStore::Memory => {
-					client = client.with(Cache(HttpCache {
-						mode,
-						manager: MokaManager::new(
-							MokaCacheBuilder::new(cache.capacity.map_or(10_000, |n| n.into()))
-								.build(),
-						),
-						options: cache_options,
-					}));
-				}
-			}
-		}
+		let recipe = ClientRecipe {
+			user_agent: user_agent.unwrap_or_else(|| USER_AGENT.to_owned()),
+			local_address,
+			default_headers,
+			dns_system,
+			dns_overrides,
+			http2_adaptive_window,
+			http2_windows,
+			#[cfg(feature = "http3")]
+			http3_max_idle_timeout,
+			#[cfg(feature = "http3")]
+			http3_windows,
+			#[cfg(feature = "http3")]
+			http3_congestion_bbr,
+			#[cfg(feature = "http3")]
+			http3_send_window,
+			pool_idle_timeout,
+			pool_max_idle_per_host,
+			redirect,
+			connect_timeout,
+			read_timeout,
+			total_timeout,
+			#[cfg(feature = "http3")]
+			tls_early_data,
+			tls_identity,
+			tls_required,
+			tls_extra_roots,
+			node_env: NodeEnvRecipe::read(),
+			http_cache,
+			#[cfg(feature = "http3")]
+			h3_upgrade,
+		};
 
-		// Registered *after* the HTTP cache, so the Alt-Svc layer sits inside it:
-		// `reqwest-middleware` runs the first-registered middleware outermost. Being
-		// inside matters three times over.
-		//
-		// A cache hit is served without calling inward, so it never reaches this
-		// layer. From outside, it would: `http-cache` rebuilds a cached response with
-		// the *stored* HTTP version, so a response cached from an HTTP/3 exchange
-		// replays as HTTP/3 and would be taken for a live one — confirming HTTP/3,
-		// clearing cancellation strikes and refreshing the confirmed TTL on evidence
-		// that never touched the network.
-		//
-		// The cache middleware also buffers the whole response body inside its own
-		// call inward. From outside, the HTTP/3 attempt guarded here would span that
-		// buffering, so a cancellation during body download would count as a strike,
-		// and `upgradeAttemptTimeout` would bound body transfer rather than the wait
-		// for response headers.
-		//
-		// And cache keys are computed before this layer runs, so an advertised-port
-		// rewrite cannot split HTTP/3 and TCP responses across separate entries.
-		#[cfg(feature = "http3")]
-		{
-			client = client.with(alt_svc_middleware);
-		}
-
-		// Registered last, so it sits innermost and wraps nothing but the exchange
-		// itself. Inside the Alt-Svc layer rather than outside it, because each
-		// protocol attempt is its own connection and deserves its own retry: a
-		// failed HTTP/3 attempt is the fallback's business, and re-running the
-		// upgrade decision from out here would re-attempt HTTP/3 on a path already
-		// judged dead and record a second failure against the origin for it. Inside
-		// the HTTP cache for the same reason as the Alt-Svc layer -- a retry should
-		// re-send the request, not redo the cache lookup that led to it.
-		client = client.with(DeadConnectionRetry);
+		let conn_timeout = recipe.conn_timeout();
+		let built = recipe.build(
+			cookie_jar.as_ref(),
+			dns_resolver.as_ref(),
+			#[cfg(feature = "http3")]
+			alt_svc_cache.as_ref(),
+		)?;
 
 		Ok(Self {
-			client: Some(client.build()),
-			raw_client: Some(reqwest_client),
+			client: Some(built.client),
+			raw_client: Some(built.raw_client),
 			dns_resolver,
 			// A warm-up connection is warm only as long as the pool keeps it idle, so the record
 			// that an origin is warm expires with that same window.
@@ -1363,18 +1665,20 @@ impl Agent {
 			warming: MokaCache::builder()
 				.time_to_live(Duration::from_secs(300))
 				.build(),
+			warm_generation: Default::default(),
 			cookie_jar,
 			stats: Default::default(),
 			conn_tracker: ConnectionTracker::new(conn_timeout),
 			#[cfg(feature = "http3")]
 			alt_svc_cache,
 			#[cfg(feature = "http3")]
-			h3_prober,
+			h3_prober: built.prober,
 			h3_follow_advertised_port,
 			#[cfg(feature = "http3")]
-			h3_upgrade_enabled,
+			h3_upgrade_enabled: recipe.h3_upgrade.enabled,
 			default_accept_encoding,
 			has_default_priority,
+			recipe: Arc::new(recipe),
 		})
 	}
 
@@ -1415,6 +1719,79 @@ impl Agent {
 			self.h3_prober = None;
 			self.alt_svc_cache = None;
 		}
+	}
+
+	/// Tell the agent the network underneath it has changed, so it stops deciding from what it
+	/// learned about a network that is gone.
+	///
+	/// Node has no portable signal for an interface or connectivity change, so Faith cannot
+	/// detect one; this is the reaction, and wiring it to a trigger (an OS notification, a VPN
+	/// transition, a captive-portal sign-in) is the caller's own. It drops pooled connections,
+	/// flushes the DNS cache, demotes the HTTP/3 origins that a real response confirmed back to
+	/// advertised so a background probe re-verifies them, and clears the HTTP/3 failure and slow
+	/// states, their cooldown backoff, and the path-time averages.
+	///
+	/// Configuration, `http3.hints`, `Alt-Svc` advertisements, the cookie jar, the HTTP cache and
+	/// the `stats()` counters are all kept: none of them is a claim about a network path.
+	///
+	/// Requests already in flight are not interrupted and run to completion on the connections
+	/// they hold; the reset shapes what requests started afterwards draw on. Calling it on a
+	/// closed agent does nothing, and calling it repeatedly is harmless.
+	///
+	/// spec:NETCHG
+	#[napi]
+	pub fn network_changed(&mut self) {
+		// A closed agent has already released all of this.
+		if self.client.is_none() {
+			return;
+		}
+
+		// reqwest cannot drop pooled connections short of dropping the client, so the client is
+		// rebuilt from the recipe the agent kept for this. Requests in flight hold their own
+		// clone of the old client (`fetch` clones the agent per request), so they run to
+		// completion and the old pool goes when the last of them finishes.
+		//
+		// A rebuild that fails leaves the agent on its existing client: the options were already
+		// validated at construction, so a failure here is not the caller's to answer for, and an
+		// agent that still works on the old network beats one that works nowhere.
+		let built = self.recipe.build(
+			self.cookie_jar.as_ref(),
+			self.dns_resolver.as_ref(),
+			#[cfg(feature = "http3")]
+			self.alt_svc_cache.as_ref(),
+		);
+		if let Ok(built) = built {
+			#[cfg(feature = "http3")]
+			{
+				// Abort probes running on the old client: each holds a clone of it, and their
+				// answers would describe the path that has just gone away.
+				if let Some(prober) = &self.h3_prober {
+					prober.abort_all();
+				}
+				self.h3_prober = built.prober;
+			}
+			self.client = Some(built.client);
+			self.raw_client = Some(built.raw_client);
+		}
+
+		// Names resolve afresh against the new network. Under the system resolver there is no
+		// resolver here and so no cache to flush (spec:DNS).
+		if let Some(resolver) = &self.dns_resolver {
+			resolver.clear_cache();
+		}
+
+		#[cfg(feature = "http3")]
+		if let Some(alt_svc_cache) = &self.alt_svc_cache {
+			alt_svc_cache.network_changed();
+		}
+
+		// The warm-up records describe pooled connections that have just been dropped, so a
+		// `preconnect` after the signal opens a connection rather than finding the origin warm
+		// (spec:NETCHG, spec:WARM). The single-flight claims are left alone: a warm-up still in
+		// flight is not duplicated by releasing its claim, and the generation bump is what stops
+		// it recording an origin as warm on the strength of a connection in the dropped pool.
+		self.warmed.invalidate_all();
+		self.warm_generation.fetch_add(1, Ordering::Relaxed);
 	}
 
 	/// Add a cookie into the agent.
@@ -1609,6 +1986,9 @@ impl Agent {
 		let conn_tracker = self.conn_tracker.clone();
 		let warmed = self.warmed.clone();
 		let warming = self.warming.clone();
+		// Read before the warm-up starts, to compare against once it finishes.
+		let warm_generation = self.warm_generation.clone();
+		let generation = warm_generation.load(Ordering::Relaxed);
 
 		faith_promise(env, async move {
 			// Release the single-flight claim whatever happens, so a later warm-up isn't blocked
@@ -1670,8 +2050,11 @@ impl Agent {
 			}
 
 			// A connection was established, so the origin is warm for the idle window; a failed
-			// warm-up leaves it unmarked so a later `preconnect` may try again.
-			if outcome.is_ok() {
+			// warm-up leaves it unmarked so a later `preconnect` may try again. A network change
+			// while this was in flight leaves it unmarked too: the connection landed in the pool
+			// that change dropped, so the origin is not warm however well the request went
+			// (spec:NETCHG#reach-across-the-subsystems).
+			if outcome.is_ok() && warm_generation.load(Ordering::Relaxed) == generation {
 				warmed.insert(key, ());
 			}
 

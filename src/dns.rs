@@ -53,6 +53,19 @@ impl FaithResolver {
 			let _ = resolver.lookup_ip(host).await;
 		}
 	}
+
+	/// Drop every cached answer, so the next lookup of any name goes to the network.
+	///
+	/// Synchronous, unlike the rest of this type: it reads the cell rather than initialising it,
+	/// because a resolver that has never been built holds nothing to flush. That also keeps it
+	/// callable from `networkChanged`, which is not async.
+	///
+	/// spec:NETCHG#reach-across-the-subsystems
+	pub fn clear_cache(&self) {
+		if let Some(resolver) = self.state.get() {
+			resolver.clear_cache();
+		}
+	}
 }
 
 impl Resolve for FaithResolver {

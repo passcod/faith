@@ -187,6 +187,48 @@ test("Agent dns.system works with dns.overrides", async (t) => {
 	t.ok(response.ok, "Overrides should work even with system DNS");
 });
 
+test("Agent dns.system overrides a name the system cannot resolve", async (t) => {
+	t.plan(1);
+
+	// The override has to be the only way this name resolves, or the test passes
+	// whether or not the override was registered at all: `.invalid` never resolves.
+	const agent = new Agent({
+		dns: {
+			system: true,
+			overrides: [
+				{
+					domain: "faith-override.invalid",
+					addresses: [`127.0.0.1:${port()}`],
+				},
+			],
+		},
+	});
+
+	const response = await faithFetch("http://faith-override.invalid/get", {
+		agent,
+	});
+	t.ok(response.ok, "the override resolves the name under the system resolver");
+});
+
+test("Agent dns.system still rejects an unparseable override address", async (t) => {
+	t.plan(1);
+
+	// Validation belongs to construction whichever resolver is in use.
+	t.throws(
+		() =>
+			new Agent({
+				dns: {
+					system: true,
+					overrides: [
+						{ domain: "example.com", addresses: ["not-an-address"] },
+					],
+				},
+			}),
+		/not-an-address/,
+		"an unparseable override address throws at construction",
+	);
+});
+
 test("Agent dns persists across multiple requests", async (t) => {
 	t.plan(4);
 

@@ -12,8 +12,9 @@ The point is that the next request rebuilds against the new network rather than 
 
 The signal draws one line through everything an agent holds, and that line governs any state the agent gains later without the state having to be named here.
 
-- [ ] State the agent learned by observing the network is discarded. A network change is precisely the event that invalidates it: it was true of a path that no longer exists, and holding it means judging the new network by the old one's behaviour. Reachability findings, timing measurements, resolved addresses, open sockets, and the counters and cooldowns derived from them are all of this kind.
+- [ ] State the agent observed the network to reach a decision by is discarded. A network change is precisely the event that invalidates it: it was true of a path that no longer exists, and holding it means deciding on the new network from the old one's behaviour. Reachability findings, timing measurements, resolved addresses, pooled sockets, and the counters and cooldowns derived from them are all of this kind.
 - [ ] State the agent was given is kept. Configuration, the caller's own assertions, and what an origin told Faith about itself are not claims about a network path, so a change of path says nothing about them.
+- [ ] What the agent reports rather than decides from is kept. The observability surfaces describe what the agent has done and what it currently holds open, so the signal is not an event in their history and does not edit it (see [OBS](observability.md)).
 - [ ] Discarding is a reset to the unknown, not a reset to a failure. Cleared state leaves each origin as though the agent had just been constructed and had never reached it, so the next request rediscovers it at full cost and nothing is held down by a penalty the old network earned.
 
 A subsystem added later inherits this rule: its network-derived state is cleared by the signal, and whether that happens is not an open question per subsystem.
@@ -24,6 +25,7 @@ The rule above resolves, for the state an agent holds today, to:
 
 - [ ] Pooled connections are discarded, so a request after the change reconnects rather than writing into a socket bound to the old network (see [POOL](connection-pool.md)).
 - [ ] The DNS cache is flushed, so names resolve afresh against the new network. Under the system resolver there is no cache to flush and the signal does no DNS work (see [DNS](dns.md)).
+- [ ] The record of which origins hold a warm connection clears with the connections themselves, so preconnecting an origin after the signal opens a connection rather than treating the origin as already warm (see [WARM](warm-up.md)).
 - [ ] Every HTTP/3 origin proven by observation drops from confirmed to advertised, keeping its advertisement and taking a fresh advertised lifetime. The path that proved it is gone, so it is re-verified rather than trusted: a background probe re-confirms it without a foreground request paying for the check (see [H3UP](../http3/upgrade.md) and [PROBE](../http3/probing.md)).
 - [ ] The HTTP/3 failed and slow states clear, along with the consecutive-failure count, the cancellation-strike count, and the cooldown backoff they drive, so an origin whose UDP path was blocked or slow on the old network is probe-worthy again immediately (see [H3UP](../http3/upgrade.md)).
 - [ ] The per-origin path-time averages clear for both the QUIC and TCP families, so slow-path demotion judges the new network from fresh samples (see [PROBE](../http3/probing.md)).
@@ -37,14 +39,17 @@ The reset leaves every HTTP/3 origin either advertised or unknown, so the demoti
 - [ ] `Alt-Svc` advertisements are kept. An advertisement is the origin's statement about itself, and a change of client network does not revise it.
 - [ ] The cookie jar and the HTTP cache are kept, holding content and origin state rather than anything about a network path (see [COOK](cookies.md) and [CACHE](../cache/http-cache.md)).
 - [ ] The `stats()` counters are kept, being a cumulative record of what the agent has done rather than a description of the network (see [OBS](observability.md)).
+- [ ] The connections `connections()` lists are kept and lapse on the pool idle window as they always do. The signal cannot tell a connection it dropped from the pool from one still carrying a request, so clearing the list would hide live connections at the moment a caller is most likely to be watching them; a dropped connection instead ages out of the list on its own (see [OBS](observability.md)).
 
 ## In-flight requests
 
 - [ ] A request already in flight when `networkChanged()` is called runs to completion on its existing connection; the signal never interrupts it.
 - [ ] The reset takes effect for work that starts after the call: it reshapes the state the next request draws on, not the state the requests already running depend on.
 
+- [ ] A request that outlives the signal records its outcome when it completes, like any other request. Its evidence came from the path that has gone, so an HTTP/3 response landing just after the signal re-confirms an origin the signal had demoted. The alternative is discarding the outcome of a request that succeeded, and the window is one request's remaining lifetime, so the outcome is kept.
+- [ ] Background HTTP/3 probes are the exception: the agent started them itself, so it abandons them rather than letting them answer for a path that no longer exists, and the origins they were verifying are free to be probed again at once (see [PROBE](../http3/probing.md)).
+
 A caller who needs in-flight requests abandoned on a network change aborts them through their `signal` as usual (see [CANCEL](../fetch/cancellation-and-timeouts.md)).
-An in-flight request that outlives the signal can still record what it learns when it completes, so a confirmation or a failure landing just after a reset describes the new network as far as the agent can tell.
 
 ## Availability
 

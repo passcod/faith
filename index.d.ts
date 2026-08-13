@@ -31,6 +31,27 @@ export declare class Agent {
    */
   close(): void
   /**
+   * Tell the agent the network underneath it has changed, so it stops deciding from what it
+   * learned about a network that is gone.
+   *
+   * Node has no portable signal for an interface or connectivity change, so Faith cannot
+   * detect one; this is the reaction, and wiring it to a trigger (an OS notification, a VPN
+   * transition, a captive-portal sign-in) is the caller's own. It drops pooled connections,
+   * flushes the DNS cache, demotes the HTTP/3 origins that a real response confirmed back to
+   * advertised so a background probe re-verifies them, and clears the HTTP/3 failure and slow
+   * states, their cooldown backoff, and the path-time averages.
+   *
+   * Configuration, `http3.hints`, `Alt-Svc` advertisements, the cookie jar, the HTTP cache and
+   * the `stats()` counters are all kept: none of them is a claim about a network path.
+   *
+   * Requests already in flight are not interrupted and run to completion on the connections
+   * they hold; the reset shapes what requests started afterwards draw on. Calling it on a
+   * closed agent does nothing, and calling it repeatedly is harmless.
+   *
+   * spec:NETCHG
+   */
+  networkChanged(): void
+  /**
    * Add a cookie into the agent.
    *
    * The cookie goes through the same rules a `Set-Cookie` header would, with the url supplying
