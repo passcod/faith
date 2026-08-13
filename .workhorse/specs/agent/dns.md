@@ -49,6 +49,11 @@ The method therefore does not bound this, unlike a request sent again on a conne
 A request carrying a `ReadableStream` body is the exception, its body having no second copy to send, so for those the connect failure reaches the caller as it came (see [REQ](../fetch/request.md)).
 A failure after a connection is established is an answer about the origin rather than about the address, and is returned to the caller as it came.
 
+Recovery reaches as far as the failure is a connect failure, which bounds what serving stale promises.
+An address that refuses a connection or has no route to it produces one straight away, so those recover in the time the refusal takes.
+An address that silently drops what is sent to it produces nothing to react to until a deadline expires, and only `timeout.connect` makes that deadline a connect failure; with no connect timeout set the request's own timeout ends the request first and the caller sees that timeout rather than a recovered request (see [CANCEL](../fetch/cancellation-and-timeouts.md)).
+An agent serving stale answers to hosts whose addresses may be firewalled rather than merely reassigned therefore wants a connect timeout, which is what turns the slow failure into the fast one this recovery is built on.
+
 ## Transports
 
 `dns.servers` is an ordered list of resolver URLs, and each URL's scheme selects the transport Faith speaks to that resolver.

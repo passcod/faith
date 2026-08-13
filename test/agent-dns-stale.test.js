@@ -30,7 +30,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 /** Wait out a 1-second TTL. */
 const expire = () => sleep(1300);
 
-function agentFor(server, dns = {}) {
+function agentFor(server, dns = {}, options = {}) {
 	return new Agent({
 		dns: {
 			servers: [`udp://${server.host}:${server.port}`],
@@ -39,6 +39,7 @@ function agentFor(server, dns = {}) {
 			...dns,
 		},
 		http3: { upgradeEnabled: false },
+		...options,
 	});
 }
 
@@ -48,7 +49,28 @@ async function timed(fn) {
 	return Date.now() - started;
 }
 
-/** An origin on 127.0.0.1, so 127.0.0.2 is a routable address nothing answers on. */
+/**
+ * The address a moved host is imagined to have left behind: reachable as a concept,
+ * with nothing answering on it.
+ *
+ * `::1` rather than another IPv4 loopback, because only `127.0.0.1` is assigned on
+ * macOS. Linux routes the whole of `127.0.0.0/8` to loopback, so `127.0.0.2` refuses a
+ * connection immediately there, but on macOS the packets go nowhere and the connect
+ * hangs until a timeout, which is a different failure and not the one under test.
+ * `::1` is assigned on both, so a closed port on it refuses promptly; and on a host
+ * with no IPv6 at all the connect fails immediately for want of a route, which is
+ * equally a connect failure. Either way it fails fast, which is what these tests need.
+ */
+const MOVED_AWAY = "::1";
+
+/** The nameserver's view of a host that has moved away, holding only the dead address. */
+const gone = () => ({ aaaa: [MOVED_AWAY], ttl: 1 });
+/** And of the same host once it is reachable again. */
+const here = () => ({ a: ["127.0.0.1"], ttl: 1 });
+
+/**
+ * An origin on `127.0.0.1` only, so [`MOVED_AWAY`] has nothing listening on its port.
+ */
 async function startOrigin() {
 	const server = http.createServer((req, res) => {
 		res.writeHead(200, { "content-type": "text/plain" });
@@ -60,6 +82,17 @@ async function startOrigin() {
 		close: () => new Promise((resolve) => server.close(resolve)),
 	};
 }
+
+/**
+ * A nameserver for the moved-host tests.
+ *
+ * `negativeTtl` is dropped to a second because these tests move a host between address
+ * families: the family it has no records in answers NODATA, and at the default
+ * negative TTL that answer would still be cached when the host reappears in it,
+ * hiding the very address the re-resolve is supposed to find.
+ */
+const movedHostServer = (zone) =>
+	startDnsServer({ zone, negativeTtl: 1 });
 
 test("DNS: an expired answer is served without waiting", async (t) => {
 	t.plan(3);
@@ -297,24 +330,22 @@ test("DNS: a network change drops stale answers", async (t) => {
 test("DNS: a stale address that has moved is re-resolved and retried", async (t) => {
 	t.plan(3);
 	const origin = await startOrigin();
-	const dns = await startDnsServer({
-		zone: { "moved.test": { a: ["127.0.0.2"], ttl: 1 } },
-	});
+	const dns = await movedHostServer({ "moved.test": gone() });
 	const agent = agentFor(dns);
 	const url = `http://moved.test:${origin.port}/`;
 	try {
 		await agent.prefetchDns("moved.test");
 
-		// Confirms the wrong address really is unreachable, so the recovery below is doing
+		// Confirms the dead address really is unreachable, so the recovery below is doing
 		// the work rather than the address having been fine all along.
 		try {
 			await fetch(url, { agent, timeout: 5000 });
-			t.fail("the wrong address should not reach the origin");
+			t.fail("the dead address should not reach the origin");
 		} catch (err) {
-			t.ok(err, "a fresh wrong address fails, as any wrong address does");
+			t.ok(err, "a fresh dead address fails, as any wrong address does");
 		}
 
-		dns.set("moved.test", { a: ["127.0.0.1"], ttl: 1 });
+		dns.set("moved.test", here());
 		await expire();
 
 		const res = await fetch(url, { agent, timeout: 8000 });
@@ -329,13 +360,11 @@ test("DNS: a stale address that has moved is re-resolved and retried", async (t)
 test("DNS: a POST recovers from a stale address too", async (t) => {
 	t.plan(1);
 	const origin = await startOrigin();
-	const dns = await startDnsServer({
-		zone: { "post.test": { a: ["127.0.0.2"], ttl: 1 } },
-	});
+	const dns = await movedHostServer({ "post.test": gone() });
 	const agent = agentFor(dns);
 	try {
 		await agent.prefetchDns("post.test");
-		dns.set("post.test", { a: ["127.0.0.1"], ttl: 1 });
+		dns.set("post.test", here());
 		await expire();
 
 		// Nothing reached the origin, so attempting it again cannot double anything: the
@@ -356,13 +385,11 @@ test("DNS: a POST recovers from a stale address too", async (t) => {
 test("DNS: a streaming body is not retried after a stale address fails", async (t) => {
 	t.plan(1);
 	const origin = await startOrigin();
-	const dns = await startDnsServer({
-		zone: { "stream.test": { a: ["127.0.0.2"], ttl: 1 } },
-	});
+	const dns = await movedHostServer({ "stream.test": gone() });
 	const agent = agentFor(dns);
 	try {
 		await agent.prefetchDns("stream.test");
-		dns.set("stream.test", { a: ["127.0.0.1"], ttl: 1 });
+		dns.set("stream.test", here());
 		await expire();
 
 		// A stream body has no second copy to send, so the connect failure reaches the

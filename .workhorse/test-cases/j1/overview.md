@@ -45,6 +45,10 @@ Automated cases live in `test/agent-dns-stale.test.js`, driving Faith at the con
 - [ ] A request that also fails to connect on the fresh address surfaces that failure rather than retrying again
 - [ ] A failure after the connection is established (a 5xx, a body that stops early) is returned as it came, with no re-resolve
 - [x] A connect failure against an address resolved fresh (past the stale window) arms no re-resolve (verifies spec: DNS)
+- [ ] A dead address that silently drops packets rather than refusing recovers when `timeout.connect` is set (verifies spec: DNS)
+- [ ] With no connect timeout set, such an address surfaces the request's own timeout rather than recovering (verifies spec: DNS)
+
+The two unticked cases above need an address that blackholes rather than refuses, which takes a firewall rule and so root. The dead address the automated tests use is `::1`, chosen because a closed port on a local address refuses immediately on every platform: `127.0.0.2` refuses on Linux, which routes all of `127.0.0.0/8` to loopback, but only `127.0.0.1` is assigned on macOS, so there it hangs into a request timeout instead. Anything asserting a fast connect failure has to avoid that trap.
 
 ## Benchmark
 
