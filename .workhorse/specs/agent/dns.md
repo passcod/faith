@@ -72,6 +72,10 @@ The exemption holds whether the servers came from `dns.servers` or from discover
 It adds to the three above rather than replacing them, so a caller extends the exemption without being able to send `localhost` to a public resolver by accident.
 A domain is exempt when it matches an entry exactly or is a subdomain of one.
 
+The root domain is not an exemptable suffix, from any source.
+Every name is a subdomain of the root, so treating it as one would exempt all of them and leave a configured `dns.servers` set unused while every lookup went to the system resolver.
+A host that has no DNS suffix of its own contributes no suffix here, which is not the same as contributing one that matches everything.
+
 ## Discovery
 
 With `dns.servers` unset, the built-in resolver configures itself from the system, preferring an encrypted transport wherever one is available for the resolvers the system has already chosen.

@@ -356,16 +356,17 @@ impl FaithResolver {
 		generation
 			.exempt
 			.get_or_init(|| async {
-				let mut names = vec![
-					Name::from_ascii("localhost").unwrap(),
-					Name::from_ascii("local").unwrap(),
-				];
-				if let Ok((config, _)) = read_system_conf() {
-					names.extend(config.domain().cloned());
-					names.extend(config.search().iter().cloned());
-				}
-				names.extend(self.inner.settings.exempt_domains.iter().cloned());
-				Arc::new(names)
+				let system = read_system_conf()
+					.map(|(config, _)| {
+						config
+							.domain()
+							.into_iter()
+							.chain(config.search())
+							.cloned()
+							.collect::<Vec<_>>()
+					})
+					.unwrap_or_default();
+				Arc::new(exempt_suffixes(system, &self.inner.settings.exempt_domains))
 			})
 			.await
 			.clone()
@@ -603,6 +604,29 @@ fn bootstrap_resolver(settings: &ResolverSettings) -> Result<TokioResolver, NetE
 	builder.build()
 }
 
+/// The suffixes handed to the system resolver rather than Faith's servers: `localhost` and `local`
+/// always, plus the ones the system supplies and the caller's `dns.exemptDomains`
+/// (spec:DNS#exempt-names).
+///
+/// The root name is never a suffix here, whichever list it arrives in. It is the parent of every
+/// name, so admitting it would exempt the lot and route every lookup to the system resolver with
+/// `dns.servers` configured and unused. It does arrive in practice: a Windows host with no DNS
+/// domain of its own reports the root as its domain, so the check is what keeps the encrypted
+/// transports working there rather than being quietly bypassed.
+fn exempt_suffixes(system: Vec<Name>, configured: &[Name]) -> Vec<Name> {
+	let mut names = vec![
+		Name::from_ascii("localhost").unwrap(),
+		Name::from_ascii("local").unwrap(),
+	];
+	names.extend(
+		system
+			.into_iter()
+			.chain(configured.iter().cloned())
+			.filter(|name| !name.is_root()),
+	);
+	names
+}
+
 /// Summarise name servers for `resolvers()`, in the order they are queried.
 fn report(name_servers: &[NameServerConfig], source: ResolverSource) -> Vec<ResolverReport> {
 	let mut reports = Vec::new();
@@ -750,6 +774,42 @@ mod tests {
 			1,
 			"the rebuilt generation resolves through the configured servers again"
 		);
+	}
+
+	#[test]
+	fn a_root_suffix_never_exempts_everything() {
+		// A Windows host with no DNS domain reports the root as its domain, and the root is the
+		// parent of every name. Taking it as a suffix exempted every lookup and sent it to the
+		// system resolver, leaving `dns.servers` configured and unused (spec:DNS#exempt-names).
+		let suffixes = exempt_suffixes(vec![Name::root()], &[]);
+		assert!(
+			!suffixes.iter().any(|suffix| suffix.is_root()),
+			"the root is not admitted as a suffix"
+		);
+
+		let name = Name::from_utf8("nonexistent.example").unwrap();
+		assert!(
+			!suffixes.iter().any(|suffix| suffix.zone_of(&name)),
+			"so an ordinary name is not exempt and reaches the configured servers"
+		);
+
+		// The names that must stay exempt still are, and a real system suffix still counts.
+		let suffixes = exempt_suffixes(vec![Name::root(), Name::from_utf8("corp.example").unwrap()], &[]);
+		for exempt in ["localhost", "printer.local", "host.corp.example"] {
+			let name = Name::from_utf8(exempt).unwrap();
+			assert!(
+				suffixes.iter().any(|suffix| suffix.zone_of(&name)),
+				"{exempt} is exempt"
+			);
+		}
+	}
+
+	#[test]
+	fn a_root_entry_from_the_caller_is_refused_too() {
+		// Whichever list it arrives in, the root would disable the caller's own servers.
+		let suffixes = exempt_suffixes(vec![], &[Name::root()]);
+		let name = Name::from_utf8("nonexistent.example").unwrap();
+		assert!(!suffixes.iter().any(|suffix| suffix.zone_of(&name)));
 	}
 
 	#[test]

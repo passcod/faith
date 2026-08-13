@@ -122,6 +122,23 @@ test("localhost is exempt from configured servers, so requests still resolve", a
 	t.equal(response.status, 200, "status is 200");
 });
 
+test("a root exempt domain does not exempt every name", async (t) => {
+	t.plan(1);
+	// Every name is a subdomain of the root, so admitting it as a suffix would route every lookup
+	// to the system resolver and leave the configured servers unused. A Windows host with no DNS
+	// domain of its own reports the root as its domain, which is how this arises in the wild
+	// (spec:DNS#exempt-names).
+	const agent = new Agent({
+		dns: { servers: [DEAD], exemptDomains: ["."], timeout: 500 },
+	});
+
+	try {
+		await faithFetch(NON_EXEMPT, { agent });
+	} catch {}
+
+	t.equal(agent.resolvers().length, 1, "the configured server is still the one used");
+});
+
 test("networkChanged returns resolvers() to unbuilt, then it rebuilds as configured", async (t) => {
 	t.plan(4);
 	// The listed servers are read off the network on first use, so the signal drops them and the
