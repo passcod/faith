@@ -22,12 +22,23 @@ import { readFileSync, existsSync } from "node:fs";
 import http from "node:http";
 import http2 from "node:http2";
 import https from "node:https";
+import { createRequire } from "node:module";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const rootDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "../..");
+const require = createRequire(import.meta.url);
+
+// The controllable authoritative nameserver the DNS rows resolve through, reused
+// from the test suite rather than reimplemented: it already serves UDP + TCP on
+// an ephemeral port with a settable zone and answer delay, and its wire format is
+// validated by test/dns-server.test.js. Its delay knob is what lets a bench row
+// show a slow resolver (see bench/README.md, the DNS group).
+export const { startDnsServer } = require(
+	path.join(rootDir, "test/lib/dns-server.js"),
+);
 
 const payloadCache = new Map();
 function payload(bytes) {

@@ -81,6 +81,24 @@ family, cache, cookies) of total p50 latency.
 - `features-rps`: one panel per feature group (versions, DNS, address
 family, cache, cookies) of throughput.
 
+### The DNS group
+
+The DNS rows resolve `bench.test`, a name that is not exempt, through a
+nameserver the harness controls (the authoritative server under `test/lib/`,
+reused rather than reimplemented). `localhost` would be handed to the system
+resolver whatever the agent's DNS settings say, so both rows would resolve the
+same way and measure nothing. All three rows run cold, so a lookup is on the
+measured path of every request rather than amortised by the cache.
+
+- `dns:hickory`: Faith's own resolver, against the controlled nameserver
+  answering instantly.
+- `dns:slow`: the same, but the nameserver answers slowly. Identical to
+  `dns:hickory` in every other respect, so the distance between them is the DNS
+  cost and nothing else — the only row that shows a slow resolver.
+- `dns:system`: the OS resolver (`dns.system`), resolving `localhost`. A
+  reference for handing off to the system, which cannot be pointed at the
+  controlled nameserver.
+
 ## Simulating latency and loss
 
 Experiemental, not well-measured / optimised for yet. This is what h3 is
