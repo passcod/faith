@@ -21,18 +21,27 @@ IPv4 and IPv6 answers race with the Happy Eyeballs algorithm, so a broken family
 A port in the URL overrides the transport's conventional port, and the HTTP transports use the `/dns-query` path when the URL supplies none.
 A URL with any other scheme, or one that does not parse, throws an address-parse error at agent construction (see [ERR](../errors/errors.md)).
 
-The encrypted transports authenticate the resolver against a name, which the URL supplies in one of two ways.
-A URL fragment names the certificate to expect when the host is an IP address, as in `tls://1.1.1.1#cloudflare-dns.com`, matching how systemd-resolved writes the same pairing.
+The encrypted transports always authenticate the resolver, and the URL determines what they authenticate against.
+A URL fragment names the certificate to expect, as in `tls://1.1.1.1#cloudflare-dns.com`, matching how systemd-resolved writes the same pairing.
 A URL whose host is a hostname authenticates against that hostname, and a fragment overrides it.
+A URL whose host is an IP address and carries no fragment authenticates against that address, which requires the resolver's certificate to list the address itself; this is what lets `tls://1.1.1.1` be written without a fragment.
+A listed server has no unauthenticated mode: a resolver whose certificate covers neither the hostname nor the address it was reached by fails authentication rather than being reached anyway.
 
-Setting `dns.servers` replaces the system's list of servers, so no discovery runs and only the listed servers are queried.
+Setting `dns.servers` replaces the system's list of servers, so no discovery runs and lookups go to the listed servers, apart from the names exempt from them entirely (see [Exempt names](#exempt-names)).
 
 ## Server order
 
 Servers are queried in the order listed, one at a time, and a later server is reached only once the servers before it have failed.
 Faith does not reorder the list by observed latency, because the order expresses the caller's intent rather than a performance hint: a list that names a private resolver first and a fallback second must not end up sending most traffic to the fallback for being closer.
 A server that fails is retried in its original position on the next lookup rather than being demoted.
-The whole list shares one lookup deadline, so exhausting several dead servers costs a single timeout rather than one timeout per server.
+A lookup that reaches the end of the list without an answer fails with a network error (see [ERR](../errors/errors.md)).
+
+`dns.timeout` bounds the whole list rather than each server, so exhausting several dead servers costs a single timeout rather than one timeout per server.
+It defaults to five seconds, unlike the agent's request timeouts, which are unset by default (see [CANCEL](../fetch/cancellation-and-timeouts.md)): a lookup with no deadline of its own would hang until whatever bounds the request as a whole.
+
+Falling through to the next server covers a server that does not answer, not one that answers as the wrong identity.
+An encrypted server whose certificate fails authentication fails the lookup outright with a network error, rather than counting as a dead server.
+The list orders the servers to try; it does not license reaching a named resolver as something else, so a resolver that cannot prove who it is stops the lookup instead of passing the name to whatever comes next.
 
 ## Bootstrapping
 
@@ -66,7 +75,7 @@ A domain is exempt when it matches an entry exactly or is a subdomain of one.
 
 With `dns.servers` unset, the built-in resolver configures itself from the system, preferring an encrypted transport wherever one is available for the resolvers the system has already chosen.
 Discovery never substitutes a different DNS provider: it changes how Faith talks to the system's resolvers, not which resolvers answer, so split-horizon and corporate resolvers keep working.
-No public resolver is baked into the library as a discovery target, because choosing a caller's DNS provider for them is not a library's decision to make.
+Discovery adds no DNS provider of its own to a host that names one, because choosing a caller's DNS provider for them is not a library's decision to make; a host that names no resolver at all is the one exception, below.
 
 Discovery works down a ladder, taking the first source that yields an encrypted endpoint for a given resolver.
 The operating system's own encrypted DNS settings come first, where the platform exposes them to be read: Windows' per-interface DNS-over-HTTPS configuration, and systemd-resolved's DNS-over-TLS settings on Linux, including the server names it pins alongside each address.
@@ -79,6 +88,7 @@ Discovery is best-effort and never fails a lookup on its own: when an encrypted 
 
 A host with no readable resolver configuration at all falls back to Google Public DNS over conventional DNS.
 This is a last resort that keeps resolution working on a misconfigured host rather than a provider Faith chooses for callers, and it is reached only when the system names no resolver of its own.
+It is a discovered server rather than a listed one, so it is probed for an encrypted transport like any other (see [Opportunistic encryption](#opportunistic-encryption)).
 
 ## Opportunistic encryption
 
@@ -92,12 +102,13 @@ The transports probed are DNS over TLS and DNS over QUIC, which are the ones a r
 
 Probing does not authenticate the resolver's certificate, which is what the standard requires of it.
 This tier therefore protects against passive observation of DNS traffic and not against an attacker able to intercept and alter it, which is why it sits below the two authenticated sources rather than beside them.
-For the same reason it is used only when discovery has found no authenticated encrypted endpoint for any resolver: an unauthenticated probe must never weaken the checks made on a resolver reached through the operating system or through Discovery of Designated Resolvers.
+For the same reason a resolver is probed only when neither authenticated source covers that resolver: an unauthenticated probe must never weaken the checks made on a resolver reached through the operating system or through Discovery of Designated Resolvers.
+The gate is per resolver rather than across the list, so a list holding one resolver with an authenticated endpoint and one with none leaves the first as discovery found it and probes the second.
 Servers listed in `dns.servers` are never probed, since an explicit list is a statement of how the caller wants each resolver reached.
 
 ## System resolver
 
-`dns.servers` and discovery configure Faith's built-in resolver only; the system's own resolver is not Faith's to configure.
+`dns.servers`, `dns.timeout`, and discovery configure Faith's built-in resolver only; the system's own resolver is not Faith's to configure, so it keeps its own deadlines and its own choice of transport.
 Setting both `dns.servers` and `dns.system: true` is a contradiction rather than a preference, and throws a configuration error at agent construction (see [ERR](../errors/errors.md)).
 `dns.system: true` switches to the system's resolver.
 This also disables Happy Eyeballs and the DNS cache; the trade is compatibility for performance, and it is the first thing to try when Faith fails to resolve something other clients can.
@@ -105,6 +116,7 @@ This also disables Happy Eyeballs and the DNS cache; the trade is compatibility 
 ## Overrides
 
 `dns.overrides` pins specific domains to specific addresses, taking effect even with `dns.system: true`.
+An override sits at the top of resolution, consulted before the hosts file and before the exemptions, so a pinned name reaches neither and an empty address list blocks an exempt name as readily as any other.
 Addresses may carry a port; without one, port 0 means "the conventional port for the protocol in use".
 An explicit port in the fetched URL wins over the override's port.
 An address that parses as neither `ip:port` nor a bare IP throws an address-parse error at agent construction.

@@ -26,6 +26,7 @@ Unlike `signal`, it applies through the entire response receipt, including the b
 `timeout.read` bounds each read operation and resets after a successful read: the tool for detecting stalled connections when the response size is unknown.
 `timeout.total` is a deadline for the whole request-response cycle, from connection start to body end.
 All three default to unset; each produces a timeout error (code `Timeout`) when exceeded.
+`dns.timeout` bounds name resolution rather than the connection or the exchange, and unlike these three it has a default (see [DNS](../agent/dns.md)).
 
 ## How the deadlines combine
 
