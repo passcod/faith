@@ -14,8 +14,8 @@ Quirks affect the agent they are set on, and so every request that runs through 
 ## What belongs in the group
 
 A switch is a quirk when it turns off a rule a standard states, whatever the reason a caller has for wanting it off.
-Faith's additive extensions are the other kind of departure: `response.trailers`, `agent`, `timeout`, `response.peer`, `version`, and `discard()` add surface the standards do not describe rather than breaking a rule any of them states, so they are always available and carry no quirk (see [FAITH](../overview.md)).
-A switch that tightens behaviour, such as `tls.required`, or that trades off security within what a standard permits, such as `tls.earlyData`, upholds the standard and is not a quirk either.
+Faith's additive extensions are the other kind of departure: they add surface the standards do not describe rather than breaking a rule any of them states, so they are always available and carry no quirk (see [FAITH](../overview.md)).
+A switch that tightens behaviour, or that trades off security within what a standard permits, upholds the standard and is not a quirk either.
 
 ## HTTP/1.x request body streaming
 
