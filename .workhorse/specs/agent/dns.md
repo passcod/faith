@@ -25,7 +25,24 @@ The encrypted transports authenticate the resolver against a name, which the URL
 A URL fragment names the certificate to expect when the host is an IP address, as in `tls://1.1.1.1#cloudflare-dns.com`, matching how systemd-resolved writes the same pairing.
 A URL whose host is a hostname authenticates against that hostname, and a fragment overrides it.
 
-Setting `dns.servers` replaces the system's resolver configuration outright, so no discovery runs and only the listed servers are queried.
+Setting `dns.servers` replaces the system's list of servers, so no discovery runs and only the listed servers are queried.
+
+## Preparing a name
+
+`dns.servers` replaces the server list and nothing else: the system's search domains, its dots threshold, and its hosts file still govern how a name becomes a query.
+The hosts file is consulted before any server, so a name it answers never reaches a resolver at all.
+
+Three options override those inputs independently of `dns.servers`, so how names are prepared can be changed without naming servers, and the reverse.
+`dns.searchDomains` replaces the system's search list.
+`dns.ndots` sets how many dots a name must contain before it is tried as given, ahead of the search list.
+`dns.hostsFile` turns hosts-file lookup on or off, and when unset follows the platform's own convention.
+
+## Exempt names
+
+Some names must not leave the local network, and sending them to a configured or encrypted resolver either leaks them or fails to resolve them.
+`localhost`, names under `.local`, and names under the network's own DNS suffix are handed to the system's resolver instead of Faith's servers.
+This is also what makes `.local` work at all, since multicast DNS is not something Faith's own client speaks.
+The exemption holds whether the servers came from `dns.servers` or from discovery, because its reason is the correctness of local names rather than a preference about transports.
 
 ## Server order
 
