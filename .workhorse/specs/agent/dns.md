@@ -27,9 +27,23 @@ A URL whose host is a hostname authenticates against that hostname, and a fragme
 
 Setting `dns.servers` replaces the system's list of servers, so no discovery runs and only the listed servers are queried.
 
+## Server order
+
+Servers are queried in the order listed, one at a time, and a later server is reached only once the servers before it have failed.
+Faith does not reorder the list by observed latency, because the order expresses the caller's intent rather than a performance hint: a list that names a private resolver first and a fallback second must not end up sending most traffic to the fallback for being closer.
+A server that fails is retried in its original position on the next lookup rather than being demoted.
+The whole list shares one lookup deadline, so exhausting several dead servers costs a single timeout rather than one timeout per server.
+
+## Bootstrapping
+
+A server URL that names a hostname cannot be contacted until that hostname resolves.
+The listed servers whose host is already an IP address do that resolving, in list order, so an encrypted server placed above a plaintext one bootstraps its siblings without the hostname being exposed in plaintext.
+Where the list has no such server, the system's own resolver configuration bootstraps instead.
+Bootstrapping happens when the resolver is first used rather than at agent construction, and a hostname that fails to resolve drops that server from the list for the life of the agent rather than failing construction or resolution.
+
 ## Preparing a name
 
-`dns.servers` replaces the server list and nothing else: the system's search domains, its dots threshold, and its hosts file still govern how a name becomes a query.
+The system's search domains, its dots threshold, and its hosts file govern how a name becomes a query, and `dns.servers` leaves all three in place.
 The hosts file is consulted before any server, so a name it answers never reaches a resolver at all.
 
 Three options override those inputs independently of `dns.servers`, so how names are prepared can be changed without naming servers, and the reverse.
@@ -44,19 +58,9 @@ Some names must not leave the local network, and sending them to a configured or
 This is also what makes `.local` work at all, since multicast DNS is not something Faith's own client speaks.
 The exemption holds whether the servers came from `dns.servers` or from discovery, because its reason is the correctness of local names rather than a preference about transports.
 
-## Server order
-
-Servers are queried in the order listed, one at a time, and a later server is reached only once the servers before it have failed.
-Faith does not reorder the list by observed latency, because the order expresses the caller's intent rather than a performance hint: a list that names a private resolver first and a fallback second must not end up sending most traffic to the fallback for being closer.
-A server that fails is retried in its original position on the next lookup rather than being demoted.
-The whole list shares one lookup deadline, so exhausting several dead servers costs a single timeout rather than one timeout per server.
-
-## Bootstrapping
-
-A server URL that names a hostname cannot be contacted until that hostname resolves, which the servers that need no bootstrapping resolve on its behalf.
-Those are the listed servers whose host is already an IP address, used in list order, so an encrypted server placed above a plaintext one bootstraps its siblings without the hostname being exposed in plaintext.
-Where the list has no such server, the system's own resolver configuration bootstraps instead.
-Bootstrapping happens when the resolver is first used rather than at agent construction, and a hostname that fails to resolve drops that server from the list for the life of the agent rather than failing construction or resolution.
+`dns.exemptDomains` adds further domains, for the internal suffixes a network uses that are not its DNS suffix.
+It adds to the three above rather than replacing them, so a caller extends the exemption without being able to send `localhost` to a public resolver by accident.
+A domain is exempt when it matches an entry exactly or is a subdomain of one.
 
 ## Discovery
 
@@ -65,7 +69,8 @@ Discovery never substitutes a different DNS provider: it changes how Faith talks
 No public resolver is baked into the library as a discovery target, because choosing a caller's DNS provider for them is not a library's decision to make.
 
 Discovery works down a ladder, taking the first source that yields an encrypted endpoint for a given resolver.
-The operating system's own encrypted DNS settings come first, where the platform exposes them to be read.
+The operating system's own encrypted DNS settings come first, where the platform exposes them to be read: Windows' per-interface DNS-over-HTTPS configuration, and systemd-resolved's DNS-over-TLS settings on Linux, including the server names it pins alongside each address.
+Platforms that keep those settings private to the operating system fall through to the sources below, which reach the same resolvers by asking rather than by reading.
 A resolver that designates an encrypted endpoint of its own comes next, found by asking it directly, following Discovery of Designated Resolvers.
 Both of these authenticate the resolver against a name, so either is preferred over probing.
 A resolver that neither source covers is queried over conventional DNS, unless opportunistic encryption finds a way to encrypt it.
