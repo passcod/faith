@@ -7,6 +7,7 @@ id: H2
 HTTP/2 flow-control windows bound how much data an origin may send before Faith acknowledges it, trading connection memory for throughput.
 Larger windows keep a high-latency link full, so the receiver is not the bottleneck; smaller windows hold less buffered data per connection.
 These settings live under the agent's `http2` options and shape every HTTP/2 connection the agent opens.
+HTTP/3 carries its own flow control at the QUIC layer, tuned separately under `http3` (see [QUIC](../http3/transport.md)).
 
 ## Static windows
 
