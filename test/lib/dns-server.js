@@ -1,0 +1,416 @@
+/**
+ * A controllable authoritative DNS server, for testing and benchmarking Faith's
+ * resolver.
+ *
+ * `dns.overrides` resolves a name without ever asking a nameserver, so it can't
+ * exercise the resolver's cache at all: no lookup happens, nothing is cached,
+ * and no TTL expires. Anything about cache behaviour — a TTL lapsing, a stale
+ * answer being served, a background refresh picking up a changed address —
+ * needs a real nameserver that answers on demand, with answers the test
+ * controls and a query log the test can assert against.
+ *
+ * The knobs exist for what those tests need to observe:
+ *
+ *   - `ttl` decides when a cached answer goes stale, so tests set it low
+ *     (1 second) rather than waiting out a realistic TTL
+ *   - `delayMs` makes the resolver slow, which is the only condition under
+ *     which serving stale beats resolving fresh; a fast local answer hides the
+ *     very difference a bench row is meant to show
+ *   - the query log distinguishes "served from cache without asking" from
+ *     "asked the nameserver", which is otherwise invisible from the outside
+ *   - `set()` changes an address mid-run, so a test can tell a background
+ *     refresh actually landed rather than assuming it did
+ *   - `fail()` covers a refresh that errors or hangs, where the question is
+ *     whether the previous answer survives
+ *
+ * Both UDP and TCP are served on the same port. Hickory falls back to TCP on a
+ * truncated or failed UDP exchange, and a server that only spoke UDP would turn
+ * that fallback into a hang.
+ *
+ * Not a general-purpose nameserver: one question per message, A and AAAA only,
+ * no CNAME chains, no delegation, no DNSSEC.
+ */
+
+const dgram = require("node:dgram");
+const net = require("node:net");
+
+const TYPE_A = 1;
+const TYPE_AAAA = 28;
+const TYPE_OPT = 41;
+const CLASS_IN = 1;
+
+const RCODE_NOERROR = 0;
+const RCODE_FORMERR = 1;
+const RCODE_SERVFAIL = 2;
+const RCODE_NXDOMAIN = 3;
+const RCODE_NOTIMP = 4;
+
+const TYPE_NAMES = { [TYPE_A]: "A", [TYPE_AAAA]: "AAAA" };
+
+/** Lowercase and drop the root dot, so zone lookups match however a client asks. */
+function normaliseName(name) {
+	return name.replace(/\.$/, "").toLowerCase();
+}
+
+function ipv4ToBuffer(str) {
+	const parts = str.split(".");
+	if (parts.length !== 4) throw new Error(`not an IPv4 address: ${str}`);
+	const buf = Buffer.alloc(4);
+	for (let i = 0; i < 4; i++) {
+		const n = Number(parts[i]);
+		if (!Number.isInteger(n) || n < 0 || n > 255) {
+			throw new Error(`not an IPv4 address: ${str}`);
+		}
+		buf[i] = n;
+	}
+	return buf;
+}
+
+function ipv6ToBuffer(str) {
+	// Reject the IPv4-mapped forms rather than half-supporting them; the zone
+	// only ever needs plain v6 literals.
+	if (str.includes(".")) throw new Error(`unsupported IPv6 form: ${str}`);
+	const halves = str.split("::");
+	if (halves.length > 2) throw new Error(`not an IPv6 address: ${str}`);
+	const head = halves[0] ? halves[0].split(":") : [];
+	const tail = halves.length === 2 && halves[1] ? halves[1].split(":") : [];
+	let groups;
+	if (halves.length === 1) {
+		groups = head;
+	} else {
+		const gap = 8 - head.length - tail.length;
+		if (gap < 1) throw new Error(`not an IPv6 address: ${str}`);
+		groups = [...head, ...Array(gap).fill("0"), ...tail];
+	}
+	if (groups.length !== 8) throw new Error(`not an IPv6 address: ${str}`);
+	const buf = Buffer.alloc(16);
+	for (let i = 0; i < 8; i++) {
+		if (!/^[0-9a-fA-F]{1,4}$/.test(groups[i])) {
+			throw new Error(`not an IPv6 address: ${str}`);
+		}
+		buf.writeUInt16BE(Number.parseInt(groups[i], 16), i * 2);
+	}
+	return buf;
+}
+
+function addressToRdata(address, type) {
+	return type === TYPE_AAAA ? ipv6ToBuffer(address) : ipv4ToBuffer(address);
+}
+
+/** Read a label sequence. Questions are never compressed, so pointers are a fault. */
+function decodeName(buf, offset) {
+	const labels = [];
+	let off = offset;
+	for (;;) {
+		if (off >= buf.length) throw new Error("truncated name");
+		const len = buf[off];
+		if (len === 0) return { name: labels.join("."), end: off + 1 };
+		if ((len & 0xc0) !== 0) throw new Error("compressed name in question");
+		off += 1;
+		if (off + len > buf.length) throw new Error("truncated label");
+		// latin1: label bytes pass through unchanged, which keeps 0x20 case
+		// randomisation intact for the echo below.
+		labels.push(buf.subarray(off, off + len).toString("latin1"));
+		off += len;
+	}
+}
+
+function skipName(buf, offset) {
+	let off = offset;
+	for (;;) {
+		if (off >= buf.length) throw new Error("truncated name");
+		const len = buf[off];
+		if (len === 0) return off + 1;
+		if ((len & 0xc0) === 0xc0) return off + 2;
+		off += 1 + len;
+	}
+}
+
+function parseQuery(buf) {
+	if (buf.length < 12) throw new Error("short message");
+	const id = buf.readUInt16BE(0);
+	const flags = buf.readUInt16BE(2);
+	if ((flags & 0x8000) !== 0) throw new Error("not a query");
+	const qdcount = buf.readUInt16BE(4);
+	if (qdcount !== 1) throw new Error(`unsupported question count: ${qdcount}`);
+	const { name, end } = decodeName(buf, 12);
+	if (end + 4 > buf.length) throw new Error("truncated question");
+	const type = buf.readUInt16BE(end);
+	const klass = buf.readUInt16BE(end + 2);
+	const questionEnd = end + 4;
+
+	// Walk the remaining sections for an OPT record: if the client offered EDNS,
+	// the reply carries one back, and its class field is the payload size.
+	let ednsPayload = null;
+	const rrCount =
+		buf.readUInt16BE(6) + buf.readUInt16BE(8) + buf.readUInt16BE(10);
+	let off = questionEnd;
+	for (let i = 0; i < rrCount && off < buf.length; i++) {
+		off = skipName(buf, off);
+		if (off + 10 > buf.length) break;
+		const rrType = buf.readUInt16BE(off);
+		const rrClass = buf.readUInt16BE(off + 2);
+		const rdlength = buf.readUInt16BE(off + 8);
+		if (rrType === TYPE_OPT) ednsPayload = rrClass;
+		off += 10 + rdlength;
+	}
+
+	return { id, flags, name, type, klass, questionEnd, ednsPayload };
+}
+
+function buildResponse(request, query, { rcode, type, addresses, ttl }) {
+	const answers = (addresses ?? []).map((address) =>
+		addressToRdata(address, type),
+	);
+	const parts = [];
+
+	const header = Buffer.alloc(12);
+	header.writeUInt16BE(query.id, 0);
+	// QR | AA | RA, echoing RD, with the rcode in the low nibble. AA because the
+	// zone is served locally; RA because clients set RD and expect it honoured.
+	header.writeUInt16BE(
+		0x8000 | 0x0400 | 0x0080 | (query.flags & 0x0100) | (rcode & 0x0f),
+		2,
+	);
+	header.writeUInt16BE(1, 4);
+	header.writeUInt16BE(answers.length, 6);
+	header.writeUInt16BE(0, 8);
+	header.writeUInt16BE(query.ednsPayload !== null ? 1 : 0, 10);
+	parts.push(header);
+
+	// Echo the question bytes verbatim. Hickory can randomise the case of the
+	// name (draft-vixie-dnsext-dns0x20) and drops a reply whose name doesn't
+	// match byte for byte, so re-encoding from the parsed string would break it.
+	parts.push(request.subarray(12, query.questionEnd));
+
+	for (const rdata of answers) {
+		const rr = Buffer.alloc(12 + rdata.length);
+		// Point at the question's name rather than repeating it.
+		rr.writeUInt16BE(0xc00c, 0);
+		rr.writeUInt16BE(type, 2);
+		rr.writeUInt16BE(CLASS_IN, 4);
+		rr.writeUInt32BE(ttl, 6);
+		rr.writeUInt16BE(rdata.length, 10);
+		rdata.copy(rr, 12);
+		parts.push(rr);
+	}
+
+	if (query.ednsPayload !== null) {
+		const opt = Buffer.alloc(11);
+		opt.writeUInt8(0, 0); // root name
+		opt.writeUInt16BE(TYPE_OPT, 1);
+		opt.writeUInt16BE(Math.max(512, query.ednsPayload), 3); // payload size
+		opt.writeUInt32BE(0, 5); // extended rcode and flags
+		opt.writeUInt16BE(0, 9); // rdlength
+		parts.push(opt);
+	}
+
+	return Buffer.concat(parts);
+}
+
+/**
+ * Start the server on an ephemeral port on `host`.
+ *
+ * `zone` maps a name to `{ a, aaaa, ttl }`: `a` and `aaaa` are address string
+ * arrays and `ttl` is in seconds, defaulting to `defaultTtl`. A name in the zone
+ * with no addresses of the queried type answers NOERROR with no records, the way
+ * a real name with only an A record answers a AAAA query; a name absent from the
+ * zone answers NXDOMAIN.
+ *
+ * Returns the handle documented on the individual methods below.
+ */
+async function startDnsServer({
+	host = "127.0.0.1",
+	zone = {},
+	defaultTtl = 1,
+	delayMs = 0,
+} = {}) {
+	const records = new Map();
+	const failures = new Map();
+	const queries = [];
+	const timers = new Set();
+	let delay = delayMs;
+	let closed = false;
+
+	function setRecord(name, entry) {
+		const key = normaliseName(name);
+		if (entry === null) {
+			records.delete(key);
+			return;
+		}
+		const a = entry.a ?? [];
+		const aaaa = entry.aaaa ?? [];
+		// Parse eagerly so a malformed address is the caller's error here rather
+		// than a mysterious SERVFAIL later.
+		for (const address of a) ipv4ToBuffer(address);
+		for (const address of aaaa) ipv6ToBuffer(address);
+		records.set(key, { a, aaaa, ttl: entry.ttl ?? defaultTtl });
+	}
+
+	for (const [name, entry] of Object.entries(zone)) setRecord(name, entry);
+
+	/** Decide the reply, or `null` to drop the query. */
+	function answer(query, transport) {
+		const name = normaliseName(query.name);
+		queries.push({
+			name,
+			type: TYPE_NAMES[query.type] ?? String(query.type),
+			transport,
+			at: Date.now(),
+		});
+
+		const failure = failures.get(name);
+		if (failure === "drop") return null;
+		if (failure === "servfail") return { rcode: RCODE_SERVFAIL };
+		if (failure === "nxdomain") return { rcode: RCODE_NXDOMAIN };
+
+		if (query.klass !== CLASS_IN) return { rcode: RCODE_NOTIMP };
+		if (query.type !== TYPE_A && query.type !== TYPE_AAAA) {
+			// Not an error: a name can simply hold no records of that type, and
+			// answering NOTIMP would make hickory retry rather than move on.
+			return { rcode: RCODE_NOERROR };
+		}
+
+		const record = records.get(name);
+		if (!record) return { rcode: RCODE_NXDOMAIN };
+		return {
+			rcode: RCODE_NOERROR,
+			type: query.type,
+			addresses: query.type === TYPE_AAAA ? record.aaaa : record.a,
+			ttl: record.ttl,
+		};
+	}
+
+	/** Reply after the configured delay, unless the server closed meanwhile. */
+	function respond(send) {
+		if (delay <= 0) {
+			send();
+			return;
+		}
+		const timer = setTimeout(() => {
+			timers.delete(timer);
+			if (!closed) send();
+		}, delay);
+		timers.add(timer);
+	}
+
+	function handle(request, transport, send) {
+		let query;
+		try {
+			query = parseQuery(request);
+		} catch {
+			// Malformed enough that there's no question to echo; only a message
+			// with a readable id can be answered at all.
+			if (request.length >= 12) {
+				const header = Buffer.alloc(12);
+				header.writeUInt16BE(request.readUInt16BE(0), 0);
+				header.writeUInt16BE(0x8000 | RCODE_FORMERR, 2);
+				respond(() => send(header));
+			}
+			return;
+		}
+		const reply = answer(query, transport);
+		if (reply === null) return;
+		respond(() => send(buildResponse(request, query, reply)));
+	}
+
+	const udp = dgram.createSocket(net.isIPv6(host) ? "udp6" : "udp4");
+	udp.on("message", (message, remote) => {
+		handle(message, "udp", (response) => {
+			udp.send(response, remote.port, remote.address, () => {});
+		});
+	});
+
+	const tcp = net.createServer((socket) => {
+		// DNS over TCP prefixes each message with its length, and a message can
+		// arrive split across reads.
+		let buffered = Buffer.alloc(0);
+		socket.on("data", (chunk) => {
+			buffered = Buffer.concat([buffered, chunk]);
+			for (;;) {
+				if (buffered.length < 2) return;
+				const length = buffered.readUInt16BE(0);
+				if (buffered.length < 2 + length) return;
+				const message = buffered.subarray(2, 2 + length);
+				buffered = buffered.subarray(2 + length);
+				handle(message, "tcp", (response) => {
+					const framed = Buffer.alloc(2 + response.length);
+					framed.writeUInt16BE(response.length, 0);
+					response.copy(framed, 2);
+					if (!socket.destroyed) socket.write(framed);
+				});
+			}
+		});
+		socket.on("error", () => socket.destroy());
+	});
+	tcp.on("error", () => {});
+
+	await new Promise((resolve, reject) => {
+		udp.once("error", reject);
+		udp.bind(0, host, resolve);
+	});
+	const { port } = udp.address();
+	await new Promise((resolve, reject) => {
+		tcp.once("error", reject);
+		tcp.listen(port, host, resolve);
+	});
+
+	return {
+		host,
+		port,
+		/** `["ip:port"]`, the shape a nameserver list is usually configured with. */
+		get servers() {
+			return [`${net.isIPv6(host) ? `[${host}]` : host}:${port}`];
+		},
+
+		/** Replace a name's records, or remove it with `null`. Takes effect immediately. */
+		set: setRecord,
+
+		/**
+		 * Make `name` fail: `servfail`, `nxdomain`, or `drop` (never answer, so
+		 * the client times out). Pass `null` to answer from the zone again.
+		 */
+		fail(name, mode = "servfail") {
+			const key = normaliseName(name);
+			if (mode === null) failures.delete(key);
+			else failures.set(key, mode);
+		},
+
+		/** Change the reply delay, in milliseconds. */
+		setDelay(ms) {
+			delay = ms;
+		},
+
+		/** Every query received, oldest first: `{ name, type, transport, at }`. */
+		get queries() {
+			return queries.slice();
+		},
+
+		/** How many queries arrived for `name`, optionally of one type only. */
+		countFor(name, type = null) {
+			const key = normaliseName(name);
+			return queries.filter(
+				(q) => q.name === key && (type === null || q.type === type),
+			).length;
+		},
+
+		/** Forget the query log, so a later assertion counts from here. */
+		resetQueries() {
+			queries.length = 0;
+		},
+
+		async close() {
+			closed = true;
+			for (const timer of timers) clearTimeout(timer);
+			timers.clear();
+			await new Promise((resolve) => udp.close(resolve));
+			await new Promise((resolve) => {
+				tcp.close(resolve);
+				// Idle keep-alive sockets would otherwise hold the close open.
+				tcp.closeAllConnections?.();
+			});
+		},
+	};
+}
+
+module.exports = { startDnsServer };
