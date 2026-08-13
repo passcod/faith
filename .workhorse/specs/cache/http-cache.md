@@ -39,7 +39,12 @@ A cache mode set on the request wins over the agent's `cache.mode`.
 
 A stored response can be served past its freshness lifetime when the origin has marked it safe to, following the `stale-while-revalidate` and `stale-if-error` response directives (RFC 5861).
 Both apply only under `default` mode, the one mode that consults staleness and would otherwise go to the network for a stale match; the other modes either serve a stored match regardless of staleness or bypass the stored entry entirely, so neither directive changes what they do.
-A directive takes effect only when the stored response carries it, so serving stale is something an origin opts into per resource rather than an agent-wide policy.
+A directive takes effect only when the stored response carries it, so serving stale is something an origin opts into per resource.
+
+`cache.serveStale` governs whether the agent honours that opt-in, defaulting to `true` so a compliant origin's directives work without configuration.
+Set to `false`, both directives are ignored: a stale match is revalidated in the foreground and a failed revalidation surfaces to the caller, which is the behaviour of an agent that never serves a body it knows to be out of date.
+This is one switch over both directives rather than one each, because the reason to refuse stale data (a caller that must not act on it) applies whether the staleness is covered for speed or for an outage.
+It applies to the agent's own cache only and does not add request `Cache-Control` directives, so it says nothing to the origin or to any cache between them.
 
 ### stale-while-revalidate
 
@@ -54,7 +59,7 @@ The background revalidation outlives the foreground request that triggered it: t
 It carries the agent's configuration like any request and is bounded by the agent's own connect and request timeouts rather than the foreground request's signal, which has already done its job (see [CANCEL](../fetch/cancellation-and-timeouts.md)).
 Its outcome belongs to the cache rather than the caller: a network failure, a `5xx`, or an agent closed while it is in flight all pass without surfacing to the caller, as an advisory warm-up's failure does (see [WARM](../agent/warm-up.md)).
 Being a real network exchange, it reaches the origin and counts as origin contact for HTTP/3 knowledge, unlike the stale cache hit it accompanies (see [H3UP](../http3/upgrade.md)).
-The stale hit the caller receives counts as a response served from the cache like any other, and the background revalidation stays out of the agent's request accounting, since it is not a request the caller made (see [OBS](../agent/observability.md)).
+The stale hit the caller receives counts as a response served from the cache like any other; the background revalidation stays out of the caller-request counters and moves `backgroundRequests` instead, since it is a request the agent made rather than one the caller asked for (see [OBS](../agent/observability.md)).
 
 ### stale-if-error
 
