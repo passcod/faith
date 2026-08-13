@@ -20,6 +20,7 @@ The HTTP/3 path needs no change: the upgrade attempt is already skipped for a bo
 - [x] Document the option in the README
 - [x] Release the stream on a refusal, so the chunk pump cannot strand and hold the process open
 - [x] Point the full-duplex HTTP/1.1 sequencing tests at the quirk, and say so in the duplex docs
+- [x] Destroy accepted sockets when closing a test origin, so a pooled connection cannot hold the run open on Node 20 and 22
 
 ## Notes
 
@@ -28,3 +29,5 @@ The existing streaming tests all target the httpbin origin over plain HTTP/1.1, 
 Refusing has to take the receiving end of the chunk channel and drop it. The JS side pumps chunks into that channel from the caller's stream as soon as the request starts, so a refusal that left the receiver in place stranded the pump: it filled the channel, blocked on the next push, and held the process open with no way out. That is what turned the failure into a hang rather than a test failure, and it is covered by a test that runs a refusal in a child process and asserts the child exits.
 
 Full duplex over HTTP/1.1 rides on a streaming request body, so it now needs the quirk. That is the trade the card asks for, and the duplex documentation says so rather than leaving the promise unqualified.
+
+A test origin has to destroy the sockets it accepted, not just stop listening: a pooled keep-alive connection keeps an accepted socket open, and on Node 20 and 22 that socket holds the event loop after the assertions have all passed, so the run finishes its output and then sits there. Node 24 and 26 tidy it up on their own, which is why the same suite passed locally and hung on half the CI matrix. `duplex-sequencing.test.js` had already met this and carried its own helper; that helper now lives in `test/fixtures/net.js` as `trackSockets` and both files use it.

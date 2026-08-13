@@ -23,6 +23,7 @@ The httpbin origin the suite runs against is plain HTTP/1.1, so it serves as the
 ## Releasing the stream on a refusal
 
 - [x] After a refusal, a process whose stream keeps producing chunks still exits on its own, rather than the chunk pump stranding on a channel nobody reads (verifies spec: REQ)
+- [x] The suite itself exits under Node 20 and 22, not just 24 and 26: a test origin destroys the sockets it accepted so a pooled connection cannot hold the run open
 
 ## Bodies the rule does not touch
 

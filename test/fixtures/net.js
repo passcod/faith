@@ -57,6 +57,29 @@ function ensureCert() {
 	return { ca: readFileSync(caPath), caPath, certPath, keyPath };
 }
 
+/**
+ * A close function for `server` that also destroys the connections it accepted.
+ *
+ * `server.close()` stops it listening but waits on connections already open, and a pooled
+ * keep-alive connection is open until the agent holding it lets go. Left to settle on its own
+ * the accepted socket keeps the event loop alive, so a test process finishes its assertions and
+ * then never exits. Newer Node releases tidy these up on their own; 20 and 22 do not.
+ */
+function trackSockets(server) {
+	const sockets = new Set();
+	server.on("connection", (socket) => {
+		sockets.add(socket);
+		socket.on("close", () => sockets.delete(socket));
+	});
+	return () =>
+		new Promise((resolve) => {
+			for (const socket of sockets) socket.destroy();
+			sockets.clear();
+			server.close(resolve);
+			setTimeout(resolve, 500).unref();
+		});
+}
+
 /** A port free for both TCP and UDP on 127.0.0.1. */
 async function findFreePort() {
 	for (let attempt = 0; attempt < 20; attempt++) {
@@ -191,4 +214,11 @@ function detail(diagnose) {
 	}
 }
 
-module.exports = { ensureCert, ensureCombinedCert, findFreePort, waitForPort, waitForUdpPort };
+module.exports = {
+	ensureCert,
+	ensureCombinedCert,
+	findFreePort,
+	trackSockets,
+	waitForPort,
+	waitForUdpPort,
+};

@@ -10,7 +10,7 @@ const https = require("node:https");
 const test = require("tape");
 const { ReadableStream } = require("stream/web");
 const { fetch, Agent, ERROR_CODES } = require("../wrapper.js");
-const { ensureCert } = require("./fixtures/net.js");
+const { ensureCert, trackSockets } = require("./fixtures/net.js");
 const { streamingAgent, url } = require("./helpers.js");
 
 // An HTTP/1.1 origin that counts what actually arrived.
@@ -25,13 +25,14 @@ function countingOrigin() {
 			res.writeHead(200).end("ok");
 		});
 	});
+	const close = trackSockets(server);
 
 	return new Promise((resolve) => {
 		server.listen(0, "127.0.0.1", () => {
 			resolve({
 				state,
 				origin: `http://127.0.0.1:${server.address().port}`,
-				close: () => new Promise((done) => server.close(done)),
+				close,
 			});
 		});
 	});
@@ -65,6 +66,7 @@ function tlsOrigin(alpn) {
 					});
 					req.on("end", () => res.writeHead(200).end("ok"));
 				});
+	const close = trackSockets(server);
 
 	return new Promise((resolve) => {
 		server.listen(0, "127.0.0.1", () => {
@@ -72,7 +74,7 @@ function tlsOrigin(alpn) {
 				state,
 				ca,
 				origin: `https://localhost:${server.address().port}`,
-				close: () => new Promise((done) => server.close(done)),
+				close,
 			});
 		});
 	});

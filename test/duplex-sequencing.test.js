@@ -26,7 +26,7 @@ const { readFileSync } = require("node:fs");
 
 const { Agent } = require("../index.js");
 const { fetch } = require("../wrapper.js");
-const { ensureCert } = require("./fixtures/net.js");
+const { ensureCert, trackSockets } = require("./fixtures/net.js");
 
 /** How long a request body is held open while the response is examined. */
 const HOLD_MS = 1000;
@@ -51,22 +51,6 @@ function routes({ writeHead, write, end, onData, onEnd, path }) {
 	onEnd(() => end("done\n"));
 }
 
-/** Track sockets so a pooled connection cannot keep `close()` from settling. */
-function track(server) {
-	const sockets = new Set();
-	server.on("connection", (socket) => {
-		sockets.add(socket);
-		socket.on("close", () => sockets.delete(socket));
-	});
-	return () =>
-		new Promise((resolve) => {
-			for (const socket of sockets) socket.destroy();
-			sockets.clear();
-			server.close(resolve);
-			setTimeout(resolve, 500).unref();
-		});
-}
-
 async function listen(server) {
 	await new Promise((resolve, reject) => {
 		server.once("error", reject);
@@ -86,7 +70,7 @@ async function h1Origin() {
 			onEnd: (fn) => req.on("end", fn),
 		}),
 	);
-	const close = track(server);
+	const close = trackSockets(server);
 	const port = await listen(server);
 	return {
 		version: "HTTP/1.1",
@@ -104,7 +88,7 @@ async function h2Origin() {
 		key: readFileSync(keyPath),
 		cert: readFileSync(certPath),
 	});
-	const close = track(server);
+	const close = trackSockets(server);
 	server.on("stream", (stream, headers) =>
 		routes({
 			path: headers[":path"],
