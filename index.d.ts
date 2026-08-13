@@ -93,6 +93,16 @@ export declare class Agent {
    */
   connections(): Array<ConnectionInfo>
   /**
+   * Returns the DNS servers this agent resolves through, in the order they are queried, so
+   * "are my lookups actually encrypted" is answerable from inside the process.
+   *
+   * Each entry gives the server's address, the transport in use (`udp`, `tcp`, `tls`, `https`,
+   * `quic`, or `h3`), and how that transport was arrived at (`configured` or `conventional`).
+   * The list is empty until the resolver has been used, because it reads its configuration on
+   * first use, and empty for an agent using the system resolver. (spec:OBS#resolvers)
+   */
+  resolvers(): Array<ResolverInfo>
+  /**
    * Warm the DNS cache for `host`, so a later request to it skips the lookup.
    *
    * Mirrors the browser's `dns-prefetch` resource hint. The argument is a bare host; a scheme,
@@ -480,6 +490,59 @@ export interface AgentDnsOptions {
    * Default: no overrides.
    */
   overrides?: Array<DnsOverride>
+  /**
+   * An ordered list of resolver URLs, each URL's scheme selecting the transport Faith speaks to
+   * that resolver: `udp://` and `tcp://` for conventional DNS on port 53, `tls://` for DNS over
+   * TLS on port 853, `https://` for DNS over HTTPS on port 443, `quic://` for DNS over QUIC on
+   * port 853, and `h3://` for DNS over HTTP/3 on port 443. A port in the URL overrides the
+   * conventional one, and the HTTP transports use `/dns-query` when the URL supplies no path.
+   *
+   * The encrypted transports always authenticate the resolver. A URL fragment names the
+   * certificate to expect (`tls://1.1.1.1#cloudflare-dns.com`); a hostname host authenticates
+   * against the hostname; a bare-IP host authenticates against the address itself.
+   *
+   * Servers are queried in order, a later one reached only once those before it fail. Setting
+   * this replaces the system's servers, so no discovery runs. Throws if a URL is unparseable or
+   * its scheme is not one of the above, and combining it with `dns.system` throws.
+   *
+   * Default: system discovery.
+   */
+  servers?: Array<string>
+  /**
+   * Bound name resolution across the whole server list, in milliseconds. Exhausting several dead
+   * servers costs a single timeout rather than one per server.
+   *
+   * Default: 5000.
+   */
+  timeout?: number
+  /**
+   * Replace the system's search list, the domains appended to a name that is not fully
+   * qualified. Independent of `dns.servers`.
+   *
+   * Default: the system's search list.
+   */
+  searchDomains?: Array<string>
+  /**
+   * How many dots a name must contain before it is tried as given, ahead of the search list.
+   * Independent of `dns.servers`.
+   *
+   * Default: the system's setting.
+   */
+  ndots?: number
+  /**
+   * Turn hosts-file lookup on or off. When unset, follows the platform's own convention.
+   *
+   * Default: platform convention.
+   */
+  hostsFile?: boolean
+  /**
+   * Further domains to exempt from the configured or encrypted resolver, for the internal
+   * suffixes a network uses. Added to the always-exempt `localhost`, `.local`, and the network's
+   * own DNS suffix; a domain is exempt when it matches an entry exactly or is a subdomain of one.
+   *
+   * Default: no extra exemptions.
+   */
+  exemptDomains?: Array<string>
 }
 
 /** Settings related to HTTP flow control, shared by HTTP/2 and HTTP/3. This is a nested object. */
@@ -1246,6 +1309,16 @@ export declare const enum Redirect {
 }
 
 export const REQWEST_VERSION: string
+
+/** One entry of `Agent.resolvers()`: a DNS server the agent resolves through (spec:OBS#resolvers). */
+export interface ResolverInfo {
+  /** The server's address, as `ip:port`. */
+  address: string
+  /** The transport in use: `udp`, `tcp`, `tls`, `https`, `quic`, or `h3`. */
+  transport: string
+  /** How the transport was arrived at: `configured` by the caller, or `conventional` DNS. */
+  source: string
+}
 
 /**
  * The measurements behind a response's timing breakdown.

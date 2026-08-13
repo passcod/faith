@@ -39,7 +39,7 @@ use crate::{
 		CookieLimits, DEFAULT_MAX_AGE, DEFAULT_MAX_PER_HOST, DEFAULT_MAX_SIZE, DEFAULT_MAX_TOTAL,
 		FaithJar,
 	},
-	dns::FaithResolver,
+	dns::{FaithResolver, ResolverSettings, ServerSpec, parse_domains},
 	error::{FaithError, FaithErrorKind},
 	options::{PRIORITY, RequestCacheMode},
 	retry::DeadConnectionRetry,
@@ -274,6 +274,47 @@ pub struct AgentDnsOptions {
 	///
 	/// Default: no overrides.
 	pub overrides: Option<Vec<DnsOverride>>,
+	/// An ordered list of resolver URLs, each URL's scheme selecting the transport Faith speaks to
+	/// that resolver: `udp://` and `tcp://` for conventional DNS on port 53, `tls://` for DNS over
+	/// TLS on port 853, `https://` for DNS over HTTPS on port 443, `quic://` for DNS over QUIC on
+	/// port 853, and `h3://` for DNS over HTTP/3 on port 443. A port in the URL overrides the
+	/// conventional one, and the HTTP transports use `/dns-query` when the URL supplies no path.
+	///
+	/// The encrypted transports always authenticate the resolver. A URL fragment names the
+	/// certificate to expect (`tls://1.1.1.1#cloudflare-dns.com`); a hostname host authenticates
+	/// against the hostname; a bare-IP host authenticates against the address itself.
+	///
+	/// Servers are queried in order, a later one reached only once those before it fail. Setting
+	/// this replaces the system's servers, so no discovery runs. Throws if a URL is unparseable or
+	/// its scheme is not one of the above, and combining it with `dns.system` throws.
+	///
+	/// Default: system discovery.
+	pub servers: Option<Vec<String>>,
+	/// Bound name resolution across the whole server list, in milliseconds. Exhausting several dead
+	/// servers costs a single timeout rather than one per server.
+	///
+	/// Default: 5000.
+	pub timeout: Option<u32>,
+	/// Replace the system's search list, the domains appended to a name that is not fully
+	/// qualified. Independent of `dns.servers`.
+	///
+	/// Default: the system's search list.
+	pub search_domains: Option<Vec<String>>,
+	/// How many dots a name must contain before it is tried as given, ahead of the search list.
+	/// Independent of `dns.servers`.
+	///
+	/// Default: the system's setting.
+	pub ndots: Option<u32>,
+	/// Turn hosts-file lookup on or off. When unset, follows the platform's own convention.
+	///
+	/// Default: platform convention.
+	pub hosts_file: Option<bool>,
+	/// Further domains to exempt from the configured or encrypted resolver, for the internal
+	/// suffixes a network uses. Added to the always-exempt `localhost`, `.local`, and the network's
+	/// own DNS suffix; a domain is exempt when it matches an entry exactly or is a subdomain of one.
+	///
+	/// Default: no extra exemptions.
+	pub exempt_domains: Option<Vec<String>>,
 }
 
 /// Sets the default headers for every request.
@@ -861,6 +902,18 @@ pub struct AgentStats {
 	pub bodies_finished: i64,
 }
 
+/// One entry of `Agent.resolvers()`: a DNS server the agent resolves through (spec:OBS#resolvers).
+#[napi(object)]
+#[derive(Debug, Clone)]
+pub struct ResolverInfo {
+	/// The server's address, as `ip:port`.
+	pub address: String,
+	/// The transport in use: `udp`, `tcp`, `tls`, `https`, `quic`, or `h3`.
+	pub transport: String,
+	/// How the transport was arrived at: `configured` by the caller, or `conventional` DNS.
+	pub source: String,
+}
+
 /// The `Agent` interface of the Faith API represents an instance of an HTTP client. Each `Agent` has
 /// its own options, connection pool, caches, etc. There are also conveniences such as `headers` for
 /// setting default headers on all requests done with the agent, and statistics collected by the agent.
@@ -1300,6 +1353,15 @@ impl Agent {
 
 		let dns = dns.unwrap_or_default();
 		let dns_system = dns.system.unwrap_or(false);
+		// Naming servers and asking for the system resolver at once is a contradiction rather than
+		// a preference, since the system resolver is not Faith's to point at listed servers
+		// (spec:DNS#system-resolver).
+		if dns_system && dns.servers.as_ref().is_some_and(|servers| !servers.is_empty()) {
+			return Err(FaithError::new(
+				FaithErrorKind::Config,
+				Some("dns.servers cannot be combined with dns.system".to_string()),
+			));
+		}
 		// Parsed whichever resolver is in use: overrides take effect under the system resolver
 		// too (spec:DNS#overrides), and an unparseable address is a construction error either
 		// way (spec:AGENT#construction).
@@ -1329,11 +1391,35 @@ impl Agent {
 			.collect::<Result<Vec<_>, FaithError>>()?;
 
 		// Faith owns the hickory resolver rather than leaving it to reqwest's built-in one, so
-		// `prefetchDns` can warm the very cache reqwest's requests read (spec:WARM) and
-		// `networkChanged` can flush it (spec:NETCHG). The system resolver (getaddrinfo) has no
-		// in-process cache Faith can warm, so no resolver is installed there and `prefetchDns`
-		// resolves as a no-op (spec:WARM).
-		let dns_resolver = (!dns_system).then(FaithResolver::default);
+		// `prefetchDns` can warm the very cache reqwest's requests read (spec:WARM),
+		// `networkChanged` can flush it (spec:NETCHG), and `dns.servers` can pick the transport and
+		// order each resolver is reached by (spec:DNS#transports). The system resolver
+		// (getaddrinfo) has no in-process cache Faith can warm, so no resolver is installed there
+		// and `prefetchDns` resolves as a no-op (spec:WARM).
+		let dns_resolver = if dns_system {
+			None
+		} else {
+			// These settings configure Faith's own resolver only, so they are read on the path that
+			// builds one rather than validated under the system resolver that ignores them.
+			let mut servers = Vec::new();
+			for url in dns.servers.unwrap_or_default() {
+				servers.push(
+					ServerSpec::parse(&url)
+						.map_err(|message| FaithError::new(FaithErrorKind::AddressParse, Some(message)))?,
+				);
+			}
+			Some(FaithResolver::new(ResolverSettings {
+				servers,
+				timeout: dns.timeout.map(|ms| Duration::from_millis(ms.into())),
+				ndots: dns.ndots.map(|n| n as usize),
+				search_domains: parse_domains(dns.search_domains)
+					.map_err(|message| FaithError::new(FaithErrorKind::Config, Some(message)))?,
+				hosts_file: dns.hosts_file,
+				exempt_domains: parse_domains(dns.exempt_domains)
+					.map_err(|message| FaithError::new(FaithErrorKind::Config, Some(message)))?
+					.unwrap_or_default(),
+			}))
+		};
 
 		let mut default_accept_encoding = None;
 		let mut has_default_priority = false;
@@ -1883,6 +1969,31 @@ impl Agent {
 	#[napi]
 	pub fn connections<'env>(&self, env: &'env Env) -> Vec<ConnectionInfo<'env>> {
 		self.conn_tracker.get_for_napi(env)
+	}
+
+	/// Returns the DNS servers this agent resolves through, in the order they are queried, so
+	/// "are my lookups actually encrypted" is answerable from inside the process.
+	///
+	/// Each entry gives the server's address, the transport in use (`udp`, `tcp`, `tls`, `https`,
+	/// `quic`, or `h3`), and how that transport was arrived at (`configured` or `conventional`).
+	/// The list is empty until the resolver has been used, because it reads its configuration on
+	/// first use, and empty for an agent using the system resolver. (spec:OBS#resolvers)
+	#[napi]
+	pub fn resolvers(&self) -> Vec<ResolverInfo> {
+		self.dns_resolver
+			.as_ref()
+			.map(|resolver| {
+				resolver
+					.resolvers()
+					.into_iter()
+					.map(|report| ResolverInfo {
+						address: report.address,
+						transport: report.transport,
+						source: report.source,
+					})
+					.collect()
+			})
+			.unwrap_or_default()
 	}
 
 	/// Note that a request reached this origin, so it holds a connection the pool keeps idle for
