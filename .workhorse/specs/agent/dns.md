@@ -20,7 +20,25 @@ IPv4 and IPv6 answers race with the Happy Eyeballs algorithm, so a broken family
 A port in the URL overrides the transport's conventional port, and the HTTP transports use the `/dns-query` path when the URL supplies none.
 A URL with any other scheme, or one that does not parse, throws an address-parse error at agent construction (see [ERR](../errors/errors.md)).
 
+The encrypted transports authenticate the resolver against a name, which the URL supplies in one of two ways.
+A URL fragment names the certificate to expect when the host is an IP address, as in `tls://1.1.1.1#cloudflare-dns.com`, matching how systemd-resolved writes the same pairing.
+A URL whose host is a hostname authenticates against that hostname, and a fragment overrides it.
+
 Setting `dns.servers` replaces the system's resolver configuration outright, so no discovery runs and only the listed servers are queried.
+
+## Server order
+
+Servers are queried in the order listed, one at a time, and a later server is reached only once the servers before it have failed.
+Faith does not reorder the list by observed latency, because the order expresses the caller's intent rather than a performance hint: a list that names a private resolver first and a fallback second must not end up sending most traffic to the fallback for being closer.
+A server that fails is retried in its original position on the next lookup rather than being demoted.
+The whole list shares one lookup deadline, so exhausting several dead servers costs a single timeout rather than one timeout per server.
+
+## Bootstrapping
+
+A server URL that names a hostname cannot be contacted until that hostname resolves, which the servers that need no bootstrapping resolve on its behalf.
+Those are the listed servers whose host is already an IP address, used in list order, so an encrypted server placed above a plaintext one bootstraps its siblings without the hostname being exposed in plaintext.
+Where the list has no such server, the system's own resolver configuration bootstraps instead.
+Bootstrapping happens when the resolver is first used rather than at agent construction, and a hostname that fails to resolve drops that server from the list for the life of the agent rather than failing construction or resolution.
 
 ## Discovery
 
@@ -34,6 +52,9 @@ Otherwise Faith asks each discovered plaintext resolver whether it designates an
 A resolver that designates nothing, on a platform that configures nothing, is queried over conventional DNS.
 
 Discovery is best-effort and never fails a lookup on its own: when an encrypted endpoint cannot be established, resolution proceeds over the transport the system configuration gives.
+
+A host with no readable resolver configuration at all falls back to Google Public DNS over conventional DNS.
+This is a last resort that keeps resolution working on a misconfigured host rather than a provider Faith chooses for callers, and it is reached only when the system names no resolver of its own.
 
 ## System resolver
 
