@@ -39,10 +39,35 @@ No test covers duplex sequencing. `test/duplex.test.js` covers the `duplex` opti
 Faith is a server-side library, so undici and Deno are the relevant precedent, and Faith already matches them.
 The README's framing that browsers lack full duplex is still correct; what changed is that Faith turns out to be on the implemented side of that line already.
 
+## What the standard actually says
+
+Worth pinning down, because the answer is "less than the prose suggests".
+
+`duplex` has exactly one normative effect in the whole fetch standard: in the `Request` constructor, "If initBody is non-null and init["duplex"] does not exist, then throw a TypeError."
+No algorithm step anywhere reads its *value*. The `duplex` getter is specified to return `"half"` unconditionally, so it reports the enum rather than anything the fetch did.
+
+The half-duplex description ("the user agent sends the entire request before processing the response") lives only in the prose describing the dictionary member.
+It is a gloss, not an algorithm, and it is stronger than a delivery gate: *processing* the response covers parsing headers and reading the body off the wire, not just handing it to the caller.
+
+The algorithm in HTTP-network fetch imposes no ordering between the two.
+Making the request waits until the response headers are transmitted; transmitting the request body is a separate sub-procedure whose chunks are transmitted "in parallel".
+Nothing gates the header wait on the body finishing.
+That absence is the reason whatwg/fetch#1254 is about *defining* `"full"` rather than about permitting it.
+
+So there is no standard-specified behaviour for Faith to conform to here, in either direction. The choice is Faith's to make and to document.
+
+### A separate divergence this turned up
+
+The standard requires HTTP/2 or later for a streaming request body: "If connection is an HTTP/1.x connection, request's body is non-null, and request's body's source is null, then return a network error", where a null source means the body came from a `ReadableStream`.
+Faith streams request bodies over HTTP/1.1 without complaint, and full duplex works there (measured above).
+This is a deliberate-looking capability rather than a bug, but it is undocumented, and it bears on this card: whichever duplex modes Faith offers, it offers them on a protocol the standard rules out for streaming uploads at all.
+
 ## Feasibility: both modes are supportable
 
 Established by a working spike on this branch, not by reasoning.
-Half duplex is a gate on when the response is surfaced, not a change to how the transport runs: the stack stays duplex underneath and Faith withholds the response until the request body has gone out.
+The spike implements half duplex as a gate on when the response is surfaced: the stack stays duplex underneath, and Faith withholds the response until the request body has gone out.
+That is the cheap reading of half duplex, and it is weaker than the standard's prose gloss, which would have Faith not process the response at all until the request was sent.
+Whether the weaker reading is the one to ship is an open decision below.
 
 Mechanism: a drop guard rides along with the request body stream (`SentGuard` in src/stream_body.rs) and fires a oneshot when the stack finishes with the body. `fetch.rs` awaits that signal after `send()` resolves, before surfacing the response, unless the caller asked for `full`.
 
@@ -70,7 +95,8 @@ The whole JS suite (1795 assertions) and the Rust tests (125) pass with the gate
    It reads naturally and matches the value the standard reserves, at the cost of accepting a value no browser accepts. The alternative is a Faith-specific option that does not collide with the standard's enum.
 
 3. How strict is the half-duplex guarantee?
-   See the third gap above: "the stack is done with the body" is deliverable, "every byte reached the origin" is not.
+   Two axes. On delivery: "the stack is done with the request body" is deliverable, "every byte reached the origin" is not (see the third gap above).
+   On processing: a gate delays handing the response over but does not stop the stack reading it, so response headers are parsed and body bytes buffer while the caller waits. Matching the standard's prose would mean not reading the response until the request is sent, which the stack does not expose a way to ask for.
 
 4. Does the guarantee need locking in with tests?
    Full duplex currently holds because of how the stack composes rather than because Faith asks for it, so a stack upgrade could take it away silently. Nothing in the suite covers duplex sequencing today.
