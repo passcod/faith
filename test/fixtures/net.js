@@ -17,9 +17,17 @@ const path = require("node:path");
  * Private CA plus a leaf for localhost, cached in tmp. A plain self-signed cert
  * isn't enough: rustls refuses to accept a CA certificate as an end-entity, so
  * the server presents the leaf and the client trusts the CA.
+ *
+ * The leaf carries the `serverAuth` extended key usage because macOS verifies
+ * through Apple's Security framework rather than webpki, and that requires a TLS
+ * server certificate to say so: without the EKU the handshake fails there (and on
+ * Windows) with `InvalidCertificate(Other(OtherError(EkuError)))` while Linux,
+ * which treats an absent EKU as unrestricted, accepts it.
  */
 function ensureCert() {
-	const dir = path.join(os.tmpdir(), "faith-test-cert-v1");
+	// Bump the version when the certificate's shape changes, so runners holding a
+	// cached copy of the old one regenerate rather than fail against it.
+	const dir = path.join(os.tmpdir(), "faith-test-cert-v2");
 	const caKeyPath = path.join(dir, "ca-key.pem");
 	const caPath = path.join(dir, "ca.pem");
 	const keyPath = path.join(dir, "key.pem");
@@ -38,6 +46,7 @@ function ensureCert() {
 			"-nodes", "-subj", "/CN=localhost",
 			"-addext", "subjectAltName=DNS:localhost,IP:127.0.0.1",
 			"-addext", "basicConstraints=critical,CA:FALSE",
+			"-addext", "extendedKeyUsage=serverAuth",
 		]);
 		execFileSync("openssl", [
 			"x509", "-req", "-in", csrPath, "-CA", caPath, "-CAkey", caKeyPath,
