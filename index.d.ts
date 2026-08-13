@@ -1161,10 +1161,15 @@ export interface DnsOverride {
 }
 
 /**
- * Controls duplex behavior of the request. If this is present it must have the value `half`, meaning
- * that Faith will send the entire request before processing the response.
+ * Declares the duplex behaviour of the request. If this is present it must have the value `half`,
+ * which is the only value the fetch standard defines.
  *
  * This option must be present when `body` is a `ReadableStream`.
+ *
+ * Faith does not act on the value: every request runs full duplex, so the response is available
+ * as soon as its headers arrive, even while the request body is still being sent. `half` is a
+ * token the standard obliges every streaming upload to carry rather than a preference, so
+ * honouring it would strand code written against runtimes that also run full duplex.
  */
 export declare const enum DuplexOption {
   Half = 'half'

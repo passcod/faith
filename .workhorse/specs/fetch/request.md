@@ -46,7 +46,16 @@ A `Priority` header the caller sets directly, or one configured as an agent defa
 Accepted body types: string, `ArrayBuffer`, `Blob`, `DataView`, `File`, `FormData`, `TypedArray`, `URLSearchParams`, and `ReadableStream`.
 A `URLSearchParams` body sets `Content-Type: application/x-www-form-urlencoded;charset=UTF-8` when no content type was given.
 A `ReadableStream` body requires `duplex: "half"`, matching the fetch standard; the stream is sent as the request body without buffering the whole payload.
-Faith operates in half duplex: the whole request is sent before the response is processed.
+
+## Duplex
+
+Faith operates in full duplex.
+A response is surfaced as soon as its headers arrive, so a request streaming its body sees the response while the body is still going out, and the response body can be read in the meantime.
+A caller can drive the request body from what it reads off the response body, exchanging messages both ways over one request.
+
+The `duplex` option is required when the body is a `ReadableStream` and carries no meaning beyond that.
+`half` is the only value the fetch standard defines and so the only value accepted; a request that sets it still runs full duplex.
+Faith takes this reading because `half` is a token the standard obliges every streaming upload to carry rather than a preference the caller expressed, so acting on it would strand code written against runtimes that also run full duplex (see [the upstream limitations register](../../upstream-limitations.md) for why the standard's own reading is not on offer).
 
 ## Credentials
 
