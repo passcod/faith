@@ -63,8 +63,8 @@ empty. `bench/` was untouched by H1, so this is live on main.
 
 Fixing it is a prerequisite for this card's row, not a separate cleanup: the rows
 must use a non-exempt name (the helper's zone uses `.test`) and point Faith at the
-helper with `dns.servers`. Worth its own breakdown entry if it wants to ship
-separately, since it is a bench-validity bug independent of stale serving.
+helper with `dns.servers`. Spun out to the breakdown, since it is a bench-validity
+bug independent of stale serving.
 
 ## Test and bench DNS server
 
