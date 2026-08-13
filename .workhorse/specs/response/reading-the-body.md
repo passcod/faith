@@ -38,6 +38,9 @@ The write runs on Faith's own async runtime rather than the libuv worker pool (s
 
 The destination is named by a string path or a `file://` URL, and a relative path resolves against the process's working directory.
 Paths are text, resolved to a string before the write begins.
+A `file://` URL is converted to a path in JavaScript, by the platform's own conversion, before the request reaches Faith's native layer.
+A URL that does not name a local path therefore throws `InvalidPath` at the call, before the body is touched: one carrying a host other than `localhost`, or one whose path encodes a separator.
+A destination that is well-formed but cannot be written to, an existing directory among them, is not knowable without asking the filesystem and surfaces as `FileWrite` when the open fails.
 `overwrite` governs an occupied destination and defaults to false, so the safe case is the one a caller gets without asking for it: the write fails with `FileExists` and the file already there is left as it was.
 `overwrite: true` truncates it instead.
 `mode` sets the permissions a newly created file is given, defaulting to what Node's own filesystem writes use.
@@ -83,3 +86,4 @@ An unread, undiscarded HTTP/1 response holds its connection until the response i
 Faith-specific properties (`url`, `version`, `peer`, `trailers`, `redirected`) do not carry over.
 It is built over the response's own body stream rather than a copy, so the conversion is available until that stream is read from or locked and refused after, as the standard does not build a `Response` over one.
 Accessing `body` without reading from it does not stand in the way.
+A whole-body read closes the window too, `toFile()` among them: the body is spent even though the stream was never handed out, and the conversion is refused with the already-disturbed error.
