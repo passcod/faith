@@ -1410,7 +1410,12 @@ impl Agent {
 		// Naming servers and asking for the system resolver at once is a contradiction rather than
 		// a preference, since the system resolver is not Faith's to point at listed servers
 		// (spec:DNS#system-resolver).
-		if dns_system && dns.servers.as_ref().is_some_and(|servers| !servers.is_empty()) {
+		if dns_system
+			&& dns
+				.servers
+				.as_ref()
+				.is_some_and(|servers| !servers.is_empty())
+		{
 			return Err(FaithError::new(
 				FaithErrorKind::Config,
 				Some("dns.servers cannot be combined with dns.system".to_string()),
@@ -1457,10 +1462,9 @@ impl Agent {
 			// builds one rather than validated under the system resolver that ignores them.
 			let mut servers = Vec::new();
 			for url in dns.servers.unwrap_or_default() {
-				servers.push(
-					ServerSpec::parse(&url)
-						.map_err(|message| FaithError::new(FaithErrorKind::AddressParse, Some(message)))?,
-				);
+				servers.push(ServerSpec::parse(&url).map_err(|message| {
+					FaithError::new(FaithErrorKind::AddressParse, Some(message))
+				})?);
 			}
 			Some(FaithResolver::new(ResolverSettings {
 				servers,

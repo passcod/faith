@@ -637,7 +637,8 @@ impl Resolve for FaithResolver {
 			let addrs = this.lookup(name.as_str()).await?;
 			// Port `0` is a placeholder reqwest fills from the URL. The returned `Addrs` has to be
 			// `'static`, so collect owned rather than borrowing the lookup.
-			let addrs: Vec<SocketAddr> = addrs.into_iter().map(|ip| SocketAddr::new(ip, 0)).collect();
+			let addrs: Vec<SocketAddr> =
+				addrs.into_iter().map(|ip| SocketAddr::new(ip, 0)).collect();
 			Ok(Box::new(addrs.into_iter()) as Addrs)
 		})
 	}
@@ -657,7 +658,10 @@ fn is_authoritatively_empty(err: &NetError) -> bool {
 /// Apply the options common to every resolver Faith builds: race both families for Happy Eyeballs,
 /// hold the caller's order fixed rather than reordering by latency, and layer any `dns.*` timeout,
 /// ndots, and hosts-file settings on top.
-fn apply_options(builder: &mut hickory_resolver::ResolverBuilder<TokioRuntimeProvider>, settings: &ResolverSettings) {
+fn apply_options(
+	builder: &mut hickory_resolver::ResolverBuilder<TokioRuntimeProvider>,
+	settings: &ResolverSettings,
+) {
 	let options = builder.options_mut();
 	options.ip_strategy = LookupIpStrategy::Ipv4AndIpv6;
 	// The list expresses the caller's intent, not a performance hint, so a private resolver named
@@ -706,8 +710,8 @@ fn build_discovery(settings: &ResolverSettings) -> Result<Built, NetError> {
 
 	let reports = report(config.name_servers(), ResolverSource::Conventional);
 
-	let mut builder =
-		TokioResolver::builder_with_config(config, TokioRuntimeProvider::default()).with_options(options);
+	let mut builder = TokioResolver::builder_with_config(config, TokioRuntimeProvider::default())
+		.with_options(options);
 	apply_options(&mut builder, settings);
 	let builder = builder.with_opportunistic_encryption(OpportunisticEncryption::Enabled {
 		config: Default::default(),
@@ -740,11 +744,10 @@ async fn build_listed(settings: &ResolverSettings) -> Result<Built, NetError> {
 /// Resolve the listed servers to hickory name servers, bootstrapping hostname hosts. A hostname
 /// that will not resolve drops that server for the life of the agent rather than failing the
 /// resolver (spec:DNS#bootstrapping).
-async fn build_name_servers(settings: &ResolverSettings) -> Result<Vec<NameServerConfig>, NetError> {
-	let needs_bootstrap = settings
-		.servers
-		.iter()
-		.any(|spec| spec.ip().is_none());
+async fn build_name_servers(
+	settings: &ResolverSettings,
+) -> Result<Vec<NameServerConfig>, NetError> {
+	let needs_bootstrap = settings.servers.iter().any(|spec| spec.ip().is_none());
 	let bootstrap = if needs_bootstrap {
 		Some(bootstrap_resolver(settings)?)
 	} else {
@@ -885,7 +888,10 @@ mod tests {
 		// spec:DNS#transports — `/dns-query` when the URL supplies none.
 		assert_eq!(spec("https://dns.google").path, None);
 		assert_eq!(
-			spec("https://dns.google").to_name_server(IpAddr::from([8, 8, 8, 8])).connections[0].protocol,
+			spec("https://dns.google")
+				.to_name_server(IpAddr::from([8, 8, 8, 8]))
+				.connections[0]
+				.protocol,
 			ProtocolConfig::Https {
 				server_name: Arc::from("dns.google"),
 				path: Arc::from(DEFAULT_DNS_QUERY_PATH),
@@ -920,10 +926,7 @@ mod tests {
 	fn a_hostname_authenticates_against_itself() {
 		// spec:DNS#transports
 		let spec = spec("tls://dns.google");
-		assert_eq!(
-			&*spec.server_name(IpAddr::from([8, 8, 8, 8])),
-			"dns.google"
-		);
+		assert_eq!(&*spec.server_name(IpAddr::from([8, 8, 8, 8])), "dns.google");
 	}
 
 	#[test]
@@ -946,7 +949,10 @@ mod tests {
 		let before = resolver.generation();
 		// Build the generation's state, so there is something for the reset to drop.
 		let _ = resolver.built(&before).await;
-		assert!(before.built.get().is_some(), "the generation built its resolver");
+		assert!(
+			before.built.get().is_some(),
+			"the generation built its resolver"
+		);
 		assert_eq!(resolver.resolvers().len(), 1, "which `resolvers()` reports");
 
 		resolver.reset();
@@ -1114,7 +1120,10 @@ mod tests {
 		);
 
 		// The names that must stay exempt still are, and a real system suffix still counts.
-		let suffixes = exempt_suffixes(vec![Name::root(), Name::from_utf8("corp.example").unwrap()], &[]);
+		let suffixes = exempt_suffixes(
+			vec![Name::root(), Name::from_utf8("corp.example").unwrap()],
+			&[],
+		);
 		for exempt in ["localhost", "printer.local", "host.corp.example"] {
 			let name = Name::from_utf8(exempt).unwrap();
 			assert!(
