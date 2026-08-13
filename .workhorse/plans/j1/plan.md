@@ -145,8 +145,10 @@ measuring the harness. The helper now sends it by default.
 - [x] Rust unit tests for the stale window, the `serveStale` switch, the retry arming,
       and the network-change drop
 - [x] JS tests driving Faith at the helper through `dns.servers`
-- [ ] Bench row showing the win against a slow resolver — blocked on card W2, which
-      restores the DNS rows and gives the harness a DNS delay knob
+- [ ] Bench row showing the win against a slow resolver — not this card's work, spun
+      out to the breakdown and based onto W2. The ordering is circular otherwise: W2
+      restores the DNS rows and adds the DNS delay knob but has nothing to compare
+      against until serving stale exists, and the row needs both, so it lands third
 
 ## Corrections made to the spec while implementing
 

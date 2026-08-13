@@ -52,4 +52,6 @@ The two unticked cases above need an address that blackholes rather than refuses
 
 ## Benchmark
 
-- [ ] A features-suite row shows the stale-serve win against a slow resolver (blocked on card W2, which restores the DNS rows and gives the harness a DNS delay knob)
+- [ ] A features-suite row shows the stale-serve win against a slow resolver
+
+The row is its own card, spun out to the breakdown and based onto W2. It cannot land here: W2 restores the DNS rows and adds the harness's DNS delay knob but has nothing to compare against until serving stale exists, while the row needs both. A third card after the two of them is what breaks that circle.

@@ -94,6 +94,18 @@ async function startOrigin() {
 const movedHostServer = (zone) =>
 	startDnsServer({ zone, negativeTtl: 1 });
 
+/**
+ * An agent for the moved-host tests, with a connect timeout.
+ *
+ * The dead address is expected to refuse promptly, and does on both platforms this runs
+ * on. The connect timeout is what keeps the test a test rather than a hang if some host
+ * blackholes the address instead: recovery is driven by a connect failure, and a bounded
+ * connect turns a silent drop into one. It is deliberately well above what a loopback
+ * refusal or a loopback connect takes, so it never fires on the path being measured.
+ */
+const movedHostAgent = (dns) =>
+	agentFor(dns, {}, { timeout: { connect: 2000, total: 15000 } });
+
 test("DNS: an expired answer is served without waiting", async (t) => {
 	t.plan(3);
 	const dns = await startDnsServer({
@@ -331,7 +343,7 @@ test("DNS: a stale address that has moved is re-resolved and retried", async (t)
 	t.plan(3);
 	const origin = await startOrigin();
 	const dns = await movedHostServer({ "moved.test": gone() });
-	const agent = agentFor(dns);
+	const agent = movedHostAgent(dns);
 	const url = `http://moved.test:${origin.port}/`;
 	try {
 		await agent.prefetchDns("moved.test");
@@ -361,7 +373,7 @@ test("DNS: a POST recovers from a stale address too", async (t) => {
 	t.plan(1);
 	const origin = await startOrigin();
 	const dns = await movedHostServer({ "post.test": gone() });
-	const agent = agentFor(dns);
+	const agent = movedHostAgent(dns);
 	try {
 		await agent.prefetchDns("post.test");
 		dns.set("post.test", here());
@@ -386,7 +398,7 @@ test("DNS: a streaming body is not retried after a stale address fails", async (
 	t.plan(1);
 	const origin = await startOrigin();
 	const dns = await movedHostServer({ "stream.test": gone() });
-	const agent = agentFor(dns);
+	const agent = movedHostAgent(dns);
 	try {
 		await agent.prefetchDns("stream.test");
 		dns.set("stream.test", here());
