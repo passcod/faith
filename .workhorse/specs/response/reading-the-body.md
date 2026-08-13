@@ -4,7 +4,7 @@ id: BODY
 
 # Reading the response body
 
-The response body is read from the network once and delivered either as a stream or through a whole-body reading method.
+The response body is read from the network once and delivered either as a stream, through a whole-body reading method, or straight to a file on disk.
 The whole-body methods follow the fetch standard's disturbed-stream semantics: the first consumer wins and later ones are refused.
 `clone()` is the sanctioned way to obtain a second consumer, and `discard()` gives explicit control over the connection cost of not reading.
 A body Faith decodes is delivered decoded whichever path reads it (see [ENC](../fetch/content-encoding.md)).
@@ -27,6 +27,38 @@ Errors surfaced through the body stream carry no `code` property (see [ERR](../e
 `blob()` sets the Blob's `type` from the `Content-Type` header, empty when absent.
 These methods verify `integrity` when set; the `body` stream path does not (see [SRI](../fetch/integrity.md)).
 `formData()` exists for type compatibility and always throws.
+
+## toFile()
+
+`toFile(path, options)` writes the body to a file on disk, the bytes travelling from the network to the filesystem inside Faith without crossing into JavaScript.
+It is a whole-body read alongside `bytes()` and its siblings: the first consumer wins, `bodyUsed` becomes true once the read begins, and `integrity` is verified when set (see [SRI](../fetch/integrity.md)).
+A caller wanting a file on disk therefore has no reason to route the body through a `ReadableStream` and Node's filesystem APIs.
+It resolves to `{ path, bytesWritten }`, where `path` is the absolute filesystem path written to and `bytesWritten` counts the bytes that landed there.
+The write runs on Faith's own async runtime rather than the libuv worker pool (see [RESP](response.md)).
+
+The destination is named by a string path or a `file://` URL, and a relative path resolves against the process's working directory.
+Paths are text, resolved to a string before the write begins.
+`overwrite` governs an occupied destination and defaults to false, so the safe case is the one a caller gets without asking for it: the write fails with `FileExists` and the file already there is left as it was.
+`overwrite: true` truncates it instead.
+`mode` sets the permissions a newly created file is given, defaulting to what Node's own filesystem writes use.
+The parent directory must already exist.
+
+The destination is opened before any of the body is read, so a failure to open it leaves the body unread and undisturbed and the caller free to retry to another path.
+A response that cannot carry a body has nothing to write and throws `ResponseBodyNull` without creating a file; a response whose body is present but empty writes an empty one.
+Every other failure to open or write is a `FileWrite` error carrying the operating system's own detail: permission refused, no such directory, no space left, a write failing part way through.
+
+A failure part way through leaves the bytes written so far sitting at the destination and throws.
+Faith does not tidy up after itself here, so a caller who needs the destination path to hold either a whole body or nothing writes to a temporary path and renames on success.
+An integrity mismatch is one of these failures: the digest is only known once the last byte has been written, so the file that fails verification is on disk when the error arrives.
+
+The bytes written are the bytes any other read path would deliver, so a body Faith decodes is written decoded (see [ENC](../fetch/content-encoding.md)).
+Where the response advertised a `Content-Length`, Faith holds the server to it as the body arrives, measuring the encoded bytes off the wire before decoding and failing with `ContentLengthOverrun` once they exceed the advertisement.
+So a caller reads the advertised length from the response headers, decides whether it is willing to spend that much disk, and knows a server cannot then send more than it promised.
+The number constrained is the wire length rather than the size on disk, so a caller wanting the two to be the same requests `Accept-Encoding: identity`, which also stops Faith decoding (see [ENC](../fetch/content-encoding.md)).
+
+`signal` does not reach a file write, the same as it does not reach any other body read; the per-request `timeout` and the agent's read and total timeouts bound it (see [CANCEL](../fetch/cancellation-and-timeouts.md)).
+`clone()` gives a second entitlement to the body, so an original and its clone each write their own file.
+`discard()` on a body already written to a file is accepted, as it is after any other read.
 
 ## clone()
 

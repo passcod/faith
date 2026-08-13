@@ -17,9 +17,10 @@ Unknown algorithms are silently ignored when picking the strongest; if every lis
 
 ## When verification happens
 
-Verification runs when the body is consumed through `bytes()`, `json()`, `text()`, `arrayBuffer()`, or `blob()`: the paths where the whole body is in hand.
+Verification runs when the body is consumed through `bytes()`, `json()`, `text()`, `arrayBuffer()`, `blob()`, or `toFile()`: the paths where the whole body is in hand.
 The digest is taken over the bytes the caller receives, which are the encoded bytes on a response Faith does not decode (see [ENC](content-encoding.md)).
 A mismatch throws an integrity-mismatch error from that call.
+On `toFile()` the bytes reach disk as they are hashed, so a mismatch is reported with the file that failed verification written (see [BODY](../response/reading-the-body.md)).
 Reading through the `body` stream does not verify: the consumer sees bytes before the digest can be known, so stream consumers take on their own verification.
 Because the body is not available at `fetch()` resolution time, a mismatch surfaces at the body-reading call, not at `fetch()`.
 Browsers throw earlier because they buffer; the failure mode is the same, only the timing differs.
