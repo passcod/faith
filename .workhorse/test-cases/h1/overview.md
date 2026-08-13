@@ -27,6 +27,15 @@ Scenarios verifying the `dns.servers` transport surface, its validation, exempt-
 - [x] `resolvers()` is empty before the resolver is used and for the system resolver — verifies spec: OBS
 - [x] `resolvers()` reports configured servers in query order with their address, transport, and `configured` source — verifies spec: OBS
 
+## Network changes
+
+- [x] `networkChanged()` returns `resolvers()` to reporting nothing, and the next lookup rebuilds the list as configured and in order — verifies spec: DNS, spec: OBS
+- [x] The reset swaps the generation rather than mutating it, so work already holding one keeps its resolvers — verifies spec: NETCHG
+- [x] Exempt names keep resolving through the system resolver after the signal — verifies spec: DNS
+- [ ] On the discovery path, a network change picks up the new network's servers rather than re-querying the previous network's — verifies spec: DNS
+- [ ] A hostname server dropped for failing to bootstrap returns after a network change — verifies spec: DNS
+- [ ] Encryption probe verdicts do not survive the signal, so a resolver on the new network is probed again — verifies spec: DNS
+
 ## Resolver wiring (needs a reachable resolver — manual)
 
 - [ ] A working `dns.servers` entry actually resolves a non-exempt name over each transport (DoT, DoH, DoQ, DoH3, udp, tcp)

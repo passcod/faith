@@ -39,4 +39,5 @@ Each entry gives the server's address, the transport in use, and how that transp
 Entries appear in the order the resolver queries them.
 The list reports live state rather than configuration, so an entry's transport changes when a probe succeeds and a server dropped for failing to bootstrap does not appear.
 An agent whose resolver has not yet been used lists nothing, because the resolver reads its configuration when first needed.
+A network change returns it to that state until the next lookup, the servers it listed having been read off the network that has gone (see [NETCHG](network-change.md)).
 `resolvers()` is empty for an agent using the system resolver, which does not report what it does internally.

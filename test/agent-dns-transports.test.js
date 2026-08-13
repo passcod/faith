@@ -122,6 +122,47 @@ test("localhost is exempt from configured servers, so requests still resolve", a
 	t.equal(response.status, 200, "status is 200");
 });
 
+test("networkChanged returns resolvers() to unbuilt, then it rebuilds as configured", async (t) => {
+	t.plan(4);
+	// The listed servers are read off the network on first use, so the signal drops them and the
+	// next lookup reads again; the caller's list is configuration and survives (spec:DNS#network-changes).
+	const agent = new Agent({
+		dns: { servers: ["tls://127.0.0.1:1#test", DEAD], timeout: 500 },
+	});
+
+	try {
+		await faithFetch(NON_EXEMPT, { agent });
+	} catch {}
+	t.equal(agent.resolvers().length, 2, "the resolver is built and reported");
+
+	agent.networkChanged();
+	t.deepEqual(agent.resolvers(), [], "the signal returns it to reporting nothing");
+
+	try {
+		await faithFetch(NON_EXEMPT, { agent });
+	} catch {}
+	const rebuilt = agent.resolvers();
+	t.equal(rebuilt.length, 2, "the next lookup rebuilds the list");
+	t.equal(rebuilt[0].transport, "tls", "as configured, in the configured order");
+});
+
+test("networkChanged leaves exempt names resolving through the system resolver", async (t) => {
+	t.plan(2);
+	// The exempt suffixes are re-read with everything else, so localhost stays exempt and keeps
+	// resolving after the signal (spec:DNS#network-changes).
+	const agent = new Agent({ dns: { servers: [DEAD], timeout: 1000 } });
+
+	const before = await faithFetch(url("/get"), { agent });
+	t.ok(before.ok, "resolves before the signal");
+	await before.text();
+
+	agent.networkChanged();
+
+	const after = await faithFetch(url("/get"), { agent });
+	t.ok(after.ok, "and after it");
+	await after.text();
+});
+
 test("dns name-preparation and exemption options construct cleanly", async (t) => {
 	t.plan(1);
 	const agent = new Agent({

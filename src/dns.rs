@@ -21,7 +21,7 @@
 
 use std::{
 	net::{IpAddr, SocketAddr},
-	sync::Arc,
+	sync::{Arc, Mutex},
 	time::Duration,
 };
 
@@ -258,14 +258,29 @@ struct Built {
 	reports: Vec<ResolverReport>,
 }
 
-struct Inner {
-	settings: ResolverSettings,
+/// Everything the resolver reads off the network, held together so a network change can drop it in
+/// one go (spec:NETCHG). Each field describes the network the agent was on when it was read: which
+/// servers discovery found, which suffixes are local to it, and which of its servers answered an
+/// encryption probe. The caller's [`ResolverSettings`] deliberately sit outside, being options the
+/// agent was constructed with rather than a reading of any network.
+#[derive(Default)]
+struct Generation {
 	/// The configured (or discovered) resolver, built lazily inside a tokio runtime.
-	built: OnceCell<Built>,
+	built: OnceCell<Arc<Built>>,
 	/// The system resolver, used for exempt names. Built lazily and independently.
-	system: OnceCell<TokioResolver>,
-	/// The exempt suffixes, including the system's own, computed once on first use.
-	exempt: OnceCell<Vec<Name>>,
+	system: OnceCell<Arc<TokioResolver>>,
+	/// The exempt suffixes, including the system's own, computed once per generation.
+	exempt: OnceCell<Arc<Vec<Name>>>,
+}
+
+struct Inner {
+	/// The options the agent was constructed with. A network change does not touch these
+	/// (spec:NETCHG#what-the-signal-keeps); they are what the next generation is rebuilt from.
+	settings: ResolverSettings,
+	/// Replaced wholesale by [`FaithResolver::reset`]. Read once at the start of a lookup rather
+	/// than at each step, so a lookup that spans the signal finishes against the one set of
+	/// resolvers it started on (spec:NETCHG#in-flight-requests).
+	generation: Mutex<Arc<Generation>>,
 }
 
 /// A hickory resolver Faith owns, shared between reqwest's request path and `prefetchDns`.
@@ -291,24 +306,34 @@ impl FaithResolver {
 		Self {
 			inner: Arc::new(Inner {
 				settings,
-				built: OnceCell::new(),
-				system: OnceCell::new(),
-				exempt: OnceCell::new(),
+				generation: Mutex::new(Arc::new(Generation::default())),
 			}),
 		}
 	}
 
-	async fn built(&self) -> Result<&Built, NetError> {
+	/// The generation a piece of work resolves against. Taken once per lookup: a reset swaps the
+	/// generation rather than mutating it, so work already holding one carries on against the
+	/// resolvers it started with (spec:NETCHG#in-flight-requests).
+	fn generation(&self) -> Arc<Generation> {
 		self.inner
+			.generation
+			.lock()
+			.expect("the DNS generation lock is only held to clone or replace an Arc")
+			.clone()
+	}
+
+	async fn built(&self, generation: &Generation) -> Result<Arc<Built>, NetError> {
+		generation
 			.built
-			.get_or_try_init(|| async { build(&self.inner.settings).await })
+			.get_or_try_init(|| async { build(&self.inner.settings).await.map(Arc::new) })
 			.await
+			.cloned()
 	}
 
 	/// The system resolver, for exempt names. Reads the system configuration and races both
 	/// address families for Happy Eyeballs like the built-in resolver does.
-	async fn system(&self) -> Result<&TokioResolver, NetError> {
-		self.inner
+	async fn system(&self, generation: &Generation) -> Result<Arc<TokioResolver>, NetError> {
+		generation
 			.system
 			.get_or_try_init(|| async {
 				let mut builder = TokioResolver::builder_tokio().unwrap_or_else(|_| {
@@ -318,15 +343,17 @@ impl FaithResolver {
 					)
 				});
 				builder.options_mut().ip_strategy = LookupIpStrategy::Ipv4AndIpv6;
-				builder.build()
+				builder.build().map(Arc::new)
 			})
 			.await
+			.cloned()
 	}
 
 	/// The exempt suffixes: `localhost`, `local`, the system's own domain and search suffixes, and
-	/// the caller's `dns.exemptDomains` (spec:DNS#exempt-names).
-	async fn exempt(&self) -> &[Name] {
-		self.inner
+	/// the caller's `dns.exemptDomains` (spec:DNS#exempt-names). The system's own suffixes are a
+	/// property of the network, so they are read per generation rather than once per agent.
+	async fn exempt(&self, generation: &Generation) -> Arc<Vec<Name>> {
+		generation
 			.exempt
 			.get_or_init(|| async {
 				let mut names = vec![
@@ -338,27 +365,33 @@ impl FaithResolver {
 					names.extend(config.search().iter().cloned());
 				}
 				names.extend(self.inner.settings.exempt_domains.iter().cloned());
-				names
+				Arc::new(names)
 			})
 			.await
+			.clone()
 	}
 
 	/// Whether `host` must go to the system resolver rather than Faith's servers.
-	async fn is_exempt(&self, host: &str) -> bool {
+	async fn is_exempt(&self, generation: &Generation, host: &str) -> bool {
 		let Ok(name) = Name::from_utf8(host) else {
 			return false;
 		};
-		self.exempt().await.iter().any(|suffix| suffix.zone_of(&name))
+		self.exempt(generation)
+			.await
+			.iter()
+			.any(|suffix| suffix.zone_of(&name))
 	}
 
 	/// Resolve `host` to its addresses, routing exempt names to the system resolver.
 	async fn lookup(&self, host: &str) -> Result<Vec<IpAddr>, NetError> {
-		let resolver = if self.is_exempt(host).await {
-			self.system().await?
+		let generation = self.generation();
+		if self.is_exempt(&generation, host).await {
+			let resolver = self.system(&generation).await?;
+			Ok(resolver.lookup_ip(host).await?.iter().collect())
 		} else {
-			&self.built().await?.resolver
-		};
-		Ok(resolver.lookup_ip(host).await?.iter().collect())
+			let built = self.built(&generation).await?;
+			Ok(built.resolver.lookup_ip(host).await?.iter().collect())
+		}
 	}
 
 	/// Resolve `host` and leave the answer in the shared cache, so a later request skips the
@@ -370,31 +403,38 @@ impl FaithResolver {
 	/// The DNS servers the agent resolves through, in query order (spec:OBS#resolvers). Empty
 	/// until the resolver has been used, because it reads its configuration on first use.
 	pub fn resolvers(&self) -> Vec<ResolverReport> {
-		self.inner
+		self.generation()
 			.built
 			.get()
 			.map(|built| built.reports.clone())
 			.unwrap_or_default()
 	}
 
-	/// Drop every cached answer, so the next lookup of any name goes to the network.
+	/// Drop everything read off the network, so the next lookup rebuilds against the network the
+	/// agent is on now.
 	///
-	/// Both resolvers are flushed, not just the configured one: exempt names are answered by the
-	/// system resolver and its own cache (spec:DNS#exempt-names), and a name under `.local` or the
-	/// network's DNS suffix is exactly the kind whose answer a network change invalidates.
+	/// Flushing cached answers alone would leave the agent resolving them again through the
+	/// previous network's servers: the discovered server list, the suffixes treated as local, and
+	/// the results of encryption probes are all readings of a network too, and the whole point of
+	/// the signal is that the network has changed. Dropping the generation takes the caches with
+	/// it, since they belong to the resolvers being dropped.
 	///
-	/// Synchronous, unlike the rest of this type: it reads the cells rather than initialising them,
-	/// because a resolver that has never been built holds nothing to flush. That also keeps it
-	/// callable from `networkChanged`, which is not async.
+	/// The caller's options are untouched, so a listed `dns.servers` set is rebuilt exactly as
+	/// configured; what it re-reads is what the system supplies and what the network answers
+	/// (spec:NETCHG#what-the-signal-keeps).
+	///
+	/// Synchronous, unlike the rest of this type: it swaps an `Arc` rather than building anything,
+	/// which keeps it callable from `networkChanged`, which is not async. Nothing is rebuilt here
+	/// either, so an agent that never resolves again pays nothing for the signal.
 	///
 	/// spec:NETCHG#reach-across-the-subsystems
-	pub fn clear_cache(&self) {
-		if let Some(built) = self.inner.built.get() {
-			built.resolver.clear_cache();
-		}
-		if let Some(system) = self.inner.system.get() {
-			system.clear_cache();
-		}
+	pub fn reset(&self) {
+		*self
+			.inner
+			.generation
+			.lock()
+			.expect("the DNS generation lock is only held to clone or replace an Arc") =
+			Arc::new(Generation::default());
 	}
 }
 
@@ -665,6 +705,51 @@ mod tests {
 		// spec:DNS#transports — throws an address-parse error at construction.
 		assert!(ServerSpec::parse("ftp://1.1.1.1").is_err());
 		assert!(ServerSpec::parse("not a url").is_err());
+	}
+
+	#[tokio::test]
+	async fn reset_replaces_the_generation_and_what_it_holds() {
+		// A network change drops what was read off the old network, so the next lookup builds
+		// against the new one rather than reusing the previous network's servers (spec:NETCHG).
+		let resolver = FaithResolver::new(ResolverSettings {
+			servers: vec![spec("udp://127.0.0.1:1")],
+			timeout: Some(Duration::from_millis(200)),
+			..ResolverSettings::default()
+		});
+
+		let before = resolver.generation();
+		// Build the generation's state, so there is something for the reset to drop.
+		let _ = resolver.built(&before).await;
+		assert!(before.built.get().is_some(), "the generation built its resolver");
+		assert_eq!(resolver.resolvers().len(), 1, "which `resolvers()` reports");
+
+		resolver.reset();
+
+		let after = resolver.generation();
+		assert!(
+			!Arc::ptr_eq(&before, &after),
+			"the reset swaps the generation rather than mutating it"
+		);
+		assert!(
+			after.built.get().is_none(),
+			"the new generation holds nothing until it is used again"
+		);
+		assert!(
+			before.built.get().is_some(),
+			"work already holding the old generation keeps its resolvers"
+		);
+		assert!(
+			resolver.resolvers().is_empty(),
+			"`resolvers()` reports nothing until the rebuild (spec:OBS#resolvers)"
+		);
+
+		// Configuration survives the signal, so the rebuild uses the servers as configured.
+		let _ = resolver.built(&after).await;
+		assert_eq!(
+			resolver.resolvers().len(),
+			1,
+			"the rebuilt generation resolves through the configured servers again"
+		);
 	}
 
 	#[test]

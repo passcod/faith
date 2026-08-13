@@ -1860,10 +1860,11 @@ impl Agent {
 			self.raw_client = Some(built.raw_client);
 		}
 
-		// Names resolve afresh against the new network. Under the system resolver there is no
-		// resolver here and so no cache to flush (spec:DNS).
+		// Names resolve afresh against the new network, through that network's own servers: the
+		// resolver drops what it read off the old one and reads again when next used. Under the
+		// system resolver there is no resolver here and so nothing to reset (spec:DNS).
 		if let Some(resolver) = &self.dns_resolver {
-			resolver.clear_cache();
+			resolver.reset();
 		}
 
 		#[cfg(feature = "http3")]

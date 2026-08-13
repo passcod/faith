@@ -48,7 +48,8 @@ The list orders the servers to try; it does not license reaching a named resolve
 A server URL that names a hostname cannot be contacted until that hostname resolves.
 The listed servers whose host is already an IP address do that resolving, in list order, so an encrypted server placed above a plaintext one bootstraps its siblings without the hostname being exposed in plaintext.
 Where the list has no such server, the system's own resolver configuration bootstraps instead.
-Bootstrapping happens when the resolver is first used rather than at agent construction, and a hostname that fails to resolve drops that server from the list for the life of the agent rather than failing construction or resolution.
+Bootstrapping happens when the resolver is first used rather than at agent construction, and a hostname that fails to resolve drops that server from the list rather than failing construction or resolution.
+A dropped server returns when the resolver is rebuilt, since a hostname that resolves nowhere on one network may resolve on the next (see [Network changes](#network-changes)).
 
 ## Preparing a name
 
@@ -96,7 +97,8 @@ Where discovery leaves a resolver on conventional DNS, Faith probes it for an en
 Probes run in the background rather than in the path of a lookup, so a resolver that ignores them costs no latency, and a cap on concurrent probes keeps the background work bounded.
 A resolver that answers a probe is used over the encrypted transport from then on, and its plaintext connection is retired rather than reused.
 Successful and failed probes are both remembered, for the periods RFC 9539 suggests, so a resolver is neither re-probed constantly nor retried immediately after refusing.
-This remembering lives in memory for the life of the agent; Faith writes no probe state to disk.
+This remembering lives in memory and lasts as long as the resolver holding it; Faith writes no probe state to disk.
+A verdict is about one resolver on one network, so it goes when the resolver is rebuilt (see [Network changes](#network-changes)).
 Closing the agent stops probes still in flight, alongside the resolver itself (see [AGENT](overview.md)).
 The transports probed are DNS over TLS and DNS over QUIC, which are the ones a resolver can offer without advertising a path.
 
@@ -105,6 +107,18 @@ This tier therefore protects against passive observation of DNS traffic and not 
 For the same reason a resolver is probed only when neither authenticated source covers that resolver: an unauthenticated probe must never weaken the checks made on a resolver reached through the operating system or through Discovery of Designated Resolvers.
 The gate is per resolver rather than across the list, so a list holding one resolver with an authenticated endpoint and one with none leaves the first as discovery found it and probes the second.
 Servers listed in `dns.servers` are never probed, since an explicit list is a statement of how the caller wants each resolver reached.
+
+## Network changes
+
+Most of what the resolver holds is a reading of one network rather than a setting of the agent's, so `networkChanged()` rebuilds the resolver from the caller's options and reads the rest again on the next lookup (see [NETCHG](network-change.md)).
+Rebuilt are the servers discovery took from the system, the addresses hostname servers bootstrapped to, the suffixes treated as local, the results of encryption probes, and the cached answers, which go with the resolvers holding them.
+Flushing the answers alone would leave the agent looking the same names up again through the previous network's servers, which is the opposite of what the signal is for.
+
+The options the agent was constructed with are untouched, so a list given in `dns.servers` is rebuilt exactly as listed and in the same order.
+What changes for such a list is only what had to be learned from the network: a hostname server bootstraps again, so it may reach a different address or return after having been dropped.
+
+Rebuilding happens on the next lookup rather than during the signal, so an agent that never resolves again pays nothing for it.
+A lookup already under way completes against the servers it started with, and `resolvers()` reports nothing between the signal and the next lookup, exactly as it does for an agent whose resolver has not been used yet (see [OBS](observability.md)).
 
 ## System resolver
 

@@ -38,6 +38,16 @@ Enabling it without persistence matches the spec's "in memory for the life of th
 - [x] Expose `resolvers()` reporting each server's address, transport, and source in query order
 - [x] Rust unit tests for URL parsing and exemption matching; JS tests for the config surface and validation
 
+### Stage 2 — network-change reset (done in this card)
+
+Rebasing onto main brought in the network-change signal, which flushed cached answers only.
+Configurable transports add three more readings of a particular network: the discovered server list, the exempt suffixes that include the network's own DNS suffix, and encryption probe verdicts.
+
+- [x] Group everything read off the network into one generation behind a mutex, leaving the caller's options outside it
+- [x] Make the signal swap the generation rather than flush caches, so the next lookup rebuilds from the current network
+- [x] Take the generation once per lookup, so work in flight finishes against the resolvers it started on
+- [x] Update the NETCHG, DNS, and OBS specs to describe what the signal resets and what it keeps
+
 ### Not done in this card
 
 Three pieces of the DNS spec are spun out as breakdown entries rather than built here: reading the operating system's encrypted DNS settings, Discovery of Designated Resolvers, and live transport state in `resolvers()`.

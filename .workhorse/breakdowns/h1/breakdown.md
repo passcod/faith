@@ -17,7 +17,3 @@ A resolver can designate an encrypted endpoint of its own, found by querying it 
 ## Report live resolver transport state · V2
 
 `resolvers()` reports the servers an agent resolves through, and the spec has an entry's transport change when an opportunistic probe upgrades that server. Reading that live state means surfacing hickory's own per-server transport state at the time of the call rather than the configuration the resolver was built from. Small next to the discovery sources, but it is what makes the method answer "are my lookups encrypted right now" rather than "what were they set up as".
-
-## Reset discovered DNS state on a network change
-
-The network-change signal flushes cached answers, which was the whole of the resolver's network-dependent state when that signal was written. Configurable transports add three more pieces that are readings of a particular network rather than agent configuration: the server list discovery takes from the system, the exempt suffixes that include the network's own DNS suffix, and the results of opportunistic-encryption probes. All three are read once and held for the life of the agent, so after a network change an agent flushes its answers and resolves them again through the previous network's resolvers. Wants a decision about which of the three the signal re-reads and whether re-reading counts as touching agent configuration, then the state handling to match.
