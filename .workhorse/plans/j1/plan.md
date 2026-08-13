@@ -102,31 +102,82 @@ Use a non-exempt name: `localhost` and `.local` are handed to the system resolve
 regardless of `dns.servers`, so the helper would never be asked. The helper's zone
 uses `.test` names for this reason.
 
-## Finding: empty AAAA answers are not cached, so A-only names never hit the cache
+## Retracted: "empty AAAA answers are not cached"
 
-Measured with the helper (A-only zone, TTL 60, 250ms answer delay), hickory
-re-queries AAAA on **every** lookup and each lookup pays a full round trip:
+An earlier version of this plan recorded that hickory re-queries AAAA on every
+lookup for an A-only name, so such names never hit the cache. **That was an
+artefact of the test helper, not Faith or hickory behaviour.**
 
-| zone | lookup 1 | lookup 2 | queries |
-|------|----------|----------|---------|
-| A + AAAA, TTL 60 | 251ms | 0ms | `A, AAAA` |
-| A only, TTL 60 | 251ms | 251ms | `A, AAAA, AAAA, AAAA` |
+A negative answer has no record to hang a TTL on, so RFC 2308 carries it in an
+authority-section SOA, and `DnsResponse::negative_ttl` (hickory-proto
+`src/op/dns_response.rs`) reads it from there. The helper sent no SOA, so hickory
+saw no negative TTL, fell back to `negative_min_ttl` (default 0), and declined to
+cache — which is exactly what RFC 2308 requires: "Negative responses without SOA
+records SHOULD NOT be cached."
 
-The A record caches fine; the no-records AAAA answer does not, because
-`negative_min_ttl` defaults to 0 (`ResolverOpts`, hickory `src/config.rs`), so the
-NODATA entry expires the instant it lands. Under `Ipv4AndIpv6` every lookup then
-blocks on that AAAA query.
+With the helper fixed to send an SOA, as a real resolver does, the A-only case
+caches correctly (`prefetchDns` against an A-only zone, TTL 60, 250ms delay):
 
-Setting `negative_min_ttl` to 30s makes lookup 2 instant (0ms) and drops the
-repeat AAAA queries entirely — confirmed by measurement.
+| helper | lookup 1 | lookup 2 | lookup 3 | queries |
+|--------|----------|----------|----------|---------|
+| SOA present, negative TTL 30 | 263ms | 0ms | 0ms | `A, AAAA` |
+| no SOA (negative TTL 0) | 262ms | 252ms | 251ms | `A, AAAA, AAAA, AAAA` |
 
-This matters for the card three ways:
+So there is no negative-caching gap to fix and no `negative_min_ttl` change to
+make. The lesson is about the harness: a nameserver that omits the SOA makes every
+negative answer look uncacheable, so any measurement taken against one is
+measuring the harness. The helper now sends it by default.
 
-- Much of the slow-resolver pain this card targets is this gap, not TTL expiry.
-  A one-line resolver-option change wins a large part of it with no wrapper at all.
-- A stale-serving wrapper keyed only on positive answers would still block on the
-  uncached AAAA query, so it would deliver **nothing** for A-only names — a very
-  common case. The wrapper has to cover NODATA answers too, or be paired with a
-  non-zero `negative_min_ttl`.
-- The bench needs both rows to be honest about where the win comes from: the
-  negative-caching fix and stale-serving are separate effects.
+## Build steps
+
+- [x] Fix the test nameserver to send an authority-section SOA on negative answers,
+      so negative caching behaves as it does against a real resolver
+- [x] Add `dns.serveStale` (default true) and `dns.maxStale` (default one hour) to
+      `AgentDnsOptions`, threaded into `ResolverSettings`
+- [x] Hold stale answers in a bounded cache inside `Generation`, keyed by host, with
+      `valid_until` taken from `LookupIp::valid_until()`
+- [x] Serve an expired entry inside the window and spawn a single-flighted background
+      refresh; a fresh entry falls through to hickory's own cache
+- [x] Classify the refresh outcome: resolves replaces, `NoRecordsFound` retires,
+      anything else keeps the entry
+- [x] Add `StaleAddressRetry` middleware, outside `DeadConnectionRetry`, that
+      re-resolves and re-attempts once on a connect failure against a stale address
+- [x] Rust unit tests for the stale window, the `serveStale` switch, the retry arming,
+      and the network-change drop
+- [x] JS tests driving Faith at the helper through `dns.servers`
+- [ ] Bench row showing the win against a slow resolver — blocked on card W2, which
+      restores the DNS rows and gives the harness a DNS delay knob
+
+## Corrections made to the spec while implementing
+
+- The stale-address retry cannot cover a `ReadableStream` body. `Body::try_clone`
+  returns `None` for a streaming body whether or not it has been read (reqwest
+  `src/async_impl/body.rs`), so there is no second copy to send. The safety argument
+  holds — nothing reached the origin — but feasibility does not, so the spec now
+  names streaming bodies as the exception. `POST` and `PATCH` with buffered bodies do
+  recover, which is more than the dead-connection replay allows.
+- Removed a criterion claiming both address families' outcomes are cached. It was
+  written to fix the retracted negative-caching finding above, describes behaviour
+  that already worked, and implied this card changed something there.
+
+## Left unspecified, decided by implementation
+
+Two behaviours the spec does not settle. Both are recorded here rather than guessed
+at silently, and either could reasonably go the other way.
+
+**`prefetchDns` on a stale entry returns without waiting for the refresh.** It goes
+through the same lookup path as a request, so it serves stale and starts the refresh
+behind it. That keeps the WARM contract ("a later request skips the lookup") true,
+since a later request is served stale and is fast. But WARM also describes the promise
+as settling when "the DNS answer landing in the cache" happens, which reads like a
+fresh answer, and a caller warming deliberately before a burst might want the fresh
+one. The alternative is for `prefetchDns` to await the refresh, which would make an
+explicit warm-up slower than a real request.
+
+**A redirect to another host attributes the connect failure to the original host.**
+reqwest follows redirects below the middleware, so `req.url().host_str()` is the host
+the caller asked for, not the redirect target. A connect failure at the target
+therefore invalidates the original host's stale entry and re-attempts the whole
+request. The outcome is correct (the failure still surfaces) and one attempt is
+wasted. The existing dead-connection layer has the same shape, so this is consistent
+rather than novel, but it is imprecise and worth knowing about.

@@ -39,10 +39,10 @@ use crate::{
 		CookieLimits, DEFAULT_MAX_AGE, DEFAULT_MAX_PER_HOST, DEFAULT_MAX_SIZE, DEFAULT_MAX_TOTAL,
 		FaithJar,
 	},
-	dns::{FaithResolver, ResolverSettings, ServerSpec, parse_domains},
+	dns::{DEFAULT_MAX_STALE, FaithResolver, ResolverSettings, ServerSpec, parse_domains},
 	error::{FaithError, FaithErrorKind},
 	options::{PRIORITY, RequestCacheMode},
-	retry::DeadConnectionRetry,
+	retry::{DeadConnectionRetry, StaleAddressRetry},
 };
 
 #[napi]
@@ -315,6 +315,23 @@ pub struct AgentDnsOptions {
 	///
 	/// Default: no extra exemptions.
 	pub exempt_domains: Option<Vec<String>>,
+	/// Serve an expired cache entry immediately and refresh it in the background, rather than making
+	/// the lookup wait for a fresh answer. A host's address changes rarely, so an expired answer is
+	/// almost always still correct, and a connect failure against one that has moved re-resolves and
+	/// attempts the request again.
+	///
+	/// Set `false` for an agent that must never connect to an address it knows to be out of date: an
+	/// expired entry is discarded and the lookup blocks on a fresh answer.
+	///
+	/// Default: true.
+	pub serve_stale: Option<bool>,
+	/// How far past expiry an answer may still be served, in milliseconds. An entry older than this
+	/// is discarded rather than served: an answer stale enough stops being evidence about where the
+	/// host is, and a refresh still failing after that long is the case where the address most likely
+	/// did change.
+	///
+	/// Default: 3600000 (one hour).
+	pub max_stale: Option<u32>,
 }
 
 /// Sets the default headers for every request.
@@ -1273,6 +1290,12 @@ impl ClientRecipe {
 			));
 		}
 
+		// Outside the dead-connection layer, so a re-resolved attempt gets the same
+		// treatment as the original one: the two answer different questions, and a
+		// fresh address deserves its own chance to draw a dead pooled connection.
+		// Inside the Alt-Svc and cache layers for the reason given below.
+		client = client.with(StaleAddressRetry::new(dns_resolver.cloned()));
+
 		// Registered last, so it sits innermost and wraps nothing but the exchange
 		// itself. Inside the Alt-Svc layer rather than outside it, because each
 		// protocol attempt is its own connection and deserves its own retry: a
@@ -1418,6 +1441,10 @@ impl Agent {
 				exempt_domains: parse_domains(dns.exempt_domains)
 					.map_err(|message| FaithError::new(FaithErrorKind::Config, Some(message)))?
 					.unwrap_or_default(),
+				serve_stale: dns.serve_stale.unwrap_or(true),
+				max_stale: dns
+					.max_stale
+					.map_or(DEFAULT_MAX_STALE, |ms| Duration::from_millis(ms.into())),
 			}))
 		};
 

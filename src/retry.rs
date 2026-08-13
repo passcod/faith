@@ -1,14 +1,21 @@
-//! Retrying a request whose pooled connection died before the origin answered.
+//! Attempting a request again when the first attempt failed for a reason that says
+//! nothing about the origin.
 //!
-//! An origin that closes idle connections aggressively hands the pool a problem it
-//! cannot see: the response was complete and said nothing, so the connection goes
-//! back in looking healthy, and the close lands afterwards. A request written into
-//! it in the meantime is lost, and without this layer the caller sees a network
-//! error for a request the origin never received.
+//! Two such reasons, each with its own layer. A pooled connection can die before the
+//! origin answered: an origin that closes idle connections aggressively hands the
+//! pool a problem it cannot see, since the response was complete and said nothing, so
+//! the connection goes back in looking healthy and the close lands afterwards. And an
+//! address served from an expired DNS entry can have moved, in which case connecting
+//! to it fails without the request having reached anything.
+//!
+//! Both are cases where failing the caller would report a verdict about an origin that
+//! was never consulted.
 
 use http::{Extensions, Method};
 use reqwest::{Request, Response};
 use reqwest_middleware::{Middleware, Next, Result};
+
+use crate::dns::FaithResolver;
 
 /// How many times a request may be replayed before the failure reaches the caller.
 ///
@@ -108,6 +115,83 @@ impl Middleware for DeadConnectionRetry {
 			outcome = next.clone().run(request, extensions).await;
 		}
 		outcome
+	}
+}
+
+/// Whether the error is a connection that was never established.
+///
+/// The distinction that matters is against a failure the origin took part in: a response of any
+/// status, a connection that died mid-exchange, a body that stopped early. Those are answers, and an
+/// address that produced one is confirmed by definition. Only a connect failure leaves open the
+/// possibility that the address itself was wrong.
+fn failed_to_connect(err: &reqwest_middleware::Error) -> bool {
+	match err {
+		reqwest_middleware::Error::Reqwest(err) => err.is_connect(),
+		// A middleware's own error is about this stack rather than about the network.
+		reqwest_middleware::Error::Middleware(_) => false,
+	}
+}
+
+/// Re-resolves and attempts a request again when connecting to a stale-served address failed.
+///
+/// Serving an expired DNS answer trades a round trip against the chance the address has moved, and
+/// this layer is what bounds the cost of being wrong to one re-resolve rather than a failed request
+/// (spec:DNS#when-a-stale-address-is-wrong).
+#[derive(Debug, Clone)]
+pub struct StaleAddressRetry {
+	/// `None` under `dns.system: true`, where Faith holds no cache and so serves nothing stale.
+	resolver: Option<FaithResolver>,
+}
+
+impl StaleAddressRetry {
+	pub fn new(resolver: Option<FaithResolver>) -> Self {
+		Self { resolver }
+	}
+}
+
+#[async_trait::async_trait]
+impl Middleware for StaleAddressRetry {
+	// spec:DNS#when-a-stale-address-is-wrong
+	async fn handle(
+		&self,
+		req: Request,
+		extensions: &mut Extensions,
+		next: Next<'_>,
+	) -> Result<Response> {
+		let Some(resolver) = self.resolver.clone() else {
+			return next.run(req, extensions).await;
+		};
+
+		// Asked before the request runs, not after it fails. The lookup this request makes serves the
+		// stale entry and starts a refresh behind it, so by the time an error is in hand the entry may
+		// already have been replaced and the question "was this address assumed?" no longer answerable.
+		//
+		// Cloned here for the same reason the dead-connection layer clones early: sending consumes the
+		// body. A `ReadableStream` body does not clone, which is what leaves those requests reporting
+		// the connect failure rather than being attempted again -- the body has no second copy, whether
+		// or not it was read.
+		let host = req.url().host_str().map(str::to_owned);
+		let replay = match &host {
+			Some(host) if resolver.served_stale(host) => req.try_clone(),
+			_ => None,
+		};
+
+		let outcome = next.clone().run(req, extensions).await;
+
+		match &outcome {
+			Err(err) if failed_to_connect(err) => {}
+			_ => return outcome,
+		}
+
+		let (Some(host), Some(request)) = (host, replay) else {
+			return outcome;
+		};
+
+		// Drop the entry so the retry's lookup waits for a fresh answer rather than being served the
+		// address that just failed. One attempt only: the fresh address is confirmed rather than
+		// assumed, so a second failure is an answer about the origin and belongs to the caller.
+		resolver.invalidate_stale(&host);
+		next.run(request, extensions).await
 	}
 }
 

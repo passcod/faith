@@ -13,7 +13,6 @@ The system resolver remains available as an escape hatch for environments where 
 Resolution uses Faith's own client with an in-memory cache; repeat requests to a host skip the lookup entirely (connection reuse skips it further still).
 `prefetchDns(host)` populates this cache ahead of the first request (see [WARM](warm-up.md)).
 IPv4 and IPv6 answers race with the Happy Eyeballs algorithm, so a broken family degrades latency rather than breaking connectivity.
-A name is looked up for both families and the outcome of each is cached, including the finding that a host holds no address of one family, so a host with only an IPv4 address is not re-queried for IPv6 on every lookup.
 
 ## Serving stale answers
 
@@ -45,8 +44,9 @@ A connect failure against an address that came from an expired entry re-resolves
 This covers a refused connection, an unreachable host, and a connect timeout, which are the shapes a wrong address takes.
 It happens once per request: a request that also fails to connect on the fresh answer surfaces that failure, the address having by then been confirmed rather than assumed.
 
-Because the connection was never established, no part of the request reached an origin, so the second attempt is safe whatever the request is.
-It therefore applies to every method and body, including the `POST`, `PATCH`, and `ReadableStream` cases that are never sent again on a new connection (see [POOL](connection-pool.md)).
+Because the connection was never established, no part of the request reached the origin, so attempting it again cannot double anything the origin has done.
+The method therefore does not bound this, unlike a request sent again on a connection that died mid-exchange: a `POST` or `PATCH` whose address was only assumed is attempted against the confirmed one (see [POOL](connection-pool.md)).
+A request carrying a `ReadableStream` body is the exception, its body having no second copy to send, so for those the connect failure reaches the caller as it came (see [REQ](../fetch/request.md)).
 A failure after a connection is established is an answer about the origin rather than about the address, and is returned to the caller as it came.
 
 ## Transports

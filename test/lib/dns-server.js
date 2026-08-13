@@ -27,14 +27,21 @@
  * truncated or failed UDP exchange, and a server that only spoke UDP would turn
  * that fallback into a hang.
  *
+ * Negative answers carry an authority-section SOA, without which a conforming
+ * resolver declines to cache them at all (RFC 2308). `negativeTtl` sets how long
+ * they may be cached for.
+ *
  * Not a general-purpose nameserver: one question per message, A and AAAA only,
- * no CNAME chains, no delegation, no DNSSEC.
+ * no CNAME chains, no delegation, no DNSSEC. The SOA it sends is owned by the
+ * queried name rather than a zone apex, which is enough for a resolver to take a
+ * negative TTL from but is not how a real zone is laid out.
  */
 
 const dgram = require("node:dgram");
 const net = require("node:net");
 
 const TYPE_A = 1;
+const TYPE_SOA = 6;
 const TYPE_AAAA = 28;
 const TYPE_OPT = 41;
 const CLASS_IN = 1;
@@ -95,6 +102,43 @@ function ipv6ToBuffer(str) {
 
 function addressToRdata(address, type) {
 	return type === TYPE_AAAA ? ipv6ToBuffer(address) : ipv4ToBuffer(address);
+}
+
+function encodeName(name) {
+	const labels = name
+		.split(".")
+		.filter(Boolean)
+		.map((label) => {
+			const buf = Buffer.alloc(1 + label.length);
+			buf.writeUInt8(label.length, 0);
+			buf.write(label, 1, "latin1");
+			return buf;
+		});
+	return Buffer.concat([...labels, Buffer.from([0])]);
+}
+
+/**
+ * SOA RDATA whose TTL and MINIMUM both carry `ttl`.
+ *
+ * A negative answer has no record to hang a TTL on, so RFC 2308 carries it in an
+ * SOA in the authority section, and a resolver takes the lower of that record's
+ * TTL and the SOA's MINIMUM. Without one, a conforming resolver declines to cache
+ * the answer at all, which is why the helper sends it: a server that omitted it
+ * would make every negative answer look uncacheable and any measurement of
+ * negative caching an artefact of the helper.
+ */
+function soaRdata(ttl) {
+	const nums = Buffer.alloc(20);
+	nums.writeUInt32BE(1, 0); // serial
+	nums.writeUInt32BE(3600, 4); // refresh
+	nums.writeUInt32BE(600, 8); // retry
+	nums.writeUInt32BE(604800, 12); // expire
+	nums.writeUInt32BE(ttl, 16); // minimum, which bounds negative caching
+	return Buffer.concat([
+		encodeName("ns.dns-server.test"),
+		encodeName("hostmaster.dns-server.test"),
+		nums,
+	]);
 }
 
 /** Read a label sequence. Questions are never compressed, so pointers are a fault. */
@@ -158,10 +202,13 @@ function parseQuery(buf) {
 	return { id, flags, name, type, klass, questionEnd, ednsPayload };
 }
 
-function buildResponse(request, query, { rcode, type, addresses, ttl }) {
+function buildResponse(request, query, { rcode, type, addresses, ttl, soaTtl }) {
 	const answers = (addresses ?? []).map((address) =>
 		addressToRdata(address, type),
 	);
+	// A negative answer carries its TTL in an authority-section SOA, so an answer
+	// with no records gets one and a positive answer does not.
+	const authority = answers.length === 0 && soaTtl !== undefined;
 	const parts = [];
 
 	const header = Buffer.alloc(12);
@@ -174,7 +221,7 @@ function buildResponse(request, query, { rcode, type, addresses, ttl }) {
 	);
 	header.writeUInt16BE(1, 4);
 	header.writeUInt16BE(answers.length, 6);
-	header.writeUInt16BE(0, 8);
+	header.writeUInt16BE(authority ? 1 : 0, 8);
 	header.writeUInt16BE(query.ednsPayload !== null ? 1 : 0, 10);
 	parts.push(header);
 
@@ -190,6 +237,18 @@ function buildResponse(request, query, { rcode, type, addresses, ttl }) {
 		rr.writeUInt16BE(type, 2);
 		rr.writeUInt16BE(CLASS_IN, 4);
 		rr.writeUInt32BE(ttl, 6);
+		rr.writeUInt16BE(rdata.length, 10);
+		rdata.copy(rr, 12);
+		parts.push(rr);
+	}
+
+	if (authority) {
+		const rdata = soaRdata(soaTtl);
+		const rr = Buffer.alloc(12 + rdata.length);
+		rr.writeUInt16BE(0xc00c, 0);
+		rr.writeUInt16BE(TYPE_SOA, 2);
+		rr.writeUInt16BE(CLASS_IN, 4);
+		rr.writeUInt32BE(soaTtl, 6);
 		rr.writeUInt16BE(rdata.length, 10);
 		rdata.copy(rr, 12);
 		parts.push(rr);
@@ -223,6 +282,7 @@ async function startDnsServer({
 	host = "127.0.0.1",
 	zone = {},
 	defaultTtl = 1,
+	negativeTtl = 30,
 	delayMs = 0,
 } = {}) {
 	const records = new Map();
@@ -261,23 +321,30 @@ async function startDnsServer({
 
 		const failure = failures.get(name);
 		if (failure === "drop") return null;
+		// SERVFAIL is not a negative answer about the name, so it carries no SOA
+		// and is not cacheable; NXDOMAIN is, and does.
 		if (failure === "servfail") return { rcode: RCODE_SERVFAIL };
-		if (failure === "nxdomain") return { rcode: RCODE_NXDOMAIN };
+		if (failure === "nxdomain") {
+			return { rcode: RCODE_NXDOMAIN, soaTtl: negativeTtl };
+		}
 
 		if (query.klass !== CLASS_IN) return { rcode: RCODE_NOTIMP };
 		if (query.type !== TYPE_A && query.type !== TYPE_AAAA) {
 			// Not an error: a name can simply hold no records of that type, and
 			// answering NOTIMP would make hickory retry rather than move on.
-			return { rcode: RCODE_NOERROR };
+			return { rcode: RCODE_NOERROR, soaTtl: negativeTtl };
 		}
 
 		const record = records.get(name);
-		if (!record) return { rcode: RCODE_NXDOMAIN };
+		if (!record) return { rcode: RCODE_NXDOMAIN, soaTtl: negativeTtl };
 		return {
 			rcode: RCODE_NOERROR,
 			type: query.type,
 			addresses: query.type === TYPE_AAAA ? record.aaaa : record.a,
 			ttl: record.ttl,
+			// Reached when the name holds no address of the family asked for, which
+			// is a negative answer and needs the SOA to be cacheable.
+			soaTtl: negativeTtl,
 		};
 	}
 
