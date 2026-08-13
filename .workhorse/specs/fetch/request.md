@@ -57,6 +57,17 @@ The `duplex` option is required when the body is a `ReadableStream` and carries 
 `half` is the only value the fetch standard defines and so the only value accepted; a request that sets it still runs full duplex.
 Faith takes this reading because `half` is a token the standard obliges every streaming upload to carry rather than a preference the caller expressed, so acting on it would strand code written against runtimes that also run full duplex (see [the upstream limitations register](../../upstream-limitations.md) for why the standard's own reading is not on offer).
 
+## Streaming a request body
+
+A streaming request body is one whose source is null because it came from a `ReadableStream`, as opposed to a buffered body whose bytes are known up front.
+Following the fetch standard, a streaming request body is carried only over HTTP/2 and HTTP/3; an HTTP/1.x connection cannot carry a body with a null source.
+When a request with a streaming body runs over a connection that negotiates HTTP/1.x, it fails with a network error (code `Network`, see [ERR](../errors/errors.md)).
+A buffered body sends over any protocol and is never subject to this rule.
+
+The agent's `allowH1RequestStreaming` option lifts the restriction: with it on, a streaming request body sends over an HTTP/1.x connection like any other body (see [AGENT](../agent/overview.md)).
+It defaults to off, so the standard behaviour holds unless a caller opts in.
+It exists for callers who control the origin and have confirmed HTTP/1.1 full-duplex streaming works against it.
+
 ## Credentials
 
 `credentials` defaults to `include` (there being no origin to be same as, `same-origin` is accepted and treated as `include`).
