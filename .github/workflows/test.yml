@@ -21,7 +21,35 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 jobs:
+  # The guard's artefact-cleanup commit is a new head SHA over an already-tested
+  # tree. See .github/scripts/cleanup-only-gate.sh for why this is a job and not a
+  # `paths-ignore` entry.
+  gate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: read
+    outputs:
+      skip: ${{ steps.decide.outputs.skip }}
+      allowed-skips: ${{ steps.decide.outputs.allowed-skips }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # The branch head, not the merge ref: the comparison is against this
+          # branch's previous commit. Depth 2 covers both and carries the script.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 2
+      - id: decide
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUIRED_CHECK: Tests pass
+          SKIPPABLE_JOBS: test
+        run: .github/scripts/cleanup-only-gate.sh
+
   test:
+    needs: gate
+    if: needs.gate.outputs.skip != 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -74,10 +102,12 @@ jobs:
   tests-pass:
     if: always() # always run even if dependencies fail
     name: Tests pass
-    needs: [test]
+    needs: [gate, test]
     runs-on: ubuntu-latest
     steps:
       - uses: re-actors/alls-green@release/v1
         with:
           jobs: ${{ toJSON(needs) }}
-          allowed-skips: ${{ needs.plan.outputs.allowed-skips }}
+          # alls-green counts a skipped dependency as a failure unless it is named
+          # here, so this has to be live for a gated skip to report green.
+          allowed-skips: ${{ needs.gate.outputs.allowed-skips }}
