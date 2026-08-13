@@ -34,6 +34,8 @@ This exists because waiting for the garbage collector is not acceptable for code
 Requests already in flight when `close()` is called run to completion; new requests on a closed agent throw a closed-agent error (code `Closed`).
 `close()` is idempotent, and the cookie jar remains readable after closing.
 
+`networkChanged()` is the other verb that acts on a live agent's own state, discarding what the agent learned from a network that no longer exists while keeping the agent usable (see [NETCHG](network-change.md)).
+
 ## Sub-configuration
 
 Nested option groups are specified in their own areas: [POOL](connection-pool.md), [COOK](cookies.md), [DNS](dns.md), [TLS](tls.md), [OBS](observability.md), [FLOW](flow-control.md), [CACHE](../cache/http-cache.md), [H3UP](../http3/upgrade.md), [QUIC](../http3/transport.md), and [REDIR](../fetch/redirects.md) and [CANCEL](../fetch/cancellation-and-timeouts.md) for the `redirect` and `timeout` groups.

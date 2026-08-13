@@ -105,6 +105,14 @@ pub struct AltSvcCache {
 	/// `failed`: the path *works*, so re-advertisements must not be discarded,
 	/// and expiry re-enters through a probe rather than treating h3 as broken.
 	slow: Cache<String, ()>,
+	/// Origins seeded from `http3.hints`, with the port hinted. A hint is the
+	/// caller's assertion rather than something observed, so it has to be
+	/// distinguishable from an entry in `confirmed` that a real HTTP/3 response
+	/// put there: [`Self::network_changed`] demotes the observed ones and
+	/// re-seeds from here. Unbounded by TTL and outside the capacity bound,
+	/// because the hints are configuration and there are as many as the caller
+	/// passed. (spec:NETCHG#what-the-signal-keeps)
+	hints: Cache<String, u16>,
 	/// Time-to-headers over TCP (h1 and h2 together), per origin.
 	tcp_times: Cache<String, PathTime>,
 	/// Time-to-headers over QUIC (h3), per origin.
@@ -128,6 +136,7 @@ impl std::fmt::Debug for AltSvcCache {
 			.field("cancellation_count", &self.cancellations.entry_count())
 			.field("probing_count", &self.probing.entry_count())
 			.field("slow_count", &self.slow.entry_count())
+			.field("hint_count", &self.hints.entry_count())
 			.finish()
 	}
 }
@@ -180,6 +189,9 @@ impl AltSvcCache {
 				.max_capacity(capacity)
 				.time_to_live(slow_ttl)
 				.build(),
+			// No TTL and no capacity bound: hints are configuration, held for the
+			// life of the agent so a network change can re-seed from them.
+			hints: Cache::builder().build(),
 			tcp_times: Cache::builder()
 				.max_capacity(capacity)
 				.time_to_live(confirmed_ttl)
@@ -273,6 +285,18 @@ impl AltSvcCache {
 	pub fn add_hint(&self, host: &str, port: u16) {
 		let origin = format!("https://{}:{}", host, port);
 
+		// Recorded whether or not it can be acted on right now: the hint is
+		// configuration, and a failure blocking it is a fact about a path that a
+		// network change can clear (spec:NETCHG#what-the-signal-keeps).
+		self.hints.insert(origin.clone(), port);
+		self.seed_hint(origin, port);
+	}
+
+	/// Put a hinted origin into `confirmed`, unless a failure currently blocks it.
+	///
+	/// Split out of [`Self::add_hint`] so [`Self::network_changed`] can re-seed the
+	/// hints it just cleared without re-recording them.
+	fn seed_hint(&self, origin: String, port: u16) {
 		if self.is_failed(&origin) {
 			return;
 		}
@@ -541,6 +565,70 @@ impl AltSvcCache {
 				.insert(origin.to_string(), FailureEntry { count: 0, ..entry });
 		} else {
 			self.failed.invalidate(origin);
+		}
+	}
+
+	/// Discard everything this cache learned by observing the network, keeping
+	/// what it was told.
+	///
+	/// Every state here except `advertised` and `hints` describes the path between
+	/// this client and an origin, and a network change is exactly the event that
+	/// invalidates such a description. So the observation-confirmed origins are
+	/// demoted rather than kept (the path that proved them is gone, and a probe
+	/// re-proves them without a foreground request paying for it), and the
+	/// failures, strikes, slow markers and averages go entirely: they are
+	/// penalties and measurements the old path earned, and carrying them over
+	/// would judge the new network by the old one's behaviour.
+	///
+	/// What the origin said about itself (`advertised`) and what the caller
+	/// asserted (`hints`) are not observations, so both survive.
+	///
+	/// spec:NETCHG
+	pub fn network_changed(&self) {
+		let now = Instant::now();
+
+		// Demote first, while `confirmed` still holds the entries: an advertisement
+		// is what makes the next request to the origin trigger a re-probe.
+		//
+		// Keys are invalidated one by one rather than with `invalidate_all`, whose
+		// timestamp-based invalidation would race the hint re-seeding below.
+		for (origin, entry) in self.confirmed.iter() {
+			// A hint holds its origin confirmed; it is an assertion, not a finding.
+			if self.hints.contains_key(origin.as_str()) {
+				continue;
+			}
+
+			self.confirmed.invalidate(origin.as_str());
+
+			// A logically expired entry is not knowledge to carry forward: it would
+			// come back as a fresh advertisement having just lapsed as a confirmation.
+			if entry.expires <= now {
+				continue;
+			}
+
+			self.advertised.insert(
+				(*origin).clone(),
+				AltSvcEntry {
+					port: entry.port,
+					expires: now + self.advertised_ttl,
+				},
+			);
+		}
+
+		self.failed.invalidate_all();
+		self.cancellations.invalidate_all();
+		self.slow.invalidate_all();
+		// In-flight probes are aborted by the caller of this method, so their
+		// single-flight claims would otherwise hold their origins until the claim
+		// TTL lapsed.
+		self.probing.invalidate_all();
+		self.tcp_times.invalidate_all();
+		self.quic_times.invalidate_all();
+
+		// After the failures are cleared, so a hint that a cooldown had been
+		// blocking takes effect now rather than staying refused.
+		for (origin, port) in self.hints.iter() {
+			self.seed_hint((*origin).clone(), port);
 		}
 	}
 
@@ -1239,6 +1327,23 @@ mod tests {
 		)
 	}
 
+	/// A cache whose knowledge expires soon, for tests about knowledge that has lapsed.
+	fn test_cache_ttls(advertised_ttl: Duration, confirmed_ttl: Duration) -> AltSvcCache {
+		AltSvcCache::new(AltSvcCacheConfig {
+			advertised_ttl,
+			confirmed_ttl,
+			failed_ttl: Duration::from_secs(300),
+			failed_max_ttl: Duration::from_secs(3600),
+			capacity: 10_000,
+			cancel_strikes: 3,
+			strike_window: Duration::from_secs(60),
+			follow_advertised_port: false,
+			probe_ttl: Duration::from_secs(10),
+			slow_factor: 2.5,
+			slow_ttl: Duration::from_millis(200),
+		})
+	}
+
 	fn test_cache_failing(
 		cancel_strikes: u32,
 		strike_window: Duration,
@@ -1774,6 +1879,207 @@ mod tests {
 			failure_entry(&cache).count,
 			0,
 			"but the run behind it is cleared"
+		);
+	}
+
+	#[test]
+	fn test_network_change_demotes_confirmed_to_advertised() {
+		let cache = test_cache();
+		let url = reqwest::Url::parse("https://example.com/path").unwrap();
+
+		cache.record_alt_svc(&url, &ad(443, None));
+		cache.confirm_h3(&url, 443);
+
+		cache.network_changed();
+
+		assert!(
+			cache.confirmed_port(&url).is_none(),
+			"the path that proved HTTP/3 is gone, so the origin is no longer confirmed"
+		);
+		assert_eq!(
+			cache.probe_candidate(&url),
+			Some(443),
+			"it keeps its advertisement, so a background probe re-verifies it at once"
+		);
+	}
+
+	#[test]
+	fn test_network_change_clears_failures_and_their_backoff() {
+		let cache = test_cache();
+		let url = reqwest::Url::parse("https://example.com/path").unwrap();
+
+		cache.record_alt_svc(&url, &ad(443, None));
+		cache.record_h3_failure(&url);
+		cache.record_alt_svc(&url, &ad(443, None));
+
+		cache.network_changed();
+
+		assert!(
+			!cache.is_failed("https://example.com:443"),
+			"a blocked UDP path is a fact about the old network"
+		);
+		assert!(
+			cache.failed.get("https://example.com:443").is_none(),
+			"and so is the run of failures that set the cooldown"
+		);
+
+		// The advertisement a failure discards has to come back for the origin to be
+		// probe-worthy again, so re-record it as a live response would.
+		cache.record_alt_svc(&url, &ad(443, None));
+		cache.record_h3_failure(&url);
+		assert_eq!(
+			failure_entry(&cache).count,
+			1,
+			"failing on the new network starts the backoff from the base cooldown"
+		);
+	}
+
+	#[test]
+	fn test_network_change_clears_a_slow_demotion() {
+		let cache = test_cache();
+		let url = reqwest::Url::parse("https://example.com/path").unwrap();
+
+		cache.record_alt_svc(&url, &ad(443, None));
+		cache.confirm_h3(&url, 443);
+		for _ in 0..EWMA_MIN_SAMPLES {
+			cache.record_path_time(&url, http::Version::HTTP_2, Duration::from_millis(5));
+			cache.record_path_time(&url, http::Version::HTTP_3, Duration::from_millis(50));
+		}
+		assert!(
+			cache.probe_candidate(&url).is_none(),
+			"the slow marker holds the origin off probing before the signal"
+		);
+
+		cache.network_changed();
+
+		assert_eq!(
+			cache.probe_candidate(&url),
+			Some(443),
+			"a slow path was slow on the old network, so the origin re-enters through a probe"
+		);
+	}
+
+	#[test]
+	fn test_network_change_clears_the_path_time_averages() {
+		let cache = test_cache();
+		let url = reqwest::Url::parse("https://example.com/path").unwrap();
+
+		cache.record_alt_svc(&url, &ad(443, None));
+		cache.confirm_h3(&url, 443);
+		// Enough TCP samples to satisfy the comparison's minimum, all of them fast.
+		for _ in 0..EWMA_MIN_SAMPLES {
+			cache.record_path_time(&url, http::Version::HTTP_2, Duration::from_millis(5));
+		}
+
+		cache.network_changed();
+		cache.confirm_h3(&url, 443);
+
+		// Slow enough to demote several times over, were the old TCP average still there
+		// to compare against.
+		for _ in 0..EWMA_MIN_SAMPLES {
+			cache.record_path_time(&url, http::Version::HTTP_3, Duration::from_millis(50));
+		}
+
+		assert_eq!(
+			cache.confirmed_port(&url),
+			Some(443),
+			"with the TCP average cleared there is nothing to judge QUIC against, so \
+			 no demotion happens on one side's samples alone"
+		);
+	}
+
+	#[test]
+	fn test_network_change_keeps_hints_confirmed() {
+		let cache = test_cache();
+		let url = reqwest::Url::parse("https://example.com/path").unwrap();
+
+		cache.add_hint("example.com", 443);
+
+		cache.network_changed();
+
+		assert_eq!(
+			cache.confirmed_port(&url),
+			Some(443),
+			"a hint is the caller's assertion, not an observation, so it survives the signal \
+			 and keeps an HTTP/3-only origin reachable"
+		);
+		assert!(
+			cache.probe_candidate(&url).is_none(),
+			"and a hinted origin is still never probed"
+		);
+	}
+
+	#[test]
+	fn test_network_change_lets_a_blocked_hint_take_effect() {
+		let cache = test_cache();
+		let url = reqwest::Url::parse("https://example.com/path").unwrap();
+
+		cache.add_hint("example.com", 443);
+		cache.record_h3_failure(&url);
+		assert!(
+			cache.confirmed_port(&url).is_none(),
+			"a failure demotes a hinted origin like any other"
+		);
+
+		cache.network_changed();
+
+		assert_eq!(
+			cache.confirmed_port(&url),
+			Some(443),
+			"the failure that was masking the hint belonged to the old network, so the \
+			 hint holds again once it is cleared"
+		);
+	}
+
+	#[test]
+	fn test_network_change_keeps_advertisements() {
+		let cache = test_cache();
+		let url = reqwest::Url::parse("https://example.com/path").unwrap();
+
+		cache.record_alt_svc(&url, &ad(443, None));
+
+		cache.network_changed();
+
+		assert_eq!(
+			cache.probe_candidate(&url),
+			Some(443),
+			"an advertisement is the origin's statement about itself, which a change of \
+			 client network does not revise"
+		);
+	}
+
+	#[test]
+	fn test_network_change_drops_expired_confirmations() {
+		let cache = test_cache_ttls(Duration::from_millis(100), Duration::from_millis(100));
+		let url = reqwest::Url::parse("https://example.com/path").unwrap();
+
+		cache.confirm_h3(&url, 443);
+		std::thread::sleep(Duration::from_millis(150));
+
+		cache.network_changed();
+
+		assert!(
+			cache.probe_candidate(&url).is_none(),
+			"a confirmation that had already lapsed is not knowledge to carry forward as \
+			 a fresh advertisement"
+		);
+	}
+
+	#[test]
+	fn test_network_change_releases_probe_claims() {
+		let cache = test_cache();
+		let url = reqwest::Url::parse("https://example.com/path").unwrap();
+
+		cache.record_alt_svc(&url, &ad(443, None));
+		assert!(cache.claim_probe(&url), "the first probe claims the origin");
+		assert!(!cache.claim_probe(&url), "and holds it single-flight");
+
+		cache.network_changed();
+
+		assert!(
+			cache.claim_probe(&url),
+			"probes in flight are aborted with the client they ran on, so their claims \
+			 must not hold the origin for the claim TTL"
 		);
 	}
 }

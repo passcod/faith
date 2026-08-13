@@ -1185,6 +1185,38 @@ Requests already in flight run to completion. Any new request on a closed agent 
 error. Calling `close()` more than once is a no-op. The cookie store, if any, remains readable via
 `getCookie`.
 
+### `Agent.networkChanged()`
+
+Tell the agent the network underneath it has changed, so it stops deciding from what it learned
+about a network that is gone. Node has no portable signal for an interface or connectivity change,
+so faith cannot detect one for you: this is the reaction, and wiring it up to a trigger is yours.
+
+```javascript
+// however your platform tells you the network moved
+network.on('change', () => agent.networkChanged());
+```
+
+It discards what the agent observed the network to make decisions by, and keeps what the agent was
+given. So it drops pooled connections, flushes the DNS cache, clears the HTTP/3 failure and slow
+states along with their cooldown backoff, resets the per-origin path-time averages, and forgets
+which origins hold a warm connection. Origins that a real HTTP/3 response confirmed drop back to
+advertised, so a background probe re-verifies each one over the new path without a foreground
+request paying for the check.
+
+Configuration, `http3.hints`, `Alt-Svc` advertisements, the cookie jar, the HTTP cache, and the
+`stats()` counters are all kept: none of them is a claim about a network path. A hint in particular
+holds its origin confirmed, which is what keeps an HTTP/3-only origin reachable across the change.
+
+**Requests already in flight are not interrupted.** They run to completion on the connections they
+hold, and the reset shapes what requests started afterwards draw on. To abandon in-flight requests
+on a network change, abort them through their own `signal`.
+
+The connections listed by `connections()` are left as they are and lapse on the pool idle window:
+the signal cannot tell a connection it dropped from one still carrying a request, so a dropped
+connection ages out of the list rather than disappearing from it.
+
+Calling it returns nothing, is safe to repeat, and does nothing on a closed agent.
+
 ### `Agent.prefetchDns(host: string): Promise<void>`
 
 Warm the DNS cache for `host`, so a later request to it skips the lookup. This mirrors the
