@@ -61,8 +61,8 @@ Faith takes this reading because `half` is a token the standard obliges every st
 
 A streaming request body is one whose source is null because it came from a `ReadableStream`, as opposed to a buffered body whose bytes are known up front.
 Following the fetch standard, a streaming request body is carried only over HTTP/2 and HTTP/3; an HTTP/1.x connection cannot carry a body with a null source.
-When a request with a streaming body runs over a connection that negotiates HTTP/1.x, it fails with a network error (code `Network`, see [ERR](../errors/errors.md)).
-A buffered body sends over any protocol and is never subject to this rule.
+When a request with a streaming body runs over a connection that negotiates HTTP/1.x, it fails with a network error (code `Network`, see [ERR](../errors/errors.md)) and nothing is written to that connection, so the origin sees no request at all.
+A buffered body sends over any protocol and is never subject to this rule, which includes a body that arrived through a `Request` object, since converting one reads its body to completion.
 
 The agent's `quirks.h1RequestStreaming` lifts the restriction, sending a streaming body over an HTTP/1.x connection like any other body (see [QUIRK](../agent/quirks.md)).
 

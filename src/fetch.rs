@@ -164,6 +164,27 @@ pub fn faith_fetch<'env>(
 
 		// Handle body: prefer streaming body over buffered body
 		if let Some(receiver_arc) = stream_receiver {
+			// A body read from a `ReadableStream` has no length to advertise, which the fetch
+			// standard allows only over HTTP/2 and HTTP/3 (spec:REQ#streaming-a-request-body).
+			if !agent.quirk_h1_request_streaming {
+				// Faith never negotiates h2c, so a plaintext origin is HTTP/1.x for certain and
+				// can be refused without opening a connection to find out.
+				if parsed_url.scheme() != "https" {
+					return Err(FaithError::new(
+						FaithErrorKind::Network,
+						Some(format!(
+							"a streaming request body requires HTTP/2 or HTTP/3, and {} is served over HTTP/1.1; set the agent's quirks.h1RequestStreaming to send it anyway",
+							parsed_url.as_str()
+						)),
+					));
+				}
+
+				// Over TLS the protocol is only known once ALPN has run. Asserting HTTP/2 on the
+				// request hands the check to the layer that finds out: the connection is chosen,
+				// and an HTTP/1.x one is refused there before any of the body is written.
+				request = request.version(http::Version::HTTP_2);
+			}
+
 			// Take the receiver from the Arc<Mutex<Option<...>>>
 			let receiver = {
 				let mut guard = receiver_arc.lock().await;

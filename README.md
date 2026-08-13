@@ -217,6 +217,11 @@ It is specified as an instance of any of the following types:*
 
 *If `body` is a `ReadableStream`, the `duplex` option must also be set.*
 
+A `ReadableStream` body is sent over HTTP/2 or HTTP/3 only, as the fetch standard requires; over
+HTTP/1.x the request fails with a `NetworkError`. Set
+[`quirks.h1RequestStreaming`](#agentoptionsquirksh1requeststreaming-bool) on the agent to send it
+anyway. Every other body type has a known length and is unaffected.
+
 ### `FetchOptions.browsingTopics`
 
 Faith deliberately does not implement this.
@@ -1088,6 +1093,33 @@ The maximum amount of idle connections per host to allow in the pool. Connection
 to keep the idle connections (per host) under that number.
 
 Default: `null` (no limit).
+
+### `AgentOptions.quirks: object`
+
+Switches that depart from standard behaviour on purpose. This is a nested object.
+
+Each quirk turns off a rule Faith otherwise upholds, in exchange for a capability the rule
+forbids. All of them are off by default, so an agent constructed with no options is
+standards-compliant. A quirk is for a caller who controls the origin, or has otherwise established
+that what the rule guards against does not apply to them: turning one on means requests may fail
+against origins that expect the standard behaviour.
+
+#### `AgentOptions.quirks.h1RequestStreaming: bool`
+
+Allow a streaming request body to be sent over an HTTP/1.x connection.
+
+The fetch standard reserves streaming request bodies for HTTP/2 and HTTP/3: a body read from a
+`ReadableStream` has no known length when the headers go out, and an HTTP/1.x origin or an
+intermediary on the path may refuse it. By default such a request fails with a `NetworkError`
+(code `Network`) without anything being written to the connection. With this on, the body sends
+over whichever protocol the connection negotiates.
+
+```js
+const agent = new Agent({ quirks: { h1RequestStreaming: true } });
+await fetch(url, { method: "POST", body: stream, duplex: "half", agent });
+```
+
+Default: `false`.
 
 ### `AgentOptions.redirect: string`
 

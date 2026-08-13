@@ -722,6 +722,27 @@ pub struct AgentPoolOptions {
 	pub max_idle_per_host: Option<u32>,
 }
 
+/// Switches that depart from standard behaviour on purpose. This is a nested object.
+///
+/// Each quirk turns off a rule Faith otherwise upholds, in exchange for a capability the rule
+/// forbids. All of them are off by default, so an agent constructed with no options is
+/// standards-compliant. A quirk is for a caller who controls the origin, or has otherwise
+/// established that what the rule guards against does not apply to them: turning one on means
+/// requests may fail against origins that expect the standard behaviour.
+#[napi(object)]
+#[derive(Debug, Clone, Copy, Default)]
+pub struct AgentQuirksOptions {
+	/// Allow a streaming request body to be sent over an HTTP/1.x connection.
+	///
+	/// The fetch standard reserves streaming request bodies for HTTP/2 and HTTP/3: a body read
+	/// from a `ReadableStream` has no known length when the headers go out, and an HTTP/1.x
+	/// origin or an intermediary on the path may refuse it. With this on, such a body sends over
+	/// whichever protocol the connection negotiates.
+	///
+	/// Default: false.
+	pub h1_request_streaming: Option<bool>,
+}
+
 /// Determines the behavior in case the server replies with a redirect status.
 /// One of the following values:
 ///
@@ -886,6 +907,8 @@ pub struct AgentOptions {
 	pub local_address: Option<String>,
 	/// Settings related to the connection pool. This is a nested object.
 	pub pool: Option<AgentPoolOptions>,
+	/// Switches that depart from standard behaviour on purpose. This is a nested object.
+	pub quirks: Option<AgentQuirksOptions>,
 	/// Determines the behavior in case the server replies with a redirect status.
 	pub redirect: Option<Redirect>,
 	/// Timeouts for requests made with this agent. This is a nested object.
@@ -992,6 +1015,9 @@ pub struct Agent {
 	/// (spec:WARM#preconnect)
 	#[cfg(feature = "http3")]
 	pub(crate) h3_upgrade_enabled: bool,
+	/// Mirrors `quirks.h1RequestStreaming`. `fetch` consults it to decide whether a streaming
+	/// request body may go out over HTTP/1.x (spec:QUIRK#http-1-x-request-body-streaming).
+	pub(crate) quirk_h1_request_streaming: bool,
 	/// The agent's default `Accept-Encoding`, if one was set among its default headers.
 	/// `fetch` consults it to decide which codings to decode when a request adds none of
 	/// its own (see [`crate::encoding`]).
@@ -1343,11 +1369,16 @@ impl Agent {
 			http3,
 			local_address,
 			pool,
+			quirks,
 			redirect,
 			timeout,
 			tls,
 			user_agent,
 		} = options;
+
+		let quirk_h1_request_streaming = quirks
+			.and_then(|quirks| quirks.h1_request_streaming)
+			.unwrap_or(false);
 
 		// Local bind address. An explicit value is honoured as-is. Otherwise, on hosts
 		// without usable IPv6, bind 0.0.0.0: reqwest binds the QUIC (HTTP/3) socket to the
@@ -1789,6 +1820,7 @@ impl Agent {
 			h3_follow_advertised_port,
 			#[cfg(feature = "http3")]
 			h3_upgrade_enabled: recipe.h3_upgrade.enabled,
+			quirk_h1_request_streaming,
 			default_accept_encoding,
 			has_default_priority,
 			recipe: Arc::new(recipe),
