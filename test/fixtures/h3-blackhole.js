@@ -94,8 +94,18 @@ async function startUdpRelay({ listenPort, upstreamPort }) {
 		blackhole() { state.blackhole = true; },
 		restore() { state.blackhole = false; },
 		close() {
-			sock.close();
-			for (const up of upstreams.values()) up.close();
+			// Every socket gets closed even if one of them objects: a dgram socket that
+			// is already down throws on close, and one throw part-way would strand the
+			// rest, where a bound UDP socket holds the event loop and hangs the whole run
+			// long after the last assertion.
+			for (const socket of [sock, ...upstreams.values()]) {
+				try {
+					socket.close();
+				} catch {
+					// already down, which is what was wanted
+				}
+			}
+			upstreams.clear();
 		},
 	};
 }

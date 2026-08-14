@@ -71,7 +71,7 @@ async function harness(http3Options, { altSvc } = {}) {
 		agent,
 		async close() {
 			await tcp.close();
-			caddy.close();
+			await caddy.close();
 		},
 	};
 }

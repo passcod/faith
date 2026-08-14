@@ -1244,6 +1244,7 @@ export const FAITH_VERSION: string
  *   - `PemParse` — PEM parse error for `AgentOptions.tls.identity` or `AgentOptions.tls.extraRoots`
  * - JS `TypeError`:
  *   - `Closed` — a request was made on an agent that has been closed
+ *   - `InvalidCompression` — `RequestInit.compress` naming no coding Faith can compress in
  *   - `InvalidHeader` — invalid header name or value
  *   - `InvalidMethod` — invalid HTTP method
  *   - `InvalidPath` — a `response.toFile()` destination that does not name a local path
@@ -1276,6 +1277,7 @@ export declare const enum FaithErrorKind {
   FileExists = 'FileExists',
   FileWrite = 'FileWrite',
   IntegrityMismatch = 'IntegrityMismatch',
+  InvalidCompression = 'InvalidCompression',
   InvalidHeader = 'InvalidHeader',
   InvalidIntegrity = 'InvalidIntegrity',
   InvalidMethod = 'InvalidMethod',
@@ -1296,6 +1298,14 @@ export interface FaithOptionsAndBody {
   agent: Agent
   body?: string | Buffer | Uint8Array
   cache?: CacheMode
+  /**
+   * Compress the request body in this coding, named by its wire token: `gzip`, `deflate`,
+   * `br`, or `zstd`.
+   *
+   * Taken as a string rather than an enum so an unrecognised value raises Faith's own
+   * `InvalidCompression` rather than a NAPI conversion error.
+   */
+  compress?: string
   credentials?: CredentialsOption
   duplex?: DuplexOption
   headers?: Array<[string, string]>

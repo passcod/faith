@@ -56,6 +56,12 @@ function encode(body, codings) {
  * - `/cacheable/:coding` — one coding, `Cache-Control: max-age=60`, `Vary: Accept-Encoding`
  * - `/cacheable-novary/:coding` — the same without `Vary`, so one stored entry answers every
  *   request whatever it advertised
+ * - `/sink` — reads the request body and reports it back base64'd, with the request headers,
+ *   so a test can read the bytes and the `Content-Encoding` that went out
+ * - `/refuses-coding` — answers `415` with an `Accept-Encoding` naming what it would take,
+ *   the only thing HTTP gives a caller who guessed wrong about request content
+ * - `/redirect-to-sink/:status` — redirects to `/sink` with `:status`, for what a replayed
+ *   body carries across a hop
  * - `/echo` — uncompressed, reporting the request headers it saw
  *
  * Every response carries `x-request-count`, so a test can tell a cache hit (the count does
@@ -159,6 +165,61 @@ function createEncodingOrigin() {
 					});
 				}
 				break;
+
+			case "sink": {
+				// Reports the request as it arrived: the bytes on the wire, base64'd so a
+				// compressed body survives the trip back, and the headers describing them.
+				// This is the request-compression counterpart to the coded routes above.
+				const chunks = [];
+				req.on("data", (chunk) => chunks.push(chunk));
+				req.on("end", () => {
+					const received = Buffer.concat(chunks);
+					const payload = JSON.stringify({
+						method: req.method,
+						headers: req.headers,
+						bodyBase64: received.toString("base64"),
+						bodyLength: received.length,
+					});
+					res.writeHead(200, {
+						"content-type": "application/json",
+						"content-length": String(Buffer.byteLength(payload)),
+						"x-request-count": String(requests),
+					});
+					res.end(req.method === "HEAD" ? undefined : payload);
+				});
+				return;
+			}
+
+			case "refuses-coding": {
+				// A server that will not take the coding it was sent, answering as RFC 9110
+				// describes: `415` naming what it would have taken instead.
+				req.resume();
+				req.on("end", () => {
+					const payload = JSON.stringify({ refused: req.headers["content-encoding"] });
+					res.writeHead(415, {
+						"content-type": "application/json",
+						"content-length": String(Buffer.byteLength(payload)),
+						"accept-encoding": "gzip",
+						"x-request-count": String(requests),
+					});
+					res.end(payload);
+				});
+				return;
+			}
+
+			case "redirect-to-sink": {
+				if (parts[1]) {
+					// Drained before answering so the redirect does not land mid-body and
+					// cost the connection, which would be a reset rather than a redirect.
+					req.resume();
+					req.on("end", () => {
+						res.writeHead(Number(parts[1]), { location: "/sink" });
+						res.end();
+					});
+					return;
+				}
+				break;
+			}
 
 			case "echo": {
 				const payload = JSON.stringify({

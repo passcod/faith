@@ -117,7 +117,7 @@ test("HTTP/3: a cancelled h3 attempt falls back to TCP", async (t) => {
 	} finally {
 		relay.close();
 		await tcp.close();
-		caddy.close();
+		await caddy.close();
 		t.end();
 	}
 });
@@ -210,7 +210,7 @@ test("HTTP/3: upgradeAttemptTimeout falls back without any cancellation", async 
 	} finally {
 		relay.close();
 		await tcp.close();
-		caddy.close();
+		await caddy.close();
 		t.end();
 	}
 });
