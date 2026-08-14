@@ -1022,6 +1022,11 @@ pub struct Agent {
 	/// `fetch` consults it to decide which codings to decode when a request adds none of
 	/// its own (see [`crate::encoding`]).
 	pub(crate) default_accept_encoding: Option<HeaderValue>,
+	/// The agent's default `Content-Encoding`, if one was set among its default headers.
+	/// `fetch` consults it when the `compress` option layers a coding on top of what a
+	/// request already declares, since setting the joined value on the request would
+	/// otherwise displace this default rather than build on it (spec:ENC).
+	pub(crate) default_content_encoding: Option<HeaderValue>,
 	/// Whether a `Priority` header sits among the agent's default headers. `fetch` consults
 	/// it so that default wins over the header the `priority` option would derive.
 	pub(crate) has_default_priority: bool,
@@ -1484,6 +1489,7 @@ impl Agent {
 		};
 
 		let mut default_accept_encoding = None;
+		let mut default_content_encoding = None;
 		let mut has_default_priority = false;
 		let mut default_headers = None;
 		if let Some(headers) = headers
@@ -1511,6 +1517,7 @@ impl Agent {
 				},
 			));
 			default_accept_encoding = map.get(reqwest::header::ACCEPT_ENCODING).cloned();
+			default_content_encoding = map.get(reqwest::header::CONTENT_ENCODING).cloned();
 			has_default_priority = map.contains_key(PRIORITY);
 			default_headers = Some(map);
 		}
@@ -1826,6 +1833,7 @@ impl Agent {
 			h3_upgrade_enabled: recipe.h3_upgrade.enabled,
 			quirk_h1_request_streaming,
 			default_accept_encoding,
+			default_content_encoding,
 			has_default_priority,
 			recipe: Arc::new(recipe),
 		})

@@ -1,13 +1,19 @@
 //! Content coding: Faith owns the decode decision rather than the HTTP stack
 //! underneath, so it can rest on the `Accept-Encoding` of the request in hand.
+//! The same codings compress a request body under the `compress` option.
 //!
 //! spec: ENC
 
 use std::{io, pin::Pin};
 
-use async_compression::tokio::bufread::{BrotliDecoder, GzipDecoder, ZlibDecoder, ZstdDecoder};
-use futures::TryStreamExt;
+use async_compression::tokio::bufread::{
+	BrotliDecoder, BrotliEncoder, GzipDecoder, GzipEncoder, ZlibDecoder, ZlibEncoder, ZstdDecoder,
+	ZstdEncoder,
+};
+use bytes::Bytes;
+use futures::{Stream, TryStreamExt};
 use reqwest::header::{CONTENT_ENCODING, CONTENT_LENGTH, HeaderMap};
+use tokio::io::AsyncReadExt;
 use tokio_util::io::{ReaderStream, StreamReader};
 
 use crate::body::DynStream;
@@ -31,6 +37,32 @@ pub(crate) enum Coding {
 }
 
 impl Coding {
+	/// Match the `compress` option's value, which names a coding by its wire token.
+	///
+	/// Unlike [`Self::from_token`], which reads a token off the wire and so takes it as
+	/// loosely as HTTP writes it, this matches the four documented tokens exactly: the
+	/// option is an API surface, and an unrecognised value is refused rather than
+	/// guessed at (spec:ENC#compressing-a-request-body).
+	pub(crate) fn from_option(value: &str) -> Option<Self> {
+		match value {
+			"gzip" => Some(Self::Gzip),
+			"deflate" => Some(Self::Deflate),
+			"br" => Some(Self::Brotli),
+			"zstd" => Some(Self::Zstd),
+			_ => None,
+		}
+	}
+
+	/// The wire token naming this coding in a `Content-Encoding`.
+	pub(crate) fn token(self) -> &'static str {
+		match self {
+			Self::Gzip => "gzip",
+			Self::Deflate => "deflate",
+			Self::Brotli => "br",
+			Self::Zstd => "zstd",
+		}
+	}
+
 	/// Match a single content-coding token, case-insensitively. `None` for
 	/// `identity`, an unknown coding, or a coding Faith cannot decode.
 	fn from_token(token: &str) -> Option<Self> {
@@ -200,6 +232,61 @@ where
 	Box::pin(ReaderStream::new(reader).map_err(|err| err.to_string()))
 }
 
+/// A request body stream, as reqwest takes one.
+pub(crate) type RequestStream = Pin<Box<dyn Stream<Item = io::Result<Bytes>> + Send>>;
+
+/// Compress a buffered request body, yielding the bytes that go on the wire.
+///
+/// The whole body is known up front, so it compresses in one pass and its length is the
+/// `Content-Length` reqwest derives from it (spec:ENC#what-a-compressed-request-sends).
+pub(crate) async fn compress_buffer(input: &[u8], coding: Coding) -> io::Result<Vec<u8>> {
+	let mut output = Vec::new();
+	match coding {
+		Coding::Gzip => GzipEncoder::new(input).read_to_end(&mut output).await?,
+		Coding::Deflate => ZlibEncoder::new(input).read_to_end(&mut output).await?,
+		Coding::Brotli => BrotliEncoder::new(input).read_to_end(&mut output).await?,
+		Coding::Zstd => ZstdEncoder::new(input).read_to_end(&mut output).await?,
+	};
+	Ok(output)
+}
+
+/// Compress a streaming request body as its chunks arrive.
+///
+/// There is no compressed length to declare before the body ends, so the result goes out
+/// chunked (spec:ENC#what-a-compressed-request-sends). The encoder buffers on its own
+/// terms, so the bytes for one chunk the caller writes need not leave with it.
+pub(crate) fn compress_stream<S>(input: S, coding: Coding) -> RequestStream
+where
+	S: Stream<Item = io::Result<Bytes>> + Send + 'static,
+{
+	let reader = StreamReader::new(input);
+	match coding {
+		Coding::Gzip => encoder_stream(GzipEncoder::new(reader)),
+		Coding::Deflate => encoder_stream(ZlibEncoder::new(reader)),
+		Coding::Brotli => encoder_stream(BrotliEncoder::new(reader)),
+		Coding::Zstd => encoder_stream(ZstdEncoder::new(reader)),
+	}
+}
+
+fn encoder_stream<R>(reader: R) -> RequestStream
+where
+	R: tokio::io::AsyncRead + Send + 'static,
+{
+	Box::pin(ReaderStream::new(reader))
+}
+
+/// Join the codings a request already declares with the one Faith applied.
+///
+/// The caller's `Content-Encoding` describes the bytes they handed over, so Faith's coding
+/// is named after theirs, the order the codings were applied in
+/// (spec:ENC#what-a-compressed-request-sends).
+pub(crate) fn layer_content_encoding(declared: Option<&str>, applied: Coding) -> String {
+	match declared.map(str::trim).filter(|value| !value.is_empty()) {
+		Some(declared) => format!("{declared}, {}", applied.token()),
+		None => applied.token().to_owned(),
+	}
+}
+
 #[cfg(test)]
 mod tests {
 	use reqwest::header::{CONTENT_ENCODING, HeaderMap, HeaderValue};
@@ -326,5 +413,98 @@ mod tests {
 		assert_eq!(parse_quality("0.5"), Some(500));
 		assert_eq!(parse_quality("0.001"), Some(1));
 		assert_eq!(parse_quality("1.0"), Some(1000));
+	}
+
+	#[test]
+	fn the_compress_option_names_a_coding_by_its_wire_token() {
+		assert_eq!(Coding::from_option("gzip"), Some(Coding::Gzip));
+		assert_eq!(Coding::from_option("deflate"), Some(Coding::Deflate));
+		assert_eq!(Coding::from_option("br"), Some(Coding::Brotli));
+		assert_eq!(Coding::from_option("zstd"), Some(Coding::Zstd));
+	}
+
+	#[test]
+	fn the_compress_option_matches_its_tokens_exactly() {
+		// Loose on the wire, exact as an API: `x-gzip` and a shouted token are read off a
+		// `Content-Encoding` but refused as option values.
+		assert_eq!(Coding::from_token("x-gzip"), Some(Coding::Gzip));
+		assert_eq!(Coding::from_option("x-gzip"), None);
+		assert_eq!(Coding::from_token("GZIP"), Some(Coding::Gzip));
+		assert_eq!(Coding::from_option("GZIP"), None);
+		assert_eq!(Coding::from_option(" gzip"), None);
+		assert_eq!(Coding::from_option("brotli"), None);
+		assert_eq!(Coding::from_option("identity"), None);
+		assert_eq!(Coding::from_option(""), None);
+	}
+
+	#[tokio::test]
+	async fn a_compressed_body_decodes_back_to_what_went_in() {
+		// The bytes a server receives are the bytes the caller supplied, whichever coding
+		// carried them: Faith's own decoder is the check.
+		let input = b"the quick brown fox jumps over the lazy dog".repeat(20);
+		for coding in [Coding::Gzip, Coding::Deflate, Coding::Brotli, Coding::Zstd] {
+			let compressed = compress_buffer(&input, coding).await.unwrap();
+			assert!(
+				compressed.len() < input.len(),
+				"{coding:?} did not compress repetitive input"
+			);
+
+			let source = futures::stream::once(async move { Ok(Bytes::from(compressed)) });
+			let decoded: Vec<u8> = decode_stream(Box::pin(source), coding)
+				.try_fold(Vec::new(), |mut acc, chunk| async move {
+					acc.extend_from_slice(&chunk);
+					Ok(acc)
+				})
+				.await
+				.unwrap();
+			assert_eq!(decoded, input, "{coding:?} round trip");
+		}
+	}
+
+	#[tokio::test]
+	async fn a_streaming_body_compresses_across_its_chunks() {
+		let chunks = ["first chunk, ", "second chunk, ", "third chunk"];
+		let source = futures::stream::iter(
+			chunks
+				.into_iter()
+				.map(|chunk| Ok(Bytes::from_static(chunk.as_bytes()))),
+		);
+
+		let compressed: Vec<u8> = compress_stream(source, Coding::Zstd)
+			.try_fold(Vec::new(), |mut acc, chunk| async move {
+				acc.extend_from_slice(&chunk);
+				Ok(acc)
+			})
+			.await
+			.unwrap();
+
+		let source = futures::stream::once(async move { Ok(Bytes::from(compressed)) });
+		let decoded: Vec<u8> = decode_stream(Box::pin(source), Coding::Zstd)
+			.try_fold(Vec::new(), |mut acc, chunk| async move {
+				acc.extend_from_slice(&chunk);
+				Ok(acc)
+			})
+			.await
+			.unwrap();
+		assert_eq!(decoded, chunks.concat().as_bytes());
+	}
+
+	#[test]
+	fn faiths_coding_is_named_after_the_codings_the_caller_declared() {
+		assert_eq!(
+			layer_content_encoding(Some("gzip"), Coding::Zstd),
+			"gzip, zstd"
+		);
+		assert_eq!(
+			layer_content_encoding(Some("gzip, br"), Coding::Deflate),
+			"gzip, br, deflate"
+		);
+	}
+
+	#[test]
+	fn a_request_declaring_nothing_names_only_the_coding_faith_applied() {
+		assert_eq!(layer_content_encoding(None, Coding::Brotli), "br");
+		assert_eq!(layer_content_encoding(Some(""), Coding::Gzip), "gzip");
+		assert_eq!(layer_content_encoding(Some("  "), Coding::Gzip), "gzip");
 	}
 }

@@ -267,6 +267,32 @@ Faith deliberately does not implement this.
   paying attention to staleness. If there was no response, it creates a normal request and updates
   the HTTP cache with the response.
 
+### `FetchOptions.compress: "gzip" | "deflate" | "br" | "zstd"`
+
+Custom to Faith. Compresses the request body in the named coding, setting `Content-Encoding` and
+sizing `Content-Length` to the compressed bytes. Any other value throws `InvalidCompression`.
+
+Compression is opt-in per request, and Faith never compresses a request body on its own. Nothing in
+HTTP tells you what a server accepts in request content until you have sent a body: a server that
+refuses the coding answers `415` with an `Accept-Encoding` naming what it would have taken. That
+response comes back to you like any other, and sending again in a coding it names is yours to do.
+
+The coding is layered on top of whatever you supply, so a `Content-Encoding` you set yourself
+describes the bytes you handed over and Faith's coding is named after yours, in the order applied:
+
+```js
+await fetch(url, {
+  method: "POST",
+  body: alreadyGzipped,
+  headers: { "Content-Encoding": "gzip" },
+  compress: "zstd",
+}); // sends Content-Encoding: gzip, zstd
+```
+
+A `ReadableStream` body is compressed as its chunks arrive and goes out chunked, there being no
+compressed length to declare before the body ends. The option does nothing on a request with no
+body to compress.
+
 ### `FetchOptions.credentials: string`
 
 *Controls whether or not the client sends credentials with the request, as well as whether any
@@ -1445,6 +1471,7 @@ error kind, documented in this comprehensive mapping:
   - `PemParse` — PEM parse error for `AgentOptions.tls.identity` or `AgentOptions.tls.extraRoots`
 - JS `TypeError`:
   - `Closed` — a request was made on an agent that has been closed
+  - `InvalidCompression` — `RequestInit.compress` naming no coding Faith can compress in
   - `InvalidHeader` — invalid header name or value
   - `InvalidMethod` — invalid HTTP method
   - `InvalidPath` — a `response.toFile()` destination that does not name a local path

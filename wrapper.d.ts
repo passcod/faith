@@ -34,6 +34,7 @@ export const ERROR_CODES: {
 	readonly FileExists: "FileExists";
 	readonly FileWrite: "FileWrite";
 	readonly IntegrityMismatch: "IntegrityMismatch";
+	readonly InvalidCompression: "InvalidCompression";
 	readonly InvalidHeader: "InvalidHeader";
 	readonly InvalidIntegrity: "InvalidIntegrity";
 	readonly InvalidMethod: "InvalidMethod";
@@ -131,6 +132,28 @@ export interface FetchOptions {
 		| "no-store"
 		| "only-if-cached"
 		| "reload";
+	/**
+	 * This is custom to Faith.
+	 *
+	 * Compresses the request body in the named coding, setting `Content-Encoding` and sizing
+	 * `Content-Length` to the compressed bytes. Any other value throws `InvalidCompression`.
+	 *
+	 * Compression is opt-in per request, and Faith never compresses a request body on its own.
+	 * Nothing in HTTP tells you what a server accepts in request content until you have sent a
+	 * body: a server that refuses the coding answers `415` with an `Accept-Encoding` naming what
+	 * it would have taken. That response comes back to you like any other, and sending again in a
+	 * coding it names is yours to do.
+	 *
+	 * The coding is layered on top of whatever you supply, so a `Content-Encoding` you set
+	 * yourself describes the bytes you handed over and Faith's coding is named after yours, in
+	 * the order applied: a `Content-Encoding: gzip` with `compress: "zstd"` sends
+	 * `Content-Encoding: gzip, zstd`.
+	 *
+	 * A `ReadableStream` body is compressed as its chunks arrive and goes out chunked, there
+	 * being no compressed length to declare before the body ends. The option does nothing on a
+	 * request with no body to compress.
+	 */
+	compress?: "gzip" | "deflate" | "br" | "zstd";
 	/**
 	 * Controls whether or not the client sends credentials with the request, as well as whether any
 	 * `Set-Cookie` response headers are respected. Credentials are cookies, ~~TLS client certificates,~~

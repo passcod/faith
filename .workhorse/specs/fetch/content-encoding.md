@@ -34,7 +34,8 @@ The codings a response names are counted across every `Content-Encoding` it carr
 ## Compressing a request body
 
 The `compress` option names the coding to compress the request body in, written as the coding's wire token: `gzip`, `deflate`, `br`, or `zstd`.
-Any other value throws an `InvalidCompression` error, a `TypeError` alongside the other kinds of API misuse (see [ERR](../errors/errors.md)).
+Any other value throws an `InvalidCompression` error, a `TypeError` alongside the other kinds of API misuse (see [ERR](../errors/errors.md)), and does so whether or not the request turns out to carry a body.
+The four tokens are matched exactly, so `x-gzip` and `GZIP` name no coding here even though both read as gzip in a response's `Content-Encoding`: a token on the wire is taken as loosely as HTTP writes it, while an option value is an API and is refused rather than guessed at.
 Each coding compresses at a level Faith picks, the same level for every request in that coding.
 The option does nothing when the request has no body to compress, so a request whose body is absent or null sends no `Content-Encoding`.
 
