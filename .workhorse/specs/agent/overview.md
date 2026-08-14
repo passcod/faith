@@ -17,6 +17,7 @@ Creating an agent per request is an anti-pattern the design deliberately does no
 Options are validated at construction.
 Errors that indicate a broken configuration throw: an unparseable `localAddress`, DNS override address, or DNS server URL (syntax error), malformed `tls.identity` or `tls.extraRoots` PEM (syntax error), and a disk cache without a path or DNS servers combined with the system resolver (configuration error).
 Convenience inputs degrade gracefully instead: default headers with invalid names or values are dropped entry by entry, and the `manual` redirect policy is accepted (see [REDIR](../fetch/redirects.md)).
+Options Faith does not recognise are ignored rather than rejected, in any group, matching how a `RequestInit` treats them (see [FAITH](../overview.md)).
 Node-compatible environment variables are read at construction and layer on top of explicit options (see [ENV](../environment/variables.md)).
 
 ## Identity and defaults

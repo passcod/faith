@@ -63,6 +63,6 @@ Headers arrive, so both mechanisms count success; the transfer stalls in the bod
 
 By default, an advertisement whose port differs from the origin's is recorded but not acted on: honouring it correctly (connect to the advertised endpoint, keep the origin's authority) is not expressible in the current HTTP stack, and guessing that the origin's own port speaks HTTP/3 would be wrong.
 Such origins simply don't upgrade.
-`http3.upgradeFollowAdvertisedPort: true` upgrades anyway by rewriting the request's port to the advertised one (non-standards-compliant, for servers the caller controls), with three visible consequences: the request's authority carries the advertised port (servers routing on authority may misroute), `response.url` reports the port actually connected to, and `redirected` ignores port-only differences on HTTP/3 responses.
+`quirks.h3FollowAdvertisedPort: true` upgrades anyway by rewriting the request's port to the advertised one, which departs from RFC 7838 and so is a quirk (see [QUIRK](../agent/quirks.md)), with three visible consequences: the request's authority carries the advertised port (servers routing on authority may misroute), `response.url` reports the port actually connected to, and `redirected` ignores port-only differences on HTTP/3 responses.
 TLS still validates against the origin's hostname either way.
 Origin knowledge stays keyed on the origin's port even when the request port was rewritten, and confirmations record the port proven rather than re-reading state that a concurrent failure may have cleared.

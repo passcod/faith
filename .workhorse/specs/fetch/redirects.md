@@ -29,4 +29,4 @@ The `Referer` header is set to the previous URL, stripped of any userinfo and fr
 
 `response.url` reports the final URL after all redirects, and `response.version` the final protocol version.
 `response.redirected` is true when the response resulted from following at least one redirect.
-With the agent's `http3.upgradeFollowAdvertisedPort` enabled, URL comparison for this flag ignores the port (the port is rewritten by the upgrade), so a genuine redirect differing only in port reads as not-redirected on those responses (see [H3UP](../http3/upgrade.md)).
+With the agent's `quirks.h3FollowAdvertisedPort` enabled, URL comparison for this flag ignores the port (the port is rewritten by the upgrade), so a genuine redirect differing only in port reads as not-redirected on those responses (see [H3UP](../http3/upgrade.md)).
