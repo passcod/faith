@@ -12,7 +12,6 @@ const zlib = require("node:zlib");
 
 const { fetch, Agent, ERROR_CODES } = require("../wrapper.js");
 const { createEncodingOrigin, PAYLOAD } = require("./fixtures/encoding-origin.js");
-const { streamingAgent } = require("./helpers.js");
 
 /** Spin up the origin, run `body`, and tear it down whatever happens. */
 async function withOrigin(t, body) {
@@ -277,7 +276,7 @@ test("request compression: a bad value throws even with no body to compress", as
 });
 
 test("request compression: a streaming body goes out chunked", async (t) => {
-	await withOrigin(t, async ({ origin }) => {
+	await withOrigin(t, async ({ origin, agent }) => {
 		const chunks = ["first chunk, ", "second chunk, ", "third chunk"];
 		const stream = new ReadableStream({
 			start(controller) {
@@ -291,7 +290,9 @@ test("request compression: a streaming body goes out chunked", async (t) => {
 			body: stream,
 			duplex: "half",
 			compress: "gzip",
-			agent: streamingAgent(),
+			// Made through the factory so it is closed with the origin: an agent left open
+			// holds its pool, and this one points at a fixture that goes away with the test.
+			agent: agent({ quirks: { h1RequestStreaming: true } }),
 			timeout: 10000,
 		});
 		const seen = await sink(res);
