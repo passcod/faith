@@ -6,6 +6,7 @@ id: ENC
 
 Faith negotiates compressed transfer and decodes a response encoded in a coding the request accepted, before the caller sees any bytes.
 A caller who sets `Accept-Encoding` themselves chooses what that is, and a body encoded outside that choice arrives as it came off the wire.
+In the other direction the `compress` option compresses a request body in one of the same codings, opt-in per request.
 
 ## Negotiation
 
@@ -29,6 +30,30 @@ Every other response is delivered as received, with `Content-Encoding` and `Cont
 That covers a response in a coding Faith cannot decode, and a response in a coding the request's `Accept-Encoding` did not accept.
 It also covers a `Content-Encoding` naming more than one coding: Faith decodes a single coding, and a representation encoded repeatedly is the caller's to unwind.
 The codings a response names are counted across every `Content-Encoding` it carries, whether they arrive comma-joined on one line or split across several, those being the same list.
+
+## Compressing a request body
+
+The `compress` option names the coding to compress the request body in, written as the coding's wire token: `gzip`, `deflate`, `br`, or `zstd`.
+Any other value throws an `InvalidCompression` error, a `TypeError` alongside the other kinds of API misuse (see [ERR](../errors/errors.md)).
+Each coding compresses at a level Faith picks, the same level for every request in that coding.
+The option does nothing when the request has no body to compress, so a request whose body is absent or null sends no `Content-Encoding`.
+
+Compression is opt-in per request, and Faith compresses no request body of its own accord.
+Nothing in HTTP tells a caller what a server accepts in request content until a body has been sent: a server that refuses the coding answers `415` with an `Accept-Encoding` naming what it would have taken.
+That response reaches the caller like any other, Faith reading nothing from it and sending nothing again in a coding it names.
+The fetch standard has no equivalent of the option, so it is a Faith extension (see [FAITH](../overview.md)).
+
+## What a compressed request sends
+
+The coding Faith applies layers on top of whatever the caller supplied, whose own `Content-Encoding` describes the bytes they handed over.
+So the request names the caller's codings followed by Faith's, in the order they were applied: a caller-set `Content-Encoding: gzip` with `compress: "zstd"` sends `Content-Encoding: gzip, zstd`, and a request with no `Content-Encoding` of its own sends the single coding Faith applied.
+`Content-Length` counts the bytes Faith produced.
+
+A `ReadableStream` body is compressed as its chunks arrive and goes out chunked with no `Content-Length`, there being no compressed length to declare before the body ends.
+It remains a streaming body in every other respect, carried only over HTTP/2 and HTTP/3 unless the agent's `quirks.h1RequestStreaming` says otherwise (see [REQ](request.md)).
+
+A 307 or 308 redirect replays the bytes Faith already compressed under the same `Content-Encoding`, compressing nothing a second time.
+A 301, 302, or 303 turns the request into a `GET` and drops the body, and `Content-Encoding` goes with it as `Content-Type` does (see [REDIR](redirects.md)).
 
 ## Where decoding sits
 
