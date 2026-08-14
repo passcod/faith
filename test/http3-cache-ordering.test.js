@@ -125,7 +125,7 @@ reset the strikes",
 	} finally {
 		relay.close();
 		await tcp.close();
-		caddy.close();
+		await caddy.close();
 		t.end();
 	}
 });

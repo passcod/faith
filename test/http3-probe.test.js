@@ -87,7 +87,7 @@ async function harness(http3Options = {}) {
 		async close() {
 			relay.close();
 			await tcp.close();
-			caddy.close();
+			await caddy.close();
 		},
 	};
 }

@@ -13,6 +13,36 @@ const path = require("node:path");
 
 const { ensureCert } = require("./net.js");
 
+/** How long a Caddy gets to go down politely before it is put down. */
+const SHUTDOWN_GRACE_MS = 2000;
+
+/**
+ * Stop a Caddy and resolve once it is actually gone.
+ *
+ * `kill()` alone only asks: Caddy shuts down gracefully and can outlive the signal,
+ * and a live child with piped stdio holds the event loop open, so a run whose Caddy
+ * lingers cannot end. That surfaces as a whole test run hanging long after the last
+ * assertion, so the signal is escalated rather than trusted.
+ */
+function stopCaddy(proc) {
+	return new Promise((resolve) => {
+		if (proc.exitCode !== null || proc.signalCode !== null) {
+			resolve();
+			return;
+		}
+
+		// Unref'd because the child itself is holding the loop: while there is anything
+		// left to wait for, this timer still fires, and once there isn't, it is moot.
+		const force = setTimeout(() => proc.kill("SIGKILL"), SHUTDOWN_GRACE_MS);
+		force.unref();
+		proc.once("exit", () => {
+			clearTimeout(force);
+			resolve();
+		});
+		proc.kill();
+	});
+}
+
 /**
  * Spawn Caddy serving https://localhost:<port> over h1/h2/h3.
  *
@@ -78,13 +108,13 @@ ${lines.map((d) => `\t${d}`).join("\n")}
 				// Kill before rejecting: the caller never gets a handle to close, and a
 				// surviving child with piped stdio keeps node alive, so a config error
 				// would surface as a hung test run rather than a failure.
-				proc.kill();
+				stopCaddy(proc);
 				reject(new Error(`caddy failed to start:\n${log}`));
 			}
 		}, 100);
 	});
 
-	return { port, log: () => log, close: () => proc.kill() };
+	return { port, log: () => log, close: () => stopCaddy(proc) };
 }
 
 /** True if a `caddy` binary is on PATH. */

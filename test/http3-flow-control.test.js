@@ -75,7 +75,7 @@ async function harness(options = {}) {
 			agent.close();
 			relay.close();
 			await tcp.close();
-			caddy.close();
+			await caddy.close();
 		},
 	};
 }
@@ -178,7 +178,7 @@ test("flow control: a small window still carries a body larger than it", async (
 		agent.close();
 		relay.close();
 		await tcp.close();
-		caddy.close();
+		await caddy.close();
 		t.end();
 	}
 });

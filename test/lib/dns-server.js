@@ -381,14 +381,20 @@ async function startDnsServer({
 		respond(() => send(buildResponse(request, query, reply)));
 	}
 
-	const udp = dgram.createSocket(net.isIPv6(host) ? "udp6" : "udp4");
-	udp.on("message", (message, remote) => {
-		handle(message, "udp", (response) => {
-			udp.send(response, remote.port, remote.address, () => {});
-		});
-	});
+	let udp;
+	let tcp;
 
-	const tcp = net.createServer((socket) => {
+	const makeUdp = () => {
+		const socket = dgram.createSocket(net.isIPv6(host) ? "udp6" : "udp4");
+		socket.on("message", (message, remote) => {
+			handle(message, "udp", (response) => {
+				socket.send(response, remote.port, remote.address, () => {});
+			});
+		});
+		return socket;
+	};
+
+	const makeTcp = () => net.createServer((socket) => {
 		// DNS over TCP prefixes each message with its length, and a message can
 		// arrive split across reads.
 		let buffered = Buffer.alloc(0);
@@ -410,17 +416,43 @@ async function startDnsServer({
 		});
 		socket.on("error", () => socket.destroy());
 	});
-	tcp.on("error", () => {});
 
-	await new Promise((resolve, reject) => {
-		udp.once("error", reject);
-		udp.bind(0, host, resolve);
-	});
-	const { port } = udp.address();
-	await new Promise((resolve, reject) => {
-		tcp.once("error", reject);
-		tcp.listen(port, host, resolve);
-	});
+	// The OS picks the port by binding UDP, then TCP takes the same number. Nothing
+	// reserves that number on the TCP side in between, so another listener can take it
+	// first: retry on a fresh pair rather than failing whichever test asked for a server.
+	//
+	// Both sockets are closed before retrying, and before giving up. A UDP socket left
+	// bound holds the event loop open, which would turn one failed bind into the whole
+	// run hanging long after its last assertion.
+	let port;
+	for (let attempt = 1; ; attempt++) {
+		udp = makeUdp();
+		tcp = makeTcp();
+		tcp.on("error", () => {});
+		try {
+			await new Promise((resolve, reject) => {
+				udp.once("error", reject);
+				udp.bind(0, host, resolve);
+			});
+			port = udp.address().port;
+			await new Promise((resolve, reject) => {
+				tcp.once("error", reject);
+				tcp.listen(port, host, resolve);
+			});
+			break;
+		} catch (err) {
+			// Either may never have come up, and closing one that did not is itself an
+			// error; the point here is only that neither is left holding anything.
+			for (const socket of [udp, tcp]) {
+				try {
+					socket.close();
+				} catch {
+					// never came up, which is what was wanted
+				}
+			}
+			if (attempt >= 5) throw err;
+		}
+	}
 
 	return {
 		host,
