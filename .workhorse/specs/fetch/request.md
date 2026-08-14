@@ -83,4 +83,4 @@ Options that assume a browser (`mode`, `referrer`, `referrerPolicy`, `attributio
 `cache` selects the HTTP cache mode for this request (see [CACHE](../cache/http-cache.md)).
 `integrity` requests body verification (see [SRI](integrity.md)).
 `signal` and `timeout` cancel the request (see [CANCEL](cancellation-and-timeouts.md)).
-Compressed transfer needs no option and is described in [ENC](content-encoding.md).
+`compress` compresses the request body in a named coding, and the negotiation and decoding of compressed responses needs no option at all (see [ENC](content-encoding.md)).
