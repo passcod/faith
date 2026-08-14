@@ -25,6 +25,7 @@ use strum::{EnumIter, IntoEnumIterator};
 ///   - `PemParse` — PEM parse error for `AgentOptions.tls.identity` or `AgentOptions.tls.extraRoots`
 /// - JS `TypeError`:
 ///   - `Closed` — a request was made on an agent that has been closed
+///   - `InvalidCompression` — `RequestInit.compress` naming no coding Faith can compress in
 ///   - `InvalidHeader` — invalid header name or value
 ///   - `InvalidMethod` — invalid HTTP method
 ///   - `InvalidPath` — a `response.toFile()` destination that does not name a local path
@@ -58,6 +59,7 @@ pub enum FaithErrorKind {
 	FileExists,
 	FileWrite,
 	IntegrityMismatch,
+	InvalidCompression,
 	InvalidHeader,
 	InvalidIntegrity,
 	InvalidMethod,
@@ -92,6 +94,7 @@ impl FaithErrorKind {
 			Self::FileExists => "the destination file already exists",
 			Self::FileWrite => "could not write the destination file",
 			Self::IntegrityMismatch => "resource integrity check failed",
+			Self::InvalidCompression => "invalid request body compression",
 			Self::InvalidHeader => "invalid header name or value",
 			Self::InvalidIntegrity => "invalid integrity value",
 			Self::InvalidMethod => "invalid HTTP method",
@@ -122,6 +125,7 @@ impl FaithErrorKind {
 				JsErrorType::SyntaxError
 			}
 			Self::Closed
+			| Self::InvalidCompression
 			| Self::InvalidHeader
 			| Self::InvalidMethod
 			| Self::InvalidPath

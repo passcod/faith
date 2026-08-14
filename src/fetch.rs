@@ -23,7 +23,7 @@ use tokio::sync::{Mutex, mpsc};
 use crate::{
 	async_task::faith_promise,
 	body::{Body, BodyHolder},
-	encoding::{self, AcceptEncoding, DEFAULT_ACCEPT_ENCODING},
+	encoding::{self, AcceptEncoding, Coding, DEFAULT_ACCEPT_ENCODING},
 	error::{FaithError, FaithErrorKind},
 	options::{CredentialsOption, FaithOptions, FaithOptionsAndBody, PRIORITY},
 	response::{FaithResponse, PeerInformation},
@@ -69,6 +69,24 @@ pub fn faith_fetch<'env>(
 
 		let mut parsed_url = reqwest::Url::parse(&url).map_err(|_| FaithErrorKind::InvalidUrl)?;
 
+		// A `compress` naming no coding Faith can compress in is misuse whether or not the
+		// request turns out to carry a body, so it is refused before anything else looks at
+		// it (spec:ENC#compressing-a-request-body).
+		let compress = options
+			.compress
+			.as_deref()
+			.map(|value| {
+				Coding::from_option(value).ok_or_else(|| {
+					FaithError::new(
+						FaithErrorKind::InvalidCompression,
+						Some(format!(
+							"compress: {value:?} names no coding; expected gzip, deflate, br, or zstd"
+						)),
+					)
+				})
+			})
+			.transpose()?;
+
 		// Handle credentials based on credentials option
 		if options.credentials == CredentialsOption::Omit {
 			// Remove credentials from URL if omit is specified
@@ -111,9 +129,39 @@ pub fn faith_fetch<'env>(
 						Some(format!("invalid header value: {value}")),
 					)
 				})?;
+
+				// Faith's coding is layered on top of what the caller declares, and reqwest's
+				// builder appends rather than replaces, so passing the caller's value through
+				// here would put a second `Content-Encoding` beside the joined one -- the same
+				// list read twice over (spec:ENC#what-a-compressed-request-sends). The value is
+				// still validated above, then withheld and re-emitted once below.
+				if compress.is_some() && header_name == CONTENT_ENCODING {
+					continue;
+				}
+
 				request = request.header(header_name, header_value);
 			}
 		}
+
+		// What the caller says they handed over: their own `Content-Encoding`, else the
+		// agent's, per-request headers winning per name as they do generally (spec: REQ).
+		// Several lines are the one list, so they are joined as they are read.
+		let declared_content_encoding = compress.and_then(|_| {
+			let from_request = options.headers.as_ref().and_then(|headers| {
+				let declared = headers
+					.iter()
+					.filter(|(name, _)| name.eq_ignore_ascii_case(CONTENT_ENCODING.as_str()))
+					.map(|(_, value)| value.as_str())
+					.collect::<Vec<_>>();
+				(!declared.is_empty()).then(|| declared.join(", "))
+			});
+			from_request.or_else(|| {
+				agent
+					.default_content_encoding
+					.as_ref()
+					.and_then(|value| value.to_str().ok().map(str::to_owned))
+			})
+		});
 
 		// The request's `Accept-Encoding` governs which codings Faith decodes on the way
 		// back (spec: ENC): a value on the request, else one inherited from the agent's
@@ -162,6 +210,12 @@ pub fn faith_fetch<'env>(
 			);
 		}
 
+		// The coding actually applied, which is `compress` only where there was a body to
+		// apply it to: the option does nothing on a request carrying none, so no
+		// `Content-Encoding` describes bytes that were never sent
+		// (spec:ENC#compressing-a-request-body).
+		let mut applied_coding = None;
+
 		// Handle body: prefer streaming body over buffered body
 		if let Some(receiver_arc) = stream_receiver {
 			// Take the receiver from the Arc<Mutex<Option<...>>> before anything below can bail
@@ -198,10 +252,48 @@ pub fn faith_fetch<'env>(
 			if let Some(receiver) = receiver {
 				// Convert the receiver into a stream for reqwest
 				let byte_stream = receiver.into_stream();
-				request = request.body(reqwest::Body::wrap_stream(byte_stream));
+				request = request.body(match compress {
+					// Compressed as the chunks arrive, and chunked on the wire either way:
+					// a stream has no length to declare up front, compressed or not
+					// (spec:ENC#what-a-compressed-request-sends).
+					Some(coding) => {
+						applied_coding = Some(coding);
+						reqwest::Body::wrap_stream(encoding::compress_stream(byte_stream, coding))
+					}
+					None => reqwest::Body::wrap_stream(byte_stream),
+				});
 			}
 		} else if let Some(body) = &body {
-			request = request.body(body.to_vec());
+			request = request.body(match compress {
+				// The compressed bytes are what reqwest sizes `Content-Length` from, so the
+				// header counts what goes on the wire (spec:ENC#what-a-compressed-request-sends).
+				Some(coding) => {
+					applied_coding = Some(coding);
+					encoding::compress_buffer(body, coding)
+						.await
+						.map_err(|err| {
+							FaithError::new(
+								FaithErrorKind::Network,
+								Some(format!("could not compress the request body: {err}")),
+							)
+						})?
+				}
+				None => body.to_vec(),
+			});
+		}
+
+		// One `Content-Encoding` naming the caller's codings then Faith's, in the order they
+		// were applied (spec:ENC#what-a-compressed-request-sends).
+		if let Some(coding) = applied_coding {
+			let value =
+				encoding::layer_content_encoding(declared_content_encoding.as_deref(), coding);
+			let value = HeaderValue::from_str(&value).map_err(|_| {
+				FaithError::new(
+					FaithErrorKind::InvalidHeader,
+					Some(format!("invalid header value: {value}")),
+				)
+			})?;
+			request = request.header(CONTENT_ENCODING, value);
 		}
 
 		if let Some(dur) = options.timeout {

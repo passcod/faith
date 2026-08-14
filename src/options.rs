@@ -157,6 +157,12 @@ pub struct FaithOptionsAndBody {
 	pub agent: Reference<Agent>,
 	pub body: Option<Either3<String, Buffer, Uint8Array>>,
 	pub cache: Option<RequestCacheMode>,
+	/// Compress the request body in this coding, named by its wire token: `gzip`, `deflate`,
+	/// `br`, or `zstd`.
+	///
+	/// Taken as a string rather than an enum so an unrecognised value raises Faith's own
+	/// `InvalidCompression` rather than a NAPI conversion error.
+	pub compress: Option<String>,
 	pub credentials: Option<CredentialsOption>,
 	pub duplex: Option<DuplexOption>,
 	pub headers: Option<Vec<(String, String)>>,
@@ -173,6 +179,8 @@ pub struct FaithOptionsAndBody {
 #[derive(Clone, Debug, Default)]
 pub(crate) struct FaithOptions {
 	pub(crate) cache: RequestCacheMode,
+	/// The `compress` option as given, resolved to a coding where the body is compressed.
+	pub(crate) compress: Option<String>,
 	pub(crate) credentials: CredentialsOption,
 	pub(crate) headers: Option<Vec<(String, String)>>,
 	pub(crate) integrity: Option<String>,
@@ -195,6 +203,7 @@ impl FaithOptions {
 		(
 			Self {
 				cache: opts.cache.unwrap_or_default(),
+				compress: opts.compress,
 				credentials,
 				headers: opts.headers,
 				integrity: opts.integrity,
