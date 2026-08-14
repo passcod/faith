@@ -45,6 +45,15 @@ const DECODERS = {
 	zstd: zlib.zstdDecompressSync,
 };
 
+/**
+ * Whether this Node can unwind `coding`. `zstdDecompressSync` landed in Node 22.15, and the
+ * suite runs on 20 as well, so a test that reads the bytes back has to ask first. Faith
+ * compresses in every coding whatever Node can do: this is a limit of the test's reading.
+ */
+function canDecode(coding) {
+	return typeof DECODERS[coding] === "function";
+}
+
 /** Undo `codings` in reverse, the last applied being the first to come off. */
 function decode(bytes, codings) {
 	return codings.reduceRight((acc, coding) => DECODERS[coding](acc), bytes);
@@ -81,11 +90,15 @@ for (const coding of ["gzip", "deflate", "br", "zstd"]) {
 				String(seen.bodyLength),
 				"Content-Length counts the compressed bytes",
 			);
-			t.equal(
-				decode(seen.body, [coding]).toString("utf8"),
-				PAYLOAD,
-				"which decode to the body the caller supplied",
-			);
+			if (canDecode(coding)) {
+				t.equal(
+					decode(seen.body, [coding]).toString("utf8"),
+					PAYLOAD,
+					"which decode to the body the caller supplied",
+				);
+			} else {
+				t.skip(`this Node cannot decode ${coding} to check the bytes`);
+			}
 		});
 	});
 }
@@ -110,30 +123,32 @@ test("request compression: the option is off unless asked for", async (t) => {
 
 test("request compression: Faith's coding is layered on what the caller declares", async (t) => {
 	await withOrigin(t, async ({ origin }) => {
-		// The caller hands over bytes they gzipped themselves and says so; Faith puts zstd
-		// over the top, so the header names both in the order they were applied.
+		// The caller hands over bytes they gzipped themselves and says so; Faith puts brotli
+		// over the top, so the header names both in the order they were applied. Layering
+		// is the same whichever coding Faith applies, so this uses one every supported Node
+		// can unwind, leaving zstd to the round-trip cases above.
 		const supplied = zlib.gzipSync(Buffer.from(PAYLOAD, "utf8"));
 		const res = await fetch(origin.url("/sink"), {
 			method: "POST",
 			body: supplied,
 			headers: { "Content-Encoding": "gzip" },
-			compress: "zstd",
+			compress: "br",
 			timeout: 10000,
 		});
 		const seen = await sink(res);
 
 		t.equal(
 			seen.headers["content-encoding"],
-			"gzip, zstd",
+			"gzip, br",
 			"the caller's coding, then Faith's",
 		);
 		t.equal(
-			decode(seen.body, ["gzip", "zstd"]).toString("utf8"),
+			decode(seen.body, ["gzip", "br"]).toString("utf8"),
 			PAYLOAD,
 			"and unwinding both gives back the original",
 		);
 		t.deepEqual(
-			zlib.zstdDecompressSync(seen.body),
+			zlib.brotliDecompressSync(seen.body),
 			supplied,
 			"Faith compressed the bytes it was handed, not the ones underneath them",
 		);
@@ -146,14 +161,14 @@ test("request compression: the declared coding arrives on one header line", asyn
 			method: "POST",
 			body: zlib.gzipSync(Buffer.from(PAYLOAD, "utf8")),
 			headers: { "Content-Encoding": "gzip" },
-			compress: "br",
+			compress: "deflate",
 			timeout: 10000,
 		});
 		const seen = await sink(res);
 
 		// Node joins repeated Content-Encoding lines with ", ", so a second line would read
 		// as the caller's coding twice over.
-		t.equal(seen.headers["content-encoding"], "gzip, br", "one list, named once");
+		t.equal(seen.headers["content-encoding"], "gzip, deflate", "one list, named once");
 	});
 });
 
