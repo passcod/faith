@@ -87,17 +87,49 @@ The DNS rows resolve `bench.test`, a name that is not exempt, through a
 nameserver the harness controls (the authoritative server under `test/lib/`,
 reused rather than reimplemented). `localhost` would be handed to the system
 resolver whatever the agent's DNS settings say, so both rows would resolve the
-same way and measure nothing. All three rows run cold, so a lookup is on the
-measured path of every request rather than amortised by the cache.
+same way and measure nothing. The `hickory`, `slow`, and `system` rows run cold,
+so a lookup is on the measured path of every request rather than amortised by
+the cache.
 
 - `dns:hickory`: Faith's own resolver, against the controlled nameserver
   answering instantly.
 - `dns:slow`: the same, but the nameserver answers slowly. Identical to
   `dns:hickory` in every other respect, so the distance between them is the DNS
-  cost and nothing else — the only row that shows a slow resolver.
+  cost and nothing else.
 - `dns:system`: the OS resolver (`dns.system`), resolving `localhost`. A
   reference for handing off to the system, which cannot be pointed at the
   controlled nameserver.
+
+#### Serving stale answers
+
+`dns:stale` and `dns:no-stale` are a Faith-vs-Faith pair over the same slow
+nameserver, identical but for `dns.serveStale`. Serving stale answers an expired
+lookup from cache immediately and refreshes behind it, so the request never pays
+the resolver; turning it off discards the expired answer and blocks on a fresh
+(slow) lookup. The distance between the two rows is the whole DNS cost that
+serving stale removes from the request path.
+
+The pair holds everything else constant. Both need a cache that persists, which
+the cold rows (a fresh agent per request) have nothing in, so both run warm.
+Both answer at a TTL of 0, so every answer is expired the instant it lands: the
+warmup populates the cache, so the measured requests are not cold, and nothing
+ever stays fresh, so they are not fresh either — every measured request lands on
+an expired entry. Both fetch the `/close` route, so each request opens a new
+connection and actually consults the resolver rather than reusing a connection
+that would skip DNS entirely. Only `dns.serveStale` differs.
+
+`dns:no-stale` is the control, and the win is the distance between the two rows,
+which can fail to show:
+
+- `dns:stale` rising toward `dns:no-stale` means serving stale is no longer
+  keeping DNS off the request path.
+- `dns:no-stale` being as fast as `dns:stale` means the DNS cost never reached
+  the measured path — a reused connection, a fresh entry, an exempt name — and
+  neither row is evidence of anything.
+
+Read on its own `dns:stale` is not evidence: it is fast whether or not serving
+stale did any work. The win is real only when `dns:no-stale` pays the resolver
+and `dns:stale` does not.
 
 ## Simulating latency and loss
 
