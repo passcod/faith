@@ -368,3 +368,131 @@ test("dns server: matches names case-insensitively", async (t) => {
 		await server.close();
 	}
 });
+
+/**
+ * Read one answer's RDATA out of a reply, given the question's name length.
+ *
+ * The question is echoed verbatim and every answer here points at it with a
+ * compression pointer, so the offsets are fixed and there is no name to walk.
+ */
+function firstAnswerRdata(response, questionName) {
+	const questionEnd = 12 + encodeNameLength(questionName) + 4;
+	const rdlength = response.readUInt16BE(questionEnd + 10);
+	return response.subarray(questionEnd + 12, questionEnd + 12 + rdlength);
+}
+
+function encodeNameLength(name) {
+	return (
+		name
+			.split(".")
+			.filter(Boolean)
+			.reduce((total, label) => total + 1 + label.length, 0) + 1
+	);
+}
+
+test("dns server: encodes an HTTPS record the way RFC 9460 spells one", async (t) => {
+	// The helper's wire format is what every HTTPS-record verdict rests on, so it
+	// is decoded here by hand rather than through the thing under test. Node's
+	// resolver cannot ask for the type, hence the raw query.
+	const server = await startDnsServer({
+		zone: {
+			"svc.test": {
+				a: ["127.0.0.1"],
+				https: [{ priority: 1, alpn: ["h2", "h3"], port: 8443 }],
+				ttl: 42,
+			},
+		},
+	});
+
+	try {
+		const response = await new Promise((resolve, reject) => {
+			const socket = net.connect(server.port, server.host, () => {
+				const message = encodeQuery(0x7777, "svc.test", 65);
+				const framed = Buffer.alloc(2 + message.length);
+				framed.writeUInt16BE(message.length, 0);
+				message.copy(framed, 2);
+				socket.write(framed);
+			});
+			let buffered = Buffer.alloc(0);
+			socket.on("data", (chunk) => {
+				buffered = Buffer.concat([buffered, chunk]);
+				if (buffered.length < 2) return;
+				const length = buffered.readUInt16BE(0);
+				if (buffered.length < 2 + length) return;
+				socket.destroy();
+				resolve(buffered.subarray(2, 2 + length));
+			});
+			socket.on("error", reject);
+			socket.setTimeout(2000, () => {
+				socket.destroy();
+				reject(new Error("timed out waiting for a TCP answer"));
+			});
+		});
+
+		t.equal(response.readUInt16BE(6), 1, "one HTTPS answer comes back");
+
+		const rdata = firstAnswerRdata(response, "svc.test");
+		t.equal(rdata.readUInt16BE(0), 1, "ServiceMode, at priority 1");
+		t.equal(rdata.readUInt8(2), 0, "the target is the root, meaning the owner");
+
+		// Params follow the target: key, length, value, in ascending key order.
+		let at = 3;
+		t.equal(rdata.readUInt16BE(at), 1, "the first param is alpn");
+		const alpnLength = rdata.readUInt16BE(at + 2);
+		const alpn = [];
+		let cursor = at + 4;
+		const alpnEnd = cursor + alpnLength;
+		while (cursor < alpnEnd) {
+			const length = rdata.readUInt8(cursor);
+			alpn.push(rdata.subarray(cursor + 1, cursor + 1 + length).toString("latin1"));
+			cursor += 1 + length;
+		}
+		t.deepEqual(alpn, ["h2", "h3"], "carrying both tokens, each length-prefixed");
+
+		at = alpnEnd;
+		t.equal(rdata.readUInt16BE(at), 3, "then the port param");
+		t.equal(rdata.readUInt16BE(at + 2), 2, "two bytes long");
+		t.equal(rdata.readUInt16BE(at + 4), 8443, "carrying the port");
+	} finally {
+		await server.close();
+	}
+});
+
+test("dns server: a name with no HTTPS record answers NOERROR with none", async (t) => {
+	// The common case by far, and the one that must not look like a failure: an
+	// origin with addresses and no HTTPS record simply advertises nothing.
+	const server = await startDnsServer({
+		zone: { "plain.test": { a: ["127.0.0.1"], ttl: 30 } },
+	});
+
+	try {
+		const response = await new Promise((resolve, reject) => {
+			const socket = net.connect(server.port, server.host, () => {
+				const message = encodeQuery(0x8888, "plain.test", 65);
+				const framed = Buffer.alloc(2 + message.length);
+				framed.writeUInt16BE(message.length, 0);
+				message.copy(framed, 2);
+				socket.write(framed);
+			});
+			let buffered = Buffer.alloc(0);
+			socket.on("data", (chunk) => {
+				buffered = Buffer.concat([buffered, chunk]);
+				if (buffered.length < 2) return;
+				const length = buffered.readUInt16BE(0);
+				if (buffered.length < 2 + length) return;
+				socket.destroy();
+				resolve(buffered.subarray(2, 2 + length));
+			});
+			socket.on("error", reject);
+			socket.setTimeout(2000, () => {
+				socket.destroy();
+				reject(new Error("timed out waiting for a TCP answer"));
+			});
+		});
+
+		t.equal(response.readUInt16BE(2) & 0x0f, 0, "NOERROR, not NXDOMAIN");
+		t.equal(response.readUInt16BE(6), 0, "and no answer records");
+	} finally {
+		await server.close();
+	}
+});

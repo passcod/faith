@@ -41,9 +41,14 @@ An `HTTPS` DNS record (RFC 9460) is a second source of advertisement alongside t
 A record whose `alpn` parameter lists an `h3`-family token records the origin as advertised, the same state an `h3` `Alt-Svc` advertisement produces: the origin becomes probe-worthy and foreground requests keep to TCP until a background probe confirms the path (see [PROBE](probing.md)).
 This is what lets an origin be probe-worthy from its first request, so discovering HTTP/3 never waits on a completed TCP exchange to read the advertisement.
 The advertisement lives for the record's own DNS TTL.
-Only the record's `alpn` parameter is read.
+`alpn` and `port` are the two parameters read; a record's other parameters carry nothing the upgrade decision rests on.
 Faith upgrades only to the origin's own host, so a record designating a target other than the origin is not acted on, matching the same-host constraint on header advertisements, and a `port` parameter differing from the origin's is treated exactly as an advertised port from a header (see [Advertised ports](#advertised-ports)).
+A record naming no target names the origin itself, which is how a record for an origin's own host is written.
 A record for an origin in the failed state is ignored exactly as a header advertisement is.
+
+Only ServiceMode records are read.
+An AliasMode record redirects the name to another one rather than describing this origin, and following that redirection is a resolution step rather than an advertisement.
+Where several ServiceMode records advertise HTTP/3, the most preferred one is acted on, which is the one with the lowest priority value.
 
 ## Hints
 

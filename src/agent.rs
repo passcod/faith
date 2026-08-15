@@ -1115,6 +1115,33 @@ pub(crate) struct ClientRecipe {
 	h3_upgrade: H3UpgradeRecipe,
 }
 
+/// Point the resolver's `HTTPS` record reading at the upgrade layer, so a record advertising
+/// `alpn="h3"` makes an origin probe-worthy before anything has connected to it.
+///
+/// A no-op without all the parts: the system resolver is not Faith's to add a query to, and with
+/// HTTP/3 upgrade off there is nothing an advertisement could feed, so neither sends one
+/// (spec:DNS#https-records).
+///
+/// Re-called on a network change, where the prober is rebuilt with the client it sends on.
+#[cfg(feature = "http3")]
+fn install_https_sink(
+	dns_resolver: Option<&FaithResolver>,
+	alt_svc_cache: Option<&Arc<AltSvcCache>>,
+	prober: Option<&Arc<H3Prober>>,
+	upgrade_enabled: bool,
+) {
+	if !upgrade_enabled {
+		return;
+	}
+	let (Some(resolver), Some(cache)) = (dns_resolver, alt_svc_cache) else {
+		return;
+	};
+	resolver.set_https_sink(Arc::new(crate::alt_svc::H3HttpsSink::new(
+		Arc::clone(cache),
+		prober,
+	)));
+}
+
 /// The clients [`ClientRecipe::build`] produces, and the prober that sends on them.
 struct BuiltClients {
 	client: ClientWithMiddleware,
@@ -1808,6 +1835,17 @@ impl Agent {
 			alt_svc_cache.as_ref(),
 		)?;
 
+		// Only now do all three exist: the resolver is built before the cache, and the prober
+		// holds a client that holds the resolver, so this is the earliest the loop can be closed
+		// (spec:DNS#https-records).
+		#[cfg(feature = "http3")]
+		install_https_sink(
+			dns_resolver.as_ref(),
+			alt_svc_cache.as_ref(),
+			built.prober.as_ref(),
+			recipe.h3_upgrade.enabled,
+		);
+
 		Ok(Self {
 			client: Some(built.client),
 			raw_client: Some(built.raw_client),
@@ -1926,6 +1964,15 @@ impl Agent {
 					prober.abort_all();
 				}
 				self.h3_prober = built.prober;
+				// The sink holds the prober, which has just been replaced along with the client
+				// it sends on; leaving the old one installed would aim DNS-triggered probes at a
+				// client that has been dropped.
+				install_https_sink(
+					self.dns_resolver.as_ref(),
+					self.alt_svc_cache.as_ref(),
+					self.h3_prober.as_ref(),
+					self.h3_upgrade_enabled,
+				);
 			}
 			self.client = Some(built.client);
 			self.raw_client = Some(built.raw_client);
