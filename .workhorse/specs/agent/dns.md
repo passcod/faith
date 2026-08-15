@@ -14,6 +14,13 @@ Resolution uses Faith's own client with an in-memory cache; repeat requests to a
 `prefetchDns(host)` populates this cache ahead of the first request (see [WARM](warm-up.md)).
 IPv4 and IPv6 answers race with the Happy Eyeballs algorithm, so a broken family degrades latency rather than breaking connectivity.
 
+## HTTPS records
+
+Resolving an `https` origin with the built-in resolver queries the `HTTPS` record type (RFC 9460) alongside the A and AAAA records, so a record advertising HTTP/3 is available before the first connection (see [H3UP](../http3/upgrade.md)).
+The query runs concurrently with the address lookups and never delays them: an absent, slow, or failed `HTTPS` answer leaves address resolution and connecting untouched, the record being a hint to verify rather than an answer to wait on.
+Its outcome feeds the HTTP/3 upgrade layer rather than the address answer, and it is queried only while HTTP/3 upgrade is enabled.
+The system resolver does not query it, `HTTPS`-record support belonging to Faith's own client (see [System resolver](#system-resolver)).
+
 ## Serving stale answers
 
 An expired entry is served immediately and refreshed in the background, so the caller starts connecting instead of waiting for a fresh answer.
