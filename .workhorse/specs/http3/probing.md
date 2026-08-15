@@ -10,7 +10,7 @@ So advertisements only make an origin probe-worthy: a background probe verifies 
 
 ## The probe
 
-A probe is a `HEAD` request to the origin's root (query, fragment, and userinfo stripped), forced to HTTP/3, launched in the background when an advertisement arrives on a non-HTTP/3 response, and again opportunistically at the start of any TCP-routed request whose origin is probe-worthy.
+A probe is a `HEAD` request to the origin's root (query, fragment, and userinfo stripped), forced to HTTP/3, launched in the background when an advertisement arrives — on a non-HTTP/3 response, or in an `HTTPS` DNS record learnt while resolving the name (see [H3UP](upgrade.md)) — and again opportunistically at the start of any TCP-routed request whose origin is probe-worthy.
 A probe neither reads nor writes the HTTP cache, so a replayed HTTP/3-versioned response cannot fake a confirmation; it cannot itself trigger further probing; and its QUIC connection joins the agent's connection pool, so the first upgraded request starts warm.
 Any HTTP/3 response confirms the origin, whatever its status: a 401 or 405 proves the transport as well as a 200 does.
 Anything else (a non-HTTP/3 response, an error, or the probe timeout, `http3.upgradeProbeTimeout`, default 5 seconds, 0 for unbounded) records a failure, which counts towards the origin's failure backoff like any other (see [H3UP](upgrade.md)).

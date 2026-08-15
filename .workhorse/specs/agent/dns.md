@@ -14,6 +14,22 @@ Resolution uses Faith's own client with an in-memory cache; repeat requests to a
 `prefetchDns(host)` populates this cache ahead of the first request (see [WARM](warm-up.md)).
 IPv4 and IPv6 answers race with the Happy Eyeballs algorithm, so a broken family degrades latency rather than breaking connectivity.
 
+## HTTPS records
+
+Resolving a name through the built-in resolver also queries the `HTTPS` record type (RFC 9460), so a record advertising HTTP/3 is available before the first connection rather than after the first response (see [H3UP](../http3/upgrade.md)).
+The query runs concurrently with the address lookups and never delays them: an absent, slow, or failed `HTTPS` answer leaves address resolution and connecting untouched, the record being a hint to verify rather than an answer to wait on.
+Its outcome feeds the HTTP/3 upgrade layer rather than the address answer, so nothing it finds, and no way it fails, reaches the caller who triggered the lookup.
+
+The record is read at the name itself, which is where the record for that host's HTTPS origin lives, and the advertisement is recorded against that origin.
+Resolution is reached with a name rather than a URL, so the query is made for any name resolved this way and what the record says holds whoever asked: a name resolved for an `http` request still contributes what its `HTTPS` record says about the same host's `https` origin.
+
+Two things bound the traffic this adds.
+The query is made only while HTTP/3 upgrade is enabled, there being nothing to act on the answer otherwise.
+And it is made only while the origin's HTTP/3 support is still an open question, so an origin already confirmed, already inside a failure cooldown, demoted for being slow, or already holding a live advertisement is not asked about again until that knowledge lapses.
+
+The system resolver does not query it, `HTTPS`-record support belonging to Faith's own client (see [System resolver](#system-resolver)).
+Exempt names reach that same resolver and so are not queried either (see [Exempt names](#exempt-names)).
+
 ## Serving stale answers
 
 An expired entry is served immediately and refreshed in the background, so the caller starts connecting instead of waiting for a fresh answer.

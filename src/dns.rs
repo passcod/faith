@@ -33,7 +33,10 @@ use hickory_resolver::{
 		ProtocolConfig, ResolveHosts, ResolverConfig, ServerOrderingStrategy,
 	},
 	net::{DnsError, NetError, runtime::TokioRuntimeProvider},
-	proto::rr::Name,
+	proto::rr::{
+		Name, RData, RecordType,
+		rdata::svcb::{SvcParamKey, SvcParamValue},
+	},
 	system_conf::read_system_conf,
 };
 use reqwest::dns::{Addrs, Name as ReqName, Resolve, Resolving};
@@ -99,6 +102,104 @@ impl Transport {
 			Self::H3 => "h3",
 		}
 	}
+}
+
+/// What an `HTTPS` record said about an origin's HTTP/3 support (spec:DNS#https-records).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct HttpsAdvertisement {
+	/// The record's `port` SvcParam, or `None` when it named none and the origin's own port
+	/// applies.
+	pub port: Option<u16>,
+	/// The record's own DNS TTL, which is how long the advertisement it carries lives.
+	pub ttl: Duration,
+}
+
+/// Where an `HTTPS` record's advertisement goes once the resolver has read one.
+///
+/// The resolver cannot own the HTTP/3 upgrade cache directly: that cache is built after the
+/// resolver, and the background prober holds a client which holds the resolver in turn. So the
+/// agent installs this afterwards (see [`FaithResolver::set_https_sink`]), which also keeps
+/// `dns.rs` free of the upgrade layer's types.
+pub trait HttpsSink: Send + Sync {
+	/// Whether an `HTTPS` record for `host` is worth querying at all right now.
+	///
+	/// Asked before the query so an origin already confirmed, already failed, or already holding a
+	/// live advertisement costs no DNS traffic to re-learn what is known.
+	fn wants(&self, host: &str) -> bool;
+
+	/// Fold a record's advertisement into the upgrade layer's knowledge of `host`.
+	fn record(&self, host: &str, advertisement: HttpsAdvertisement);
+}
+
+/// Whether an ALPN token names a version of HTTP/3.
+///
+/// The same family test the `Alt-Svc` reader applies, so a draft token like `h3-29` counts here
+/// exactly as it does in a header (spec:H3UP#reading-advertisements).
+fn is_h3_alpn(token: &str) -> bool {
+	token == "h3" || token.starts_with("h3-")
+}
+
+/// Read the HTTP/3 advertisement out of an `HTTPS` answer for `name`, if it carries one.
+///
+/// Only ServiceMode records are considered: an AliasMode record (`svc_priority` 0) redirects to
+/// another name rather than describing this one, and following that redirection is a resolution
+/// step this does not take. Among the rest the lowest `svc_priority` wins, which is the preference
+/// order RFC 9460 defines.
+///
+/// A record whose target is neither the root (which per RFC 9460 §2.5.2 means the owner name
+/// itself) nor the queried name designates a *different* host, and Faith only upgrades to the
+/// origin's own host, so such a record is not acted on (spec:H3UP#advertisements-from-dns).
+/// `queried` is the name the answer was actually asked for rather than the host as written, since
+/// the search list can requalify a name before it reaches a server; comparison ignores the trailing
+/// root so the two are judged on identity rather than on how each was spelled.
+fn read_https_answer(
+	queried: &Name,
+	answers: &[hickory_resolver::proto::rr::Record],
+) -> Option<HttpsAdvertisement> {
+	let mut best: Option<(u16, HttpsAdvertisement)> = None;
+
+	for record in answers {
+		let RData::HTTPS(https) = &record.data else {
+			continue;
+		};
+
+		if https.svc_priority == 0 {
+			continue;
+		}
+
+		if !https.target_name.is_root() && !https.target_name.eq_ignore_root(queried) {
+			continue;
+		}
+
+		let mut has_h3 = false;
+		let mut port = None;
+		for (key, value) in &https.svc_params {
+			match (key, value) {
+				(SvcParamKey::Alpn, SvcParamValue::Alpn(alpn)) => {
+					has_h3 = alpn.0.iter().any(|token| is_h3_alpn(token));
+				}
+				(SvcParamKey::Port, SvcParamValue::Port(value)) => port = Some(*value),
+				_ => {}
+			}
+		}
+
+		if !has_h3 {
+			continue;
+		}
+
+		let advertisement = HttpsAdvertisement {
+			port,
+			ttl: Duration::from_secs(record.ttl.into()),
+		};
+		if best
+			.as_ref()
+			.is_none_or(|(best, _)| https.svc_priority < *best)
+		{
+			best = Some((https.svc_priority, advertisement));
+		}
+	}
+
+	best.map(|(_, advertisement)| advertisement)
 }
 
 /// A resolver Faith reaches by IP or by a hostname it bootstraps.
@@ -348,6 +449,13 @@ struct Inner {
 	/// than at each step, so a lookup that spans the signal finishes against the one set of
 	/// resolvers it started on (spec:NETCHG#in-flight-requests).
 	generation: Mutex<Arc<Generation>>,
+	/// Where `HTTPS` records go, installed by the agent once the upgrade cache and prober exist.
+	///
+	/// Sits beside the settings rather than inside the generation deliberately: it is wiring
+	/// rather than something read off a network, so a network change leaves it in place. Its
+	/// absence is what turns the `HTTPS` query off, so an agent with HTTP/3 upgrade disabled, or
+	/// one on the system resolver, never sends one.
+	https_sink: Mutex<Option<Arc<dyn HttpsSink>>>,
 }
 
 /// A hickory resolver Faith owns, shared between reqwest's request path and `prefetchDns`.
@@ -374,8 +482,31 @@ impl FaithResolver {
 			inner: Arc::new(Inner {
 				settings,
 				generation: Mutex::new(Arc::new(Generation::default())),
+				https_sink: Mutex::new(None),
 			}),
 		}
+	}
+
+	/// Install where `HTTPS` records go, enabling the query (spec:DNS#https-records).
+	///
+	/// Called after the agent's HTTP/3 upgrade cache and prober are built, which cannot happen
+	/// before the resolver exists. Replaces any previous sink, which is what a network change
+	/// needs: the prober is rebuilt with the client, so the sink must be too or it would kick
+	/// probes onto a client that has been dropped.
+	pub fn set_https_sink(&self, sink: Arc<dyn HttpsSink>) {
+		*self
+			.inner
+			.https_sink
+			.lock()
+			.expect("the HTTPS sink lock is only held to clone or replace an Arc") = Some(sink);
+	}
+
+	fn https_sink(&self) -> Option<Arc<dyn HttpsSink>> {
+		self.inner
+			.https_sink
+			.lock()
+			.expect("the HTTPS sink lock is only held to clone or replace an Arc")
+			.clone()
 	}
 
 	/// The generation a piece of work resolves against. Taken once per lookup: a reset swaps the
@@ -460,6 +591,10 @@ impl FaithResolver {
 			return Ok(resolver.lookup_ip(host).await?.iter().collect());
 		}
 
+		// Alongside the addresses rather than after them: the record is a hint for the upgrade
+		// layer to verify, so nothing about connecting waits on it (spec:DNS#https-records).
+		self.spawn_https_query(&generation, host);
+
 		if let Some(addrs) = self.stale_addrs(&generation, host) {
 			self.spawn_refresh(&generation, host);
 			return Ok(addrs);
@@ -470,6 +605,46 @@ impl FaithResolver {
 		let addrs: Vec<IpAddr> = lookup.iter().collect();
 		self.remember(&generation, host, &addrs, lookup.valid_until());
 		Ok(addrs)
+	}
+
+	/// Ask for `host`'s `HTTPS` record behind the address lookup, so an origin advertising
+	/// `alpn="h3"` is known before the first connection rather than after the first TCP response
+	/// (spec:DNS#https-records).
+	///
+	/// Spawned rather than awaited: an absent, slow, or failed answer must leave address
+	/// resolution and connecting untouched. Its outcome belongs to the upgrade layer rather than
+	/// to the request that triggered it, so nothing here reaches a caller, exactly as a stale
+	/// refresh's outcome does not.
+	fn spawn_https_query(&self, generation: &Arc<Generation>, host: &str) {
+		let Some(sink) = self.https_sink() else {
+			return;
+		};
+		// Asked before the query, not after: an origin already confirmed, failed, or holding a
+		// live advertisement has nothing to learn, so it costs no DNS traffic.
+		if !sink.wants(host) {
+			return;
+		}
+		let Ok(name) = Name::from_utf8(host) else {
+			return;
+		};
+
+		let this = self.clone();
+		let generation = Arc::clone(generation);
+		let host = host.to_owned();
+		tokio::spawn(async move {
+			let Ok(built) = this.built(&generation).await else {
+				return;
+			};
+			let Ok(lookup) = built.resolver.lookup(name, RecordType::HTTPS).await else {
+				return;
+			};
+			// The answer's own query name, not the host as written: the search list may have
+			// requalified it, and the record's target is judged against what was actually asked.
+			if let Some(advertisement) = read_https_answer(lookup.query().name(), lookup.answers())
+			{
+				sink.record(&host, advertisement);
+			}
+		});
 	}
 
 	/// The addresses to serve for `host` without waiting, when its answer has expired but is still
@@ -1145,6 +1320,208 @@ mod tests {
 		let suffixes = exempt_suffixes(vec![], &[Name::root()]);
 		let name = Name::from_utf8("nonexistent.example").unwrap();
 		assert!(!suffixes.iter().any(|suffix| suffix.zone_of(&name)));
+	}
+
+	mod https_records {
+		use hickory_resolver::proto::rr::{
+			Record,
+			rdata::{HTTPS, SVCB, svcb::Alpn},
+		};
+
+		use super::*;
+
+		fn name(input: &str) -> Name {
+			Name::from_utf8(input).unwrap()
+		}
+
+		/// One `HTTPS` answer, spelled the way a server would send it.
+		fn record(
+			owner: &str,
+			priority: u16,
+			target: Name,
+			params: Vec<(SvcParamKey, SvcParamValue)>,
+			ttl: u32,
+		) -> Record {
+			Record::from_rdata(
+				name(owner),
+				ttl,
+				RData::HTTPS(HTTPS(SVCB::new(priority, target, params))),
+			)
+		}
+
+		fn alpn(tokens: &[&str]) -> (SvcParamKey, SvcParamValue) {
+			(
+				SvcParamKey::Alpn,
+				SvcParamValue::Alpn(Alpn(tokens.iter().map(|t| (*t).to_owned()).collect())),
+			)
+		}
+
+		#[test]
+		fn an_h3_alpn_on_the_owner_name_advertises() {
+			// spec:H3UP#advertisements-from-dns — the ordinary case: `.` as the target means the
+			// owner name, so the record describes the origin itself.
+			let queried = name("example.com.");
+			let answers = [record(
+				"example.com.",
+				1,
+				Name::root(),
+				vec![alpn(&["h2", "h3"])],
+				3600,
+			)];
+
+			assert_eq!(
+				read_https_answer(&queried, &answers),
+				Some(HttpsAdvertisement {
+					port: None,
+					ttl: Duration::from_secs(3600),
+				}),
+				"an `alpn` listing h3 is an advertisement, and the record's own TTL bounds it"
+			);
+		}
+
+		#[test]
+		fn a_draft_h3_token_counts_like_the_header_reader_treats_one() {
+			// spec:H3UP#reading-advertisements — `h3-29` is an h3-family token either way it
+			// arrives, so DNS must not be stricter than the `Alt-Svc` reader.
+			let queried = name("example.com.");
+			let answers = [record(
+				"example.com.",
+				1,
+				Name::root(),
+				vec![alpn(&["h3-29"])],
+				60,
+			)];
+
+			assert!(read_https_answer(&queried, &answers).is_some());
+		}
+
+		#[test]
+		fn a_record_without_h3_in_its_alpn_advertises_nothing() {
+			// An origin that speaks only HTTP/2 says so here, and reading that as an h3
+			// advertisement would send every such origin down a probe that must fail.
+			let queried = name("example.com.");
+			let answers = [record(
+				"example.com.",
+				1,
+				Name::root(),
+				vec![alpn(&["h2"])],
+				3600,
+			)];
+
+			assert_eq!(read_https_answer(&queried, &answers), None);
+		}
+
+		#[test]
+		fn the_port_parameter_is_carried_through() {
+			// spec:H3UP#advertisements-from-dns — a differing port is handled by the same
+			// machinery an `Alt-Svc` advertised port is.
+			let queried = name("example.com.");
+			let answers = [record(
+				"example.com.",
+				1,
+				Name::root(),
+				vec![
+					alpn(&["h3"]),
+					(SvcParamKey::Port, SvcParamValue::Port(8443)),
+				],
+				3600,
+			)];
+
+			assert_eq!(
+				read_https_answer(&queried, &answers).and_then(|ad| ad.port),
+				Some(8443)
+			);
+		}
+
+		#[test]
+		fn a_record_targeting_another_host_is_not_acted_on() {
+			// Faith only upgrades to the origin's own host, exactly as it refuses an `Alt-Svc`
+			// advertisement naming a different one (spec:H3UP#advertisements-from-dns).
+			let queried = name("example.com.");
+			let answers = [record(
+				"example.com.",
+				1,
+				name("cdn.example.net."),
+				vec![alpn(&["h3"])],
+				3600,
+			)];
+
+			assert_eq!(read_https_answer(&queried, &answers), None);
+		}
+
+		#[test]
+		fn a_record_naming_the_queried_host_itself_is_acted_on() {
+			// Spelling the owner name out is equivalent to the `.` shorthand, and the comparison
+			// ignores case and the trailing root the way name equality should.
+			let queried = name("example.com.");
+			let answers = [record(
+				"example.com.",
+				1,
+				name("ExAmPlE.CoM."),
+				vec![alpn(&["h3"])],
+				3600,
+			)];
+
+			assert!(read_https_answer(&queried, &answers).is_some());
+		}
+
+		#[test]
+		fn an_alias_mode_record_is_skipped() {
+			// Priority 0 is AliasMode: it redirects to another name rather than describing this
+			// one, and following that redirection is a resolution step this does not take.
+			let queried = name("example.com.");
+			let answers = [record(
+				"example.com.",
+				0,
+				name("svc.example.net."),
+				vec![alpn(&["h3"])],
+				3600,
+			)];
+
+			assert_eq!(read_https_answer(&queried, &answers), None);
+		}
+
+		#[test]
+		fn the_lowest_priority_service_mode_record_wins() {
+			// RFC 9460 orders ServiceMode records by ascending priority, so the most preferred
+			// record is the one whose port is acted on.
+			let queried = name("example.com.");
+			let answers = [
+				record(
+					"example.com.",
+					9,
+					Name::root(),
+					vec![
+						alpn(&["h3"]),
+						(SvcParamKey::Port, SvcParamValue::Port(9443)),
+					],
+					3600,
+				),
+				record(
+					"example.com.",
+					2,
+					Name::root(),
+					vec![
+						alpn(&["h3"]),
+						(SvcParamKey::Port, SvcParamValue::Port(2443)),
+					],
+					3600,
+				),
+			];
+
+			assert_eq!(
+				read_https_answer(&queried, &answers).and_then(|ad| ad.port),
+				Some(2443),
+				"the preferred record is the one acted on"
+			);
+		}
+
+		#[test]
+		fn an_empty_answer_advertises_nothing() {
+			// The common case for an origin with no `HTTPS` record at all: nothing learned, and
+			// nothing that could make the origin probe-worthy.
+			assert_eq!(read_https_answer(&name("example.com."), &[]), None);
+		}
 	}
 
 	#[test]
