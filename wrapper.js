@@ -524,6 +524,26 @@ async function fetch(resource, options = {}) {
 		);
 	}
 
+	// The fetch standard's Request constructor throws a TypeError when the method is GET or
+	// HEAD and the body is non-null, and fetch() inherits that by constructing a Request. Faith
+	// constructs no Request, so it enforces the rule here, before anything is sent
+	// (spec:REQ#body). The method is matched case-insensitively, so a normalised `get` or `head`
+	// in any case is refused just the same; an absent method defaults to GET. Any non-null body
+	// counts, including an empty string.
+	const requestMethod =
+		nativeOptions.method == null ? "GET" : nativeOptions.method;
+	if (
+		typeof requestMethod === "string" &&
+		(requestMethod.toUpperCase() === "GET" ||
+			requestMethod.toUpperCase() === "HEAD") &&
+		nativeOptions.body !== undefined &&
+		nativeOptions.body !== null
+	) {
+		throw new TypeError(
+			`Request with ${requestMethod.toUpperCase()} method cannot have a body`,
+		);
+	}
+
 	// Convert headers to native format
 	// This is the inverse of what Response does: Request headers go from
 	// Headers/Object -> Array<[string, string]>, while Response headers go from

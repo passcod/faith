@@ -43,6 +43,12 @@ A `Priority` header the caller sets directly, or one configured as an agent defa
 
 ## Body
 
+A `GET` or `HEAD` request cannot carry a body.
+A non-null body on either method is refused with a `TypeError` before the request is sent, matching the fetch standard's `Request` constructor.
+The method is matched after the normalisation described in [Method and headers](#method-and-headers), so a lower-case `get` or any other case of `get` or `head` is refused just the same, and a method absent altogether defaults to `GET` and is subject to the rule.
+Any non-null body counts, including an empty string.
+This is a case the fetch standard specifies as a throw, unlike the permissiveness Faith extends where the standard leaves a runtime free to choose.
+
 Accepted body types: string, `ArrayBuffer`, `Blob`, `DataView`, `File`, `FormData`, `TypedArray`, `URLSearchParams`, and `ReadableStream`.
 A `URLSearchParams` body sets `Content-Type: application/x-www-form-urlencoded;charset=UTF-8` when no content type was given.
 A `ReadableStream` body requires `duplex: "half"`, matching the fetch standard; the stream is sent as the request body without buffering the whole payload.
