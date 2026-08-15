@@ -276,6 +276,60 @@ impl AltSvcCache {
 		self.advertised.insert(origin, entry);
 	}
 
+	/// Whether an `HTTPS` DNS record for this origin would tell us anything we do not already
+	/// know, so the resolver can skip the query rather than send one per lookup.
+	///
+	/// Nothing is learnable while the origin is confirmed (already routing over HTTP/3), failed
+	/// (blocked whatever a record says), slow (demoted on measurement, which a record cannot
+	/// overturn), or already carrying a live advertisement (the probe it warrants is already
+	/// warranted). Each of those states expires, and the query resumes when it does.
+	///
+	/// spec:DNS#https-records
+	pub fn wants_https_record(&self, url: &reqwest::Url) -> bool {
+		let Some(origin) = Self::origin_key(url) else {
+			return false;
+		};
+
+		!self.is_failed(&origin)
+			&& !self.confirmed.contains_key(&origin)
+			&& !self.slow.contains_key(&origin)
+			&& self
+				.advertised
+				.get(&origin)
+				.is_none_or(|entry| entry.expires <= Instant::now())
+	}
+
+	/// Record an HTTP/3 advertisement carried by an `HTTPS` DNS record.
+	///
+	/// An `HTTPS` record and an `Alt-Svc` header are two ways for an origin to say the same thing,
+	/// so this lands in exactly the state a header advertisement does: the origin becomes
+	/// probe-worthy, and foreground requests keep to TCP until a probe proves the path. The port
+	/// and same-host rules are the header's too — [`Self::record_alt_svc`] applies them — because
+	/// the reasons for them are about what Faith can connect to rather than about where the
+	/// advertisement was read.
+	///
+	/// spec:H3UP#advertisements-from-dns
+	pub fn record_https_record(&self, url: &reqwest::Url, port: Option<u16>, ttl: Duration) {
+		// A record naming no port describes the origin's own, exactly as an `Alt-Svc` header with
+		// no alt-authority port would.
+		let Some(port) = port.or_else(|| url.port_or_known_default()) else {
+			return;
+		};
+
+		self.record_alt_svc(
+			url,
+			&AltSvcAdvertisement {
+				// The same-host case: a record targeting another host is dropped before it gets
+				// here, since Faith only upgrades to the origin's own host.
+				host: String::new(),
+				port,
+				// The record's own DNS TTL is how long what it says is good for, which is the
+				// role `ma` plays for a header advertisement.
+				max_age: Some(ttl),
+			},
+		);
+	}
+
 	/// Hints seed `confirmed` directly, not `advertised`: a hint is the *user's*
 	/// assertion, and routing it through a probe would both second-guess an
 	/// explicit instruction and break h3-only origins (no TCP listener), which
@@ -904,6 +958,82 @@ impl H3Prober {
 	}
 }
 
+/// Feeds `HTTPS` DNS records into the upgrade layer, so an origin advertising `alpn="h3"` is
+/// probe-worthy from its first request rather than from the first TCP response carrying an
+/// `Alt-Svc` header.
+///
+/// Installed on the resolver by the agent (see [`crate::dns::FaithResolver::set_https_sink`]),
+/// which is the only place that holds all three: the resolver is built before the cache, and the
+/// prober holds a client that holds the resolver, so nothing lower down can own this.
+///
+/// The record is read at the bare name, which per RFC 9460 is the record for the origin at the
+/// default HTTPS port; the resolver sees only a hostname, so that is also the only origin it could
+/// name. Recording it there is right whichever request triggered the lookup, because what the
+/// record describes does not depend on who asked.
+///
+/// spec:H3UP#advertisements-from-dns spec:DNS#https-records
+pub struct H3HttpsSink {
+	cache: Arc<AltSvcCache>,
+	/// Weak, and load-bearingly so: the prober holds the client, the client holds the resolver,
+	/// and the resolver holds this sink. A strong reference here would close that ring and leak
+	/// the whole graph — connection pool included — past `Agent::close`, which works by dropping
+	/// the client. The agent owns the only strong reference, so this lives exactly as long as the
+	/// agent's prober does.
+	///
+	/// `None` rather than a dead handle when probing is off, where an advertisement is acted on
+	/// inline by the next foreground request instead (spec:PROBE).
+	prober: Option<std::sync::Weak<H3Prober>>,
+}
+
+impl std::fmt::Debug for H3HttpsSink {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		f.debug_struct("H3HttpsSink")
+			.field("probing", &self.prober.is_some())
+			.finish()
+	}
+}
+
+impl H3HttpsSink {
+	pub fn new(cache: Arc<AltSvcCache>, prober: Option<&Arc<H3Prober>>) -> Self {
+		Self {
+			cache,
+			prober: prober.map(Arc::downgrade),
+		}
+	}
+
+	/// The origin a record at `host` describes: the default HTTPS port, which is the port whose
+	/// record lives at the bare name.
+	fn origin_url(host: &str) -> Option<reqwest::Url> {
+		reqwest::Url::parse(&format!("https://{host}")).ok()
+	}
+}
+
+impl crate::dns::HttpsSink for H3HttpsSink {
+	fn wants(&self, host: &str) -> bool {
+		Self::origin_url(host).is_some_and(|url| self.cache.wants_https_record(&url))
+	}
+
+	fn record(&self, host: &str, advertisement: crate::dns::HttpsAdvertisement) {
+		let Some(url) = Self::origin_url(host) else {
+			return;
+		};
+
+		self.cache
+			.record_https_record(&url, advertisement.port, advertisement.ttl);
+
+		// Probe straight away rather than waiting for the request that triggered the lookup to
+		// finish: the point of reading DNS is that the path can be verified while that request is
+		// still on TCP, so the one after it upgrades.
+		//
+		// A prober that has gone means the agent was closed (or rebuilt) while this query was in
+		// flight; the advertisement above is still worth keeping, but there is nothing left to
+		// probe it with, and resurrecting a dropped client to try would be exactly wrong.
+		if let Some(prober) = self.prober.as_ref().and_then(std::sync::Weak::upgrade) {
+			prober.maybe_probe(&url);
+		}
+	}
+}
+
 #[derive(Clone)]
 pub struct AltSvcMiddleware {
 	cache: Arc<AltSvcCache>,
@@ -1487,6 +1617,130 @@ mod tests {
 		assert!(
 			cache.probe_candidate(&url).is_none(),
 			"nothing to verify: the hint already confirmed the origin"
+		);
+	}
+
+	#[test]
+	fn test_https_record_lands_as_an_advertisement_not_a_confirmation() {
+		// spec:H3UP#advertisements-from-dns — DNS is a second source of the same advertisement,
+		// so it makes the origin probe-worthy without routing a foreground request onto an
+		// unverified QUIC path.
+		let cache = test_cache();
+		let url = reqwest::Url::parse("https://example.com/path").unwrap();
+
+		cache.record_https_record(&url, None, Duration::from_secs(3600));
+
+		assert!(
+			cache.confirmed_port(&url).is_none(),
+			"a record is evidence worth probing, not worth routing on"
+		);
+		assert_eq!(
+			cache.probe_candidate(&url),
+			Some(443),
+			"and a record naming no port describes the origin's own"
+		);
+	}
+
+	#[test]
+	fn test_https_record_port_follows_the_advertised_port_rules() {
+		// spec:H3UP#advertised-ports — a `port` differing from the origin's is treated exactly as
+		// an `Alt-Svc` advertised port: recorded, but not acted on by default.
+		let cache = test_cache();
+		let url = reqwest::Url::parse("https://example.com/path").unwrap();
+
+		cache.record_https_record(&url, Some(8443), Duration::from_secs(3600));
+
+		assert!(
+			cache.probe_candidate(&url).is_none(),
+			"h3 on :8443 says nothing about :443, so nothing is probed"
+		);
+
+		let following = test_cache_with(3, Duration::from_secs(60), true);
+		following.record_https_record(&url, Some(8443), Duration::from_secs(3600));
+		assert_eq!(
+			following.probe_candidate(&url),
+			Some(8443),
+			"opting into the quirk probes the advertised port"
+		);
+	}
+
+	#[test]
+	fn test_https_record_is_refused_while_the_origin_is_failed() {
+		// A failure blocks recording fresh advertisements whatever their source, or a flapping
+		// origin could re-enter the cycle through DNS (spec:H3UP#advertisements-from-dns).
+		let cache = test_cache();
+		let url = reqwest::Url::parse("https://example.com/path").unwrap();
+
+		cache.record_h3_failure(&url);
+		cache.record_https_record(&url, None, Duration::from_secs(3600));
+
+		assert!(cache.probe_candidate(&url).is_none());
+		assert!(
+			!cache.wants_https_record(&url),
+			"and there is no point querying again while the cooldown runs"
+		);
+	}
+
+	#[test]
+	fn test_wants_https_record_only_while_there_is_something_to_learn() {
+		// spec:DNS#https-records — the gate is what keeps the query off every lookup once the
+		// origin's HTTP/3 support is settled either way.
+		let url = reqwest::Url::parse("https://example.com/path").unwrap();
+
+		let unknown = test_cache();
+		assert!(
+			unknown.wants_https_record(&url),
+			"an origin nothing is known about is worth asking about"
+		);
+
+		let advertised = test_cache();
+		advertised.record_alt_svc(&url, &ad(443, None));
+		assert!(
+			!advertised.wants_https_record(&url),
+			"a live advertisement already warrants the probe a record would"
+		);
+
+		let confirmed = test_cache();
+		confirmed.confirm_h3(&url, 443);
+		assert!(
+			!confirmed.wants_https_record(&url),
+			"a confirmed origin is already routing over HTTP/3"
+		);
+	}
+
+	#[test]
+	fn test_wants_https_record_again_once_the_advertisement_lapses() {
+		// The gate must not be permanent: an advertisement that expires without being confirmed
+		// leaves the origin unknown again, and DNS is how it can be re-learned.
+		let cache = test_cache_ttls(Duration::from_millis(50), Duration::from_secs(86400));
+		let url = reqwest::Url::parse("https://example.com/path").unwrap();
+
+		cache.record_alt_svc(&url, &ad(443, None));
+		assert!(!cache.wants_https_record(&url));
+
+		std::thread::sleep(Duration::from_millis(120));
+
+		assert!(
+			cache.wants_https_record(&url),
+			"once the advertisement lapses the query is worth making again"
+		);
+	}
+
+	#[test]
+	fn test_https_record_ttl_bounds_the_advertisement() {
+		// spec:H3UP#advertisements-from-dns — the record's own DNS TTL is what the advertisement
+		// lives for, the role `ma` plays for a header.
+		let cache = test_cache();
+		let url = reqwest::Url::parse("https://example.com/path").unwrap();
+
+		cache.record_https_record(&url, None, Duration::from_millis(50));
+		assert_eq!(cache.probe_candidate(&url), Some(443));
+
+		std::thread::sleep(Duration::from_millis(120));
+
+		assert!(
+			cache.probe_candidate(&url).is_none(),
+			"past the record's TTL the advertisement is no longer evidence"
 		);
 	}
 

@@ -44,7 +44,12 @@ const TYPE_A = 1;
 const TYPE_SOA = 6;
 const TYPE_AAAA = 28;
 const TYPE_OPT = 41;
+const TYPE_HTTPS = 65;
 const CLASS_IN = 1;
+
+/** SvcParamKeys this helper can encode (RFC 9460 §14.3.2). */
+const SVCPARAM_ALPN = 1;
+const SVCPARAM_PORT = 3;
 
 const RCODE_NOERROR = 0;
 const RCODE_FORMERR = 1;
@@ -52,7 +57,11 @@ const RCODE_SERVFAIL = 2;
 const RCODE_NXDOMAIN = 3;
 const RCODE_NOTIMP = 4;
 
-const TYPE_NAMES = { [TYPE_A]: "A", [TYPE_AAAA]: "AAAA" };
+const TYPE_NAMES = {
+	[TYPE_A]: "A",
+	[TYPE_AAAA]: "AAAA",
+	[TYPE_HTTPS]: "HTTPS",
+};
 
 /** Lowercase and drop the root dot, so zone lookups match however a client asks. */
 function normaliseName(name) {
@@ -115,6 +124,51 @@ function encodeName(name) {
 			return buf;
 		});
 	return Buffer.concat([...labels, Buffer.from([0])]);
+}
+
+/**
+ * HTTPS (SVCB) RDATA: `SvcPriority TargetName SvcParams` (RFC 9460 §2.2).
+ *
+ * `priority` 0 is AliasMode, anything else ServiceMode. `target` defaults to `.`
+ * (the root), which in ServiceMode means the owner name itself, and is how a
+ * record for the origin's own host is normally written. Params are emitted in
+ * ascending key order, which the RFC requires and a strict parser enforces.
+ */
+function httpsRdata({ priority = 1, target = ".", alpn, port } = {}) {
+	const params = [];
+
+	if (alpn !== undefined) {
+		const tokens = alpn.map((token) => {
+			const buf = Buffer.alloc(1 + token.length);
+			buf.writeUInt8(token.length, 0);
+			buf.write(token, 1, "latin1");
+			return buf;
+		});
+		params.push({ key: SVCPARAM_ALPN, value: Buffer.concat(tokens) });
+	}
+
+	if (port !== undefined) {
+		const value = Buffer.alloc(2);
+		value.writeUInt16BE(port, 0);
+		params.push({ key: SVCPARAM_PORT, value });
+	}
+
+	params.sort((a, b) => a.key - b.key);
+
+	const head = Buffer.alloc(2);
+	head.writeUInt16BE(priority, 0);
+
+	const encoded = params.map(({ key, value }) => {
+		const buf = Buffer.alloc(4 + value.length);
+		buf.writeUInt16BE(key, 0);
+		buf.writeUInt16BE(value.length, 2);
+		value.copy(buf, 4);
+		return buf;
+	});
+
+	// The target is written out in full: RFC 9460 forbids compressing it, and a
+	// pointer here would be read as a label length.
+	return Buffer.concat([head, encodeName(target), ...encoded]);
 }
 
 /**
@@ -202,10 +256,15 @@ function parseQuery(buf) {
 	return { id, flags, name, type, klass, questionEnd, ednsPayload };
 }
 
-function buildResponse(request, query, { rcode, type, addresses, ttl, soaTtl }) {
-	const answers = (addresses ?? []).map((address) =>
-		addressToRdata(address, type),
-	);
+function buildResponse(
+	request,
+	query,
+	{ rcode, type, addresses, rdatas, ttl, soaTtl },
+) {
+	// `rdatas` carries record types the helper encodes itself (HTTPS); the
+	// address types are built from their strings here.
+	const answers =
+		rdatas ?? (addresses ?? []).map((address) => addressToRdata(address, type));
 	// A negative answer carries its TTL in an authority-section SOA, so an answer
 	// with no records gets one and a positive answer does not.
 	const authority = answers.length === 0 && soaTtl !== undefined;
@@ -270,11 +329,12 @@ function buildResponse(request, query, { rcode, type, addresses, ttl, soaTtl }) 
 /**
  * Start the server on an ephemeral port on `host`.
  *
- * `zone` maps a name to `{ a, aaaa, ttl }`: `a` and `aaaa` are address string
- * arrays and `ttl` is in seconds, defaulting to `defaultTtl`. A name in the zone
- * with no addresses of the queried type answers NOERROR with no records, the way
- * a real name with only an A record answers a AAAA query; a name absent from the
- * zone answers NXDOMAIN.
+ * `zone` maps a name to `{ a, aaaa, https, ttl, httpsTtl }`: `a` and `aaaa` are
+ * address string arrays, `https` is an array of `{ priority, target, alpn, port }`
+ * HTTPS records, and the TTLs are in seconds, defaulting to `defaultTtl`
+ * (`httpsTtl` to `ttl`). A name in the zone with no records of the queried type
+ * answers NOERROR with no records, the way a real name with only an A record
+ * answers a AAAA query; a name absent from the zone answers NXDOMAIN.
  *
  * Returns the handle documented on the individual methods below.
  */
@@ -304,7 +364,16 @@ async function startDnsServer({
 		// than a mysterious SERVFAIL later.
 		for (const address of a) ipv4ToBuffer(address);
 		for (const address of aaaa) ipv6ToBuffer(address);
-		records.set(key, { a, aaaa, ttl: entry.ttl ?? defaultTtl });
+		// Encoded eagerly for the same reason, and because the params are fixed
+		// once set: nothing about them varies per query.
+		const https = (entry.https ?? []).map(httpsRdata);
+		records.set(key, {
+			a,
+			aaaa,
+			https,
+			ttl: entry.ttl ?? defaultTtl,
+			httpsTtl: entry.httpsTtl ?? entry.ttl ?? defaultTtl,
+		});
 	}
 
 	for (const [name, entry] of Object.entries(zone)) setRecord(name, entry);
@@ -319,7 +388,13 @@ async function startDnsServer({
 			at: Date.now(),
 		});
 
-		const failure = failures.get(name);
+		const entry = failures.get(name);
+		// A failure scoped to one record type leaves the others answering, which is
+		// how a query for one type is failed without also breaking resolution.
+		const failure =
+			entry && (entry.type === null || entry.type === query.type)
+				? entry.mode
+				: null;
 		if (failure === "drop") return null;
 		// SERVFAIL is not a negative answer about the name, so it carries no SOA
 		// and is not cacheable; NXDOMAIN is, and does.
@@ -329,7 +404,11 @@ async function startDnsServer({
 		}
 
 		if (query.klass !== CLASS_IN) return { rcode: RCODE_NOTIMP };
-		if (query.type !== TYPE_A && query.type !== TYPE_AAAA) {
+		if (
+			query.type !== TYPE_A &&
+			query.type !== TYPE_AAAA &&
+			query.type !== TYPE_HTTPS
+		) {
 			// Not an error: a name can simply hold no records of that type, and
 			// answering NOTIMP would make hickory retry rather than move on.
 			return { rcode: RCODE_NOERROR, soaTtl: negativeTtl };
@@ -337,6 +416,19 @@ async function startDnsServer({
 
 		const record = records.get(name);
 		if (!record) return { rcode: RCODE_NXDOMAIN, soaTtl: negativeTtl };
+
+		if (query.type === TYPE_HTTPS) {
+			return {
+				rcode: RCODE_NOERROR,
+				type: TYPE_HTTPS,
+				rdatas: record.https,
+				ttl: record.httpsTtl,
+				// A name with addresses but no HTTPS record is the common case, and
+				// that negative answer needs the SOA to be cacheable like any other.
+				soaTtl: negativeTtl,
+			};
+		}
+
 		return {
 			rcode: RCODE_NOERROR,
 			type: query.type,
@@ -468,11 +560,24 @@ async function startDnsServer({
 		/**
 		 * Make `name` fail: `servfail`, `nxdomain`, or `drop` (never answer, so
 		 * the client times out). Pass `null` to answer from the zone again.
+		 *
+		 * `type` scopes the failure to one record type (`"A"`, `"AAAA"`, `"HTTPS"`),
+		 * leaving the rest answering normally; omit it to fail every type.
 		 */
-		fail(name, mode = "servfail") {
+		fail(name, mode = "servfail", { type = null } = {}) {
 			const key = normaliseName(name);
-			if (mode === null) failures.delete(key);
-			else failures.set(key, mode);
+			if (mode === null) {
+				failures.delete(key);
+				return;
+			}
+			const code =
+				type === null
+					? null
+					: Number(
+							Object.keys(TYPE_NAMES).find((k) => TYPE_NAMES[k] === type) ?? NaN,
+						);
+			if (Number.isNaN(code)) throw new Error(`unknown record type ${type}`);
+			failures.set(key, { mode, type: code });
 		},
 
 		/** Change the reply delay, in milliseconds. */
