@@ -50,6 +50,12 @@ Where a timestamp is non-zero, `fetchStart` is the earliest and the rest are no 
 `deliveryType` is `cache` for a response served by the HTTP cache and empty for one fetched from the network (see [CACHE](../cache/http-cache.md)).
 `nextHopProtocol` is the protocol the request travelled over as an ALPN Protocol ID (RFC 7301): `h3`, `h2`, `h2c`, `http/1.1`, and so on, whether or not the connection actually negotiated over ALPN.
 
+`serverTiming` is the list of metrics the origin reported in its `Server-Timing` response header, as entries matching `PerformanceServerTiming` and in the order the header lists them.
+Each metric becomes one entry: `name` is the metric name, `duration` the value of its `dur` parameter in fractional milliseconds, and `description` the value of its `desc` parameter.
+A metric with no `dur`, or a `dur` that is not a number, reads a `duration` of 0, and a metric with no `desc` reads an empty `description`, so an unparseable parameter falls back to the default rather than dropping the entry.
+A metric named more than once yields one entry per occurrence, and metrics spread across repeated `Server-Timing` header lines all contribute.
+The list is empty when the header is absent, carries no metrics, or is dropped for not being valid UTF-8 (see [Standard properties](#standard-properties)).
+
 `fetchStart` is the moment the request began and the origin the other phases are measured against.
 `finalResponseHeadersStart` is when the final response's headers arrived, and `responseEnd` when the body finished.
 `responseStart` follows the standard's derivation: `firstInterimResponseStart` when that is non-zero, otherwise `finalResponseHeadersStart`.
@@ -60,7 +66,7 @@ Reuse is read from the connections the agent tracks, so it is reported for the s
 
 The service worker fields (`workerStart`, `workerRouterEvaluationStart`, `workerCacheLookupStart`, `workerMatchedRouterSource`, `workerFinalRouterSource`) and `renderBlockingStatus` describe a browsing context: they have no server-side meaning, so the timestamps read 0, the sources read empty, and `renderBlockingStatus` reads `non-blocking`.
 
-`redirectStart`, `redirectEnd`, `domainLookupStart`, `domainLookupEnd`, `connectStart`, `connectEnd`, `secureConnectionStart`, `requestStart`, `requestSent`, and `firstInterimResponseStart` read 0, and `transferSize`, `encodedBodySize`, and `decodedBodySize` read 0 with `serverTiming` an empty list.
+`redirectStart`, `redirectEnd`, `domainLookupStart`, `domainLookupEnd`, `connectStart`, `connectEnd`, `secureConnectionStart`, `requestStart`, `requestSent`, and `firstInterimResponseStart` read 0, and `transferSize`, `encodedBodySize`, and `decodedBodySize` read 0.
 So the span from `fetchStart` to `finalResponseHeadersStart` covers connection acquisition (pool wait, or DNS, connect, and TLS handshake on a fresh connection) together with the server's own turnaround, rather than being attributable to a phase.
 
 `finalResponseHeadersStart` less `fetchStart` is the time to response headers.
