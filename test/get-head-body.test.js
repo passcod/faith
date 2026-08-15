@@ -70,10 +70,14 @@ test("GET with a null body is allowed", async (t) => {
 	t.plan(1);
 	const response = await fetch(url("/get"), { method: "GET", body: null });
 	t.equal(response.status, 200, "GET with null body succeeds");
+	// These tests assert on the status alone, so the body is discarded rather than left
+	// unread holding its connection open.
+	await response.discard();
 });
 
 test("POST with a body is allowed", async (t) => {
 	t.plan(1);
 	const response = await fetch(url("/post"), { method: "POST", body: "x" });
 	t.equal(response.status, 200, "POST with a body succeeds");
+	await response.discard();
 });
