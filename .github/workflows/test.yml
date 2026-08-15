@@ -97,6 +97,14 @@ jobs:
       - run: npm run test
         env:
           HTTPBIN_URL: http://localhost:8888
+          # httpbin binds IPv4 only, but `localhost` resolves to `::1` as well, and
+          # Windows offers that one first. Faith's own stack walks the address list and
+          # lands on the listener either way; Node's fetch, which the comparison tests
+          # measure Faith against, intermittently gave up on the first connection of a
+          # run instead. Resolving IPv4 first points it at the address httpbin is
+          # actually on. The URL stays a name because the DNS and warm-up tests need a
+          # host that resolves rather than an IP literal.
+          NODE_OPTIONS: --dns-result-order=ipv4first
 
   # Dummy job to have a stable name for PR requirements
   tests-pass:
