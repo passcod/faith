@@ -175,7 +175,7 @@ pub enum Trailers {
 
 /// Where the trailers land: written by whoever finishes the body, awaited by `trailers()`.
 ///
-/// A watch channel, rather than a lock read in a loop. Per the fetch spec's trailers
+/// A watch channel, rather than a lock read in a loop. Per the fetch standard's trailers
 /// proposal (<https://github.com/whatwg/fetch/pull/1940>) this promise is *meant* not to
 /// resolve until the body has been consumed, so the wait is unbounded by design -- which is
 /// precisely why polling was the wrong shape for it. Awaiting trailers without reading the
@@ -342,7 +342,7 @@ impl FaithResponse {
 	/// whether the body has been read yet.
 	///
 	/// In Faith, this indicates whether the body stream has ever been read from or canceled, as defined
-	/// [in the spec](https://streams.spec.whatwg.org/#is-readable-stream-disturbed). Note that accessing
+	/// [in the standard](https://streams.spec.whatwg.org/#is-readable-stream-disturbed). Note that accessing
 	/// the `.body` property counts as a read, even if you don't actually consume any bytes of content.
 	#[napi(getter)]
 	pub fn body_used(&self) -> bool {
@@ -353,8 +353,8 @@ impl FaithResponse {
 	/// contents, or `null` for any actual HTTP response that has no body, such as `HEAD` requests and
 	/// `204 No Content` responses.
 	///
-	/// Note that browsers currently do not return `null` for those responses, but the spec requires
-	/// it. Faith chooses to respect the spec rather than the browsers in this case.
+	/// Note that browsers currently do not return `null` for those responses, but the standard
+	/// requires it. Faith chooses to respect the standard rather than the browsers in this case.
 	///
 	/// An important consideration exists in conjunction with the connection pool: if you start the
 	/// body stream, this will hold the connection until the stream is fully consumed. If another
@@ -608,8 +608,8 @@ impl FaithResponse {
 
 	/// The `text()` method of the `Response` interface takes a `Response` stream and reads it to
 	/// completion. It returns a promise that resolves with a `String`. The response is always decoded
-	/// using UTF-8; as per spec, invalid UTF-8 sequences are replaced with U+FFFD rather than
-	/// causing an error.
+	/// using UTF-8; as per the standard, invalid UTF-8 sequences are replaced with U+FFFD rather
+	/// than causing an error.
 	#[napi]
 	pub fn text<'env>(&self, env: &'env Env) -> Result<PromiseRaw<'env, String>, napi::Error> {
 		let this = Clone::clone(self);
@@ -823,12 +823,12 @@ impl FaithResponse {
 	/// resolves to either `null` or a `Headers` structure that contains the HTTP/2 or /3 trailing
 	/// headers.
 	///
-	/// This was once in the spec as a getter but was removed as it wasn't implemented by any browser.
+	/// This was once in the standard as a getter, but was removed as no browser implemented it.
 	///
 	/// Trailers only exist once the body has ended, so this does not resolve until the body
 	/// has been consumed — by `text()`, `bytes()`, `json()`, `blob()`, or reading the `body`
 	/// stream. Awaiting it first, on its own, waits forever: that is the behaviour the fetch
-	/// spec's trailers proposal describes (<https://github.com/whatwg/fetch/pull/1940>), not
+	/// standard's trailers proposal describes (<https://github.com/whatwg/fetch/pull/1940>), not
 	/// a quirk of Faith. Holding the promise while something else reads the body is fine, and
 	/// costs nothing while it is pending.
 	///
@@ -860,7 +860,8 @@ impl FaithResponse {
 	///
 	/// `clone()` throws an `Error` if the response body has already been used.
 	///
-	/// (In-spec, this should throw a `TypeError`, but for technical reasons this is not possible with Faith.)
+	/// (Per the standard, this should throw a `TypeError`, but for technical reasons this is not
+	/// possible with Faith.)
 	#[napi]
 	pub fn clone(&self, env: Env) -> Result<Self, napi::Error> {
 		if self.disturbed.load(Ordering::SeqCst) {

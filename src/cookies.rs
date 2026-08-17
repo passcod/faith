@@ -65,8 +65,8 @@ fn key_of(cookie: &StoredCookie<'static>) -> CookieKey {
 /// Whether cookies received from this URL count as coming over a secure transport.
 ///
 /// Browsers widen this to any "potentially trustworthy" origin, which takes in `http://localhost`;
-/// the spec calls for `https`, so a `__Host-` cookie a browser would keep on a local dev server is
-/// rejected here.
+/// the standard calls for `https`, so a `__Host-` cookie a browser would keep on a local dev
+/// server is rejected here.
 fn is_secure(url: &Url) -> bool {
 	url.scheme() == "https"
 }

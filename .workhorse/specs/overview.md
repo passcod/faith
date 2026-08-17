@@ -21,7 +21,7 @@ A divergence is either a browser concept with no server-side meaning or a choice
 ## Compatibility stance
 
 `fetch(resource, options)` accepts the same shapes as WHATWG fetch: a URL string or stringifiable object (including `URL`), or a Web API `Request` object.
-Behaviour follows the fetch specification by default; where browsers and the specification disagree, Faith follows the specification (for example, `body` is `null` on responses that cannot have a body).
+Behaviour follows the fetch standard by default; where browsers and the standards disagree, Faith follows the standards unless a spec here says otherwise (for example, `body` is `null` on responses that cannot have a body).
 Browser-only concepts that assume an origin or a browsing context (CORS, `mode`, `referrer`, `referrerPolicy`, `attributionReporting`, `browsingTopics`, `keepalive`) have no server-side meaning; passing them is harmless and they take no effect.
 Options in a `RequestInit` that Faith does not recognise are ignored rather than rejected.
 Faith-specific extensions (such as `agent`, `timeout`, response `peer`, `version`, `trailers`, `discard()`) are additive: code written against standard fetch runs unmodified.

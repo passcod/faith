@@ -1,7 +1,7 @@
 /**
  * Faith Fetch API Wrapper
  *
- * This wrapper provides a spec-compliant Fetch API interface on top of
+ * This wrapper provides a standards-compliant Fetch API interface on top of
  * the native Rust bindings. The main difference is that `body` is exposed
  * as a property/getter instead of a method, and the class is named `Response`
  * instead of `FetchResponse`.
@@ -63,7 +63,7 @@ function destinationPath(destination) {
 		// A host names a machine other than this one, so the URL does not name a local path.
 		// Checked here rather than left to the platform: Windows' own conversion turns a host
 		// into a UNC path instead of refusing it, and a network share is not a local file.
-		// `localhost` normalises to an empty host, so this accepts it as the spec requires.
+		// `localhost` normalises to an empty host, so this accepts it as the standard requires.
 		if (parsed.host) {
 			throw invalidPathError(
 				`toFile destination is not a local path: file URL host "${parsed.host}" names another machine`,
@@ -444,7 +444,7 @@ function mintResourceTiming(response, fetchStart, measurements) {
 }
 
 /**
- * Response class that provides spec-compliant Fetch API
+ * Response class that provides standards-compliant Fetch API
  */
 class Response {
 	/** @type {import('./index').FaithResponse} */
@@ -810,7 +810,7 @@ async function fetch(resource, options = {}) {
 		// Handle URLSearchParams
 		if (nativeOptions.body instanceof URLSearchParams) {
 			nativeOptions.body = nativeOptions.body.toString();
-			// Set Content-Type if not already set (per Fetch spec)
+			// Set Content-Type if not already set (per the fetch standard)
 			if (!nativeOptions.headers) {
 				nativeOptions.headers = [];
 			}

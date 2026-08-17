@@ -23,7 +23,7 @@ module.exports = {
 
 		// Consume the body FIRST. Trailers arrive after the body ends, so the promise
 		// does not resolve until the body has been read -- which is what the fetch
-		// spec's trailers proposal requires (whatwg/fetch#1940), not a faith quirk.
+		// standard's trailers proposal requires (whatwg/fetch#1940), not a faith quirk.
 		// Reversing these two lines deadlocks the cell.
 		const body = await res.text();
 		t.equal(body, PAYLOAD, "body arrives ahead of the trailers");

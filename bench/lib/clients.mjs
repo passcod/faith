@@ -39,7 +39,7 @@ export async function loadImpls({ ca }) {
 
 	// --- undici, two ways ------------------------------------------------
 
-	// Node's built-in fetch (undici's spec wrapper). HTTP/1.1 only. Trusting
+	// Node's built-in fetch (undici's standard fetch wrapper). HTTP/1.1 only. Trusting
 	// the bench CA requires NODE_EXTRA_CA_CERTS, which the runner sets before
 	// re-exec, so no per-context config is needed here.
 	impls.set("native", {
@@ -59,7 +59,7 @@ export async function loadImpls({ ca }) {
 	});
 
 	// undici's raw request() API — the same engine as native fetch without the
-	// WHATWG streams/spec machinery, i.e. the true ceiling of the undici stack.
+	// WHATWG streams and standard fetch machinery, i.e. the true ceiling of the undici stack.
 	const undici = require("undici");
 	impls.set("undici", {
 		name: "undici",
@@ -166,7 +166,7 @@ export async function loadImpls({ ca }) {
 		},
 	});
 
-	// node-fetch. HTTP/1.1 over node core; a spec-shaped wrapper, unlike got.
+	// node-fetch. HTTP/1.1 over node core; a standard-shaped wrapper, unlike got.
 	const { default: nodeFetch } = await import("node-fetch");
 	impls.set("node-fetch", {
 		name: "node-fetch",
