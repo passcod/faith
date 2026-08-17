@@ -13,6 +13,7 @@ The library's contract has two halves: fidelity to the fetch standard, and diver
 
 The [WHATWG Fetch standard](https://fetch.spec.whatwg.org/) defines the API surface, and the [trailers proposal](https://github.com/whatwg/fetch/issues/1940) defines `response.trailers` (see [TRL](response/trailers.md)).
 [Subresource Integrity](https://www.w3.org/TR/SRI/) defines the `integrity` option (see [SRI](fetch/integrity.md)).
+[Resource Timing](https://w3c.github.io/resource-timing/) and [Server-Timing](https://w3c.github.io/server-timing/) define the request's timing breakdown (see [RESP](response/response.md)).
 On the wire, Faith answers to HTTP semantics and caching (RFC 9110 and RFC 9111), HTTP/1.1 (RFC 9112), HTTP/2 (RFC 9113), HTTP/3 (RFC 9114), Alt-Svc (RFC 7838), cookies (RFC 6265), and Happy Eyeballs (RFC 8305).
 
 Each of these is the reference against which Faith's behaviour is judged, and behaviour that departs from one is named as a divergence in the spec that covers it.
