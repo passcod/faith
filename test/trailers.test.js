@@ -1,5 +1,5 @@
 /**
- * Response trailers, and the ordering the fetch spec requires of them.
+ * Response trailers, and the ordering the fetch standard requires of them.
  *
  * Trailers only exist once a body has ended, so `response.trailers` does not resolve
  * until the body has been consumed — see https://github.com/whatwg/fetch/pull/1940.
@@ -101,7 +101,7 @@ test("trailers: pending until the body is consumed, and idle while pending", asy
 	try {
 		const res = await fetch(`${server.url}/trailers`, { agent: server.agent, timeout: 10000 });
 
-		// Held, not awaited: awaiting here is the deadlock the spec describes.
+		// Held, not awaited: awaiting here is the deadlock the standard describes.
 		const pending = res.trailers;
 
 		const raced = await Promise.race([
@@ -109,7 +109,11 @@ test("trailers: pending until the body is consumed, and idle while pending", asy
 			new Promise((resolve) => setTimeout(() => resolve("pending"), 500)),
 		]);
 
-		t.equal(raced, "pending", "does not resolve before the body is consumed, per the spec");
+		t.equal(
+			raced,
+			"pending",
+			"does not resolve before the body is consumed, per the standard",
+		);
 		// That the wait is parked rather than a `yield_now` spin -- the bug this replaces --
 		// is asserted in the Rust unit test `waiting_for_trailers_parks_rather_than_spinning`,
 		// which counts wake-ups instead of sampling CPU. Timing the process measures the

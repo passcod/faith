@@ -74,3 +74,8 @@ The stack also does not surface interim (1xx) responses, so a `103 Early Hints` 
 
 Spec: [RESP](specs/response/response.md), Request timing.
 Reuse is read from the agent's connection tracker, which registers a connection from the local and remote addresses the HTTP stack attaches to a response, and attaches them only for TCP-based responses; this is the same constraint that keeps QUIC connections out of `connections()`.
+
+## A server timing entry is not an instance of a platform class
+
+Spec: [RESP](specs/response/response.md), Request timing.
+The platform's performance interfaces carry no `PerformanceServerTiming` class, and the call that mints a resource timing entry takes no metrics to attach, so there is nothing to make an entry an instance of and no `instanceof` for one to satisfy, unlike the breakdown that holds them.

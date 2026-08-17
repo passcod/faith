@@ -52,7 +52,7 @@ Where a timestamp is non-zero, `fetchStart` is the earliest and the rest are no 
 
 `serverTiming` is the metrics the origin reported in its `Server-Timing` response header, in the order the header lists them.
 Each metric is one entry carrying the three attributes of a `PerformanceServerTiming`: `name` is the metric name, `duration` the fractional milliseconds its `dur` parameter reports, and `description` its `desc` parameter.
-The platform has no `PerformanceServerTiming` class to mint, so an entry is a plain object holding those attributes, which is also what it serialises as.
+An entry is a plain object carrying those attributes rather than an instance of a platform class, and serialises as those three attributes alone.
 Metrics spread across repeated `Server-Timing` header lines all contribute, and a metric name reported more than once yields one entry per occurrence.
 
 The header is parsed to its grammar, and characters belonging to no metric name or parameter are ignored rather than ending the metric they sit in.
