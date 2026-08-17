@@ -65,7 +65,7 @@ A `dur` that is not a number reads 0, one that trails junk after a number reads 
 The list is empty when the header is absent or names no metric, and a header value that is not valid UTF-8 is dropped before it is read (see [Standard properties](#standard-properties)).
 
 The parse is held to the web platform tests for the header, so an origin's metrics read through Faith as they do in a browser.
-The header's specification also carries a parsing algorithm looser than its own grammar, and the grammar and the tests are the pair Faith answers to, that being where a browser's reading of the header sits.
+The Server-Timing standard also carries a parsing algorithm looser than its own grammar, and the grammar and the tests are the pair Faith answers to, that being where a browser's reading of the header sits.
 
 `fetchStart` is the moment the request began and the origin the other phases are measured against.
 `finalResponseHeadersStart` is when the final response's headers arrived, and `responseEnd` when the body finished.

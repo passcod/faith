@@ -4,9 +4,9 @@
  * https://github.com/cvazac/generate-server-timing-tests).
  *
  * Each case is the header value an origin sent and the metrics a browser reads from it, so a
- * change to Faith's parse that a browser would not make fails here. The cases cover the grammar
- * in more depth than the header's own specification does: they are the reason the parse follows
- * the grammar rather than the specification's parsing algorithm, which several of them fail.
+ * change to Faith's parse that a browser would not make fails here. The cases pin the grammar in
+ * more depth than the Server-Timing standard's prose does: they are the reason the parse follows
+ * that grammar rather than the standard's parsing algorithm, which 35 of them fail.
  */
 
 module.exports = [
