@@ -16,8 +16,15 @@ The parse is exercised through a real origin echoing the header value, so each c
 - [x] A metric with no `dur` reads a duration of 0, and one with no `desc` an empty description (verifies spec: RESP)
 - [x] A `dur` that is not a number reads 0, and one trailing junk after a number reads that number (verifies spec: RESP)
 - [x] A parameter given twice counts as the first of the two, and the parameters after it are still read (verifies spec: RESP)
-- [x] A metric with no name is dropped and the rest of the list stands (verifies spec: RESP)
+- [x] A parameter name is matched without regard to case (verifies spec: RESP)
+- [x] A value that is neither a token nor a well-formed quoted string reads empty (verifies spec: RESP)
+- [x] Characters belonging to no name or parameter are ignored rather than ending the metric (verifies spec: RESP)
+- [x] A metric whose name is no token is dropped and the rest of the list stands (verifies spec: RESP)
 - [x] A `Server-Timing` value that is not valid UTF-8 leaves the list empty (verifies spec: RESP)
+
+## Interop
+
+- [x] All 85 web platform test parsing cases read the metrics a browser reads (verifies spec: RESP)
 
 ## Alongside the rest of the entry
 
