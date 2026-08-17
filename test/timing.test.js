@@ -81,7 +81,7 @@ test("Response.timing reads 0 for the phases Faith does not observe", async (t) 
 		"encodedBodySize",
 		"decodedBodySize",
 	];
-	t.plan(unobserved.length + 1);
+	t.plan(unobserved.length);
 
 	const response = await faithFetch(url("/get"));
 	await response.text();
@@ -90,7 +90,6 @@ test("Response.timing reads 0 for the phases Faith does not observe", async (t) 
 	for (const field of unobserved) {
 		t.equal(timing[field], 0, `${field} should read 0`);
 	}
-	t.deepEqual(timing.serverTiming, [], "serverTiming should be empty");
 });
 
 test("Response.timing reads empty for the browsing context fields", async (t) => {

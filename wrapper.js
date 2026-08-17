@@ -98,6 +98,215 @@ function mimeEssence(value) {
 	return value.split(";", 1)[0].trim().toLowerCase();
 }
 
+/** ASCII whitespace, as Infra defines it, at either end of a string. */
+const ASCII_WHITESPACE_ENDS = /^[\t\n\f\r ]+|[\t\n\f\r ]+$/g;
+
+/** HTTP tab or space, the narrower set the fetch standard trims header elements with. */
+const HTTP_TAB_OR_SPACE_ENDS = /^[\t ]+|[\t ]+$/g;
+
+/** One ASCII whitespace code point, tested where the cursor stands. */
+const ASCII_WHITESPACE = /[\t\n\f\r ]/;
+
+/**
+ * A leading floating-point number, by the HTML standard's rules for parsing floating-point number
+ * values: leading whitespace and trailing junk are both allowed, and a value that does not begin
+ * with a number does not match at all.
+ */
+const LEADING_FLOAT =
+	/^[\t\n\f\r ]*([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)/;
+
+/**
+ * Collect code points from `input` at the cursor until one of `stops` is reached, advancing the
+ * cursor to it. The building block the standards' own header parsing is written in terms of, so
+ * the parsing below can follow their steps rather than approximate them.
+ *
+ * @param {string} input
+ * @param {{ at: number }} cursor
+ * @param {string} stops
+ * @returns {string}
+ */
+function collectExcept(input, cursor, stops) {
+	const start = cursor.at;
+	while (cursor.at < input.length && !stops.includes(input[cursor.at])) {
+		cursor.at++;
+	}
+	return input.slice(start, cursor.at);
+}
+
+/**
+ * Collect an HTTP quoted string from `input` at the cursor, which stands on the opening quote.
+ *
+ * With `extract` set the string's contents are returned, its backslash escapes resolved; without
+ * it the raw text, quotes and all, which is what splitting a header value needs so each element
+ * it hands out still parses. One left unterminated runs to the end of the input.
+ *
+ * @param {string} input
+ * @param {{ at: number }} cursor
+ * @param {boolean} extract
+ * @returns {string}
+ */
+function collectQuotedString(input, cursor, extract) {
+	const start = cursor.at;
+	let value = "";
+	cursor.at++;
+
+	for (;;) {
+		value += collectExcept(input, cursor, '"\\');
+		if (cursor.at >= input.length) {
+			break;
+		}
+
+		const quoteOrBackslash = input[cursor.at++];
+		if (quoteOrBackslash !== "\\") {
+			break;
+		}
+		if (cursor.at >= input.length) {
+			value += "\\";
+			break;
+		}
+		value += input[cursor.at++];
+	}
+
+	return extract ? value : input.slice(start, cursor.at);
+}
+
+/**
+ * Split a header value into its comma-separated elements, as the fetch standard's "get, decode,
+ * and split" does: a comma inside a quoted string belongs to the string rather than ending an
+ * element.
+ *
+ * @param {string} value
+ * @returns {string[]}
+ */
+function splitHeaderValue(value) {
+	const cursor = { at: 0 };
+	const elements = [];
+	let element = "";
+
+	for (;;) {
+		element += collectExcept(value, cursor, '",');
+		if (value[cursor.at] === '"') {
+			element += collectQuotedString(value, cursor, false);
+			if (cursor.at < value.length) {
+				continue;
+			}
+		}
+
+		elements.push(element.replace(HTTP_TAB_OR_SPACE_ENDS, ""));
+		element = "";
+		if (cursor.at >= value.length) {
+			return elements;
+		}
+		cursor.at++;
+	}
+}
+
+/**
+ * Parse a `dur` parameter into a duration in milliseconds.
+ *
+ * The Server-Timing specification defines `duration` against the HTML standard's floating-point
+ * parse rather than the language's, so a value with trailing junk still reports the number it
+ * starts with, and one that is not a number at all reports 0.
+ *
+ * @param {string} value
+ * @returns {number}
+ */
+function parseDuration(value) {
+	const match = LEADING_FLOAT.exec(value);
+	return match ? Number(match[1]) : 0;
+}
+
+/**
+ * Parse one `server-timing-metric` into a `PerformanceServerTiming`-shaped entry, following the
+ * Server-Timing specification's own parse: the metric name runs to the first `;`, each parameter
+ * name to its `=`, and a parameter value is either a quoted string or the text up to the next
+ * `;`. Whitespace around each of those is not part of it, and characters that are part of no
+ * parameter are ignored rather than ending the metric.
+ *
+ * Node has no `PerformanceServerTiming` class to mint, so the entry is a plain object carrying
+ * the interface's three attributes, which is also what it serialises as.
+ *
+ * @param {string} field
+ * @returns {{ name: string, duration: number, description: string } | null}
+ */
+function parseServerTimingMetric(field) {
+	const cursor = { at: 0 };
+	const name = collectExcept(field, cursor, ";").replace(
+		ASCII_WHITESPACE_ENDS,
+		"",
+	);
+	// A metric has to be named to be worth anything, and an empty name is the specification's
+	// one parse failure.
+	if (!name) {
+		return null;
+	}
+
+	/** @type {Map<string, string>} */
+	const params = new Map();
+	while (cursor.at < field.length) {
+		// The ";" the previous collection stopped at.
+		cursor.at++;
+
+		const param = collectExcept(field, cursor, "=").replace(
+			ASCII_WHITESPACE_ENDS,
+			"",
+		);
+		let value = "";
+		if (field[cursor.at] === "=") {
+			cursor.at++;
+			while (
+				cursor.at < field.length &&
+				ASCII_WHITESPACE.test(field[cursor.at])
+			) {
+				cursor.at++;
+			}
+
+			if (field[cursor.at] === '"') {
+				value = collectQuotedString(field, cursor, true);
+				// The text between the closing quote and the next parameter is part of no
+				// parameter, so it is read and dropped.
+				collectExcept(field, cursor, ";");
+			} else {
+				value = collectExcept(field, cursor, ";").replace(
+					ASCII_WHITESPACE_ENDS,
+					"",
+				);
+			}
+		}
+
+		// A parameter named twice counts once, as the first of the two: a repeat is dropped
+		// without disturbing the parameters that follow it.
+		if (param && !params.has(param)) {
+			params.set(param, value);
+		}
+	}
+
+	return {
+		name,
+		duration: params.has("dur") ? parseDuration(params.get("dur")) : 0,
+		description: params.get("desc") ?? "",
+	};
+}
+
+/**
+ * The metrics an origin reported in its `Server-Timing` header, in the order the header lists
+ * them. A metric that does not parse is dropped and the rest of the list stands, because an
+ * origin's diagnostics are worth more read in part than not at all.
+ *
+ * spec:RESP#request-timing
+ *
+ * @param {string | null} value
+ * @returns {Array<{ name: string, duration: number, description: string }>}
+ */
+function parseServerTiming(value) {
+	if (!value) {
+		return [];
+	}
+	return splitHeaderValue(value)
+		.map(parseServerTimingMetric)
+		.filter((metric) => metric !== null);
+}
+
 /**
  * Mint the response's `PerformanceResourceTiming`.
  *
@@ -190,7 +399,7 @@ function mintResourceTiming(response, fetchStart, measurements) {
 		transferSize: 0,
 		encodedBodySize: 0,
 		decodedBodySize: 0,
-		serverTiming: [],
+		serverTiming: parseServerTiming(response.headers.get("server-timing")),
 		reused: measurements.reused,
 	};
 
