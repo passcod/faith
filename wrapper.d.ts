@@ -272,7 +272,7 @@ export class Response {
 	 * whether the body has been read yet.
 	 *
 	 * In Faith, this indicates whether the body stream has ever been read from or canceled, as defined
-	 * [in the spec](https://streams.spec.whatwg.org/#is-readable-stream-disturbed). Note that accessing
+	 * [in the standard](https://streams.spec.whatwg.org/#is-readable-stream-disturbed). Note that accessing
 	 * the `.body` property counts as a read, even if you don't actually consume any bytes of content.
 	 */
 	readonly bodyUsed: boolean;
@@ -345,8 +345,8 @@ export class Response {
 	 * contents, or `null` for any actual HTTP response that has no body, such as `HEAD` requests and
 	 * `204 No Content` responses.
 	 *
-	 * Note that browsers currently do not return `null` for those responses, but the spec requires
-	 * it. Faith chooses to respect the spec rather than the browsers in this case.
+	 * Note that browsers currently do not return `null` for those responses, but the standard
+	 * requires it. Faith chooses to respect the standard rather than the browsers in this case.
 	 *
 	 * A response has one body stream: this is built on first access and the same stream is
 	 * returned thereafter, so reading through it advances a single position. Use `clone()` to
@@ -364,13 +364,13 @@ export class Response {
 	 * resolves to either `null` or a `Headers` structure that contains the HTTP/2 or /3 trailing
 	 * headers.
 	 *
-	 * This was once in the spec but was removed as it wasn't implemented by any browser;
+	 * This was once in the standard but was removed as no browser implemented it;
 	 * https://github.com/whatwg/fetch/pull/1940 is the current effort to bring it back.
 	 *
 	 * Trailers arrive after the body ends, so this does not resolve until the body has been
 	 * consumed — by `text()`, `bytes()`, `json()`, `blob()`, or reading the `body` stream.
 	 * Awaiting it on its own, without ever reading the body, waits forever; that is what
-	 * the spec above describes. Holding the promise while something else reads the body is
+	 * the proposal above describes. Holding the promise while something else reads the body is
 	 * fine, and costs nothing while it is pending.
 	 *
 	 * `discard()` counts as consuming the body but discards its trailers with it: this then

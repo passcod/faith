@@ -1,5 +1,6 @@
 const test = require("tape");
 const { fetch: faithFetch, Agent } = require("../wrapper.js");
+const parsingCases = require("./fixtures/server-timing-parsing.js");
 const { url } = require("./helpers.js");
 
 // spec:RESP#request-timing
@@ -192,4 +193,16 @@ test("serverTiming survives serialisation", async (t) => {
 		[{ name: "db", duration: 53, description: "db query" }],
 		"JSON should carry the metrics",
 	);
+});
+
+test("serverTiming parses the header as the web platform tests require", async (t) => {
+	t.plan(parsingCases.length);
+
+	for (const { case: index, header, metrics } of parsingCases) {
+		t.deepEqual(
+			await serverTiming(header),
+			metrics,
+			`case ${index}: ${JSON.stringify(header)}`,
+		);
+	}
 });

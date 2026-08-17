@@ -441,8 +441,8 @@ Faith does not allow its `Response` object to be constructed. If you need to, yo
 contents,* or `null` for any actual HTTP response that has no body, such as `HEAD` requests and
 `204 No Content` responses.
 
-Note that browsers currently do not return `null` for those responses, but the spec requires it.
-Faith chooses to respect the spec rather than the browsers in this case.
+Note that browsers currently do not return `null` for those responses, but the standard requires it.
+Faith chooses to respect the standard rather than the browsers in this case.
 
 A response has one body stream: it is built on first access and the same stream is returned
 thereafter, so reading through it advances a single position. Use `clone()` to get a second full
@@ -530,14 +530,14 @@ const trailers = await res.trailers; // resolves
 ```
 
 Awaiting the trailers on their own, without ever reading the body, waits forever: there is nothing
-to end the body and produce them. That is the behaviour the current spec proposal describes
+to end the body and produce them. That is the behaviour the current proposal describes
 ([whatwg/fetch#1940](https://github.com/whatwg/fetch/pull/1940)), not a quirk of Faith. Holding the
 promise while something else reads the body is fine, and costs nothing while it is pending.
 
 `discard()` counts as consuming the body, but discards its trailers along with it: the promise then
 resolves to `null` rather than waiting for trailers that can no longer arrive.
 
-Custom to Faith. This was once in the spec but was removed as it wasn't implemented by any browser;
+Custom to Faith. This was once in the standard but was removed as no browser implemented it;
 the proposal above is the current effort to bring it back.
 
 ### `Response.type: string`

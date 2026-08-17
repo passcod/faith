@@ -52,15 +52,20 @@ Where a timestamp is non-zero, `fetchStart` is the earliest and the rest are no 
 
 `serverTiming` is the metrics the origin reported in its `Server-Timing` response header, in the order the header lists them.
 Each metric is one entry carrying the three attributes of a `PerformanceServerTiming`: `name` is the metric name, `duration` the fractional milliseconds its `dur` parameter reports, and `description` its `desc` parameter.
-The platform has no `PerformanceServerTiming` class to mint, so an entry is a plain object holding those attributes, which is also what it serialises as.
+An entry is a plain object carrying those attributes rather than an instance of a platform class, and serialises as those three attributes alone.
 Metrics spread across repeated `Server-Timing` header lines all contribute, and a metric name reported more than once yields one entry per occurrence.
 
-The header is parsed as the Server-Timing specification defines, so an origin's metrics read through Faith as they do in a browser.
+The header is parsed to its grammar, and characters belonging to no metric name or parameter are ignored rather than ending the metric they sit in.
+A metric is named by a token, so text that is no token names no metric: that metric is dropped and the rest of the list stands.
+A parameter's name is a token too, matched without regard to case, and one Faith does not read is skipped rather than ending the metric.
+A parameter's value is a token or a quoted string, and one that is neither, a quoted string left unterminated among them, reads empty.
 A description is commonly a quoted string, and a comma or semicolon inside one belongs to the description rather than ending the metric or the list.
 A metric with no `dur` reads a `duration` of 0 and one with no `desc` an empty `description`, so a metric reporting a name alone still appears.
-A `dur` that is not a number reads 0, one that trails junk after a number reads that number, and a parameter given twice counts as the first of the two.
-A metric with no name is dropped and the rest of the list stands.
+A `dur` that is not a number reads 0, one that trails junk after a number reads that number, and a parameter given twice counts as the first of the two whether or not that first one carried a value the grammar allows.
 The list is empty when the header is absent or names no metric, and a header value that is not valid UTF-8 is dropped before it is read (see [Standard properties](#standard-properties)).
+
+The parse is held to the web platform tests for the header, so an origin's metrics read through Faith as they do in a browser.
+The Server-Timing standard also carries a parsing algorithm looser than its own grammar, and the grammar and the tests are the pair Faith answers to, that being where a browser's reading of the header sits.
 
 `fetchStart` is the moment the request began and the origin the other phases are measured against.
 `finalResponseHeadersStart` is when the final response's headers arrived, and `responseEnd` when the body finished.

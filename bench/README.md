@@ -8,7 +8,7 @@ picked to have at most one representative per (stack, API-style):
 
 | impl | stack | protocols | notes |
 |------|-------|-----------|-------|
-| `native` | undici (spec fetch) | h1, h1s | Node's built-in `fetch()` |
+| `native` | undici (standard fetch) | h1, h1s | Node's built-in `fetch()` |
 | `undici` | undici (raw) | h1, h1s | `undici.request()` (same underlying API, but with less wrapping) |
 | `http2` | node core | h2 | `node:http2` client (native, built-in) |
 | `got` | node core / http2-wrapper | h1, h1s, h2 | a popular JS client that actually speaks h2 |

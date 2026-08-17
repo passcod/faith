@@ -12,7 +12,7 @@ A body Faith decodes is delivered decoded whichever path reads it (see [ENC](../
 ## The body stream
 
 `body` is a `ReadableStream` of the body contents, or `null` for responses that cannot carry a body (HEAD requests, `204 No Content`).
-Browsers return a stream there anyway; Faith follows the specification.
+Browsers return a stream there anyway; Faith follows the standard.
 Accessing `body` marks the response disturbed (`bodyUsed` becomes true), even before any bytes are consumed.
 A response has one body stream: `body` builds it on first access and returns that same `ReadableStream` object thereafter.
 Consumption therefore advances a single position, and a handle taken after part of the body has been read continues from where the earlier one left off.

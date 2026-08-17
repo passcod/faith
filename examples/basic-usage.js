@@ -2,7 +2,7 @@
  * Basic Usage Example for Faith Fetch API
  *
  * This example demonstrates the basic usage of the faith fetch library,
- * which provides a spec-compliant Fetch API implementation powered by Rust.
+ * which provides a standards-compliant Fetch API implementation powered by Rust.
  */
 
 const { fetch } = require("../wrapper.js");

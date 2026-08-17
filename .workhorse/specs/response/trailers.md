@@ -5,7 +5,7 @@ id: TRL
 # Response trailers
 
 `Response.trailers` is a promise resolving to the HTTP trailing headers, or `null` when there are none.
-Faith implements the semantics of the fetch specification's trailers proposal (whatwg/fetch#1940).
+Faith implements the semantics of the fetch standard's trailers proposal (whatwg/fetch#1940).
 
 ## Resolution ordering
 

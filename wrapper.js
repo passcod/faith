@@ -1,7 +1,7 @@
 /**
  * Faith Fetch API Wrapper
  *
- * This wrapper provides a spec-compliant Fetch API interface on top of
+ * This wrapper provides a standards-compliant Fetch API interface on top of
  * the native Rust bindings. The main difference is that `body` is exposed
  * as a property/getter instead of a method, and the class is named `Response`
  * instead of `FetchResponse`.
@@ -63,7 +63,7 @@ function destinationPath(destination) {
 		// A host names a machine other than this one, so the URL does not name a local path.
 		// Checked here rather than left to the platform: Windows' own conversion turns a host
 		// into a UNC path instead of refusing it, and a network share is not a local file.
-		// `localhost` normalises to an empty host, so this accepts it as the spec requires.
+		// `localhost` normalises to an empty host, so this accepts it as the standard requires.
 		if (parsed.host) {
 			throw invalidPathError(
 				`toFile destination is not a local path: file URL host "${parsed.host}" names another machine`,
@@ -98,27 +98,22 @@ function mimeEssence(value) {
 	return value.split(";", 1)[0].trim().toLowerCase();
 }
 
-/** ASCII whitespace, as Infra defines it, at either end of a string. */
-const ASCII_WHITESPACE_ENDS = /^[\t\n\f\r ]+|[\t\n\f\r ]+$/g;
-
-/** HTTP tab or space, the narrower set the fetch standard trims header elements with. */
+/** HTTP tab or space, the whitespace a header's own grammar allows, at either end of a string. */
 const HTTP_TAB_OR_SPACE_ENDS = /^[\t ]+|[\t ]+$/g;
 
-/** One ASCII whitespace code point, tested where the cursor stands. */
-const ASCII_WHITESPACE = /[\t\n\f\r ]/;
+/** A `token` (RFC 9110), matched where the cursor stands and allowed to be empty. */
+const TOKEN = /[!#$%&'*+\-.^_`|~0-9A-Za-z]*/y;
 
 /**
  * A leading floating-point number, by the HTML standard's rules for parsing floating-point number
- * values: leading whitespace and trailing junk are both allowed, and a value that does not begin
- * with a number does not match at all.
+ * values, which the Server-Timing standard defines `duration` against: a number with trailing junk
+ * reads as the number, and a value that does not begin with one does not match at all.
  */
-const LEADING_FLOAT =
-	/^[\t\n\f\r ]*([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)/;
+const LEADING_FLOAT = /^[\t ]*([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)/;
 
 /**
  * Collect code points from `input` at the cursor until one of `stops` is reached, advancing the
- * cursor to it. The building block the standards' own header parsing is written in terms of, so
- * the parsing below can follow their steps rather than approximate them.
+ * cursor to it.
  *
  * @param {string} input
  * @param {{ at: number }} cursor
@@ -134,40 +129,67 @@ function collectExcept(input, cursor, stops) {
 }
 
 /**
- * Collect an HTTP quoted string from `input` at the cursor, which stands on the opening quote.
- *
- * With `extract` set the string's contents are returned, its backslash escapes resolved; without
- * it the raw text, quotes and all, which is what splitting a header value needs so each element
- * it hands out still parses. One left unterminated runs to the end of the input.
+ * Collect a `token` from `input` at the cursor, which is empty when the cursor stands on a code
+ * point no token may contain.
  *
  * @param {string} input
  * @param {{ at: number }} cursor
- * @param {boolean} extract
  * @returns {string}
  */
-function collectQuotedString(input, cursor, extract) {
+function collectToken(input, cursor) {
+	TOKEN.lastIndex = cursor.at;
+	const [token] = TOKEN.exec(input);
+	cursor.at = TOKEN.lastIndex;
+	return token;
+}
+
+/**
+ * Advance the cursor past any tab or space.
+ *
+ * @param {string} input
+ * @param {{ at: number }} cursor
+ */
+function skipTabOrSpace(input, cursor) {
+	while (input[cursor.at] === "\t" || input[cursor.at] === " ") {
+		cursor.at++;
+	}
+}
+
+/**
+ * Collect an HTTP quoted string from `input` at the cursor, which stands on the opening quote.
+ *
+ * `contents` is the string with its backslash escapes resolved, and `raw` the text as it stands,
+ * quotes and all, which is what splitting a header value needs so each element it hands out still
+ * parses. `terminated` is whether a closing quote was reached: one that runs to the end of the
+ * input, or ends on a dangling escape, is not a quoted string at all.
+ *
+ * @param {string} input
+ * @param {{ at: number }} cursor
+ * @returns {{ contents: string, raw: string, terminated: boolean }}
+ */
+function collectQuotedString(input, cursor) {
 	const start = cursor.at;
-	let value = "";
+	let contents = "";
+	let terminated = false;
 	cursor.at++;
 
-	for (;;) {
-		value += collectExcept(input, cursor, '"\\');
-		if (cursor.at >= input.length) {
+	while (cursor.at < input.length) {
+		const char = input[cursor.at++];
+		if (char === '"') {
+			terminated = true;
 			break;
 		}
-
-		const quoteOrBackslash = input[cursor.at++];
-		if (quoteOrBackslash !== "\\") {
-			break;
+		if (char === "\\") {
+			if (cursor.at >= input.length) {
+				break;
+			}
+			contents += input[cursor.at++];
+			continue;
 		}
-		if (cursor.at >= input.length) {
-			value += "\\";
-			break;
-		}
-		value += input[cursor.at++];
+		contents += char;
 	}
 
-	return extract ? value : input.slice(start, cursor.at);
+	return { contents, raw: input.slice(start, cursor.at), terminated };
 }
 
 /**
@@ -186,7 +208,7 @@ function splitHeaderValue(value) {
 	for (;;) {
 		element += collectExcept(value, cursor, '",');
 		if (value[cursor.at] === '"') {
-			element += collectQuotedString(value, cursor, false);
+			element += collectQuotedString(value, cursor).raw;
 			if (cursor.at < value.length) {
 				continue;
 			}
@@ -204,9 +226,8 @@ function splitHeaderValue(value) {
 /**
  * Parse a `dur` parameter into a duration in milliseconds.
  *
- * The Server-Timing specification defines `duration` against the HTML standard's floating-point
- * parse rather than the language's, so a value with trailing junk still reports the number it
- * starts with, and one that is not a number at all reports 0.
+ * The floating-point parse is the HTML standard's rather than the language's, so a value that is
+ * not a number reads 0 rather than failing the metric.
  *
  * @param {string} value
  * @returns {number}
@@ -217,65 +238,61 @@ function parseDuration(value) {
 }
 
 /**
- * Parse one `server-timing-metric` into a `PerformanceServerTiming`-shaped entry, following the
- * Server-Timing specification's own parse: the metric name runs to the first `;`, each parameter
- * name to its `=`, and a parameter value is either a quoted string or the text up to the next
- * `;`. Whitespace around each of those is not part of it, and characters that are part of no
- * parameter are ignored rather than ending the metric.
+ * Parse one `server-timing-metric` into a `PerformanceServerTiming`-shaped entry.
  *
- * Node has no `PerformanceServerTiming` class to mint, so the entry is a plain object carrying
- * the interface's three attributes, which is also what it serialises as.
+ * The parse follows the grammar in the Server-Timing standard, and that standard's rule that
+ * characters belonging to no metric name or parameter are ignored, rather than its parsing
+ * algorithm, which is looser than its own grammar and reads a metric no browser reads the same way:
+ * it takes any text up to a `;` as a metric name, any text up to an `=` as a parameter name, and any
+ * text at all as a parameter value. Web platform tests cover the header's parse in some depth, and
+ * they are the behaviour written here, so an origin's metrics read through Faith as they do in a
+ * browser.
+ *
+ * Node has no `PerformanceServerTiming` class to mint, so the entry is a plain object carrying the
+ * interface's three attributes, which is also what it serialises as.
  *
  * @param {string} field
  * @returns {{ name: string, duration: number, description: string } | null}
  */
 function parseServerTimingMetric(field) {
 	const cursor = { at: 0 };
-	const name = collectExcept(field, cursor, ";").replace(
-		ASCII_WHITESPACE_ENDS,
-		"",
-	);
-	// A metric has to be named to be worth anything, and an empty name is the specification's
-	// one parse failure.
+	skipTabOrSpace(field, cursor);
+	// A metric is named by a token, and text that is not one names nothing.
+	const name = collectToken(field, cursor);
 	if (!name) {
 		return null;
 	}
 
 	/** @type {Map<string, string>} */
 	const params = new Map();
-	while (cursor.at < field.length) {
-		// The ";" the previous collection stopped at.
+	for (;;) {
+		// Whatever stands between the end of a name or value and the next parameter is part of
+		// neither, so it is read and dropped rather than ending the metric.
+		collectExcept(field, cursor, ";");
+		if (cursor.at >= field.length) {
+			break;
+		}
 		cursor.at++;
 
-		const param = collectExcept(field, cursor, "=").replace(
-			ASCII_WHITESPACE_ENDS,
-			"",
-		);
+		skipTabOrSpace(field, cursor);
+		// Parameter names are matched without regard to case, as the tokens they are.
+		const param = collectToken(field, cursor).toLowerCase();
+		skipTabOrSpace(field, cursor);
+
 		let value = "";
 		if (field[cursor.at] === "=") {
 			cursor.at++;
-			while (
-				cursor.at < field.length &&
-				ASCII_WHITESPACE.test(field[cursor.at])
-			) {
-				cursor.at++;
-			}
-
+			skipTabOrSpace(field, cursor);
 			if (field[cursor.at] === '"') {
-				value = collectQuotedString(field, cursor, true);
-				// The text between the closing quote and the next parameter is part of no
-				// parameter, so it is read and dropped.
-				collectExcept(field, cursor, ";");
+				const quoted = collectQuotedString(field, cursor);
+				value = quoted.terminated ? quoted.contents : "";
 			} else {
-				value = collectExcept(field, cursor, ";").replace(
-					ASCII_WHITESPACE_ENDS,
-					"",
-				);
+				value = collectToken(field, cursor);
 			}
 		}
 
-		// A parameter named twice counts once, as the first of the two: a repeat is dropped
-		// without disturbing the parameters that follow it.
+		// A parameter counts as the first of its name, whether or not that first one carried a
+		// value the grammar allows, and the parameters after it are read either way.
 		if (param && !params.has(param)) {
 			params.set(param, value);
 		}
@@ -427,7 +444,7 @@ function mintResourceTiming(response, fetchStart, measurements) {
 }
 
 /**
- * Response class that provides spec-compliant Fetch API
+ * Response class that provides standards-compliant Fetch API
  */
 class Response {
 	/** @type {import('./index').FaithResponse} */
@@ -793,7 +810,7 @@ async function fetch(resource, options = {}) {
 		// Handle URLSearchParams
 		if (nativeOptions.body instanceof URLSearchParams) {
 			nativeOptions.body = nativeOptions.body.toString();
-			// Set Content-Type if not already set (per Fetch spec)
+			// Set Content-Type if not already set (per the fetch standard)
 			if (!nativeOptions.headers) {
 				nativeOptions.headers = [];
 			}

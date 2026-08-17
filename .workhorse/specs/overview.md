@@ -13,6 +13,7 @@ The library's contract has two halves: fidelity to the fetch standard, and diver
 
 The [WHATWG Fetch standard](https://fetch.spec.whatwg.org/) defines the API surface, and the [trailers proposal](https://github.com/whatwg/fetch/issues/1940) defines `response.trailers` (see [TRL](response/trailers.md)).
 [Subresource Integrity](https://www.w3.org/TR/SRI/) defines the `integrity` option (see [SRI](fetch/integrity.md)).
+[Resource Timing](https://w3c.github.io/resource-timing/) and [Server-Timing](https://w3c.github.io/server-timing/) define the request's timing breakdown (see [RESP](response/response.md)).
 On the wire, Faith answers to HTTP semantics and caching (RFC 9110 and RFC 9111), HTTP/1.1 (RFC 9112), HTTP/2 (RFC 9113), HTTP/3 (RFC 9114), Alt-Svc (RFC 7838), cookies (RFC 6265), and Happy Eyeballs (RFC 8305).
 
 Each of these is the reference against which Faith's behaviour is judged, and behaviour that departs from one is named as a divergence in the spec that covers it.
@@ -21,7 +22,7 @@ A divergence is either a browser concept with no server-side meaning or a choice
 ## Compatibility stance
 
 `fetch(resource, options)` accepts the same shapes as WHATWG fetch: a URL string or stringifiable object (including `URL`), or a Web API `Request` object.
-Behaviour follows the fetch specification by default; where browsers and the specification disagree, Faith follows the specification (for example, `body` is `null` on responses that cannot have a body).
+Behaviour follows the fetch standard by default; where browsers and the standards disagree, Faith follows the standards unless a spec here says otherwise (for example, `body` is `null` on responses that cannot have a body).
 Browser-only concepts that assume an origin or a browsing context (CORS, `mode`, `referrer`, `referrerPolicy`, `attributionReporting`, `browsingTopics`, `keepalive`) have no server-side meaning; passing them is harmless and they take no effect.
 Options in a `RequestInit` that Faith does not recognise are ignored rather than rejected.
 Faith-specific extensions (such as `agent`, `timeout`, response `peer`, `version`, `trailers`, `discard()`) are additive: code written against standard fetch runs unmodified.
