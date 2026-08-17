@@ -37,11 +37,36 @@ function streamingAgent() {
 // Skip tests if native fetch is not available
 const hasNativeFetch = typeof globalThis.fetch === "function";
 
+/**
+ * Node's own fetch, the baseline a comparison measures Faith against.
+ *
+ * On Windows this intermittently fails on the run's first call with a bare
+ * `TypeError: fetch failed`, while Faith's request to the same URL a line earlier
+ * succeeds and every later call in the same process succeeds too. One assertion then
+ * takes the whole matrix down. What a comparison is for is what a response looks
+ * like, not how reliably Node connects, so a failed attempt is retried once.
+ *
+ * The reason undici buries in `cause` is printed on the way past: tape prints neither
+ * it nor an errno, which is what left the cause unidentified when this started. Only
+ * CI has ever produced it, so the note is the only way it will be seen. It goes out as
+ * a TAP comment so it lands in the log without derailing the stream.
+ */
+async function nativeFetch(resource, options) {
+	try {
+		return await globalThis.fetch(resource, options);
+	} catch (error) {
+		const cause = error.cause;
+		const reason = cause?.code ?? cause?.message ?? cause ?? error.message;
+		console.log(`# native fetch failed (${reason}), retrying once`);
+		return await globalThis.fetch(resource, options);
+	}
+}
+
 // Helper to compare responses
 async function compareResponses(t, path, options = {}) {
 	const { fetch: faithFetch } = require("../wrapper.js");
 	const faithResponse = await faithFetch(url(path), options);
-	const nativeResponse = await globalThis.fetch(url(path), options);
+	const nativeResponse = await nativeFetch(url(path), options);
 
 	// Compare basic properties
 	t.equal(
