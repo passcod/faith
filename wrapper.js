@@ -106,8 +106,8 @@ const TOKEN = /[!#$%&'*+\-.^_`|~0-9A-Za-z]*/y;
 
 /**
  * A leading floating-point number, by the HTML standard's rules for parsing floating-point number
- * values, which the Server-Timing specification defines `duration` against: a number with trailing
- * junk reads as the number, and a value that does not begin with one does not match at all.
+ * values, which the Server-Timing standard defines `duration` against: a number with trailing junk
+ * reads as the number, and a value that does not begin with one does not match at all.
  */
 const LEADING_FLOAT = /^[\t ]*([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)/;
 
@@ -240,12 +240,13 @@ function parseDuration(value) {
 /**
  * Parse one `server-timing-metric` into a `PerformanceServerTiming`-shaped entry.
  *
- * The parse follows the header's grammar and the specification's rule that characters belonging to
- * no metric name or parameter are ignored, rather than the specification's own parsing algorithm,
- * which is looser than the grammar and reads a metric no browser reads the same way: it takes any
- * text up to a `;` as a metric name, any text up to an `=` as a parameter name, and any text at all
- * as a parameter value. Web platform tests cover the header's parse in some depth, and they are the
- * behaviour written here, so an origin's metrics read through Faith as they do in a browser.
+ * The parse follows the grammar in the Server-Timing standard, and that standard's rule that
+ * characters belonging to no metric name or parameter are ignored, rather than its parsing
+ * algorithm, which is looser than its own grammar and reads a metric no browser reads the same way:
+ * it takes any text up to a `;` as a metric name, any text up to an `=` as a parameter name, and any
+ * text at all as a parameter value. Web platform tests cover the header's parse in some depth, and
+ * they are the behaviour written here, so an origin's metrics read through Faith as they do in a
+ * browser.
  *
  * Node has no `PerformanceServerTiming` class to mint, so the entry is a plain object carrying the
  * interface's three attributes, which is also what it serialises as.
