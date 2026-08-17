@@ -50,11 +50,17 @@ Where a timestamp is non-zero, `fetchStart` is the earliest and the rest are no 
 `deliveryType` is `cache` for a response served by the HTTP cache and empty for one fetched from the network (see [CACHE](../cache/http-cache.md)).
 `nextHopProtocol` is the protocol the request travelled over as an ALPN Protocol ID (RFC 7301): `h3`, `h2`, `h2c`, `http/1.1`, and so on, whether or not the connection actually negotiated over ALPN.
 
-`serverTiming` is the list of metrics the origin reported in its `Server-Timing` response header, as entries matching `PerformanceServerTiming` and in the order the header lists them.
-Each metric becomes one entry: `name` is the metric name, `duration` the value of its `dur` parameter in fractional milliseconds, and `description` the value of its `desc` parameter.
-A metric with no `dur`, or a `dur` that is not a number, reads a `duration` of 0, and a metric with no `desc` reads an empty `description`, so an unparseable parameter falls back to the default rather than dropping the entry.
-A metric named more than once yields one entry per occurrence, and metrics spread across repeated `Server-Timing` header lines all contribute.
-The list is empty when the header is absent, carries no metrics, or is dropped for not being valid UTF-8 (see [Standard properties](#standard-properties)).
+`serverTiming` is the metrics the origin reported in its `Server-Timing` response header, in the order the header lists them.
+Each metric is one entry carrying the three attributes of a `PerformanceServerTiming`: `name` is the metric name, `duration` the fractional milliseconds its `dur` parameter reports, and `description` its `desc` parameter.
+The platform has no `PerformanceServerTiming` class to mint, so an entry is a plain object holding those attributes, which is also what it serialises as.
+Metrics spread across repeated `Server-Timing` header lines all contribute, and a metric name reported more than once yields one entry per occurrence.
+
+The header is parsed as the Server-Timing specification defines, so an origin's metrics read through Faith as they do in a browser.
+A description is commonly a quoted string, and a comma or semicolon inside one belongs to the description rather than ending the metric or the list.
+A metric with no `dur` reads a `duration` of 0 and one with no `desc` an empty `description`, so a metric reporting a name alone still appears.
+A `dur` that is not a number reads 0, one that trails junk after a number reads that number, and a parameter given twice counts as the first of the two.
+A metric with no name is dropped and the rest of the list stands.
+The list is empty when the header is absent or names no metric, and a header value that is not valid UTF-8 is dropped before it is read (see [Standard properties](#standard-properties)).
 
 `fetchStart` is the moment the request began and the origin the other phases are measured against.
 `finalResponseHeadersStart` is when the final response's headers arrived, and `responseEnd` when the body finished.
