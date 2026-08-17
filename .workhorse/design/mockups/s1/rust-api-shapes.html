@@ -1,0 +1,456 @@
+<!-- spec: (none yet) — API shape options for the web-faith crate -->
+<!DOCTYPE html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<title>Rust API shapes</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 48px 32px 96px;
+    background: #f8f7f4;
+    color: #1c1917;
+    font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 15px;
+    line-height: 1.6;
+  }
+  .page { max-width: 1180px; margin: 0 auto; }
+
+  h1 { font-size: 28px; font-weight: 600; letter-spacing: -0.02em; margin: 0 0 8px; }
+  .lede { color: #57534e; margin: 0 0 40px; max-width: 720px; }
+
+  .option {
+    background: #ffffff;
+    border: 1px solid #e7e5e4;
+    border-radius: 12px;
+    padding: 28px;
+    margin-bottom: 24px;
+    box-shadow: 0 1px 2px rgba(28, 25, 23, 0.04);
+  }
+  .option-head {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 4px;
+  }
+  .tag {
+    font-size: 12px;
+    font-weight: 600;
+    color: #c2410c;
+    background: #fff7ed;
+    border: 1px solid #fed7aa;
+    border-radius: 4px;
+    padding: 2px 8px;
+    letter-spacing: 0.02em;
+  }
+  h2 { font-size: 19px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
+  .option-note { color: #57534e; margin: 0 0 24px; max-width: 780px; }
+
+  .scenarios { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  @media (max-width: 1000px) { .scenarios { grid-template-columns: 1fr; } }
+
+  .scenario-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #57534e;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 8px;
+  }
+  pre {
+    margin: 0;
+    background: #fafaf9;
+    border: 1px solid #e7e5e4;
+    border-radius: 8px;
+    padding: 16px;
+    overflow-x: auto;
+    font-family: "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
+    font-size: 12.5px;
+    line-height: 1.65;
+    color: #1c1917;
+  }
+  .k { color: #57534e; font-weight: 600; }
+  .s { color: #4d7c0f; }
+  .c { color: #a8a29e; }
+  .a { color: #c2410c; font-weight: 600; }
+
+  .verdict {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin-top: 24px;
+    padding-top: 20px;
+    border-top: 1px solid #f5f5f4;
+  }
+  @media (max-width: 700px) { .verdict { grid-template-columns: 1fr; } }
+  .verdict h3 {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin: 0 0 8px;
+    color: #57534e;
+  }
+  .verdict ul { margin: 0; padding-left: 18px; color: #57534e; }
+  .verdict li { margin-bottom: 4px; }
+
+  h2.section { font-size: 21px; margin: 48px 0 16px; letter-spacing: -0.015em; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    background: #ffffff;
+    border: 1px solid #e7e5e4;
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  th, td {
+    text-align: left;
+    padding: 12px 16px;
+    border-bottom: 1px solid #f5f5f4;
+    vertical-align: top;
+  }
+  th {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #57534e;
+    background: #fafaf9;
+  }
+  td { color: #57534e; font-size: 14px; }
+  td:first-child { color: #1c1917; font-weight: 500; }
+  tr:last-child td { border-bottom: none; }
+  code {
+    font-family: "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
+    font-size: 12.5px;
+    background: #f5f5f4;
+    padding: 1px 5px;
+    border-radius: 4px;
+    color: #1c1917;
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <h1>Rust API shapes</h1>
+  <p class="lede">
+    Three candidate surfaces for <code>web-faith</code>, each shown against the same three jobs.
+    All of them keep browser-like defaults: cookie jar, HTTP cache, redirect following, and HTTP/3 upgrade
+    are on unless turned off.
+  </p>
+
+  <!-- ============ OPTION A ============ -->
+  <div class="option">
+    <div class="option-head">
+      <span class="tag">A</span>
+      <h2>Client-first</h2>
+    </div>
+    <p class="option-note">
+      A <code>Client</code> owns the pool, jar, and cache; requests are built by method verb off the client.
+      This is the reqwest arrangement, with Faith's defaults swapped in.
+    </p>
+
+    <div class="scenarios">
+      <div>
+        <div class="scenario-label">Fetch some JSON</div>
+<pre><span class="k">use</span> web_faith::<span class="a">Client</span>;
+
+<span class="k">let</span> client = <span class="a">Client</span>::new()?;
+
+<span class="k">let</span> things: <span class="k">Vec</span>&lt;Thing&gt; = client
+    .get(<span class="s">"https://api.example/things"</span>)
+    .send()
+    .<span class="k">await</span>?
+    .json()
+    .<span class="k">await</span>?;</pre>
+      </div>
+
+      <div>
+        <div class="scenario-label">Configured POST</div>
+<pre><span class="k">let</span> client = <span class="a">Client</span>::builder()
+    .user_agent(<span class="s">"myapp/1.0"</span>)
+    .cache(Cache::disk(<span class="s">"/var/cache/app"</span>))
+    .cookies(<span class="k">false</span>)
+    .build()?;
+
+<span class="k">let</span> res = client
+    .post(<span class="s">"https://api.example/things"</span>)
+    .header(<span class="s">"authorization"</span>, tok)
+    .integrity(<span class="s">"sha384-oqVuAfXR"</span>)
+    .timeout(Duration::from_secs(<span class="s">5</span>))
+    .json(&amp;thing)
+    .send()
+    .<span class="k">await</span>?;</pre>
+      </div>
+
+      <div>
+        <div class="scenario-label">Stream the body</div>
+<pre><span class="k">let</span> res = client.get(url).send().<span class="k">await</span>?;
+
+<span class="k">let</span> <span class="k">mut</span> body = res.body_stream();
+<span class="k">while</span> <span class="k">let</span> <span class="k">Some</span>(chunk) = body.next().<span class="k">await</span> {
+    sink.write_all(&amp;chunk?).<span class="k">await</span>?;
+}
+
+<span class="k">let</span> trailers = res.trailers().<span class="k">await</span>;
+<span class="k">let</span> timing = res.timing().<span class="k">await</span>;</pre>
+      </div>
+    </div>
+
+    <div class="verdict">
+      <div>
+        <h3>Argues for</h3>
+        <ul>
+          <li>Instantly legible to anyone who has used reqwest</li>
+          <li>Option structs become nested builders, no <code>Option</code>-soup</li>
+          <li>The agent is never implicit, so pool ownership is obvious</li>
+        </ul>
+      </div>
+      <div>
+        <h3>Argues against</h3>
+        <ul>
+          <li>No one-line call: the trivial GET still needs a client first</li>
+          <li>Furthest from the specs' fetch vocabulary</li>
+          <li>Reads as "another reqwest" rather than a browser</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ OPTION B ============ -->
+  <div class="option">
+    <div class="option-head">
+      <span class="tag">B</span>
+      <h2>Free <code>fetch</code>, builder for the rest</h2>
+    </div>
+    <p class="option-note">
+      <code>fetch(url)</code> is a free function on a process-wide default agent, matching the Node entry point.
+      Anything beyond a bare GET goes through <code>Request</code>, which carries the options and ends in <code>send()</code>.
+    </p>
+
+    <div class="scenarios">
+      <div>
+        <div class="scenario-label">Fetch some JSON</div>
+<pre><span class="k">use</span> web_faith::<span class="a">fetch</span>;
+
+<span class="k">let</span> things: <span class="k">Vec</span>&lt;Thing&gt; =
+    <span class="a">fetch</span>(<span class="s">"https://api.example/things"</span>)
+        .<span class="k">await</span>?
+        .json()
+        .<span class="k">await</span>?;</pre>
+      </div>
+
+      <div>
+        <div class="scenario-label">Configured POST</div>
+<pre><span class="k">use</span> web_faith::{Agent, Request};
+
+<span class="k">let</span> agent = Agent::builder()
+    .user_agent(<span class="s">"myapp/1.0"</span>)
+    .cache(Cache::disk(<span class="s">"/var/cache/app"</span>))
+    .build()?;
+
+<span class="k">let</span> res = Request::post(<span class="s">"https://api.example/things"</span>)
+    .header(<span class="s">"authorization"</span>, tok)
+    .integrity(<span class="s">"sha384-oqVuAfXR"</span>)
+    .cache_mode(CacheMode::NoStore)
+    .json(&amp;thing)
+    .agent(&amp;agent)
+    .send()
+    .<span class="k">await</span>?;</pre>
+      </div>
+
+      <div>
+        <div class="scenario-label">Stream the body</div>
+<pre><span class="k">let</span> res = <span class="a">fetch</span>(url).<span class="k">await</span>?;
+
+<span class="k">let</span> <span class="k">mut</span> body = res.body_stream();
+<span class="k">while</span> <span class="k">let</span> <span class="k">Some</span>(chunk) = body.next().<span class="k">await</span> {
+    sink.write_all(&amp;chunk?).<span class="k">await</span>?;
+}
+
+<span class="k">let</span> trailers = res.trailers().<span class="k">await</span>;
+<span class="k">let</span> timing = res.timing().<span class="k">await</span>;</pre>
+      </div>
+    </div>
+
+    <div class="verdict">
+      <div>
+        <h3>Argues for</h3>
+        <ul>
+          <li>The one-liner really is one line</li>
+          <li>Same default-agent story as Node, so the specs carry over</li>
+          <li>Request is independent of the agent, so it can be built once and sent on several</li>
+        </ul>
+      </div>
+      <div>
+        <h3>Argues against</h3>
+        <ul>
+          <li>Two entry points to learn, and a cliff between them</li>
+          <li><code>.agent()</code> in the middle of a chain is easy to forget, and the default is silent</li>
+          <li>A process-wide default agent is a hidden global</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ OPTION C ============ -->
+  <div class="option">
+    <div class="option-head">
+      <span class="tag">C</span>
+      <h2>One <code>fetch</code> over anything request-shaped</h2>
+    </div>
+    <p class="option-note">
+      A single <code>fetch()</code> takes anything that converts into a request: a URL string, a <code>Url</code>,
+      a built <code>Request</code>, or a <code>http::Request</code>. The builder is how you say more, not a second door.
+      This is the closest Rust gets to <code>fetch(url)</code> and <code>fetch(url, init)</code> being the same call.
+    </p>
+
+    <div class="scenarios">
+      <div>
+        <div class="scenario-label">Fetch some JSON</div>
+<pre><span class="k">use</span> web_faith::<span class="a">fetch</span>;
+
+<span class="k">let</span> things: <span class="k">Vec</span>&lt;Thing&gt; =
+    <span class="a">fetch</span>(<span class="s">"https://api.example/things"</span>)
+        .<span class="k">await</span>?
+        .json()
+        .<span class="k">await</span>?;</pre>
+      </div>
+
+      <div>
+        <div class="scenario-label">Configured POST</div>
+<pre><span class="k">let</span> agent = Agent::builder()
+    .user_agent(<span class="s">"myapp/1.0"</span>)
+    .cache(Cache::disk(<span class="s">"/var/cache/app"</span>))
+    .build()?;
+
+<span class="k">let</span> res = <span class="a">fetch</span>(
+    Request::post(<span class="s">"https://api.example/things"</span>)
+        .header(<span class="s">"authorization"</span>, tok)
+        .integrity(<span class="s">"sha384-oqVuAfXR"</span>)
+        .json(&amp;thing)
+        .on(&amp;agent),
+).<span class="k">await</span>?;
+
+<span class="c">// or, sending from the agent directly</span>
+<span class="k">let</span> res = agent.<span class="a">fetch</span>(url).<span class="k">await</span>?;</pre>
+      </div>
+
+      <div>
+        <div class="scenario-label">Stream the body</div>
+<pre><span class="k">let</span> res = <span class="a">fetch</span>(url).<span class="k">await</span>?;
+
+<span class="k">let</span> <span class="k">mut</span> body = res.body_stream();
+<span class="k">while</span> <span class="k">let</span> <span class="k">Some</span>(chunk) = body.next().<span class="k">await</span> {
+    sink.write_all(&amp;chunk?).<span class="k">await</span>?;
+}
+
+<span class="k">let</span> trailers = res.trailers().<span class="k">await</span>;
+<span class="k">let</span> timing = res.timing().<span class="k">await</span>;</pre>
+      </div>
+    </div>
+
+    <div class="verdict">
+      <div>
+        <h3>Argues for</h3>
+        <ul>
+          <li>One verb the whole way up, from one-liner to fully configured</li>
+          <li><code>agent.fetch(..)</code> and <code>fetch(req.on(&amp;agent))</code> are the same call, so neither is a special case</li>
+          <li>Accepting <code>http::Request</code> makes it a drop-in for tower and friends</li>
+        </ul>
+      </div>
+      <div>
+        <h3>Argues against</h3>
+        <ul>
+          <li>The generic argument gives worse compile errors than a plain signature</li>
+          <li>Nesting the builder inside the call reads awkwardly at four or more options</li>
+          <li>Still needs the hidden default agent for the bare form</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ DECISIONS ============ -->
+  <h2 class="section">What each shape decides for us</h2>
+  <table>
+    <thead>
+      <tr>
+        <th style="width: 24%">Question</th>
+        <th style="width: 25%">A · Client-first</th>
+        <th style="width: 25%">B · Free fetch</th>
+        <th style="width: 26%">C · One fetch</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Bare GET</td>
+        <td>Needs a client</td>
+        <td>One line</td>
+        <td>One line</td>
+      </tr>
+      <tr>
+        <td>Default agent</td>
+        <td>None, always explicit</td>
+        <td>Process-wide, implicit</td>
+        <td>Process-wide, implicit</td>
+      </tr>
+      <tr>
+        <td>Where options live</td>
+        <td>On the client's request builder</td>
+        <td>On a standalone request builder</td>
+        <td>On a standalone request builder</td>
+      </tr>
+      <tr>
+        <td>Can one request go to two agents</td>
+        <td>No, it is born on a client</td>
+        <td>Yes</td>
+        <td>Yes</td>
+      </tr>
+      <tr>
+        <td>Spec vocabulary</td>
+        <td>Needs a translation per criterion</td>
+        <td>Carries across</td>
+        <td>Carries across</td>
+      </tr>
+      <tr>
+        <td>Interop with <code>http::Request</code></td>
+        <td>Extra method</td>
+        <td>Extra method</td>
+        <td>Falls out of the trait</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2 class="section">Settled either way</h2>
+  <table>
+    <tbody>
+      <tr>
+        <td style="width: 24%">Response</td>
+        <td>Fetch-shaped: <code>status</code>, <code>headers</code>, <code>ok</code>, <code>url</code>, <code>redirected</code>,
+            plus <code>text()</code>, <code>json()</code>, <code>bytes()</code>, <code>body_stream()</code>,
+            and Faith's <code>peer</code>, <code>version</code>, <code>trailers()</code>, <code>timing()</code>, <code>discard()</code>.</td>
+      </tr>
+      <tr>
+        <td>Body reuse</td>
+        <td>Reading a body consumes it, and a second read is an error, matching the fetch standard rather than reqwest's owned-response model.</td>
+      </tr>
+      <tr>
+        <td>Errors</td>
+        <td>One <code>Error</code> enum carrying the existing kinds, each with the same code the Node binding reports.</td>
+      </tr>
+      <tr>
+        <td>Cancellation</td>
+        <td>Dropping the future cancels the request; <code>timeout</code> stays an option for the deadline case.</td>
+      </tr>
+      <tr>
+        <td>Runtime</td>
+        <td>Tokio, as today.</td>
+      </tr>
+    </tbody>
+  </table>
+
+</div>
+</body>
+</html>
