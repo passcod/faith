@@ -289,6 +289,69 @@ agent.preconnect(<span class="s">"https://api.example"</span>).<span class="k">a
     </tbody>
   </table>
 
+  <h2 class="section">Ecosystem types</h2>
+  <p class="lede" style="margin-bottom: 24px;">
+    The <code>http</code> crate's types are canonical wherever one exists, so a Faith request composes with
+    tower, hyper, and axum code without a shim. Setters stay fetch-flavoured by taking anything that
+    converts, so a string literal works where JS would pass a string.
+  </p>
+  <table>
+    <thead>
+      <tr><th style="width: 22%">Concept</th><th style="width: 26%">Canonical type</th><th>What setters accept</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Method</td>
+        <td><code>http::Method</code></td>
+        <td><code>.method(impl TryInto&lt;Method&gt;)</code>, so <code>"POST"</code> and <code>Method::POST</code> both work</td>
+      </tr>
+      <tr>
+        <td>Header</td>
+        <td><code>http::HeaderName</code>, <code>http::HeaderValue</code></td>
+        <td><code>.header(impl TryInto&lt;HeaderName&gt;, impl TryInto&lt;HeaderValue&gt;)</code></td>
+      </tr>
+      <tr>
+        <td>Header set</td>
+        <td><code>http::HeaderMap</code></td>
+        <td><code>.headers(impl IntoIterator&lt;Item = (K, V)&gt;)</code>, which covers a <code>HeaderMap</code>, a
+            <code>Vec</code> of pairs, and an array of string pairs</td>
+      </tr>
+      <tr>
+        <td>Status</td>
+        <td><code>http::StatusCode</code></td>
+        <td>Read-only. <code>ok</code> and <code>status_text</code> derive from it</td>
+      </tr>
+      <tr>
+        <td>Version</td>
+        <td><code>http::Version</code></td>
+        <td>Read-only, replacing the Node binding's string</td>
+      </tr>
+      <tr>
+        <td>URL</td>
+        <td><code>url::Url</code></td>
+        <td><code>impl TryInto&lt;Url&gt;</code>, matching what the fetch standard parses and what reqwest already uses</td>
+      </tr>
+      <tr>
+        <td>Request in</td>
+        <td><code>Request</code></td>
+        <td><code>fetch</code> and <code>Request::new</code> take a URL, a <code>Request</code>, or an
+            <code>http::Request&lt;B&gt;</code></td>
+      </tr>
+      <tr>
+        <td>Response out</td>
+        <td><code>Response</code></td>
+        <td>Converts into <code>http::Response&lt;Body&gt;</code>, and the body implements
+            <code>http_body::Body</code> so it feeds tower and hyper directly</td>
+      </tr>
+      <tr>
+        <td>Conversion errors</td>
+        <td><code>Error::InvalidHeader</code> and friends</td>
+        <td>Held until the builder resolves: at <code>build()</code> for a request, at the await for a fetch.
+            Either way the error names the offending header</td>
+      </tr>
+    </tbody>
+  </table>
+
   <h2 class="section">Considered and dropped</h2>
   <div class="dropped">
     <ul>
