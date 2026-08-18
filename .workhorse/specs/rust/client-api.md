@@ -35,6 +35,24 @@ A `Request` is inert, and passing one to `fetch` returns a builder again, so a r
 
 A builder that carries no agent cannot be awaited, and the compiler refuses it rather than the call failing when it runs.
 
+## Layering options
+
+A request is built in layers: a builder wraps a target, `build()` settles it into a `Request`, and that request can itself be the target of another builder, to any depth.
+Each layer wins over the layer it wraps, which is the rule the Node surface follows when options passed to `fetch()` beat the values carried on a `Request` (see [REQ](../fetch/request.md)).
+So in `agent.fetch(Request::new(inner).timeout(b)).timeout(c)` the timeout is `c`, whatever `inner` set.
+A setting a layer does not touch is inherited from beneath it unchanged, so wrapping a request to adjust one thing leaves the rest as it was.
+
+Single-valued settings, among them the method, body, timeout, integrity, cache mode, credentials, priority, and request compression, take the outermost value set explicitly.
+Setting one twice on a single builder is the same question at a smaller scale, and the later call wins.
+
+Headers merge by name rather than wholesale, matching how per-request headers beat agent defaults in [REQ](../fetch/request.md).
+A name an outer layer sets takes the outer value, a name only an inner layer sets is carried through, and removing a name removes what the layers beneath contributed for it.
+Setting a collection of headers applies each entry as a single header would, so it adds to and overrides the set by name rather than replacing it.
+
+The URL comes from the target at the bottom of the stack, and wrapping a request carries its URL through.
+
+The agent is not part of this layering: a request runs on whichever agent's `fetch` was called, and a `Request` carries no agent of its own.
+
 ## Reading a response
 
 A `Response` carries `status`, `status_text`, `ok`, `headers`, `url`, `redirected`, `kind`, and `body_used` with the meanings in [RESP](../response/response.md), and Faith's own `peer` and `version`.
