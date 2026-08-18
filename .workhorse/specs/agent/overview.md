@@ -33,6 +33,8 @@ Dual-stack hosts are unaffected.
 `close()` releases the agent's resources on demand: the connection pool, the DNS resolver, in-flight HTTP/3 probes, and the HTTP/3 knowledge cache.
 This exists because waiting for the garbage collector is not acceptable for code that creates many short-lived agents.
 Requests already in flight when `close()` is called run to completion; new requests on a closed agent throw a closed-agent error (code `Closed`).
+A request counts as in flight from the moment it is issued rather than from when its work begins, so a request issued just before `close()` completes even if nothing had started on it yet.
+`close()` acts on the agent itself rather than on the reference it was called through, so every reference to that agent sees it closed.
 `close()` is idempotent, and the cookie jar remains readable after closing.
 
 `networkChanged()` is the other verb that acts on a live agent's own state, discarding what the agent learned from a network that no longer exists while keeping the agent usable (see [NETCHG](network-change.md)).

@@ -11,6 +11,7 @@ Callers match on `error.code` against the exported `ERROR_CODES` map rather than
 
 Every error Faith throws carries a `code` set to a stable name for its kind.
 `ERROR_CODES` is exported and enumerates the library's error codes; it is generated from the same source as the errors themselves, so the two cannot drift.
+That source is the client's own error type: a component crate names its own errors for the failures it can produce, and the client converts them as they cross into it, so the split into crates (see [RUST](../rust/overview.md)) leaves the set of codes and the kind each failure reports unchanged.
 Every code in `ERROR_CODES` is reachable: each one names a kind that some failure surfaces to the caller, so a branch written for any code in the map can fire.
 Error messages are prefixed with the kind name and may embed underlying detail; the message is for humans, the code is the API.
 Errors surfaced through reading the response `body` stream carry no `code`.
