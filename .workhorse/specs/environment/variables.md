@@ -36,6 +36,15 @@ Faith proxies by default, so unlike Node (where the same variable opts in), it a
 
 `SSLKEYLOGFILE` names a path to which TLS session keys are written, enabling decryption of captured traffic when debugging.
 
+## What the Rust surface reads
+
+The vocabulary above is Node's because the Node surface answers to Node's conventions.
+`web-faith` reads the part of it that belongs to the platform rather than to a JavaScript runtime (see [RUST](../rust/overview.md)): `SSL_CERT_FILE` and `SSL_CERT_DIR` with the same OpenSSL semantics and the same per-platform reach, `SSLKEYLOGFILE`, and the proxy variables alongside the operating system's own proxy settings.
+The `NODE_`-prefixed variables belong to the Node surface alone.
+A Rust caller extends the trust store through `tls.extraRoots` (see [TLS](../agent/tls.md)) and keeps certificate validation on, that being what `NODE_TLS_REJECT_UNAUTHORIZED` exists to relax for a compatibility the Rust surface does not owe.
+
+Both surfaces read their variables once at construction.
+
 ## Variables with nothing to control
 
 `NODE_USE_SYSTEM_CA` is ignored because the platform trust store is Faith's only default source of roots; there is no bundled set to toggle away from.

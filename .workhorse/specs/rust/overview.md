@@ -18,7 +18,7 @@ Six component crates are published alongside it, each one useful to a caller who
 
 - `web-faith-cookies` is the cookie jar, with the storage, matching, and eviction rules in [COOK](../agent/cookies.md).
 - `web-faith-dns` is the resolver, its cache, the discovery ladder, the `HTTPS` record query, and Happy Eyeballs, as in [DNS](../agent/dns.md).
-- `web-faith-conn-tracker` reads live connection state from the operating system, as in [OBS](../agent/observability.md).
+- `web-faith-conn-tracker` reads live per-connection statistics from the operating system, which is the `connections()` view in [OBS](../agent/observability.md); the cumulative counters and the resolver listing that spec also covers belong to `web-faith` and `web-faith-dns` respectively.
 - `web-faith-alt-svc` is the Alt-Svc store and the HTTP/3 upgrade machinery, as in [H3UP](../http3/upgrade.md) and [PROBE](../http3/probing.md).
 - `web-faith-encoding` is content coding for request and response bodies, as in [ENC](../fetch/content-encoding.md).
 - `web-faith-integrity` is Subresource Integrity parsing and verification, as in [SRI](../fetch/integrity.md).
@@ -39,11 +39,20 @@ Where a component needs a shape from the layer above, it takes it as a generic o
 
 Each component crate carries its own documentation, and its examples run against that crate alone.
 
+## Subsystems that stay with the client
+
+QUIC and TLS are not component crates.
+Faith reaches both through reqwest, which carries the HTTP/3 implementation Faith uses and offers the choice of TLS backend, so the swapping available there is the one the ecosystem already provides rather than one Faith builds above it.
+`web-faith` passes those choices through as features of its own: HTTP/3 has such a feature already, and the TLS backend is selected the same way, with aws-lc-rs the default and ring the alternative.
+What the two subsystems do is specified in [QUIC](../http3/transport.md) and [TLS](../agent/tls.md).
+
 ## Choosing what is built
 
 Cargo features are how a subsystem is included or left out, so a build that has no use for a piece does not carry it.
-Each of the six components has a feature on `web-faith` named for it, and the default set turns on the ones that make the client behave like a browser.
-Turning a component's feature off drops the dependency and the behaviour it provides, and the client continues to work without it.
+Each of the six components has a feature on `web-faith` named for it, and every one of them is on by default, so a caller who reaches for the crate without thinking about features gets the whole client.
+Turning a component's feature off drops the dependency and the code that reaches for it, and the client continues to work without it; it also removes the parts of the API that only mean something with the component present, as in [RSAPI](client-api.md).
+
+A feature decides what is compiled in rather than what is switched on at run time, and the two need not agree: the cookies feature is on by default while the jar itself stays off until an agent asks for it (see [COOK](../agent/cookies.md)).
 
 Features are the whole of the swapping mechanism: a caller chooses among the implementations Faith builds rather than supplying one.
 

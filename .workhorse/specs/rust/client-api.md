@@ -5,14 +5,14 @@ id: RSAPI
 # The Rust client API
 
 `web-faith` has one noun and one verb: an `Agent` owns the connection pool, resolver, cookie jar, HTTP cache, and HTTP/3 knowledge, and `fetch` is how every request goes out.
-The surface is fetch-flavoured rather than a transcription of the JavaScript API: it keeps fetch's vocabulary and its browser-like defaults, and it speaks the Rust ecosystem's types wherever one exists for the job.
+The surface is fetch-flavoured rather than a transcription of the JavaScript API: it keeps fetch's vocabulary and the defaults the Node surface has, and it speaks the Rust ecosystem's types wherever one exists for the job.
 The agent's own behaviour, its options, and its lifecycle are specified in [AGENT](../agent/overview.md) and the specs beneath it; this spec covers the shape a Rust caller sees.
 
 ## Agent
 
 `Agent::new()` constructs an agent with default options, and `Agent::builder()` returns a builder whose methods mirror the option groups in [AGENT](../agent/overview.md), ending in `build()`.
 Nested option groups are nested builders rather than structs of optional fields, so a group left alone is absent from the call rather than spelled out as absent.
-Construction validates options and reports the errors named in [AGENT](../agent/overview.md).
+Construction validates options and reports the errors named in [AGENT](../agent/overview.md), and reads the environment variables [ENV](../environment/variables.md) names for this surface.
 
 An agent is cheap to clone and every clone names the same underlying agent, so cloning one is how a request gets an agent to run on rather than a way to get a second pool.
 Because clones share, `close()` acts on the agent itself and every handle to it sees the result.
@@ -21,19 +21,29 @@ The agent captures what a request needs at the moment the request is issued, whi
 
 `network_changed()`, `stats()`, `connections()`, `resolvers()`, `prefetch_dns()`, and `preconnect()` act on a live agent as their counterparts do on the Node surface.
 
+`cookies()` reaches the agent's jar, returning the `web-faith-cookies` jar itself rather than wrapping it in per-cookie methods, so a caller inserts and reads cookies through the same type that crate documents (see [COOK](../agent/cookies.md)).
+An agent with no jar has nothing to hand back and says so in the return type, which is where the Node surface's null-returning reads land in Rust.
+The jar outlives `close()` and stays readable from a closed agent, as [AGENT](../agent/overview.md) requires.
+
+`USER_AGENT` is exported so a caller can prepend its own product token to Faith's default.
+The versions it embeds are not exported alongside it, a Rust caller already having its own package metadata to read them from.
+
 ## Making a request
 
-`agent.fetch(target)` returns a request builder, where `target` is a URL, a `Request`, or an `http::Request`.
+`agent.fetch(target)` returns a fetch builder.
+A target is anything that converts into a `url::Url` — a `Url`, a `&str`, a `String` — or a `Request`, or an `http::Request`.
 The builder implements `IntoFuture`, so awaiting it sends the request: a bare call awaits directly, and a configured one awaits after its options.
 There is no separate send step, and a builder that is dropped without being awaited sends nothing, so the builder is marked `#[must_use]`.
 
 Builder methods cover the per-request options in [REQ](../fetch/request.md), [CANCEL](../fetch/cancellation-and-timeouts.md), [SRI](../fetch/integrity.md), [ENC](../fetch/content-encoding.md), and [CACHE](../cache/http-cache.md), and set the method, headers, and body.
 
-`Request::new(target)` takes the same three kinds of target and returns the same builder, which `build()` resolves into a `Request` rather than sending it.
-A `Request` is inert, and passing one to `fetch` returns a builder again, so a request can be prepared once and adjusted at each call site or sent unchanged on more than one agent.
+`Request::new(target)` takes the same kinds of target and returns a request builder, which `build()` resolves into a `Request` rather than sending it.
+A `Request` is inert, and passing one to `fetch` returns a fetch builder, so a request can be prepared once and adjusted at each call site or sent unchanged on more than one agent.
 `try_clone()` copies a request when its body allows it and reports that it cannot when the body is a stream, a stream being consumable once.
 
-A builder that carries no agent cannot be awaited, and the compiler refuses it rather than the call failing when it runs.
+The two builders carry the same option-setting methods, so a call reads the same way whichever one it is written against, and they are distinct types because their terminal steps differ.
+A fetch builder is awaited and has no `build()`; a request builder is built and cannot be awaited, so an attempt to send a request that has no agent to send it on is refused by the compiler rather than surfacing when the code runs.
+`try_clone()` belongs to `Request` alone, and a fetch builder is not a target, so `fetch` calls do not nest.
 
 ## Layering options
 
@@ -69,7 +79,13 @@ URLs are `url::Url`, which is what the fetch standard's parsing rules describe a
 
 Setters accept anything that converts into the canonical type, so a string literal works where JavaScript would pass a string and a typed value works where a caller already holds one.
 A conversion that fails is held until the builder resolves and surfaces there: at `build()` for a request, and at the await for a fetch.
-Either way it reports the invalid-header or invalid-method error naming the offender, as [REQ](../fetch/request.md) requires.
+Either way it reports the error naming the offender — `InvalidHeader`, `InvalidMethod`, or `InvalidUrl` for a target that does not parse — as [REQ](../fetch/request.md) and [ERR](../errors/errors.md) require.
+Holding the failure is what lets a target be given as a string: an unparseable one is reported where the request is resolved rather than by a call that cannot fail.
+
+## What a disabled component removes
+
+A component's Cargo feature governs the API as much as the build, so turning one off takes away the methods that only mean something with that component present: no `integrity()` without integrity, no cookie jar handle without cookies, and the same for request compression and cache mode (see [RUST](overview.md)).
+Code written against a component that is not built fails to compile rather than compiling into a call that does nothing, so a build reports what it does not carry at the point the caller asks for it.
 
 ## Errors and cancellation
 

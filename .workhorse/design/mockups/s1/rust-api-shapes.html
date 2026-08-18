@@ -112,8 +112,8 @@
   <h1>Rust API shape</h1>
   <p class="lede">
     <code>web-faith</code> has one noun and one verb. An <code>Agent</code> owns the pool, jar, cache, and
-    resolver; <code>fetch</code> is how every request goes out. Browser-like defaults stay on unless turned off:
-    cookie jar, HTTP cache, redirect following, and HTTP/3 upgrade.
+    resolver; <code>fetch</code> is how every request goes out. Defaults match the Node surface: redirects
+    followed and HTTP/3 upgrade on, cookie jar and HTTP cache opted into.
   </p>
 
   <div class="panel">
@@ -143,7 +143,7 @@
 <pre><span class="k">let</span> agent = <span class="a">Agent</span>::builder()
     .user_agent(<span class="s">"myapp/1.0"</span>)
     .cache(Cache::disk(<span class="s">"/var/cache/app"</span>))
-    .cookies(<span class="k">false</span>)
+    .cookies(<span class="k">true</span>)
     .build()?;
 
 <span class="k">let</span> res = agent
@@ -222,8 +222,8 @@
     <h2>Agent lifecycle</h2>
     <p class="panel-note">
       An agent is cheap to clone and every clone names the same pool, so <code>close</code> acts on the shared
-      agent rather than on the handle it was called through. Requests that have already gone out run to
-      completion; a request that has not yet started fails with the closed-agent error.
+      agent rather than on the handle it was called through. Requests already issued run to completion, even
+      ones no work has started on; a request issued afterwards fails with the closed-agent error.
     </p>
 
     <div class="cols-2">
@@ -248,6 +248,7 @@ agent.<span class="a">close</span>();</pre>
 <span class="k">let</span> stats = agent.stats();
 <span class="k">let</span> conns = agent.connections();
 <span class="k">let</span> resolvers = agent.resolvers();
+<span class="k">let</span> jar = agent.cookies();
 
 agent.prefetch_dns(<span class="s">"api.example"</span>).<span class="k">await</span>?;
 agent.preconnect(<span class="s">"https://api.example"</span>).<span class="k">await</span>?;</pre>
@@ -334,8 +335,8 @@ agent.preconnect(<span class="s">"https://api.example"</span>).<span class="k">a
       <tr>
         <td>Request in</td>
         <td><code>Request</code></td>
-        <td><code>fetch</code> and <code>Request::new</code> take a URL, a <code>Request</code>, or an
-            <code>http::Request&lt;B&gt;</code></td>
+        <td><code>fetch</code> and <code>Request::new</code> take an <code>impl TryInto&lt;Url&gt;</code>, a
+            <code>Request</code>, or an <code>http::Request&lt;B&gt;</code></td>
       </tr>
       <tr>
         <td>Response out</td>
