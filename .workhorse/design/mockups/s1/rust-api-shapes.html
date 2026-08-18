@@ -372,6 +372,114 @@
     </div>
   </div>
 
+  <!-- ============ GLOBAL AGENT ============ -->
+  <h2 class="section">The default agent, if it stays</h2>
+  <p class="lede" style="margin-bottom: 24px;">
+    B and C both lean on a process-wide agent for the bare <code>fetch(url)</code> form.
+    Making it reachable turns it from a hidden global into a named one. Two questions decide the shape:
+    when it may be replaced, and what a closed default does next.
+  </p>
+
+  <div class="option">
+    <div class="option-head">
+      <span class="tag">i</span>
+      <h2>Install once</h2>
+    </div>
+    <p class="option-note">
+      The default may be set until the moment something uses it, and never after.
+      This is how rustls takes its crypto provider.
+    </p>
+    <div class="scenarios" style="grid-template-columns: 1fr 1fr;">
+      <div>
+        <div class="scenario-label">Setting it up</div>
+<pre><span class="c">// early in main, before any fetch</span>
+Agent::builder()
+    .user_agent(<span class="s">"myapp/1.0"</span>)
+    .cache(Cache::disk(<span class="s">"/var/cache/app"</span>))
+    .build()?
+    .<span class="a">install_default</span>()?;   <span class="c">// Err if in use</span>
+
+<span class="k">let</span> res = fetch(url).<span class="k">await</span>?;  <span class="c">// uses it</span></pre>
+      </div>
+      <div>
+        <div class="scenario-label">Reaching it</div>
+<pre><span class="k">let</span> agent = web_faith::<span class="a">default_agent</span>();
+
+<span class="k">let</span> stats = agent.stats();
+agent.network_changed();
+
+<span class="c">// no close: it lives for the process</span></pre>
+      </div>
+    </div>
+    <div class="verdict">
+      <div>
+        <h3>Argues for</h3>
+        <ul>
+          <li>No request can ever change agent mid-flight</li>
+          <li>The failure is loud and at startup, not a silent wrong-pool</li>
+        </ul>
+      </div>
+      <div>
+        <h3>Argues against</h3>
+        <ul>
+          <li>Nothing can release the pool and cache short of process exit</li>
+          <li>Tests that want a fresh default per case cannot have one</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="option">
+    <div class="option-head">
+      <span class="tag">ii</span>
+      <h2>Swappable</h2>
+    </div>
+    <p class="option-note">
+      The default sits behind a lock and can be replaced or closed at any point.
+      Setting hands back whatever was there, so the caller decides what happens to it.
+    </p>
+    <div class="scenarios" style="grid-template-columns: 1fr 1fr;">
+      <div>
+        <div class="scenario-label">Swapping</div>
+<pre><span class="k">let</span> previous = web_faith::<span class="a">set_default_agent</span>(agent);
+
+<span class="c">// the old one is yours to wind down</span>
+<span class="k">if</span> <span class="k">let</span> <span class="k">Some</span>(<span class="k">mut</span> old) = previous {
+    old.close();
+}</pre>
+      </div>
+      <div>
+        <div class="scenario-label">Shutting down</div>
+<pre><span class="k">let</span> agent = web_faith::<span class="a">default_agent</span>();
+<span class="k">let</span> stats = agent.stats();
+
+<span class="c">// closes the shared agent, not a clone</span>
+web_faith::<span class="a">close_default_agent</span>();
+
+<span class="c">// what does this do?</span>
+<span class="k">let</span> res = fetch(url).<span class="k">await</span>;</pre>
+      </div>
+    </div>
+    <div class="verdict">
+      <div>
+        <h3>Argues for</h3>
+        <ul>
+          <li>The pool, cache, and resolver can be released on demand</li>
+          <li>Tests can install and tear down a default per case</li>
+          <li>A network change or a config reload can rebuild it wholesale</li>
+        </ul>
+      </div>
+      <div>
+        <h3>Argues against</h3>
+        <ul>
+          <li>Two concurrent <code>fetch</code> calls can land on different agents</li>
+          <li>Every bare <code>fetch</code> pays a lock read</li>
+          <li>Leaves the last line above undecided</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
   <!-- ============ DECISIONS ============ -->
   <h2 class="section">What each shape decides for us</h2>
   <table>
