@@ -40,7 +40,7 @@ use crate::{
 		FaithJar,
 	},
 	dns::{DEFAULT_MAX_STALE, FaithResolver, ResolverSettings, ServerSpec, parse_domains},
-	error::{FaithError, FaithErrorKind},
+	error::{FaithError, FaithErrorExt, FaithErrorKind},
 	options::{PRIORITY, RequestCacheMode},
 	retry::{DeadConnectionRetry, StaleAddressRetry},
 };

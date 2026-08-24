@@ -45,6 +45,7 @@ tokio-stream.workspace = true
 time.workspace = true
 tokio-util.workspace = true
 url.workspace = true
+web-faith.workspace = true
 
 [target.'cfg(target_os = "linux")'.dependencies]
 netlink-packet-core.workspace = true

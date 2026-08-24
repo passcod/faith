@@ -7,7 +7,7 @@ use napi::{
 };
 use serde_json;
 
-use crate::error::FaithError;
+use crate::error::{FaithError, FaithErrorExt};
 
 #[derive(Clone, Debug)]
 pub struct Value(pub serde_json::Value);

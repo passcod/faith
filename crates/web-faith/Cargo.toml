@@ -1,0 +1,16 @@
+[package]
+name = "web-faith"
+description = "A browser-shaped HTTP client: fetch semantics over a Rust network stack"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+# Flipped on once the client API is built out and the release tooling is in place.
+publish = false
+
+[dependencies]
+reqwest.workspace = true
+reqwest-middleware.workspace = true
+strum.workspace = true

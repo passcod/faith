@@ -2795,6 +2795,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "web-faith"
+version = "0.7.0"
+dependencies = [
+ "reqwest",
+ "reqwest-middleware",
+ "strum",
+]
+
+[[package]]
 name = "web-faith-napi"
 version = "0.7.0"
 dependencies = [
@@ -2831,6 +2840,7 @@ dependencies = [
  "tokio-stream",
  "tokio-util",
  "url",
+ "web-faith",
  "windows",
 ]
 

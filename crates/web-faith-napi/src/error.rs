@@ -1,12 +1,17 @@
-use std::{
-	error::Error,
-	fmt::{Debug, Display},
-};
-
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
-use strum::{EnumIter, IntoEnumIterator};
+pub use web_faith::{FaithError, FaithErrorKind};
 
+#[derive(Debug, Clone, Copy)]
+enum JsErrorType {
+	GenericError,
+	NamedError(&'static str),
+	SyntaxError,
+	TypeError,
+}
+
+/// Which JavaScript error class a kind is thrown as.
+///
 /// Faith produces fine-grained errors, but maps them to a few javascript error types for fetch
 /// compatibility. The `.code` property on errors thrown from Faith is set to a stable name for each
 /// error kind, documented in this comprehensive mapping:
@@ -47,130 +52,60 @@ use strum::{EnumIter, IntoEnumIterator};
 ///
 /// Due to technical limitations, when reading a body stream, reads might fail, but that error
 /// will not have a `code` property.
-#[napi(string_enum)]
-#[derive(Debug, Clone, Copy, EnumIter)]
-pub enum FaithErrorKind {
-	Aborted,
-	AddressParse,
-	BodyStream,
-	Closed,
-	Config,
-	ContentLengthOverrun,
-	FileExists,
-	FileWrite,
-	IntegrityMismatch,
-	InvalidCompression,
-	InvalidHeader,
-	InvalidIntegrity,
-	InvalidMethod,
-	InvalidPath,
-	InvalidUrl,
-	JsonParse,
-	Network,
-	PemParse,
-	Redirect,
-	ResponseAlreadyDisturbed,
-	ResponseBodyNull,
-	Timeout,
-}
-
-#[derive(Debug, Clone, Copy)]
-enum JsErrorType {
-	GenericError,
-	NamedError(&'static str),
-	SyntaxError,
-	TypeError,
-}
-
-impl FaithErrorKind {
-	fn default_message(self) -> &'static str {
-		match self {
-			Self::Aborted => "the request was aborted",
-			Self::AddressParse => "invalid IP address and/or port",
-			Self::BodyStream => "internal response body stream copy error",
-			Self::Closed => "the agent has been closed",
-			Self::Config => "invalid agent configuration",
-			Self::ContentLengthOverrun => "response body exceeded the advertised Content-Length",
-			Self::FileExists => "the destination file already exists",
-			Self::FileWrite => "could not write the destination file",
-			Self::IntegrityMismatch => "resource integrity check failed",
-			Self::InvalidCompression => "invalid request body compression",
-			Self::InvalidHeader => "invalid header name or value",
-			Self::InvalidIntegrity => "invalid integrity value",
-			Self::InvalidMethod => "invalid HTTP method",
-			Self::InvalidPath => "destination does not name a local path",
-			Self::InvalidUrl => "invalid URL",
-			Self::JsonParse => "invalid json in response body",
-			Self::Network => "network error",
-			Self::PemParse => "invalid client certificate or key",
-			Self::Redirect => "got a redirect",
-			Self::ResponseAlreadyDisturbed => "response body already disturbed",
-			Self::ResponseBodyNull => "response cannot carry a body to write",
-			Self::Timeout => "timed out",
+fn js_type(kind: FaithErrorKind) -> JsErrorType {
+	use FaithErrorKind as K;
+	match kind {
+		K::BodyStream | K::Config | K::FileExists | K::FileWrite | K::IntegrityMismatch => {
+			JsErrorType::GenericError
 		}
-	}
-
-	fn js_type(self) -> JsErrorType {
-		match self {
-			Self::BodyStream
-			| Self::Config
-			| Self::FileExists
-			| Self::FileWrite
-			| Self::IntegrityMismatch => JsErrorType::GenericError,
-			Self::Aborted | Self::Timeout => JsErrorType::NamedError("AbortError"),
-			Self::Network | Self::Redirect | Self::ContentLengthOverrun => {
-				JsErrorType::NamedError("NetworkError")
-			}
-			Self::AddressParse | Self::InvalidIntegrity | Self::JsonParse | Self::PemParse => {
-				JsErrorType::SyntaxError
-			}
-			Self::Closed
-			| Self::InvalidCompression
-			| Self::InvalidHeader
-			| Self::InvalidMethod
-			| Self::InvalidPath
-			| Self::InvalidUrl
-			| Self::ResponseAlreadyDisturbed
-			| Self::ResponseBodyNull => JsErrorType::TypeError,
+		K::Aborted | K::Timeout => JsErrorType::NamedError("AbortError"),
+		K::Network | K::Redirect | K::ContentLengthOverrun => {
+			JsErrorType::NamedError("NetworkError")
 		}
+		K::AddressParse | K::InvalidIntegrity | K::JsonParse | K::PemParse => {
+			JsErrorType::SyntaxError
+		}
+		K::Closed
+		| K::InvalidCompression
+		| K::InvalidHeader
+		| K::InvalidMethod
+		| K::InvalidPath
+		| K::InvalidUrl
+		| K::ResponseAlreadyDisturbed
+		| K::ResponseBodyNull => JsErrorType::TypeError,
 	}
 }
 
-impl From<FaithErrorKind> for FaithError {
-	fn from(kind: FaithErrorKind) -> Self {
-		Self {
-			kind,
-			message: None,
-		}
-	}
+/// Throwing a [`FaithError`] into JavaScript.
+///
+/// The error itself is the client's, and knows nothing of napi; turning one into a value V8 can
+/// carry is this crate's business, which is why it arrives as an extension rather than as methods
+/// on the error.
+pub trait FaithErrorExt {
+	/// Convert to a napi error.
+	///
+	/// This is explicit rather than a `From` impl so that it cannot happen by accident, losing the
+	/// error class and code that [`Self::into_js_error`] preserves.
+	fn into_napi(self) -> napi::Error;
+
+	fn to_napi(&self) -> napi::Error;
+
+	/// Whenever possible, prefer this so that the error types are correct.
+	fn into_js_error<'env>(self, env: &'env Env) -> Unknown<'env>;
 }
 
-#[derive(Debug, Clone)]
-pub struct FaithError {
-	pub kind: FaithErrorKind,
-	pub message: Option<String>,
-}
-
-impl FaithError {
-	pub fn new(kind: FaithErrorKind, message: Option<impl Into<String>>) -> Self {
-		Self {
-			kind,
-			message: message.map(|m| m.into()),
-		}
-	}
-
-	// we make this explicit instead of adding a From<> so that we can't accidentally do it
-	pub fn into_napi(self) -> napi::Error {
+impl FaithErrorExt for FaithError {
+	fn into_napi(self) -> napi::Error {
 		self.to_napi()
 	}
+
 	fn to_napi(&self) -> napi::Error {
 		napi::Error::new(napi::Status::GenericFailure, format!("{self}"))
 	}
 
-	// whenever possible, we should prefer to use this so that the error types are correct
-	pub fn into_js_error<'env>(self, env: &'env Env) -> Unknown<'env> {
-		let code = format!("{:?}", self.kind);
-		let unk = match self.kind.js_type() {
+	fn into_js_error<'env>(self, env: &'env Env) -> Unknown<'env> {
+		let code = self.kind.code();
+		let unk = match js_type(self.kind) {
 			JsErrorType::TypeError => JsTypeError::from(self.into_napi()).into_unknown(*env),
 			JsErrorType::SyntaxError => JsSyntaxError::from(self.into_napi()).into_unknown(*env),
 			JsErrorType::GenericError => JsError::from(self.into_napi()).into_unknown(*env),
@@ -199,92 +134,7 @@ impl FaithError {
 	}
 }
 
-/// Dig a [`FaithError`] back out of an error chain, if one is in there.
-///
-/// The `error` redirect policy refuses a redirect by handing reqwest a [`FaithError`], which comes
-/// back to us wrapped in an error of reqwest's own, so the kind we chose has to be recovered from
-/// the source chain to survive as a `code`. Redirect failures reqwest raises on its own account
-/// (exhausting the hop limit, an https-only downgrade) carry no [`FaithError`] and so fall through
-/// to the generic mapping, which is what tells the two apart.
-fn faith_kind_in_chain(err: &(dyn Error + 'static)) -> Option<FaithErrorKind> {
-	let mut source = err.source();
-	while let Some(e) = source {
-		if let Some(faith) = e.downcast_ref::<FaithError>() {
-			return Some(faith.kind);
-		}
-		source = e.source();
-	}
-
-	None
-}
-
-impl From<reqwest::Error> for FaithError {
-	fn from(err: reqwest::Error) -> Self {
-		// Always include full error chain for debugging
-		let mut msg = format!("{err:?}");
-		let mut source = err.source();
-		while let Some(e) = source {
-			msg.push_str(&format!(" -> {e:?}"));
-			source = e.source();
-		}
-
-		if err.is_timeout() {
-			return FaithError::new(FaithErrorKind::Timeout, Some(msg));
-		}
-
-		// A redirect the agent's own policy refused carries the kind we handed reqwest; one reqwest
-		// raised on its own account stays a plain network error.
-		let kind = err
-			.is_redirect()
-			.then(|| faith_kind_in_chain(&err))
-			.flatten()
-			.unwrap_or(FaithErrorKind::Network);
-
-		FaithError::new(kind, Some(msg))
-	}
-}
-
-impl From<reqwest_middleware::Error> for FaithError {
-	fn from(err: reqwest_middleware::Error) -> Self {
-		match err {
-			reqwest_middleware::Error::Middleware(err) => {
-				FaithError::new(FaithErrorKind::Network, Some(err.to_string()))
-			}
-			reqwest_middleware::Error::Reqwest(err) => err.into(),
-		}
-	}
-}
-
-impl Error for FaithError {
-	fn source(&self) -> Option<&(dyn Error + 'static)> {
-		None
-	}
-
-	fn description(&self) -> &str {
-		"description() is deprecated; use Display"
-	}
-
-	fn cause(&self) -> Option<&dyn Error> {
-		self.source()
-	}
-}
-
-impl Display for FaithError {
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		write!(
-			f,
-			"{:?}: {}",
-			self.kind,
-			self.message
-				.as_deref()
-				.unwrap_or_else(|| self.kind.default_message())
-		)
-	}
-}
-
 #[napi]
 pub fn error_codes() -> Vec<String> {
-	FaithErrorKind::iter()
-		.map(|kind| format!("{:?}", kind))
-		.collect()
+	web_faith::error_codes()
 }
