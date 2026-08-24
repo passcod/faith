@@ -88,10 +88,23 @@ QUIC/TLS stay inside `web-faith` as reqwest features (aws-lc-rs default, ring al
         optional abort future; `fetch.rs` is 59 lines converting a `fetch()` call into those.
   - **Left for step 9:** the recipe structs' public fields, which the builder should own the
         assembly of.
-- [ ] **9. Build the fetch-flavoured client API** per [RSAPI](../../specs/rust/client-api.md):
-  `Agent`/`Agent::builder()`, cheap-clone shared agent, `agent.fetch(target) -> IntoFuture` builder
-  (`#[must_use]`), `Request`/`Request::new`/`try_clone`, layering rules, `http`/`url`/`bytes` types,
-  `http_body::Body` response + `Into<http::Response>`, feature-gated API surface, Tokio, drop-cancels.
+- [ ] **9. Build the fetch-flavoured client API** per [RSAPI](../../specs/rust/client-api.md).
+  **In progress:**
+  - [x] `USER_AGENT` is the client's, composed from its own version and reqwest's, which `web-faith`
+        now reads in a build script of its own. The binding's constant reads from it.
+  - [x] Reading a response: the accessors and `bytes`/`text`/`json`/`body_stream`/`discard`/
+        `to_file`/`timing`/`trailers` on `web_faith::response::Response`, with the napi methods
+        delegating. `json` is generic over what it deserialises into.
+  - [x] `http_body::Body` for the body, and `Response::into_http`. Fallible, since taking the body
+        can find it already being consumed.
+  - [ ] **`Agent::builder()` — the big remaining piece.** ~13 option groups as nested builders, and
+        the ~440 lines of validation currently in `web-faith-napi` that turn `AgentOptions` into a
+        recipe. Move that logic rather than rewrite it: both surfaces must land on the same defaults,
+        and a second implementation is how they drift. `Agent::new()` then follows, and the recipe
+        structs' fields close up behind the builder.
+  - [ ] `Request`, `Request::new`, `try_clone`, and the fetch builder over `IntoFuture`, with the
+        layering rules (outermost wins; headers merge by name).
+  - [ ] Setters taking anything convertible, holding a failed conversion until the builder resolves.
 - [ ] **10. Feature wiring** — a default-on feature per capability a build can do without; disabling
   one drops the code and the API surface it gates (compile error at the call site, not a no-op), and
   the dependency too where the capability is a crate. Component, crate, and feature are three axes
