@@ -36,6 +36,7 @@ hickory-resolver = { version = "0.26", features = [
 ] }
 moka = { version = "0.12", features = ["sync"] }
 http = "1.4.0"
+http-body = "1.0.1"
 http-body-util = "0.1.3"
 hyper = "1.8.1"
 http-cache-reqwest = { version = "1.0.0-alpha.6", features = [

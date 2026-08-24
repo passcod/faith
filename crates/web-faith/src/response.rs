@@ -3,6 +3,7 @@
 // spec:RESP spec:TRL spec:BODY
 
 use std::{
+	fmt::Debug,
 	hint::unreachable_unchecked,
 	mem::replace,
 	net::SocketAddr,
@@ -11,6 +12,7 @@ use std::{
 		Arc,
 		atomic::{AtomicBool, Ordering},
 	},
+	task::{Context, Poll},
 	time::{Duration, Instant},
 };
 
@@ -193,6 +195,50 @@ mod tests {
 		fn wake_by_ref(self: &Arc<Self>) {
 			self.0.fetch_add(1, Ordering::SeqCst);
 		}
+	}
+
+	/// A response that cannot carry a body converts to an `http::Response` with an empty one,
+	/// carrying its status, version, and headers across.
+	#[test]
+	fn a_bodyless_response_converts_to_an_http_response() {
+		let mut headers = HeaderMap::new();
+		headers.insert("x-test", "yes".parse().expect("a valid header value"));
+
+		let response = Response {
+			body: BodyHolder::none(),
+			decode: None,
+			disturbed: Arc::new(AtomicBool::new(false)),
+			headers,
+			integrity: None,
+			peer: Arc::new(PeerInformation {
+				address: None,
+				certificate: None,
+			}),
+			redirected: false,
+			stats: Arc::new(InnerAgentStats::default()),
+			status_code: StatusCode::NO_CONTENT,
+			timing: Arc::new(TimingSlot::new(
+				Instant::now(),
+				crate::timing::RequestTiming::default(),
+			)),
+			trailers: Arc::new(TrailersSlot::default()),
+			url: Url::parse("https://example.com/").expect("a valid url"),
+			version: Version::HTTP_2,
+		};
+
+		let http = response.into_http().expect("an undisturbed body converts");
+		assert_eq!(http.status(), StatusCode::NO_CONTENT);
+		assert_eq!(http.version(), Version::HTTP_2);
+		assert_eq!(
+			http.headers().get("x-test").map(|v| v.as_bytes()),
+			Some(&b"yes"[..])
+		);
+
+		// Draining it yields nothing, which is what a consumer of the body actually observes.
+		let collected =
+			futures::executor::block_on(http_body_util::BodyExt::collect(http.into_body()))
+				.expect("an empty body collects");
+		assert!(collected.to_bytes().is_empty());
 	}
 
 	/// Waiting for trailers parks until the body settles the question, rather than polling
@@ -706,5 +752,63 @@ impl Response {
 				.unwrap_or_else(|_| path.to_owned()),
 			bytes_written: written,
 		})
+	}
+}
+
+/// A [`Response`]'s body, as an [`http_body::Body`].
+///
+/// This is what a response hands to code written against the wider ecosystem: a tower service, a
+/// hyper client, anything that takes a body rather than Faith's own reads.
+pub struct ResponseBody {
+	chunks: Pin<Box<dyn Stream<Item = Result<Bytes, FaithError>> + Send>>,
+}
+
+impl Debug for ResponseBody {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		f.debug_struct("ResponseBody").finish_non_exhaustive()
+	}
+}
+
+impl http_body::Body for ResponseBody {
+	type Data = Bytes;
+	type Error = FaithError;
+
+	fn poll_frame(
+		mut self: Pin<&mut Self>,
+		cx: &mut Context<'_>,
+	) -> Poll<Option<Result<http_body::Frame<Self::Data>, Self::Error>>> {
+		self.chunks
+			.as_mut()
+			.poll_next(cx)
+			.map(|chunk| chunk.map(|chunk| chunk.map(http_body::Frame::data)))
+	}
+}
+
+impl Response {
+	/// Take the response as an [`http::Response`], so it feeds code written against the ecosystem
+	/// rather than against Faith.
+	///
+	/// Fails where taking the body would: a body already being consumed elsewhere reports the
+	/// already-disturbed error. A response that cannot carry a body yields an empty one.
+	pub fn into_http(self) -> Result<http::Response<ResponseBody>, FaithError> {
+		let chunks: Pin<Box<dyn Stream<Item = Result<Bytes, FaithError>> + Send>> =
+			match self.body_stream()? {
+				Some(stream) => Box::pin(stream),
+				None => Box::pin(stream::empty()),
+			};
+
+		let mut response = http::Response::new(ResponseBody { chunks });
+		*response.status_mut() = self.status_code;
+		*response.version_mut() = self.version;
+		*response.headers_mut() = self.headers.clone();
+		Ok(response)
+	}
+}
+
+impl TryFrom<Response> for http::Response<ResponseBody> {
+	type Error = FaithError;
+
+	fn try_from(response: Response) -> Result<Self, Self::Error> {
+		response.into_http()
 	}
 }
