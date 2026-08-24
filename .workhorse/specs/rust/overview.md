@@ -53,9 +53,6 @@ Cargo features on `web-faith` are how a subsystem is left out of a build that ha
 Features are on by default, so a caller who reaches for the crate without thinking about them gets the whole client.
 Turning one off drops the code behind it and the client continues to work without it; the parts of the API that only mean something with that subsystem present go with it, as in [RSAPI](client-api.md).
 
-A feature names a capability rather than a crate.
-Turning one off may drop a dependency along with the code or may simply compile less of `web-faith` itself, and a subsystem the client is not built without carries no feature at all.
-
 A feature decides what is compiled in rather than what is switched on at run time, and the two need not agree: the cookies feature is on by default while the jar itself stays off until an agent asks for it (see [COOK](../agent/cookies.md)).
 
 Features are the whole of the swapping mechanism: a caller chooses among the implementations Faith builds rather than supplying one.
