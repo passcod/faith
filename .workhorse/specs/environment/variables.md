@@ -27,7 +27,7 @@ On macOS and Windows the OS trust store is used directly and these are ignored, 
 `NODE_EXTRA_CA_CERTS` names a PEM file whose certificates are added to the trust store on top of the platform roots and any `tls.extraRoots` (see [TLS](../agent/tls.md)); certificates from both sources combine, and where `SSL_CERT_FILE` replaces the system roots this adds to them.
 It is lenient, matching Node's warn-and-continue behaviour: an empty value, an unreadable file, or an unparseable file is ignored rather than fatal.
 (The `tls.extraRoots` option, being an explicit programmatic choice, throws on malformed input instead.)
-A Rust caller extends the trust store through `tls.extraRoots`.
+On the Rust surface, extra roots come from the agent's TLS options alone.
 
 ## Certificate validation
 
