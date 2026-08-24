@@ -35,7 +35,6 @@ This applies to the Node surface alone.
 
 `NODE_TLS_REJECT_UNAUTHORIZED` set to exactly `0` disables TLS certificate validation for the agent; any other value or unset keeps validation on.
 This matches Node's semantics and exists only for that compatibility; trusting a specific private CA via `NODE_EXTRA_CA_CERTS` or `tls.extraRoots` is the supported path.
-The Rust surface keeps certificate validation on, that being a compatibility it does not owe.
 
 ## Proxies
 
