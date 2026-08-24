@@ -12,8 +12,7 @@ It has two public surfaces:
 - the Rust crate `web-faith` (see [RSAPI](rust/client-api.md)) and the component crates at that prefix (see [RUST](rust/overview.md));
 - the Node.js module `@passcod/faith`.
 
-Both are built from one implementation, so a behaviour specified here holds on both unless a spec says otherwise.
-The specs describe it in JavaScript terms except where they name the Rust surface.
+The specs describe behaviour in JavaScript terms except where they name the Rust surface.
 
 The library's contract has two halves: fidelity to the fetch standard, and divergence where the standard assumes a browser.
 
