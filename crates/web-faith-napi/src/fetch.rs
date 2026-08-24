@@ -20,10 +20,11 @@ use reqwest::{
 };
 use tokio::sync::{Mutex, mpsc};
 
+use web_faith_encoding::{self as encoding, AcceptEncoding, Coding, DEFAULT_ACCEPT_ENCODING};
+
 use crate::{
 	async_task::faith_promise,
 	body::{Body, BodyHolder},
-	encoding::{self, AcceptEncoding, Coding, DEFAULT_ACCEPT_ENCODING},
 	error::{FaithError, FaithErrorKind},
 	options::{CredentialsOption, FaithOptions, FaithOptionsAndBody, PRIORITY},
 	response::{FaithResponse, PeerInformation},

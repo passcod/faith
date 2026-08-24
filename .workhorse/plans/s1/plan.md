@@ -55,17 +55,17 @@ QUIC/TLS stay inside `web-faith` as reqwest features (aws-lc-rs default, ring al
 
 ## Build order (each step ends green: `cargo build` + `cargo test` + napi `npm run build`)
 
-- [ ] **0. Workspace scaffold.** Root `[workspace]` with shared `[workspace.package]`
+- [x] **0. Workspace scaffold.** Root `[workspace]` with shared `[workspace.package]`
   (licence, repository, authors, edition, `rust-version = "1.96"`) and `[workspace.dependencies]`.
   Move the current crate to `crates/web-faith-napi`. Fix `build.rs` `Cargo.lock` path. Make
   `napi build` target the relocated crate and keep `index.js`/`index.d.ts` at repo root. Verify the
   npm build still produces a working `.node`. No behaviour change.
-- [ ] **1. Error core split.** Pure-Rust `FaithError`/`FaithErrorKind` (no napi) reachable by every
+- [x] **1. Error core split.** Pure-Rust `FaithError`/`FaithErrorKind` (no napi) reachable by every
   crate; napi conversions live only in `web-faith-napi`. `ERROR_CODES` still generated from the one
   source ([ERR](../../specs/errors/errors.md)). Decide where the shared error core lives (likely in
   `web-faith`, with components naming their own error types that the client converts — per
   [RUST](../../specs/rust/overview.md) "A component crate stands alone").
-- [ ] **2. Extract `web-faith-integrity`** — own error type, own docs, `cargo test -p web-faith-integrity` with no JS runtime.
+- [x] **2. Extract `web-faith-integrity`** — own error type, own docs, `cargo test -p web-faith-integrity` with no JS runtime.
 - [ ] **3. Extract `web-faith-encoding`** — decouple from `crate::body::DynStream` (take a generic/`bytes` stream).
 - [ ] **4. Extract `web-faith-cookies`** — `url::Url`; reqwest `CookieStore` behind a feature.
 - [ ] **5. Extract `web-faith-dns`.**

@@ -2805,6 +2805,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "web-faith-encoding"
+version = "0.7.0"
+dependencies = [
+ "async-compression",
+ "bytes",
+ "futures",
+ "http",
+ "tokio",
+ "tokio-util",
+]
+
+[[package]]
 name = "web-faith-integrity"
 version = "0.7.0"
 dependencies = [
@@ -2849,6 +2861,7 @@ dependencies = [
  "tokio-util",
  "url",
  "web-faith",
+ "web-faith-encoding",
  "web-faith-integrity",
  "windows",
 ]

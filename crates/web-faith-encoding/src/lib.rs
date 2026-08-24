@@ -12,24 +12,28 @@ use async_compression::tokio::bufread::{
 };
 use bytes::Bytes;
 use futures::{Stream, TryStreamExt};
-use reqwest::header::{CONTENT_ENCODING, CONTENT_LENGTH, HeaderMap};
+use http::header::{CONTENT_ENCODING, CONTENT_LENGTH, HeaderMap};
 use tokio::io::AsyncReadExt;
 use tokio_util::io::{ReaderStream, StreamReader};
 
-use crate::body::DynStream;
+/// A body byte-stream, as the decoders take and return one.
+///
+/// The client hands its own body streams straight to [`decode_stream`]: the shape is the same one
+/// its pipeline already carries, so nothing has to depend on the layer above to name it.
+pub type ByteStream = dyn Stream<Item = Result<Bytes, String>> + Send + Sync;
 
 /// The `Accept-Encoding` Faith advertises when the caller advertises none.
 ///
 /// Matches the value reqwest's decompression stack sent before Faith took over the
 /// codings, so the wire is unchanged for the default request.
-pub(crate) const DEFAULT_ACCEPT_ENCODING: &str = "zstd,gzip,deflate,br";
+pub const DEFAULT_ACCEPT_ENCODING: &str = "zstd,gzip,deflate,br";
 
 /// A content coding Faith can decode. Wire tokens: `gzip`, `deflate`, `br`, `zstd`.
 ///
 /// `deflate` is the zlib-wrapped form (RFC 1950), matching what reqwest and every
 /// other mainstream client decode it as.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Coding {
+pub enum Coding {
 	Gzip,
 	Deflate,
 	Brotli,
@@ -43,7 +47,7 @@ impl Coding {
 	/// loosely as HTTP writes it, this matches the four documented tokens exactly: the
 	/// option is an API surface, and an unrecognised value is refused rather than
 	/// guessed at (spec:ENC#compressing-a-request-body).
-	pub(crate) fn from_option(value: &str) -> Option<Self> {
+	pub fn from_option(value: &str) -> Option<Self> {
 		match value {
 			"gzip" => Some(Self::Gzip),
 			"deflate" => Some(Self::Deflate),
@@ -54,7 +58,7 @@ impl Coding {
 	}
 
 	/// The wire token naming this coding in a `Content-Encoding`.
-	pub(crate) fn token(self) -> &'static str {
+	pub fn token(self) -> &'static str {
 		match self {
 			Self::Gzip => "gzip",
 			Self::Deflate => "deflate",
@@ -87,7 +91,7 @@ impl Coding {
 /// single coding Faith can decode and the request's `Accept-Encoding` accepted it.
 /// A `Content-Encoding` naming more than one coding, an unknown coding, or a coding the
 /// request did not accept yields `None`, and the body is delivered as received.
-pub(crate) fn decision(headers: &HeaderMap, accept: &AcceptEncoding) -> Option<Coding> {
+pub fn decision(headers: &HeaderMap, accept: &AcceptEncoding) -> Option<Coding> {
 	// A representation encoded more than once is the caller's to unwind. The codings may
 	// arrive comma-joined on one line or split across several `Content-Encoding` lines --
 	// the same list either way, so both forms are gathered together before counting.
@@ -107,7 +111,7 @@ pub(crate) fn decision(headers: &HeaderMap, accept: &AcceptEncoding) -> Option<C
 }
 
 /// Strip the headers that describe the encoded bytes, once a body has been decoded.
-pub(crate) fn strip_decoded_headers(headers: &mut HeaderMap) {
+pub fn strip_decoded_headers(headers: &mut HeaderMap) {
 	headers.remove(CONTENT_ENCODING);
 	headers.remove(CONTENT_LENGTH);
 }
@@ -117,7 +121,7 @@ pub(crate) fn strip_decoded_headers(headers: &mut HeaderMap) {
 /// Each slot holds the quality value (0..=1000) a coding was named with, if it was
 /// named outright; `star` holds the quality value of `*` if present.
 #[derive(Clone, Copy, Debug, Default)]
-pub(crate) struct AcceptEncoding {
+pub struct AcceptEncoding {
 	gzip: Option<u16>,
 	deflate: Option<u16>,
 	brotli: Option<u16>,
@@ -126,7 +130,7 @@ pub(crate) struct AcceptEncoding {
 }
 
 impl AcceptEncoding {
-	pub(crate) fn parse(value: &str) -> Self {
+	pub fn parse(value: &str) -> Self {
 		let mut accept = Self::default();
 		for element in value.split(',') {
 			let mut parts = element.split(';');
@@ -210,7 +214,7 @@ fn parse_quality(value: &str) -> Option<u16> {
 ///
 /// The body stream carries decoded bytes on every read path this way (see [`Coding`]);
 /// trailers are pulled off the frames before this point, so decoding sees data only.
-pub(crate) fn decode_stream(input: Pin<Box<DynStream>>, coding: Coding) -> Pin<Box<DynStream>> {
+pub fn decode_stream(input: Pin<Box<ByteStream>>, coding: Coding) -> Pin<Box<ByteStream>> {
 	let reader = StreamReader::new(input.map_err(io::Error::other));
 	match coding {
 		Coding::Gzip => reader_stream(GzipDecoder::new(reader)),
@@ -225,7 +229,7 @@ pub(crate) fn decode_stream(input: Pin<Box<DynStream>>, coding: Coding) -> Pin<B
 	}
 }
 
-fn reader_stream<R>(reader: R) -> Pin<Box<DynStream>>
+fn reader_stream<R>(reader: R) -> Pin<Box<ByteStream>>
 where
 	R: tokio::io::AsyncRead + Send + Sync + 'static,
 {
@@ -233,13 +237,13 @@ where
 }
 
 /// A request body stream, as reqwest takes one.
-pub(crate) type RequestStream = Pin<Box<dyn Stream<Item = io::Result<Bytes>> + Send>>;
+pub type RequestStream = Pin<Box<dyn Stream<Item = io::Result<Bytes>> + Send>>;
 
 /// Compress a buffered request body, yielding the bytes that go on the wire.
 ///
 /// The whole body is known up front, so it compresses in one pass and its length is the
 /// `Content-Length` reqwest derives from it (spec:ENC#what-a-compressed-request-sends).
-pub(crate) async fn compress_buffer(input: &[u8], coding: Coding) -> io::Result<Vec<u8>> {
+pub async fn compress_buffer(input: &[u8], coding: Coding) -> io::Result<Vec<u8>> {
 	let mut output = Vec::new();
 	match coding {
 		Coding::Gzip => GzipEncoder::new(input).read_to_end(&mut output).await?,
@@ -255,7 +259,7 @@ pub(crate) async fn compress_buffer(input: &[u8], coding: Coding) -> io::Result<
 /// There is no compressed length to declare before the body ends, so the result goes out
 /// chunked (spec:ENC#what-a-compressed-request-sends). The encoder buffers on its own
 /// terms, so the bytes for one chunk the caller writes need not leave with it.
-pub(crate) fn compress_stream<S>(input: S, coding: Coding) -> RequestStream
+pub fn compress_stream<S>(input: S, coding: Coding) -> RequestStream
 where
 	S: Stream<Item = io::Result<Bytes>> + Send + 'static,
 {
@@ -280,7 +284,7 @@ where
 /// The caller's `Content-Encoding` describes the bytes they handed over, so Faith's coding
 /// is named after theirs, the order the codings were applied in
 /// (spec:ENC#what-a-compressed-request-sends).
-pub(crate) fn layer_content_encoding(declared: Option<&str>, applied: Coding) -> String {
+pub fn layer_content_encoding(declared: Option<&str>, applied: Coding) -> String {
 	match declared.map(str::trim).filter(|value| !value.is_empty()) {
 		Some(declared) => format!("{declared}, {}", applied.token()),
 		None => applied.token().to_owned(),
@@ -289,7 +293,7 @@ pub(crate) fn layer_content_encoding(declared: Option<&str>, applied: Coding) ->
 
 #[cfg(test)]
 mod tests {
-	use reqwest::header::{CONTENT_ENCODING, HeaderMap, HeaderValue};
+	use http::header::{CONTENT_ENCODING, HeaderMap, HeaderValue};
 
 	use super::*;
 

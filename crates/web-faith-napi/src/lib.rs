@@ -6,7 +6,6 @@ mod body;
 mod conn_tracker;
 mod cookies;
 mod dns;
-mod encoding;
 mod error;
 mod fetch;
 mod options;
