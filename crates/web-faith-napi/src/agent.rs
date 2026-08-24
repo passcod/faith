@@ -32,6 +32,7 @@ use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 use crate::alt_svc::parse_alt_svc_header;
 #[cfg(feature = "http3")]
 use crate::alt_svc::{AltSvcCache, AltSvcCacheConfig, AltSvcMiddleware, H3Prober};
+use web_faith_conn_tracker::ConnectionTracker;
 use web_faith_dns::{
 	DEFAULT_MAX_STALE, FaithResolver, ResolverSettings, ServerSpec, parse_domains,
 };
@@ -43,7 +44,7 @@ use web_faith_cookies::{
 
 use crate::{
 	async_task::faith_promise,
-	conn_tracker::{ConnectionInfo, ConnectionTracker},
+	conn_tracker::{ConnectionInfo, connections_for_napi},
 	error::{FaithError, FaithErrorExt, FaithErrorKind},
 	options::{PRIORITY, RequestCacheMode},
 	retry::{DeadConnectionRetry, StaleAddressRetry},
@@ -2091,7 +2092,7 @@ impl Agent {
 	/// on field availability. If the platform isn't supported at all, this will always return empty.
 	#[napi]
 	pub fn connections<'env>(&self, env: &'env Env) -> Vec<ConnectionInfo<'env>> {
-		self.conn_tracker.get_for_napi(env)
+		connections_for_napi(&self.conn_tracker, env)
 	}
 
 	/// Returns the DNS servers this agent resolves through, in the order they are queried, so
