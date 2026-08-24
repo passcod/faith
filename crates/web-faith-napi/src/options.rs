@@ -4,6 +4,8 @@ use http_cache_reqwest::CacheMode;
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
 
+use web_faith::request::{Credentials, RequestOptions};
+
 use crate::agent::Agent;
 
 /// The cache mode you want to use for the request. This may be any one of the following values:
@@ -176,49 +178,33 @@ pub struct FaithOptionsAndBody {
 	pub timeout: Option<u32>,
 }
 
-#[derive(Clone, Debug, Default)]
-pub(crate) struct FaithOptions {
-	pub(crate) cache: RequestCacheMode,
-	/// The `compress` option as given, resolved to a coding where the body is compressed.
-	pub(crate) compress: Option<String>,
-	pub(crate) credentials: CredentialsOption,
-	pub(crate) headers: Option<Vec<(String, String)>>,
-	pub(crate) integrity: Option<String>,
-	pub(crate) method: Option<String>,
-	/// The `Priority` header value derived from the `priority` option, if it maps to one.
-	pub(crate) priority: Option<&'static str>,
-	pub(crate) timeout: Option<Duration>,
-}
+/// Read a `fetch()` call's options into the shape the client takes.
+pub(crate) fn extract(opts: FaithOptionsAndBody) -> (RequestOptions, Agent, Option<Arc<Buffer>>) {
+	// `same-origin` means nothing without an origin to be same as, so it lands on `include`,
+	// which is what a server-side caller means by it.
+	let credentials = match opts.credentials.unwrap_or_default() {
+		CredentialsOption::Omit => Credentials::Omit,
+		CredentialsOption::Include | CredentialsOption::SameOrigin => Credentials::Include,
+	};
 
-impl FaithOptions {
-	pub(crate) fn extract(opts: FaithOptionsAndBody) -> (Self, Agent, Option<Arc<Buffer>>) {
-		let credentials = opts.credentials.unwrap_or_default();
-		// Transform same-origin to include
-		let credentials = if credentials == CredentialsOption::SameOrigin {
-			CredentialsOption::Include
-		} else {
-			credentials
-		};
-
-		(
-			Self {
-				cache: opts.cache.unwrap_or_default(),
-				compress: opts.compress,
-				credentials,
-				headers: opts.headers,
-				integrity: opts.integrity,
-				method: opts.method,
-				priority: priority_urgency(opts.priority.as_deref()),
-				timeout: opts.timeout.map(Into::into).map(Duration::from_millis),
-			},
-			Agent::clone(&opts.agent),
-			opts.body.map(|either| match either {
-				Either3::A(s) => Arc::new(Buffer::from(s.as_bytes())),
-				Either3::B(b) => Arc::new(b),
-				Either3::C(u) => Arc::new(Buffer::from(u.as_ref())),
-			}),
-		)
-	}
+	(
+		RequestOptions {
+			cache: opts.cache.unwrap_or_default().into(),
+			compress: opts.compress,
+			credentials,
+			headers: opts.headers,
+			integrity: opts.integrity,
+			method: opts.method,
+			priority: priority_urgency(opts.priority.as_deref()),
+			timeout: opts.timeout.map(Into::into).map(Duration::from_millis),
+		},
+		Agent::clone(&opts.agent),
+		opts.body.map(|either| match either {
+			Either3::A(s) => Arc::new(Buffer::from(s.as_bytes())),
+			Either3::B(b) => Arc::new(b),
+			Either3::C(u) => Arc::new(Buffer::from(u.as_ref())),
+		}),
+	)
 }
 
 #[cfg(test)]

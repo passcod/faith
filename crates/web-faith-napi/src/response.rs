@@ -15,7 +15,6 @@ use napi::{
 use napi_derive::napi;
 use serde_json;
 
-pub use web_faith::response::PeerInformation;
 use web_faith::{
 	body::{Body, drain_body_inner},
 	response::{FileDestination, FileProgress, FileWritten, Response, Trailers},
