@@ -60,12 +60,7 @@ pub const REQWEST_VERSION: &str = env!("REQWEST_VERSION");
 /// });
 /// ```
 #[napi]
-pub const USER_AGENT: &str = concat!(
-	"Faith/",
-	env!("CARGO_PKG_VERSION"),
-	" reqwest/",
-	env!("REQWEST_VERSION")
-);
+pub const USER_AGENT: &str = web_faith::USER_AGENT;
 
 /// Whether this host can bind the IPv6 wildcard (`[::]`).
 ///

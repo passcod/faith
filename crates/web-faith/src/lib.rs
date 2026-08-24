@@ -29,4 +29,21 @@ pub mod stats;
 pub mod timing;
 pub mod warm_up;
 
+/// The `User-Agent` a request carries when nothing overrides it.
+///
+/// Prepend your own product token to it rather than replacing it, so a server still sees which
+/// client is calling:
+///
+/// ```
+/// # use web_faith::USER_AGENT;
+/// let ua = format!("YourApp/1.2.3 {USER_AGENT}");
+/// assert!(ua.ends_with(USER_AGENT));
+/// ```
+pub const USER_AGENT: &str = concat!(
+	"Faith/",
+	env!("CARGO_PKG_VERSION"),
+	" reqwest/",
+	env!("REQWEST_VERSION")
+);
+
 pub use error::{FaithError, FaithErrorKind, error_codes};
