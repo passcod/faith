@@ -2798,9 +2798,19 @@ dependencies = [
 name = "web-faith"
 version = "0.7.0"
 dependencies = [
+ "async-trait",
+ "bytes",
+ "futures",
+ "http",
+ "http-body-util",
+ "hyper",
  "reqwest",
  "reqwest-middleware",
+ "stream_shared",
  "strum",
+ "tokio",
+ "web-faith-alt-svc",
+ "web-faith-dns",
  "web-faith-integrity",
 ]
 

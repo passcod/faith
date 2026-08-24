@@ -20,16 +20,18 @@ use reqwest::{
 };
 use tokio::sync::{Mutex, mpsc};
 
+use web_faith::{
+	body::{Body, BodyHolder},
+	timing::{HeadersStamp, RequestTiming, TimingSlot, alpn_protocol_id},
+};
 use web_faith_encoding::{self as encoding, AcceptEncoding, Coding, DEFAULT_ACCEPT_ENCODING};
 
 use crate::{
 	async_task::faith_promise,
-	body::{Body, BodyHolder},
 	error::{FaithError, FaithErrorKind},
 	options::{CredentialsOption, FaithOptions, FaithOptionsAndBody, PRIORITY},
 	response::{FaithResponse, PeerInformation},
 	stream_body::StreamBody,
-	timing::{HeadersStamp, RequestTiming, TimingSlot, alpn_protocol_id},
 };
 
 /// The methods the fetch standard normalises to upper case; any other method is sent as given.

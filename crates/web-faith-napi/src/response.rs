@@ -28,15 +28,18 @@ use serde_json;
 use stream_shared::SharedStream;
 use tokio::{io::AsyncWriteExt, sync::watch};
 
+use web_faith::{
+	body::{Body, BodyHolder, DynStream, drain_body_inner},
+	timing::TimingSlot,
+};
 use web_faith_encoding::{Coding, decode_stream};
 use web_faith_integrity::{finish_integrity, integrity_checker, verify_integrity};
 
 use crate::{
 	agent::InnerAgentStats,
 	async_task::{Value, faith_promise},
-	body::{Body, BodyHolder, DynStream, drain_body_inner},
 	error::{FaithError, FaithErrorExt, FaithErrorKind},
-	timing::{TimingBreakdown, TimingSlot},
+	timing::TimingBreakdown,
 };
 
 /// The `Response` interface of the Fetch API represents the response to a request.

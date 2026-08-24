@@ -11,12 +11,24 @@ authors.workspace = true
 publish = false
 
 [dependencies]
+async-trait.workspace = true
+bytes.workspace = true
+futures.workspace = true
+http.workspace = true
+http-body-util.workspace = true
+hyper.workspace = true
 reqwest.workspace = true
 reqwest-middleware.workspace = true
+stream_shared.workspace = true
 strum.workspace = true
+tokio.workspace = true
+web-faith-dns = { workspace = true, features = ["reqwest"] }
+web-faith-alt-svc = { workspace = true, optional = true }
 web-faith-integrity = { workspace = true, optional = true }
 
 [features]
-default = ["integrity"]
+default = ["http3", "integrity"]
+# Transparent HTTP/3, and the Alt-Svc machinery that upgrades an origin to it.
+http3 = ["reqwest/http3", "dep:web-faith-alt-svc"]
 # Subresource Integrity: parsing and verifying `integrity` values.
 integrity = ["dep:web-faith-integrity"]

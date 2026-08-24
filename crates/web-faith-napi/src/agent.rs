@@ -28,8 +28,9 @@ use reqwest::{
 };
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 
+use web_faith::retry::{DeadConnectionRetry, StaleAddressRetry};
 #[cfg(feature = "http3")]
-use crate::timing::HeadersStamp;
+use web_faith::timing::HeadersStamp;
 #[cfg(feature = "http3")]
 use web_faith_alt_svc::parse_alt_svc_header;
 #[cfg(feature = "http3")]
@@ -49,7 +50,6 @@ use crate::{
 	conn_tracker::{ConnectionInfo, connections_for_napi},
 	error::{FaithError, FaithErrorExt, FaithErrorKind},
 	options::{PRIORITY, RequestCacheMode},
-	retry::{DeadConnectionRetry, StaleAddressRetry},
 };
 
 #[napi]

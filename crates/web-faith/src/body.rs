@@ -17,23 +17,23 @@ use tokio::sync::Mutex;
 
 use crate::timing::TimingSlot;
 
-pub(crate) type DynStream = dyn Stream<Item = std::result::Result<Bytes, String>> + Send + Sync;
+pub type DynStream = dyn Stream<Item = std::result::Result<Bytes, String>> + Send + Sync;
 
-pub(crate) enum Body {
+pub enum Body {
 	Inner(reqwest::Body),
 	Consumed,
 	Stream(SharedStream<Pin<Box<DynStream>>>),
 }
 
 /// Wrapper around the body that auto-drains on drop to release the connection.
-pub(crate) struct BodyHolder {
+pub struct BodyHolder {
 	pub body: Option<Arc<Mutex<Body>>>,
 	/// Flag to prevent drain if body was properly consumed
-	pub(crate) drained: Arc<AtomicBool>,
+	pub drained: Arc<AtomicBool>,
 	/// HTTP version - HTTP/2+ doesn't need draining for connection reuse
-	pub(crate) version: Version,
+	pub version: Version,
 	/// Settled when the body ends, so an abandoned body still finishes its timing
-	pub(crate) timing: Option<Arc<TimingSlot>>,
+	pub timing: Option<Arc<TimingSlot>>,
 }
 
 impl BodyHolder {
@@ -143,7 +143,7 @@ impl Drop for BodyHolder {
 
 /// Drain a body to release the connection back to the pool.
 /// This reads and discards all remaining bytes.
-pub(crate) async fn drain_body_inner(arc: Arc<Mutex<Body>>) {
+pub async fn drain_body_inner(arc: Arc<Mutex<Body>>) {
 	let mut guard = arc.lock().await;
 	match replace(&mut *guard, Body::Consumed) {
 		Body::Inner(body) => {

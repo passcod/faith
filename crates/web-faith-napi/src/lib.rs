@@ -1,12 +1,10 @@
 mod agent;
 mod async_task;
-mod body;
 mod conn_tracker;
 mod error;
 mod fetch;
 mod options;
 mod response;
-mod retry;
 mod stream_body;
 mod timing;
 
