@@ -22,5 +22,6 @@ pub mod client;
 pub mod error;
 pub mod retry;
 pub mod timing;
+pub mod warm_up;
 
 pub use error::{FaithError, FaithErrorKind, error_codes};

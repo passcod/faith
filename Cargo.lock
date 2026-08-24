@@ -2810,6 +2810,7 @@ dependencies = [
  "stream_shared",
  "strum",
  "tokio",
+ "url",
  "web-faith-alt-svc",
  "web-faith-cookies",
  "web-faith-dns",
