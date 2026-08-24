@@ -4,7 +4,7 @@ id: ENV
 
 # Environment variables
 
-Faith reads a set of environment variables rather than asking a caller to configure what the surrounding platform already answers.
+Faith reads a set of environment variables.
 The set is deliberately Node's own vocabulary plus the standard proxy and OpenSSL variables, not a Faith-specific namespace; on the Node surface that is what makes `fetch()` behave like Node's built-in fetch without extra configuration.
 
 Each section below names the surfaces it applies to.
