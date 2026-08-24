@@ -15,16 +15,17 @@ use std::{
 };
 
 use bytes::Bytes;
-use futures::{StreamExt, stream};
+use futures::{Stream, StreamExt, TryStreamExt, stream};
 use http::header::{CONTENT_LENGTH, HeaderMap};
 use http_body_util::BodyStream;
 use reqwest::{StatusCode, Url, Version};
+use serde::de::DeserializeOwned;
 use stream_shared::SharedStream;
 use tokio::{io::AsyncWriteExt, sync::watch};
 use web_faith_encoding::{Coding, decode_stream};
 
 use crate::{
-	body::{Body, BodyHolder, DynStream},
+	body::{Body, BodyHolder, DynStream, drain_body_inner},
 	error::{FaithError, FaithErrorKind},
 	stats::InnerAgentStats,
 	timing::TimingSlot,
@@ -294,6 +295,151 @@ pub struct Response {
 }
 
 impl Response {
+	/// The response's status.
+	pub fn status(&self) -> StatusCode {
+		self.status_code
+	}
+
+	/// The canonical reason phrase for the status, or empty for a code with no well-known one.
+	///
+	/// Always the canonical phrase: HTTP/1 lets a server send its own, which is not surfaced here,
+	/// and HTTP/2 and HTTP/3 carry none at all.
+	pub fn status_text(&self) -> &'static str {
+		self.status_code.canonical_reason().unwrap_or_default()
+	}
+
+	/// Whether the status is in the 2xx range.
+	pub fn ok(&self) -> bool {
+		self.status_code.is_success()
+	}
+
+	pub fn headers(&self) -> &HeaderMap {
+		&self.headers
+	}
+
+	/// The URL the response came from, which is the last one after any redirects.
+	pub fn url(&self) -> &Url {
+		&self.url
+	}
+
+	/// Whether a redirect was followed to reach this response.
+	pub fn redirected(&self) -> bool {
+		self.redirected
+	}
+
+	/// The HTTP version the response arrived over.
+	pub fn version(&self) -> Version {
+		self.version
+	}
+
+	/// What is known of the peer that sent the response.
+	pub fn peer(&self) -> &PeerInformation {
+		&self.peer
+	}
+
+	/// Whether the body has been read, or handed out as a stream.
+	pub fn body_used(&self) -> bool {
+		self.disturbed.load(Ordering::SeqCst)
+	}
+
+	/// Read the whole body.
+	///
+	/// Reading consumes the body, so a second read fails with the already-disturbed error, as the
+	/// fetch standard has it rather than the owned-response model other Rust clients use. An
+	/// `integrity` value on the request is verified here, once the whole body is in hand.
+	// spec:BODY
+	pub async fn bytes(&self) -> Result<Vec<u8>, FaithError> {
+		self.check_stream_disturbed()?;
+		self.gather_contiguous().await
+	}
+
+	/// Read the whole body as text.
+	///
+	/// Always decoded as UTF-8, with invalid sequences replaced by U+FFFD rather than failing, which
+	/// is what the fetch standard calls for.
+	pub async fn text(&self) -> Result<String, FaithError> {
+		let bytes = self.bytes().await?;
+		Ok(String::from_utf8(bytes)
+			.unwrap_or_else(|err| String::from_utf8_lossy(err.as_bytes()).into_owned()))
+	}
+
+	/// Read the whole body and deserialise it from JSON.
+	///
+	/// The body is read into memory before it is parsed, which can cost twice its size; read
+	/// [`Self::body_stream`] instead where that matters.
+	pub async fn json<T: DeserializeOwned>(&self) -> Result<T, FaithError> {
+		let bytes = self.bytes().await?;
+		serde_json::from_slice(&bytes)
+			.map_err(|err| FaithError::new(FaithErrorKind::JsonParse, Some(err.to_string())))
+	}
+
+	/// Take the body as a stream of chunks, decoded under whichever coding was negotiated.
+	///
+	/// `None` for a response that cannot carry a body. Unlike the collecting reads, this can be
+	/// called more than once: each call hands back the same shared stream rather than a second one.
+	/// A body already being consumed elsewhere reports the already-disturbed error rather than
+	/// waiting for the other reader to finish.
+	// spec:BODY
+	pub fn body_stream(
+		&self,
+	) -> Result<Option<impl Stream<Item = Result<Bytes, FaithError>> + use<>>, FaithError> {
+		// The body counts as disturbed from here, though the stream itself stays re-readable.
+		let _ = self.check_stream_disturbed();
+
+		let Some(lock) = &self.body.body else {
+			return Ok(None);
+		};
+
+		let mut body = lock
+			.try_lock()
+			.map_err(|_| FaithError::from(FaithErrorKind::ResponseAlreadyDisturbed))?;
+		let stream = self.ensure_stream(&mut body, self.body.drained.clone())?;
+
+		Ok(Some(stream.map_err(|err| {
+			FaithError::new(FaithErrorKind::BodyStream, Some(err))
+		})))
+	}
+
+	/// Give up on the body, releasing the connection back to the pool.
+	///
+	/// Worth doing when the body is not wanted: left unread, the connection may be held open until
+	/// the response is dropped. An HTTP/1 body is read and thrown away so the connection can be
+	/// reused; a multiplexed one is dropped instead, cancelling the stream without touching the
+	/// connection it shared.
+	///
+	/// This settles the trailers as none rather than leaving them pending: on a multiplexed
+	/// connection the stream was cancelled before any could arrive, and draining an HTTP/1 body
+	/// here bypasses the stream that would have collected them. A caller who discards the body and
+	/// then awaits trailers would otherwise wait for something that can no longer come.
+	// spec:BODY spec:TRL spec:RESP#request-timing
+	pub async fn discard(&self) {
+		if let Some(arc) = self.body.body.clone() {
+			if self.body.is_multiplexed() {
+				*arc.lock().await = Body::Consumed;
+			} else {
+				drain_body_inner(arc).await;
+			}
+		}
+		self.body.drained.store(true, Ordering::SeqCst);
+		self.trailers.ended();
+		// Discarding is one of the ways a body finishes.
+		self.timing.ended();
+	}
+
+	/// The timing of the request that produced this response, once its body has ended.
+	// spec:RESP#request-timing
+	pub async fn timing(&self) -> crate::timing::RequestTiming {
+		self.timing.settled().await
+	}
+
+	/// The trailers, once the body has ended.
+	///
+	/// A body that is never read never ends, so this waits indefinitely by design; see [`Trailers`].
+	// spec:TRL
+	pub async fn trailers(&self) -> Trailers {
+		self.trailers.settled().await
+	}
+
 	pub fn check_stream_disturbed(&self) -> Result<(), FaithError> {
 		if self.disturbed.swap(true, Ordering::SeqCst) {
 			Err(FaithErrorKind::ResponseAlreadyDisturbed.into())

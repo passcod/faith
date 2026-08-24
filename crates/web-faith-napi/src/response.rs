@@ -13,12 +13,8 @@ use napi::{
 	threadsafe_function::{ThreadsafeFunction, ThreadsafeFunctionCallMode},
 };
 use napi_derive::napi;
-use serde_json;
 
-use web_faith::{
-	body::{Body, drain_body_inner},
-	response::{FileDestination, FileProgress, FileWritten, Response, Trailers},
-};
+use web_faith::response::{FileDestination, FileProgress, FileWritten, Response, Trailers};
 
 use crate::{
 	async_task::{Value, faith_promise},
@@ -123,7 +119,7 @@ impl FaithResponse {
 	#[napi]
 	pub fn headers(&self) -> Vec<(String, String)> {
 		self.inner
-			.headers
+			.headers()
 			.iter()
 			.filter_map(|(name, value)| {
 				value
@@ -138,7 +134,7 @@ impl FaithResponse {
 	/// response was successful (status in the range 200-299) or not.
 	#[napi(getter)]
 	pub fn ok(&self) -> bool {
-		self.inner.status_code.is_success()
+		self.inner.ok()
 	}
 
 	/// Custom to Faith.
@@ -176,7 +172,7 @@ impl FaithResponse {
 	/// `false` on those responses.
 	#[napi(getter)]
 	pub fn redirected(&self) -> bool {
-		self.inner.redirected
+		self.inner.redirected()
 	}
 
 	/// The `status` read-only property of the `Response` interface contains the HTTP status codes of the
@@ -185,7 +181,7 @@ impl FaithResponse {
 	/// A value is `0` is returned for a response whose `type` is `opaque`, `opaqueredirect`, or `error`.
 	#[napi(getter)]
 	pub fn status(&self) -> u16 {
-		self.inner.status_code.as_u16()
+		self.inner.status().as_u16()
 	}
 
 	/// The `statusText` read-only property of the `Response` interface contains the status message
@@ -198,10 +194,7 @@ impl FaithResponse {
 	/// string.
 	#[napi(getter)]
 	pub fn status_text(&self) -> &'static str {
-		self.inner
-			.status_code
-			.canonical_reason()
-			.unwrap_or_default()
+		self.inner.status_text()
 	}
 
 	/// The `type` read-only property of the `Response` interface contains the type of the response. The
@@ -217,7 +210,7 @@ impl FaithResponse {
 	/// value of the `url` property will be the final URL obtained after any redirects.
 	#[napi(getter)]
 	pub fn url(&self) -> String {
-		self.inner.url.to_string()
+		self.inner.url().to_string()
 	}
 
 	/// The `version` read-only property of the `Response` interface contains the HTTP version of the
@@ -303,32 +296,9 @@ impl FaithResponse {
 	/// Returns a promise that resolves when the body has been fully discarded.
 	#[napi]
 	pub fn discard<'env>(&self, env: &'env Env) -> Result<PromiseRaw<'env, ()>, napi::Error> {
-		let body = self.inner.body.body.clone();
-		let drained_flag = self.inner.body.drained.clone();
-		let is_multiplexed = self.inner.body.is_multiplexed();
-		let trailers = self.inner.trailers.clone();
-		let timing = self.inner.timing.clone();
+		let this = Clone::clone(self);
 		faith_promise(env, async move {
-			if let Some(arc) = body {
-				if is_multiplexed {
-					// Multiplexed connections don't need draining for reuse; dropping
-					// the body cancels the stream and frees its resources right away
-					// instead of waiting for garbage collection.
-					let mut guard = arc.lock().await;
-					*guard = Body::Consumed;
-				} else {
-					drain_body_inner(arc).await;
-				}
-			}
-			drained_flag.store(true, Ordering::SeqCst);
-			// Discarding the body discards its trailers: on a multiplexed connection the
-			// stream was cancelled before any could arrive, and draining an HTTP/1 body
-			// here bypasses the stream that would have collected them. Settling this as
-			// "none" rather than leaving it pending is the point -- a caller who discarded
-			// the body and then awaited trailers used to wait forever.
-			trailers.ended();
-			// Discarding is one of the ways a body finishes (spec:RESP#request-timing).
-			timing.ended();
+			this.inner.discard().await;
 			Ok(())
 		})
 	}
@@ -340,10 +310,10 @@ impl FaithResponse {
 	#[napi]
 	pub fn bytes<'env>(&self, env: &'env Env) -> Result<PromiseRaw<'env, Buffer>, napi::Error> {
 		let this = Clone::clone(self);
-		faith_promise(env, async move {
-			this.inner.check_stream_disturbed()?;
-			this.inner.gather_contiguous().await.map(Buffer::from)
-		})
+		faith_promise(
+			env,
+			async move { this.inner.bytes().await.map(Buffer::from) },
+		)
 	}
 
 	/// The `text()` method of the `Response` interface takes a `Response` stream and reads it to
@@ -353,12 +323,7 @@ impl FaithResponse {
 	#[napi]
 	pub fn text<'env>(&self, env: &'env Env) -> Result<PromiseRaw<'env, String>, napi::Error> {
 		let this = Clone::clone(self);
-		faith_promise(env, async move {
-			this.inner.check_stream_disturbed()?;
-			let bytes = this.inner.gather_contiguous().await?;
-			Ok(String::from_utf8(bytes)
-				.unwrap_or_else(|e| String::from_utf8_lossy(e.as_bytes()).into_owned()))
-		})
+		faith_promise(env, async move { this.inner.text().await })
 	}
 
 	/// The `json()` method of the `Response` interface takes a `Response` stream and reads it to
@@ -374,13 +339,7 @@ impl FaithResponse {
 	#[napi]
 	pub fn json<'env>(&self, env: &'env Env) -> Result<PromiseRaw<'env, Value>, napi::Error> {
 		let this = Clone::clone(self);
-		faith_promise(env, async move {
-			this.inner.check_stream_disturbed()?;
-			let bytes = this.inner.gather_contiguous().await?;
-			let value = serde_json::from_slice(&bytes)
-				.map_err(|e| FaithError::new(FaithErrorKind::JsonParse, Some(e.to_string())))?;
-			Ok(Value(value))
-		})
+		faith_promise(env, async move { this.inner.json().await.map(Value) })
 	}
 
 	/// Custom to Faith.
@@ -452,7 +411,7 @@ impl FaithResponse {
 	// spec:RESP#request-timing
 	#[napi]
 	pub async fn timing(&self) -> TimingBreakdown {
-		self.inner.timing.settled().await.into()
+		self.inner.timing().await.into()
 	}
 
 	/// The `trailers()` read-only property of the `Response` interface returns a promise that
@@ -474,7 +433,7 @@ impl FaithResponse {
 	/// This is an async fn as an internal implementation detail and the wrapper makes it a property.
 	#[napi]
 	pub async fn trailers(&self) -> Option<Vec<(String, String)>> {
-		match self.inner.trailers.settled().await {
+		match self.inner.trailers().await {
 			// NotYet cannot come back from `settled`, which is what it waits on.
 			Trailers::NotYet | Trailers::None => None,
 			Trailers::Some(headers) => Some(
