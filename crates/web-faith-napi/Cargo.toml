@@ -46,6 +46,7 @@ time.workspace = true
 tokio-util.workspace = true
 url.workspace = true
 web-faith.workspace = true
+web-faith-cookies = { workspace = true, features = ["reqwest"] }
 web-faith-encoding.workspace = true
 web-faith-integrity.workspace = true
 

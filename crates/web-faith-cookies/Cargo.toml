@@ -1,0 +1,23 @@
+[package]
+name = "web-faith-cookies"
+description = "A cookie jar with the RFC 6265bis rules that hold outside a browser"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+# Flipped on once the release tooling is in place.
+publish = false
+
+[dependencies]
+cookie.workspace = true
+cookie_store.workspace = true
+http.workspace = true
+time.workspace = true
+url.workspace = true
+reqwest = { workspace = true, optional = true }
+
+[features]
+# Implement reqwest's `CookieStore`, so the jar can serve as its cookie provider.
+reqwest = ["dep:reqwest"]

@@ -1,20 +1,22 @@
-//! The agent's cookie jar. (spec:COOK)
+//! A cookie jar for HTTP clients, with the rules that hold outside a browser. (spec:COOK)
 //!
-//! `cookie_store` implements the classic RFC 6265 storage model, and reqwest's [`Jar`] wraps it in a
+//! `cookie_store` implements the classic RFC 6265 storage model, and reqwest's `Jar` wraps it in a
 //! private field, so extending it means wrapping the store ourselves rather than the jar. What this
 //! adds is the RFC 6265bis rules that mean something without a browsing context: the `__Host-` and
 //! `__Secure-` name prefixes, a cap on how far ahead a cookie may expire, and caps on how many
 //! cookies and how many bytes one server can accumulate. `SameSite` is left to the `cookie` crate to
 //! parse and is never read, governing cross-site behaviour that only a first-party context has.
 //!
-//! [`Jar`]: reqwest::cookie::Jar
+//! The `reqwest` feature implements that client's `CookieStore` trait, so the jar can be handed to
+//! it as a cookie provider.
 
 use std::{collections::HashMap, sync::RwLock, time::Duration};
 
 use cookie::{Cookie as RawCookie, Expiration};
 use cookie_store::{Cookie as StoredCookie, CookieStore as Store, StoreAction};
-use reqwest::{Url, cookie::CookieStore, header::HeaderValue};
+use http::HeaderValue;
 use time::OffsetDateTime;
+use url::Url;
 
 /// A cookie may not persist beyond this by default. RFC 6265bis §5.5.
 pub const DEFAULT_MAX_AGE: Duration = Duration::from_secs(400 * 24 * 60 * 60);
@@ -271,8 +273,16 @@ impl Inner {
 	}
 }
 
-impl CookieStore for FaithJar {
-	fn set_cookies(&self, cookie_headers: &mut dyn Iterator<Item = &HeaderValue>, url: &Url) {
+impl FaithJar {
+	/// Store the cookies a response set, ignoring any the jar's rules refuse.
+	///
+	/// A header that is not valid UTF-8, or that does not parse as a cookie, is skipped rather than
+	/// failing the read: one bad `Set-Cookie` does not spoil the response.
+	pub fn store_response_cookies<'h>(
+		&self,
+		cookie_headers: impl Iterator<Item = &'h HeaderValue>,
+		url: &Url,
+	) {
 		for header in cookie_headers {
 			let Ok(header) = std::str::from_utf8(header.as_bytes()) else {
 				continue;
@@ -286,7 +296,8 @@ impl CookieStore for FaithJar {
 		}
 	}
 
-	fn cookies(&self, url: &Url) -> Option<HeaderValue> {
+	/// The `Cookie` header to send to `url`, or `None` when the jar has nothing for it.
+	pub fn request_cookie_header(&self, url: &Url) -> Option<HeaderValue> {
 		let inner = self.inner.read().unwrap();
 		let cookies = inner
 			.store
@@ -300,6 +311,17 @@ impl CookieStore for FaithJar {
 		}
 
 		HeaderValue::from_str(&cookies).ok()
+	}
+}
+
+#[cfg(feature = "reqwest")]
+impl reqwest::cookie::CookieStore for FaithJar {
+	fn set_cookies(&self, cookie_headers: &mut dyn Iterator<Item = &HeaderValue>, url: &Url) {
+		self.store_response_cookies(cookie_headers, url);
+	}
+
+	fn cookies(&self, url: &Url) -> Option<HeaderValue> {
+		self.request_cookie_header(url)
 	}
 }
 
@@ -321,7 +343,7 @@ mod tests {
 
 	/// What the jar would send to `url`, as a `Cookie` header value.
 	fn sent(jar: &FaithJar, url: &str) -> Option<String> {
-		jar.cookies(&self::url(url))
+		jar.request_cookie_header(&self::url(url))
 			.map(|value| value.to_str().unwrap().to_owned())
 	}
 
@@ -733,7 +755,7 @@ mod tests {
 			HeaderValue::from_static("__Host-bad=1; Path=/"),
 		];
 
-		jar.set_cookies(&mut headers.iter(), &url("https://example.com/"));
+		jar.store_response_cookies(headers.iter(), &url("https://example.com/"));
 
 		let sent = sent(&jar, "https://example.com/").unwrap();
 		assert!(sent.contains("__Host-good=1"), "{sent}");

@@ -4,7 +4,6 @@ mod alt_svc;
 mod async_task;
 mod body;
 mod conn_tracker;
-mod cookies;
 mod dns;
 mod error;
 mod fetch;

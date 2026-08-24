@@ -2805,6 +2805,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "web-faith-cookies"
+version = "0.7.0"
+dependencies = [
+ "cookie",
+ "cookie_store",
+ "http",
+ "reqwest",
+ "time",
+ "url",
+]
+
+[[package]]
 name = "web-faith-encoding"
 version = "0.7.0"
 dependencies = [
@@ -2861,6 +2873,7 @@ dependencies = [
  "tokio-util",
  "url",
  "web-faith",
+ "web-faith-cookies",
  "web-faith-encoding",
  "web-faith-integrity",
  "windows",
