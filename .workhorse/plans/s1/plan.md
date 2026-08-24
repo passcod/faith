@@ -148,6 +148,31 @@ Decisions taken while doing steps 0–7, worth not relitigating:
   comment is emitted verbatim into `index.d.ts`, where `[`X`]` means nothing, so plain backticks
   belong on anything a napi item documents.
 
+## Outstanding: make the spec tree serve both surfaces
+
+A spec should be one of three things, never a fourth: generic to both surfaces (naming the concept
+and linking to where it is defined), specified at the correct site, or explicitly about one surface
+so the reader knows which. What it should not be is shared behaviour spelled in one surface's
+identifiers, which is what a JavaScript name in a spec covering both amounts to.
+
+[FAITH](../../specs/overview.md) and [ENV](../../specs/environment/variables.md) are done. The
+remaining sites, from a survey of JS-cased identifiers:
+
+- `agent/observability.md` (~20: `bodiesStarted`, `responseCount`, `rttUs`, and the rest of the
+  per-connection fields), `agent/warm-up.md` (~10, `prefetchDns` five times),
+  `agent/cookies.md` (~8), `agent/dns.md` (~6), `agent/overview.md` (~5),
+  `agent/flow-control.md` (~4), `agent/connection-pool.md` (~3), and scattered singles.
+- `response/response.md` and `response/reading-the-body.md` need judgment rather than a sweep: most
+  of their identifiers are Resource Timing's own field names (`fetchStart`, `requestStart`), which
+  are standard vocabulary and should stay. Faith's own (`bodyUsed`, `statusText`) are the ones that
+  want naming as concepts, [RSAPI](../../specs/rust/client-api.md) spelling them `body_used` and
+  `status_text`.
+- `rust/client-api.md` needs nothing: its `Request` and `Response` are the Rust types.
+
+So the raw identifier count overstates the work — a blind sweep would churn standard-defined names
+and Rust types alike. Roughly 60 genuine sites across about ten files, each needing a decision on
+whether the surrounding spec is shared or single-surface.
+
 ## Verification discipline
 
 Every step must leave `cargo build`, `cargo test`, and the napi `npm run build` green
