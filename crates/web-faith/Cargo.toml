@@ -14,3 +14,9 @@ publish = false
 reqwest.workspace = true
 reqwest-middleware.workspace = true
 strum.workspace = true
+web-faith-integrity = { workspace = true, optional = true }
+
+[features]
+default = ["integrity"]
+# Subresource Integrity: parsing and verifying `integrity` values.
+integrity = ["dep:web-faith-integrity"]

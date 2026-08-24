@@ -2801,6 +2801,14 @@ dependencies = [
  "reqwest",
  "reqwest-middleware",
  "strum",
+ "web-faith-integrity",
+]
+
+[[package]]
+name = "web-faith-integrity"
+version = "0.7.0"
+dependencies = [
+ "ssri",
 ]
 
 [[package]]
@@ -2841,6 +2849,7 @@ dependencies = [
  "tokio-util",
  "url",
  "web-faith",
+ "web-faith-integrity",
  "windows",
 ]
 

@@ -9,7 +9,6 @@ mod dns;
 mod encoding;
 mod error;
 mod fetch;
-mod integrity;
 mod options;
 mod response;
 mod retry;
