@@ -103,6 +103,7 @@ pub fn faith_fetch<'env>(
 		let headers_stamp = HeadersStamp::default();
 
 		let mut request = agent
+			.inner
 			.client
 			.as_ref()
 			.ok_or(FaithErrorKind::Closed)?
@@ -160,6 +161,7 @@ pub fn faith_fetch<'env>(
 			});
 			from_request.or_else(|| {
 				agent
+					.inner
 					.default_content_encoding
 					.as_ref()
 					.and_then(|value| value.to_str().ok().map(str::to_owned))
@@ -182,13 +184,14 @@ pub fn faith_fetch<'env>(
 				.clone()
 				.or_else(|| {
 					agent
+						.inner
 						.default_accept_encoding
 						.as_ref()
 						.and_then(|value| value.to_str().ok().map(str::to_owned))
 				})
 				.unwrap_or_else(|| DEFAULT_ACCEPT_ENCODING.to_owned()),
 		);
-		if request_accept_encoding.is_none() && agent.default_accept_encoding.is_none() {
+		if request_accept_encoding.is_none() && agent.inner.default_accept_encoding.is_none() {
 			request = request.header(
 				ACCEPT_ENCODING,
 				HeaderValue::from_static(DEFAULT_ACCEPT_ENCODING),
@@ -201,7 +204,7 @@ pub fn faith_fetch<'env>(
 		// left to reqwest: it fills a default header in only where the request carries none
 		// of that name, so setting the derived value would displace the agent's own.
 		if let Some(urgency) = options.priority
-			&& !agent.has_default_priority
+			&& !agent.inner.has_default_priority
 			&& !options.headers.as_ref().is_some_and(|headers| {
 				headers
 					.iter()
@@ -233,7 +236,7 @@ pub fn faith_fetch<'env>(
 
 			// A body read from a `ReadableStream` has no length to advertise, which the fetch
 			// standard allows only over HTTP/2 and HTTP/3 (spec:REQ#streaming-a-request-body).
-			if !agent.quirk_h1_request_streaming {
+			if !agent.inner.quirk_h1_request_streaming {
 				// Faith never negotiates h2c, so a plaintext origin is HTTP/1.x for certain and
 				// can be refused without opening a connection to find out.
 				if parsed_url.scheme() != "https" {
@@ -303,7 +306,11 @@ pub fn faith_fetch<'env>(
 			request = request.timeout(dur);
 		}
 
-		agent.stats.requests_sent.fetch_add(1, Ordering::Relaxed);
+		agent
+			.inner
+			.stats
+			.requests_sent
+			.fetch_add(1, Ordering::Relaxed);
 
 		// The origin every phase is measured from.
 		let started = Instant::now();
@@ -321,6 +328,7 @@ pub fn faith_fetch<'env>(
 		};
 
 		agent
+			.inner
 			.stats
 			.responses_received
 			.fetch_add(1, Ordering::Relaxed);
@@ -341,16 +349,17 @@ pub fn faith_fetch<'env>(
 		// the TCP fallback re-runs the untouched clone. Restricting the normalisation
 		// to those keeps exact comparison, and so port-only redirect detection, for
 		// every other response.
-		let redirected = if agent.h3_follow_advertised_port && version == http::Version::HTTP_3 {
-			let without_port = |url: &reqwest::Url| {
-				let mut url = url.clone();
-				let _ = url.set_port(None);
-				url
+		let redirected =
+			if agent.inner.h3_follow_advertised_port && version == http::Version::HTTP_3 {
+				let without_port = |url: &reqwest::Url| {
+					let mut url = url.clone();
+					let _ = url.set_port(None);
+					url
+				};
+				without_port(&parsed_url) != without_port(&response_url)
+			} else {
+				parsed_url != response_url
 			};
-			without_port(&parsed_url) != without_port(&response_url)
-		} else {
-			parsed_url != response_url
-		};
 
 		// Track connection for TCP stats (if we can get both local and remote addr).
 		// A connection the tracker has already seen is one the pool handed back, which is
@@ -358,7 +367,7 @@ pub fn faith_fetch<'env>(
 		let reused = if let Some(http_info) = response.extensions().get::<HttpInfo>() {
 			let local_addr = http_info.local_addr();
 			let remote_addr = http_info.remote_addr();
-			agent.conn_tracker.track(local_addr, remote_addr)
+			agent.inner.conn_tracker.track(local_addr, remote_addr)
 		} else {
 			false
 		};
@@ -366,7 +375,7 @@ pub fn faith_fetch<'env>(
 		// The origin now holds a connection the pool keeps idle, so a `preconnect` for it has
 		// nothing left to do (spec:WARM). Keyed on the URL the request was sent to, so a
 		// redirect chain marks the origin that actually answered rather than the one asked for.
-		agent.mark_warm(&response_url);
+		agent.inner.mark_warm(&response_url);
 
 		let peer = PeerInformation {
 			address: response.remote_addr(),
@@ -436,7 +445,7 @@ pub fn faith_fetch<'env>(
 			integrity: options.integrity,
 			peer: Arc::new(peer),
 			redirected,
-			stats: agent.stats.clone(),
+			stats: agent.inner.stats.clone(),
 			status_code,
 			timing,
 			trailers: Default::default(),

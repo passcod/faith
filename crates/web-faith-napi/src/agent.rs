@@ -2,43 +2,31 @@ use std::{
 	fmt::Debug,
 	net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6, UdpSocket},
 	str::FromStr as _,
-	sync::{
-		Arc,
-		atomic::{AtomicU64, Ordering},
-	},
+	sync::Arc,
 	time::Duration,
 };
 
 use napi::bindgen_prelude::{PromiseRaw, within_runtime_if_available};
 
-use http::Version;
 use http_cache_reqwest::{
 	CACacheManager, CacheOptions, HttpCacheOptions, MokaCacheBuilder, MokaManager,
 };
-use hyper_util::client::legacy::connect::HttpInfo;
-use moka::sync::Cache as MokaCache;
 use napi::{Either, Env, bindgen_prelude::Buffer};
 use napi_derive::napi;
 use reqwest::{
-	Certificate, Client, Identity, Url,
-	cookie::CookieStore as _,
+	Certificate, Identity, Url,
 	header::{HeaderMap, HeaderName, HeaderValue},
 };
-use reqwest_middleware::ClientWithMiddleware;
 
+use web_faith::agent::AgentSettings;
+#[cfg(feature = "http3")]
+use web_faith::client::H3UpgradeRecipe;
 use web_faith::client::{
 	ClientRecipe, DEFAULT_CONNECTION_WINDOW, DEFAULT_STREAM_WINDOW, HttpCacheRecipe,
 	HttpCacheStore, NodeEnvRecipe, RedirectPolicy, ResolvedWindows,
 };
 #[cfg(feature = "http3")]
-use web_faith::client::{H3UpgradeRecipe, install_https_sink};
-use web_faith::stats::InnerAgentStats;
-use web_faith::warm_up::{extract_host, origin_key, reduce_to_origin};
-#[cfg(feature = "http3")]
-use web_faith_alt_svc::parse_alt_svc_header;
-#[cfg(feature = "http3")]
-use web_faith_alt_svc::{AltSvcCache, AltSvcCacheConfig, H3Prober};
-use web_faith_conn_tracker::ConnectionTracker;
+use web_faith_alt_svc::{AltSvcCache, AltSvcCacheConfig};
 use web_faith_dns::{
 	DEFAULT_MAX_STALE, FaithResolver, ResolverSettings, ServerSpec, parse_domains,
 };
@@ -904,68 +892,7 @@ pub struct ResolverInfo {
 #[napi]
 #[derive(Debug, Clone)]
 pub struct Agent {
-	/// `None` once [`Agent::close`] has been called. The heavy resources
-	/// (connection pool, DNS resolver, background tasks) live inside this
-	/// client, so dropping it is what actually releases them.
-	pub(crate) client: Option<ClientWithMiddleware>,
-	/// The raw `reqwest::Client` underlying [`Self::client`], sharing its connection pool. A
-	/// `preconnect` warm-up sends its synthetic request here rather than through the middleware
-	/// stack, which bypasses the HTTP cache and the Alt-Svc layer (and so keeps the warm-up out of
-	/// request accounting), while still pooling the connection foreground requests reuse. `None`
-	/// once the agent is closed. (spec:WARM)
-	pub(crate) raw_client: Option<Client>,
-	/// Faith's DNS resolver, shared with [`Self::client`] so `prefetchDns` warms the cache requests
-	/// read. `None` under the system resolver, where there is no such cache. (spec:WARM)
-	pub(crate) dns_resolver: Option<FaithResolver>,
-	/// Origins with a warm-up connection opened within the pool idle window, so a repeat
-	/// `preconnect` does no new work. Keyed by `scheme://host:port`; entries expire with the idle
-	/// timeout. (spec:WARM)
-	pub(crate) warmed: MokaCache<String, ()>,
-	/// Single-flight claims for in-flight `preconnect` warm-ups, so concurrent calls for the same
-	/// origin do not open duplicate connections. (spec:WARM)
-	pub(crate) warming: MokaCache<String, ()>,
-	/// Bumped by `networkChanged`, so a warm-up that was in flight across the signal does not
-	/// record its origin as warm: its connection went into the pool that was just dropped
-	/// (spec:NETCHG#reach-across-the-subsystems).
-	pub(crate) warm_generation: Arc<AtomicU64>,
-	pub(crate) cookie_jar: Option<Arc<FaithJar>>,
-	pub(crate) stats: Arc<InnerAgentStats>,
-	pub(crate) conn_tracker: Arc<ConnectionTracker>,
-	#[cfg(feature = "http3")]
-	#[allow(dead_code)]
-	pub(crate) alt_svc_cache: Option<Arc<AltSvcCache>>,
-	/// Held so `close()` can abort in-flight background probes: each one owns a
-	/// clone of the raw client, which would otherwise keep the connection pool
-	/// alive past close for up to the probe timeout.
-	#[cfg(feature = "http3")]
-	pub(crate) h3_prober: Option<Arc<H3Prober>>,
-	/// Mirrors `http3.upgradeFollowAdvertisedPort`. Lives here because `fetch` needs
-	/// it to stop a rewritten port from being reported as a redirect.
-	pub(crate) h3_follow_advertised_port: bool,
-	/// Mirrors `http3.upgradeEnabled`. A warm-up needs it to route the way a foreground request
-	/// would: with the upgrade machinery off, nothing upgrades, whatever the caches hold.
-	/// (spec:WARM#preconnect)
-	#[cfg(feature = "http3")]
-	pub(crate) h3_upgrade_enabled: bool,
-	/// Mirrors `quirks.h1RequestStreaming`. `fetch` consults it to decide whether a streaming
-	/// request body may go out over HTTP/1.x (spec:QUIRK#http-1-x-request-body-streaming).
-	pub(crate) quirk_h1_request_streaming: bool,
-	/// The agent's default `Accept-Encoding`, if one was set among its default headers.
-	/// `fetch` consults it to decide which codings to decode when a request adds none of
-	/// its own (see [`crate::encoding`]).
-	pub(crate) default_accept_encoding: Option<HeaderValue>,
-	/// The agent's default `Content-Encoding`, if one was set among its default headers.
-	/// `fetch` consults it when the `compress` option layers a coding on top of what a
-	/// request already declares, since setting the joined value on the request would
-	/// otherwise displace this default rather than build on it (spec:ENC).
-	pub(crate) default_content_encoding: Option<HeaderValue>,
-	/// Whether a `Priority` header sits among the agent's default headers. `fetch` consults
-	/// it so that default wins over the header the `priority` option would derive.
-	pub(crate) has_default_priority: bool,
-	/// How to build this agent's clients, so `networkChanged` can build them again
-	/// (spec:NETCHG). Shared rather than cloned per agent clone: every clone builds the same
-	/// client from the same recipe, and `fetch` clones the agent per request.
-	pub(crate) recipe: Arc<ClientRecipe>,
+	pub(crate) inner: web_faith::agent::Agent,
 }
 
 #[napi]
@@ -1422,45 +1349,7 @@ impl Agent {
 			h3_upgrade,
 		};
 
-		let conn_timeout = recipe.conn_timeout();
-		let built = recipe.build(
-			cookie_jar.as_ref(),
-			dns_resolver.as_ref(),
-			#[cfg(feature = "http3")]
-			alt_svc_cache.as_ref(),
-		)?;
-
-		// Only now do all three exist: the resolver is built before the cache, and the prober
-		// holds a client that holds the resolver, so this is the earliest the loop can be closed
-		// (spec:DNS#https-records).
-		#[cfg(feature = "http3")]
-		install_https_sink(
-			dns_resolver.as_ref(),
-			alt_svc_cache.as_ref(),
-			built.prober.as_ref(),
-			recipe.h3_upgrade.enabled,
-		);
-
-		Ok(Self {
-			client: Some(built.client),
-			raw_client: Some(built.raw_client),
-			dns_resolver,
-			// A warm-up connection is warm only as long as the pool keeps it idle, so the record
-			// that an origin is warm expires with that same window.
-			warmed: MokaCache::builder().time_to_live(conn_timeout).build(),
-			// A safety TTL well past any reasonable warm-up, so a claim that never gets released
-			// (a warm-up whose task is dropped) frees the origin rather than wedging it.
-			warming: MokaCache::builder()
-				.time_to_live(Duration::from_secs(300))
-				.build(),
-			warm_generation: Default::default(),
-			cookie_jar,
-			stats: Default::default(),
-			conn_tracker: ConnectionTracker::new(conn_timeout),
-			#[cfg(feature = "http3")]
-			alt_svc_cache,
-			#[cfg(feature = "http3")]
-			h3_prober: built.prober,
+		let settings = AgentSettings {
 			h3_follow_advertised_port,
 			#[cfg(feature = "http3")]
 			h3_upgrade_enabled: recipe.h3_upgrade.enabled,
@@ -1468,7 +1357,17 @@ impl Agent {
 			default_accept_encoding,
 			default_content_encoding,
 			has_default_priority,
-			recipe: Arc::new(recipe),
+		};
+
+		Ok(Self {
+			inner: web_faith::agent::Agent::build(
+				recipe,
+				settings,
+				cookie_jar,
+				dns_resolver,
+				#[cfg(feature = "http3")]
+				alt_svc_cache,
+			)?,
 		})
 	}
 
@@ -1492,23 +1391,7 @@ impl Agent {
 	/// no-op. The cookie store, if any, remains readable via `getCookie`.
 	#[napi]
 	pub fn close(&mut self) {
-		// Dropping the client releases the reqwest connection pool and the
-		// Hickory resolver task; the alt-svc cache goes with it. The raw client
-		// shares that pool and the resolver, so it goes too, and both are what a
-		// later `preconnect`/`prefetchDns` checks to throw the closed-agent error.
-		self.client = None;
-		self.raw_client = None;
-		self.dns_resolver = None;
-		#[cfg(feature = "http3")]
-		{
-			// Probes hold a raw client clone; abort them so the pool doesn't
-			// outlive close by up to the probe timeout.
-			if let Some(prober) = &self.h3_prober {
-				prober.abort_all();
-			}
-			self.h3_prober = None;
-			self.alt_svc_cache = None;
-		}
+		self.inner.close();
 	}
 
 	/// Tell the agent the network underneath it has changed, so it stops deciding from what it
@@ -1527,71 +1410,10 @@ impl Agent {
 	/// Requests already in flight are not interrupted and run to completion on the connections
 	/// they hold; the reset shapes what requests started afterwards draw on. Calling it on a
 	/// closed agent does nothing, and calling it repeatedly is harmless.
-	///
-	/// spec:NETCHG
+	// spec:NETCHG
 	#[napi]
 	pub fn network_changed(&mut self) {
-		// A closed agent has already released all of this.
-		if self.client.is_none() {
-			return;
-		}
-
-		// reqwest cannot drop pooled connections short of dropping the client, so the client is
-		// rebuilt from the recipe the agent kept for this. Requests in flight hold their own
-		// clone of the old client (`fetch` clones the agent per request), so they run to
-		// completion and the old pool goes when the last of them finishes.
-		//
-		// A rebuild that fails leaves the agent on its existing client: the options were already
-		// validated at construction, so a failure here is not the caller's to answer for, and an
-		// agent that still works on the old network beats one that works nowhere.
-		let built = self.recipe.build(
-			self.cookie_jar.as_ref(),
-			self.dns_resolver.as_ref(),
-			#[cfg(feature = "http3")]
-			self.alt_svc_cache.as_ref(),
-		);
-		if let Ok(built) = built {
-			#[cfg(feature = "http3")]
-			{
-				// Abort probes running on the old client: each holds a clone of it, and their
-				// answers would describe the path that has just gone away.
-				if let Some(prober) = &self.h3_prober {
-					prober.abort_all();
-				}
-				self.h3_prober = built.prober;
-				// The sink holds the prober, which has just been replaced along with the client
-				// it sends on; leaving the old one installed would aim DNS-triggered probes at a
-				// client that has been dropped.
-				install_https_sink(
-					self.dns_resolver.as_ref(),
-					self.alt_svc_cache.as_ref(),
-					self.h3_prober.as_ref(),
-					self.h3_upgrade_enabled,
-				);
-			}
-			self.client = Some(built.client);
-			self.raw_client = Some(built.raw_client);
-		}
-
-		// Names resolve afresh against the new network, through that network's own servers: the
-		// resolver drops what it read off the old one and reads again when next used. Under the
-		// system resolver there is no resolver here and so nothing to reset (spec:DNS).
-		if let Some(resolver) = &self.dns_resolver {
-			resolver.reset();
-		}
-
-		#[cfg(feature = "http3")]
-		if let Some(alt_svc_cache) = &self.alt_svc_cache {
-			alt_svc_cache.network_changed();
-		}
-
-		// The warm-up records describe pooled connections that have just been dropped, so a
-		// `preconnect` after the signal opens a connection rather than finding the origin warm
-		// (spec:NETCHG, spec:WARM). The single-flight claims are left alone: a warm-up still in
-		// flight is not duplicated by releasing its claim, and the generation bump is what stops
-		// it recording an origin as warm on the strength of a connection in the dropped pool.
-		self.warmed.invalidate_all();
-		self.warm_generation.fetch_add(1, Ordering::Relaxed);
+		self.inner.network_changed();
 	}
 
 	/// Add a cookie into the agent.
@@ -1605,15 +1427,11 @@ impl Agent {
 	/// - the cookie is larger than `cookies.maxSize`
 	#[napi]
 	pub fn add_cookie(&self, url: String, cookie: String) {
-		let Some(jar) = &self.cookie_jar else {
-			return;
-		};
-
 		let Ok(url) = Url::from_str(&url) else {
 			return;
 		};
 
-		jar.add_cookie_str(&cookie, &url);
+		self.inner.add_cookie(&url, &cookie);
 	}
 
 	/// Retrieve a cookie from the store.
@@ -1625,16 +1443,8 @@ impl Agent {
 	/// - the cookie cannot be represented as a string
 	#[napi]
 	pub fn get_cookie(&self, url: String) -> Option<String> {
-		let Some(jar) = &self.cookie_jar else {
-			return None;
-		};
-
-		let Ok(url) = Url::from_str(&url) else {
-			return None;
-		};
-
-		jar.cookies(&url)
-			.and_then(|val| val.to_str().ok().map(ToOwned::to_owned))
+		let url = Url::from_str(&url).ok()?;
+		self.inner.cookie_header(&url)
 	}
 
 	/// Returns statistics gathered by this agent:
@@ -1645,7 +1455,7 @@ impl Agent {
 	/// - `bodiesFinished`
 	#[napi]
 	pub fn stats(&self) -> AgentStats {
-		AgentStats::from(self.stats.snapshot())
+		AgentStats::from(self.inner.stats())
 	}
 
 	/// Returns information on current connections open by this agent.
@@ -1657,7 +1467,7 @@ impl Agent {
 	/// on field availability. If the platform isn't supported at all, this will always return empty.
 	#[napi]
 	pub fn connections<'env>(&self, env: &'env Env) -> Vec<ConnectionInfo<'env>> {
-		connections_for_napi(&self.conn_tracker, env)
+		connections_for_napi(&self.inner.conn_tracker, env)
 	}
 
 	/// Returns the DNS servers this agent resolves through, in the order they are queried, so
@@ -1666,32 +1476,18 @@ impl Agent {
 	/// Each entry gives the server's address, the transport in use (`udp`, `tcp`, `tls`, `https`,
 	/// `quic`, or `h3`), and how that transport was arrived at (`configured` or `conventional`).
 	/// The list is empty until the resolver has been used, because it reads its configuration on
-	/// first use, and empty for an agent using the system resolver. (spec:OBS#resolvers)
+	/// first use, and empty for an agent using the system resolver.
 	#[napi]
 	pub fn resolvers(&self) -> Vec<ResolverInfo> {
-		self.dns_resolver
-			.as_ref()
-			.map(|resolver| {
-				resolver
-					.resolvers()
-					.into_iter()
-					.map(|report| ResolverInfo {
-						address: report.address,
-						transport: report.transport,
-						source: report.source,
-					})
-					.collect()
+		self.inner
+			.resolvers()
+			.into_iter()
+			.map(|report| ResolverInfo {
+				address: report.address,
+				transport: report.transport,
+				source: report.source,
 			})
-			.unwrap_or_default()
-	}
-
-	/// Note that a request reached this origin, so it holds a connection the pool keeps idle for
-	/// the idle window and a `preconnect` for it has no new work to do (spec:WARM).
-	///
-	/// Called for foreground requests as well as warm-ups, because the criterion is about the
-	/// origin holding an idle pooled connection, not about how it came to hold one.
-	pub(crate) fn mark_warm(&self, url: &Url) {
-		self.warmed.insert(origin_key(url), ());
+			.collect()
 	}
 
 	/// Warm the DNS cache for `host`, so a later request to it skips the lookup.
@@ -1701,26 +1497,19 @@ impl Agent {
 	/// lands in the cache and never rejects, whatever happens on the network — a resolution failure
 	/// resolves quietly, because the work is advisory. Under the system resolver there is no cache
 	/// to warm, so the call resolves without doing anything. A malformed host throws synchronously,
-	/// as does a call on a closed agent. (spec:WARM)
+	/// as does a call on a closed agent.
 	#[napi]
 	pub fn prefetch_dns<'env>(
 		&self,
 		env: &'env Env,
 		host: String,
 	) -> Result<PromiseRaw<'env, ()>, napi::Error> {
-		if self.client.is_none() {
-			return Err(caller_error(env, FaithErrorKind::Closed));
-		}
-
-		let Some(host) = extract_host(&host) else {
-			return Err(caller_error(env, FaithErrorKind::AddressParse));
-		};
-
-		let resolver = self.dns_resolver.clone();
+		let warming = self
+			.inner
+			.prefetch_dns(&host)
+			.map_err(|err| caller_error(env, err))?;
 		faith_promise(env, async move {
-			if let Some(resolver) = resolver {
-				resolver.prefetch(&host).await;
-			}
+			warming.await;
 			Ok(())
 		})
 	}
@@ -1734,130 +1523,19 @@ impl Agent {
 	/// foreground request would use: a confirmed HTTP/3 origin gets a warm QUIC connection, every
 	/// other origin a TCP one. The returned promise resolves when the attempt finishes and never
 	/// rejects: every network failure resolves quietly. A malformed origin throws synchronously, as
-	/// does a call on a closed agent. (spec:WARM)
+	/// does a call on a closed agent.
 	#[napi]
 	pub fn preconnect<'env>(
 		&self,
 		env: &'env Env,
 		origin: String,
 	) -> Result<PromiseRaw<'env, ()>, napi::Error> {
-		let Some(raw_client) = self.raw_client.clone() else {
-			return Err(caller_error(env, FaithErrorKind::Closed));
-		};
-
-		let Some(url) = reduce_to_origin(&origin) else {
-			return Err(caller_error(env, FaithErrorKind::AddressParse));
-		};
-		let key = origin_key(&url);
-
-		// Already warm within the idle window, or a warm-up for this origin already in flight:
-		// either way there is no new work to do, so resolve without opening a duplicate.
-		if self.warmed.contains_key(&key)
-			|| !self.warming.entry(key.clone()).or_insert(()).is_fresh()
-		{
-			return faith_promise(env, async move { Ok(()) });
-		}
-
-		// The transport the next foreground request would take, decided exactly as
-		// `AltSvcMiddleware` decides it: nothing upgrades with the machinery off; with a prober,
-		// only a confirmed origin routes to QUIC (an advertisement is evidence worth probing, not
-		// worth routing on); without one, the legacy inline upgrade acts on advertisements too.
-		// Diverging here would warm the wrong transport (spec:WARM#preconnect).
-		#[cfg(feature = "http3")]
-		let h3_port = self
-			.alt_svc_cache
-			.as_ref()
-			.filter(|_| self.h3_upgrade_enabled)
-			.and_then(|cache| {
-				if self.h3_prober.is_some() {
-					cache.confirmed_port(&url)
-				} else {
-					cache.should_use_h3(&url)
-				}
-			});
-		#[cfg(not(feature = "http3"))]
-		let h3_port: Option<u16> = None;
-
-		#[cfg(feature = "http3")]
-		let alt_svc_cache = self.alt_svc_cache.clone();
-		#[cfg(feature = "http3")]
-		let h3_prober = self.h3_prober.clone();
-
-		let conn_tracker = self.conn_tracker.clone();
-		let warmed = self.warmed.clone();
-		let warming = self.warming.clone();
-		// Read before the warm-up starts, to compare against once it finishes.
-		let warm_generation = self.warm_generation.clone();
-		let generation = warm_generation.load(Ordering::Relaxed);
-
+		let warming = self
+			.inner
+			.preconnect(&origin)
+			.map_err(|err| caller_error(env, err))?;
 		faith_promise(env, async move {
-			// Release the single-flight claim whatever happens, so a later warm-up isn't blocked
-			// by this one having finished.
-			struct ReleaseClaim {
-				warming: MokaCache<String, ()>,
-				key: String,
-			}
-			impl Drop for ReleaseClaim {
-				fn drop(&mut self) {
-					self.warming.invalidate(&self.key);
-				}
-			}
-			let _release = ReleaseClaim {
-				warming,
-				key: key.clone(),
-			};
-
-			let request = match h3_port {
-				Some(port) => {
-					let mut h3_url = url.clone();
-					// A port differing from the origin's only comes back with
-					// `upgradeFollowAdvertisedPort` on; rewriting the URL is how reqwest is told to
-					// connect there (mirrors the foreground path).
-					if Some(port) != h3_url.port_or_known_default() {
-						let _ = h3_url.set_port(Some(port));
-					}
-					raw_client.head(h3_url).version(Version::HTTP_3)
-				}
-				None => raw_client.head(url.clone()),
-			};
-
-			let outcome = request.send().await;
-
-			// A TCP warm-up leaves a pooled connection to track and, in probe mode, may reveal an
-			// HTTP/3 advertisement to act on; a QUIC warm-up does neither (QUIC connections are not
-			// tracked, and a confirmed origin has nothing left to probe).
-			if h3_port.is_none() {
-				if let Ok(response) = &outcome
-					&& let Some(info) = response.extensions().get::<HttpInfo>()
-				{
-					conn_tracker.track_warmup(info.local_addr(), info.remote_addr());
-				}
-
-				// A background probe verifies HTTP/3 for a probe-worthy origin exactly as a real
-				// TCP-routed request would, folding in any fresh advertisement first; the warm-up
-				// settles without waiting for it. Both only apply in probe mode (a prober present).
-				#[cfg(feature = "http3")]
-				if let Some(prober) = &h3_prober {
-					if let (Some(cache), Ok(response)) = (&alt_svc_cache, &outcome)
-						&& let Some(value) = response.headers().get("alt-svc")
-						&& let Ok(value) = value.to_str()
-						&& let Some(advertisement) = parse_alt_svc_header(value)
-					{
-						cache.record_alt_svc(&url, &advertisement);
-					}
-					prober.maybe_probe(&url);
-				}
-			}
-
-			// A connection was established, so the origin is warm for the idle window; a failed
-			// warm-up leaves it unmarked so a later `preconnect` may try again. A network change
-			// while this was in flight leaves it unmarked too: the connection landed in the pool
-			// that change dropped, so the origin is not warm however well the request went
-			// (spec:NETCHG#reach-across-the-subsystems).
-			if outcome.is_ok() && warm_generation.load(Ordering::Relaxed) == generation {
-				warmed.insert(key, ());
-			}
-
+			warming.await;
 			Ok(())
 		})
 	}
@@ -1865,8 +1543,8 @@ impl Agent {
 
 /// Build the JS error a warm-up throws synchronously for a caller mistake, preserving its `.code`
 /// and JS error class. Network failures never reach here — they resolve quietly (spec:WARM).
-fn caller_error(env: &Env, kind: FaithErrorKind) -> napi::Error {
-	napi::Error::from(FaithError::from(kind).into_js_error(env))
+fn caller_error(env: &Env, err: FaithError) -> napi::Error {
+	napi::Error::from(err.into_js_error(env))
 }
 
 #[cfg(test)]

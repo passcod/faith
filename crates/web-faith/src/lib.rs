@@ -17,6 +17,7 @@
 //!
 //! </div>
 
+pub mod agent;
 pub mod body;
 pub mod client;
 pub mod error;

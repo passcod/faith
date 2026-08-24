@@ -47,8 +47,6 @@ export declare class Agent {
    * Requests already in flight are not interrupted and run to completion on the connections
    * they hold; the reset shapes what requests started afterwards draw on. Calling it on a
    * closed agent does nothing, and calling it repeatedly is harmless.
-   *
-   * spec:NETCHG
    */
   networkChanged(): void
   /**
@@ -99,7 +97,7 @@ export declare class Agent {
    * Each entry gives the server's address, the transport in use (`udp`, `tcp`, `tls`, `https`,
    * `quic`, or `h3`), and how that transport was arrived at (`configured` or `conventional`).
    * The list is empty until the resolver has been used, because it reads its configuration on
-   * first use, and empty for an agent using the system resolver. (spec:OBS#resolvers)
+   * first use, and empty for an agent using the system resolver.
    */
   resolvers(): Array<ResolverInfo>
   /**
@@ -110,7 +108,7 @@ export declare class Agent {
    * lands in the cache and never rejects, whatever happens on the network — a resolution failure
    * resolves quietly, because the work is advisory. Under the system resolver there is no cache
    * to warm, so the call resolves without doing anything. A malformed host throws synchronously,
-   * as does a call on a closed agent. (spec:WARM)
+   * as does a call on a closed agent.
    */
   prefetchDns(host: string): Promise<undefined>
   /**
@@ -123,7 +121,7 @@ export declare class Agent {
    * foreground request would use: a confirmed HTTP/3 origin gets a warm QUIC connection, every
    * other origin a TCP one. The returned promise resolves when the attempt finishes and never
    * rejects: every network failure resolves quietly. A malformed origin throws synchronously, as
-   * does a call on a closed agent. (spec:WARM)
+   * does a call on a closed agent.
    */
   preconnect(origin: string): Promise<undefined>
 }
