@@ -4,7 +4,7 @@ id: RSAPI
 
 # The Rust client API
 
-`web-faith` has one noun and one verb: an `Agent` owns the connection pool, resolver, cookie jar, HTTP cache, and HTTP/3 knowledge, and `fetch` is how every request goes out.
+An `Agent` owns the connection pool, resolver, cookie jar, HTTP cache, and HTTP/3 knowledge, and `fetch` is how every request goes out.
 The surface is fetch-flavoured rather than a transcription of the JavaScript API: it keeps fetch's vocabulary and the defaults the Node surface has, and it speaks the Rust ecosystem's types wherever one exists for the job.
 The agent's own behaviour, its options, and its lifecycle are specified in [AGENT](../agent/overview.md) and the specs beneath it; this spec covers the shape a Rust caller sees.
 
