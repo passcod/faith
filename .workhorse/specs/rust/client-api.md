@@ -84,7 +84,7 @@ Holding the failure is what lets a target be given as a string: an unparseable o
 
 ## What a disabled component removes
 
-A component's Cargo feature governs the API as much as the build, so turning one off takes away the methods that only mean something with that component present: no `integrity()` without integrity, no cookie jar handle without cookies, and the same for request compression and cache mode (see [RUST](overview.md)).
+A component's Cargo feature governs the API as much as the build, so turning one off takes away the methods that only mean something with that component present: no cookie jar handle without cookies, and the same for request compression and cache mode (see [RUST](overview.md)).
 Code written against a component that is not built fails to compile rather than compiling into a call that does nothing, so a build reports what it does not carry at the point the caller asks for it.
 
 ## Errors and cancellation

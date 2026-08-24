@@ -49,8 +49,11 @@ What the two subsystems do is specified in [QUIC](../http3/transport.md) and [TL
 ## Choosing what is built
 
 Cargo features are how a subsystem is included or left out, so a build that has no use for a piece does not carry it.
-Each of the six components has a feature on `web-faith` named for it, and every one of them is on by default, so a caller who reaches for the crate without thinking about features gets the whole client.
+A component a build can do without has a feature on `web-faith` named for it, and every one of them is on by default, so a caller who reaches for the crate without thinking about features gets the whole client.
 Turning a component's feature off drops the dependency and the code that reaches for it, and the client continues to work without it; it also removes the parts of the API that only mean something with the component present, as in [RSAPI](client-api.md).
+
+Integrity has no such feature and is always built.
+It is small enough that leaving it out saves nothing worth measuring, and a caller who asks for a digest to be checked is owed the check rather than a build that quietly skips it.
 
 A feature decides what is compiled in rather than what is switched on at run time, and the two need not agree: the cookies feature is on by default while the jar itself stays off until an agent asks for it (see [COOK](../agent/cookies.md)).
 

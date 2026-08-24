@@ -86,16 +86,15 @@ QUIC/TLS stay inside `web-faith` as reqwest features (aws-lc-rs default, ring al
         writing a body out takes a progress closure rather than a threadsafe function.
   - [x] `fetch.rs` inverted: `web_faith::request::send` takes an agent, URL, options, body, and an
         optional abort future; `fetch.rs` is 59 lines converting a `fetch()` call into those.
-  - **Left for step 9:** the `integrity` feature, which had to stop being optional. The client's read
-        path verifies unconditionally and gating the call sites would mean a build that quietly skips
-        verification, where the spec wants the feature to remove the API offering it. That API is
-        step 9's, so the feature returns with it. Same for the recipe structs' public fields.
+  - **Left for step 9:** the recipe structs' public fields, which the builder should own the
+        assembly of.
 - [ ] **9. Build the fetch-flavoured client API** per [RSAPI](../../specs/rust/client-api.md):
   `Agent`/`Agent::builder()`, cheap-clone shared agent, `agent.fetch(target) -> IntoFuture` builder
   (`#[must_use]`), `Request`/`Request::new`/`try_clone`, layering rules, `http`/`url`/`bytes` types,
   `http_body::Body` response + `Into<http::Response>`, feature-gated API surface, Tokio, drop-cancels.
-- [ ] **10. Feature wiring** — one default-on feature per component on `web-faith`; disabling one
-  drops the dep, the code, and the API surface it gates (compile error at the call site, not a no-op).
+- [ ] **10. Feature wiring** — a default-on feature per component a build can do without; disabling
+  one drops the dep, the code, and the API surface it gates (compile error at the call site, not a
+  no-op). Integrity is deliberately not among them: it is always built, per [RUST](../../specs/rust/overview.md).
 - [ ] **11. Rust-facing tests + examples** — per-crate examples that run against that crate alone;
   client integration tests mirroring the JS suite where it translates. Add `.workhorse/test-cases/s1/`.
 - [ ] **12. Publishing infra** — release-plz, `cargo-semver-checks` against previous version per crate,
