@@ -4,8 +4,8 @@ id: FAITH
 
 # Faith
 
-Faith is a fetch implementation backed by a Rust network stack rather than Node's built-in HTTP machinery.
-It aims to behave like the browser's fetch wherever that concept translates to a server-side runtime, while exposing the capabilities that stack unlocks: transparent HTTP/2 and HTTP/3, IPv4/IPv6 Happy Eyeballs, DNS caching, an optional cookie jar, and HTTP caching.
+Faith is a fetch API implementation for Node.js and Rust.
+It aims to behave like the browser's fetch wherever that concept translates to a server-side runtime, with transparent HTTP/2 and HTTP/3, IPv4/IPv6 Happy Eyeballs, DNS caching, an optional cookie jar, and HTTP caching.
 
 It reaches callers through two surfaces built from one implementation.
 The native module `@passcod/faith` is the Node.js surface, and the specs here describe its behaviour in JavaScript terms unless they say otherwise.
