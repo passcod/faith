@@ -76,20 +76,17 @@ QUIC/TLS stay inside `web-faith` as reqwest features (aws-lc-rs default, ring al
   - [x] The client-building machinery moved: `ClientRecipe`, `NodeEnvRecipe`, `HttpCacheRecipe`,
         `HttpCacheStore`, `H3UpgradeRecipe`, `ResolvedWindows`, `install_https_sink`, and a pure
         `RedirectPolicy` the napi `Redirect` converts into.
-  - [ ] **The `Agent` inversion — the big remaining piece.** `agent.rs` is down to ~2140 lines:
-        roughly 860 of `#[napi(object)]` option structs (JS-facing, they stay), ~100 of the `Agent`
-        struct, and ~1170 of `#[napi] impl Agent` holding 22 methods. The struct's fields are
-        already pure (reqwest/moka/Arc), so the blocker is that `#[napi] impl` cannot target a
-        foreign type: moving `Agent` to `web-faith` forces the napi `Agent` to become a distinct
-        class wrapping it, in the same change. Each of the 22 methods then splits into a pure core
-        method on `web_faith::Agent` and a thin binding that converts — `close`, `network_changed`,
-        `stats`, `connections`, `resolvers`, `prefetch_dns`, `preconnect`, `cookies` are the verbs
-        [RSAPI](../../specs/rust/client-api.md) names, so this is where the real client API starts
-        rather than a mechanical relocation.
-  - [ ] `response.rs` (~966 lines, 40 napi refs) and `fetch.rs` (~447) follow the agent, since both
-        are built around the napi response class.
-  - [ ] `options.rs` (~246) stays largely JS-facing; the recipe fields it assembles become the
-        builder's business in step 9.
+  - [x] **The `Agent` inversion.** Done: `web_faith::agent::Agent` owns the pool, the verbs, and the
+        per-request settings; `web-faith-napi`'s `Agent` is a napi class holding a handle on it, and
+        keeps the ~440 lines of `AgentOptions` validation that produce a recipe. `prefetch_dns` and
+        `preconnect` return futures the binding wraps, so a refusal happens before the future exists.
+  - [ ] `response.rs` (~966 lines, 40 napi refs) and `fetch.rs` (~447) are what is left. Both are
+        built around the napi response class, so they invert the way the agent did: a pure response
+        and a pure request path in the client, with the napi classes wrapping them. `fetch.rs`
+        already reaches the agent through `agent.inner`, which is the seam to pull on.
+  - [ ] `options.rs` (~246) stays largely JS-facing, holding the `AgentOptions` validation and the
+        per-request option shapes; the recipe it assembles becomes the builder's business in step 9.
+  - [ ] `stream_body.rs` and `async_task.rs` are napi machinery and stay where they are.
 - [ ] **9. Build the fetch-flavoured client API** per [RSAPI](../../specs/rust/client-api.md):
   `Agent`/`Agent::builder()`, cheap-clone shared agent, `agent.fetch(target) -> IntoFuture` builder
   (`#[must_use]`), `Request`/`Request::new`/`try_clone`, layering rules, `http`/`url`/`bytes` types,
