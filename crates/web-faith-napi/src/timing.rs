@@ -39,6 +39,15 @@ impl HeadersStamp {
 	}
 }
 
+/// The Alt-Svc layer is the one place a response's arrival is observed, so it marks the stamp the
+/// request carries; reading it back out is this module's business.
+#[cfg(feature = "http3")]
+impl web_faith_alt_svc::ArrivalStamp for HeadersStamp {
+	fn mark(&self, at: Instant) {
+		HeadersStamp::mark(self, at);
+	}
+}
+
 /// What Faith measures of a request, filled in as the request progresses.
 #[derive(Clone, Debug, Default)]
 pub struct RequestTiming {

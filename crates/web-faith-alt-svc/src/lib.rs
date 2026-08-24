@@ -1,4 +1,5 @@
 use std::{
+	marker::PhantomData,
 	sync::Arc,
 	time::{Duration, Instant},
 };
@@ -8,7 +9,14 @@ use moka::sync::Cache;
 use reqwest::{Request, Response};
 use reqwest_middleware::{Middleware, Next, Result};
 
-use crate::timing::HeadersStamp;
+/// Recording the moment a response's headers arrived.
+///
+/// The stamp itself belongs to the client, which puts it in the request's extensions and reads it
+/// back out to surface the timing; this layer is only the one place that observes the arrival, so
+/// all it needs is to be able to mark what the client left there.
+pub trait ArrivalStamp: Send + Sync + 'static {
+	fn mark(&self, at: Instant);
+}
 
 #[derive(Debug, Clone)]
 pub struct AltSvcEntry {
@@ -1034,8 +1042,12 @@ impl web_faith_dns::HttpsSink for H3HttpsSink {
 	}
 }
 
+/// The Alt-Svc layer, which upgrades an origin to HTTP/3 once it advertises one.
+///
+/// `S` is the client's arrival stamp, which this marks when a response's headers land; see
+/// [`ArrivalStamp`].
 #[derive(Clone)]
-pub struct AltSvcMiddleware {
+pub struct AltSvcMiddleware<S: ArrivalStamp> {
 	cache: Arc<AltSvcCache>,
 	enabled: bool,
 	/// Ceiling on how long an HTTP/3 attempt may take to produce response
@@ -1045,9 +1057,10 @@ pub struct AltSvcMiddleware {
 	/// advertisements in the background. `None` restores the inline upgrade,
 	/// where the next foreground request is the verification.
 	prober: Option<Arc<H3Prober>>,
+	stamp: PhantomData<fn(S)>,
 }
 
-impl std::fmt::Debug for AltSvcMiddleware {
+impl<S: ArrivalStamp> std::fmt::Debug for AltSvcMiddleware<S> {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		f.debug_struct("AltSvcMiddleware")
 			.field("enabled", &self.enabled)
@@ -1058,7 +1071,7 @@ impl std::fmt::Debug for AltSvcMiddleware {
 	}
 }
 
-impl AltSvcMiddleware {
+impl<S: ArrivalStamp> AltSvcMiddleware<S> {
 	pub fn new(
 		cache: Arc<AltSvcCache>,
 		enabled: bool,
@@ -1070,6 +1083,7 @@ impl AltSvcMiddleware {
 			enabled,
 			attempt_timeout,
 			prober,
+			stamp: PhantomData,
 		}
 	}
 
@@ -1095,7 +1109,7 @@ impl AltSvcMiddleware {
 /// request's extensions to become the surfaced timing, so the two can never disagree.
 ///
 /// spec:RESP#request-timing
-async fn run_stamped(
+async fn run_stamped<S: ArrivalStamp>(
 	next: Next<'_>,
 	req: Request,
 	extensions: &mut Extensions,
@@ -1103,7 +1117,7 @@ async fn run_stamped(
 	let result = next.run(req, extensions).await;
 	let at = Instant::now();
 	if result.is_ok()
-		&& let Some(stamp) = extensions.get::<HeadersStamp>()
+		&& let Some(stamp) = extensions.get::<S>()
 	{
 		stamp.mark(at);
 	}
@@ -1111,7 +1125,7 @@ async fn run_stamped(
 }
 
 #[async_trait::async_trait]
-impl Middleware for AltSvcMiddleware {
+impl<S: ArrivalStamp> Middleware for AltSvcMiddleware<S> {
 	async fn handle(
 		&self,
 		mut req: Request,
@@ -1119,7 +1133,7 @@ impl Middleware for AltSvcMiddleware {
 		next: Next<'_>,
 	) -> Result<Response> {
 		if !self.enabled {
-			return run_stamped(next, req, extensions).await.0;
+			return run_stamped::<S>(next, req, extensions).await.0;
 		}
 
 		let url = req.url().clone();
@@ -1161,11 +1175,11 @@ impl Middleware for AltSvcMiddleware {
 				// leaving the fallback below free to use it.
 				let outcome = match self.attempt_timeout {
 					Some(limit) => {
-						tokio::time::timeout(limit, run_stamped(next.clone(), req, extensions))
+						tokio::time::timeout(limit, run_stamped::<S>(next.clone(), req, extensions))
 							.await
 							.ok()
 					}
-					None => Some(run_stamped(next.clone(), req, extensions).await),
+					None => Some(run_stamped::<S>(next.clone(), req, extensions).await),
 				};
 				// Reached on success, error and expiry alike; only a mid-flight
 				// drop skips it and leaves the guard armed.
@@ -1201,7 +1215,7 @@ impl Middleware for AltSvcMiddleware {
 
 						// Use the cloned request (which still has default HTTP version)
 						let started = Instant::now();
-						let (result, at) = run_stamped(next, req_clone, extensions).await;
+						let (result, at) = run_stamped::<S>(next, req_clone, extensions).await;
 						if let Ok(ref response) = result {
 							self.cache.record_path_time(
 								&url,
@@ -1214,7 +1228,7 @@ impl Middleware for AltSvcMiddleware {
 				}
 			} else {
 				// Can't clone request (streaming body), just proceed without HTTP/3
-				run_stamped(next, req, extensions).await.0
+				run_stamped::<S>(next, req, extensions).await.0
 			}
 		} else {
 			// An advertisement from an earlier response may still be waiting on
@@ -1223,7 +1237,7 @@ impl Middleware for AltSvcMiddleware {
 			self.maybe_probe(&url);
 
 			let started = Instant::now();
-			let (result, at) = run_stamped(next, req, extensions).await;
+			let (result, at) = run_stamped::<S>(next, req, extensions).await;
 
 			// Check for Alt-Svc header in non-HTTP/3 responses
 			if let Ok(ref response) = result {

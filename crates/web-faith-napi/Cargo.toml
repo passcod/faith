@@ -46,6 +46,7 @@ time.workspace = true
 tokio-util.workspace = true
 url.workspace = true
 web-faith.workspace = true
+web-faith-alt-svc = { workspace = true, optional = true }
 web-faith-conn-tracker.workspace = true
 web-faith-cookies = { workspace = true, features = ["reqwest"] }
 web-faith-dns = { workspace = true, features = ["reqwest"] }
@@ -65,4 +66,4 @@ napi-build.workspace = true
 
 [features]
 default = ["http3"]
-http3 = ["reqwest/http3"]
+http3 = ["reqwest/http3", "dep:web-faith-alt-svc"]

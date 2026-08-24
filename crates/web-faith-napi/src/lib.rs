@@ -1,6 +1,4 @@
 mod agent;
-#[cfg(feature = "http3")]
-mod alt_svc;
 mod async_task;
 mod body;
 mod conn_tracker;

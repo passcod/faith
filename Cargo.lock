@@ -2805,6 +2805,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "web-faith-alt-svc"
+version = "0.7.0"
+dependencies = [
+ "async-trait",
+ "http",
+ "moka",
+ "reqwest",
+ "reqwest-middleware",
+ "tokio",
+ "url",
+ "web-faith-dns",
+]
+
+[[package]]
 name = "web-faith-conn-tracker"
 version = "0.7.0"
 dependencies = [
@@ -2898,6 +2912,7 @@ dependencies = [
  "tokio-util",
  "url",
  "web-faith",
+ "web-faith-alt-svc",
  "web-faith-conn-tracker",
  "web-faith-cookies",
  "web-faith-dns",

@@ -29,9 +29,11 @@ use reqwest::{
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 
 #[cfg(feature = "http3")]
-use crate::alt_svc::parse_alt_svc_header;
+use crate::timing::HeadersStamp;
 #[cfg(feature = "http3")]
-use crate::alt_svc::{AltSvcCache, AltSvcCacheConfig, AltSvcMiddleware, H3Prober};
+use web_faith_alt_svc::parse_alt_svc_header;
+#[cfg(feature = "http3")]
+use web_faith_alt_svc::{AltSvcCache, AltSvcCacheConfig, AltSvcMiddleware, H3Prober};
 use web_faith_conn_tracker::ConnectionTracker;
 use web_faith_dns::{
 	DEFAULT_MAX_STALE, FaithResolver, ResolverSettings, ServerSpec, parse_domains,
@@ -1141,7 +1143,7 @@ fn install_https_sink(
 	let (Some(resolver), Some(cache)) = (dns_resolver, alt_svc_cache) else {
 		return;
 	};
-	resolver.set_https_sink(Arc::new(crate::alt_svc::H3HttpsSink::new(
+	resolver.set_https_sink(Arc::new(web_faith_alt_svc::H3HttpsSink::new(
 		Arc::clone(cache),
 		prober,
 	)));
@@ -1345,7 +1347,7 @@ impl ClientRecipe {
 		// rewrite cannot split HTTP/3 and TCP responses across separate entries.
 		#[cfg(feature = "http3")]
 		if let Some(alt_svc_cache) = alt_svc_cache {
-			client = client.with(AltSvcMiddleware::new(
+			client = client.with(AltSvcMiddleware::<HeadersStamp>::new(
 				alt_svc_cache.clone(),
 				self.h3_upgrade.enabled,
 				self.h3_upgrade.attempt_timeout,
