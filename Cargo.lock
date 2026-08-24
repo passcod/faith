@@ -2817,6 +2817,7 @@ dependencies = [
  "web-faith-conn-tracker",
  "web-faith-cookies",
  "web-faith-dns",
+ "web-faith-encoding",
  "web-faith-integrity",
 ]
 

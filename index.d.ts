@@ -326,8 +326,6 @@ toFile(path: string, options?: ToFileOptions | undefined | null, onProgress?: ((
  *
  * This is an async fn as an internal implementation detail and the wrapper makes it a
  * property.
- *
- * spec:RESP#request-timing
  */
 timing(): Promise<TimingBreakdown>
 /**

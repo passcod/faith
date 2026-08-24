@@ -428,7 +428,7 @@ pub fn faith_fetch<'env>(
 			timing.ended();
 		}
 
-		Ok(FaithResponse {
+		Ok(FaithResponse::from(web_faith::response::Response {
 			body: if empty {
 				BodyHolder::none()
 			} else {
@@ -451,6 +451,6 @@ pub fn faith_fetch<'env>(
 			trailers: Default::default(),
 			url: response_url,
 			version,
-		})
+		}))
 	})
 }

@@ -1,73 +1,31 @@
 use std::{
 	fmt::Debug,
-	hint::unreachable_unchecked,
-	mem::replace,
-	pin::Pin,
 	result::Result,
 	sync::{
 		Arc,
 		atomic::{AtomicBool, Ordering},
 	},
-	time::Instant,
 };
 
-use bytes::Bytes;
-use futures::{StreamExt, TryStreamExt, stream};
-use http_body_util::BodyStream;
+use futures::TryStreamExt;
 use napi::{
 	bindgen_prelude::*,
 	threadsafe_function::{ThreadsafeFunction, ThreadsafeFunctionCallMode},
 };
 use napi_derive::napi;
-use reqwest::{
-	StatusCode, Url, Version,
-	header::{CONTENT_LENGTH, HeaderMap},
-};
 use serde_json;
-use stream_shared::SharedStream;
-use tokio::io::AsyncWriteExt;
-
-use web_faith::{
-	body::{Body, BodyHolder, DynStream, drain_body_inner},
-	response::{FileDestination, PROGRESS_INTERVAL, Trailers, TrailersSlot, open_destination},
-	stats::InnerAgentStats,
-	timing::TimingSlot,
-};
-use web_faith_encoding::{Coding, decode_stream};
 
 pub use web_faith::response::PeerInformation;
-use web_faith_integrity::{finish_integrity, integrity_checker, verify_integrity};
+use web_faith::{
+	body::{Body, drain_body_inner},
+	response::{FileDestination, FileProgress, FileWritten, Response, Trailers},
+};
 
 use crate::{
 	async_task::{Value, faith_promise},
 	error::{FaithError, FaithErrorExt, FaithErrorKind},
 	timing::TimingBreakdown,
 };
-
-/// The `Response` interface of the Fetch API represents the response to a request.
-///
-/// Faith does not allow its `Response` object to be constructed. If you need to, you may use the
-/// `webResponse()` method to convert one into a Web API `Response` object; note the caveats.
-#[napi]
-#[derive(Debug, Clone)]
-pub struct FaithResponse {
-	pub(crate) body: BodyHolder,
-	/// The coding to decode the body under, or `None` to deliver it as received.
-	/// Set once when the response is built, from the request's `Accept-Encoding` and the
-	/// response's `Content-Encoding` (see [`web_faith_encoding`]).
-	pub(crate) decode: Option<Coding>,
-	pub(crate) disturbed: Arc<AtomicBool>,
-	pub(crate) headers: HeaderMap,
-	pub(crate) integrity: Option<String>,
-	pub(crate) peer: Arc<PeerInformation>,
-	pub(crate) redirected: bool,
-	pub(crate) stats: Arc<InnerAgentStats>,
-	pub(crate) status_code: StatusCode,
-	pub(crate) timing: Arc<TimingSlot>,
-	pub(crate) trailers: Arc<TrailersSlot>,
-	pub(crate) url: Url,
-	pub(crate) version: Version,
-}
 
 /// Options for `toFile()`.
 #[napi(object)]
@@ -103,11 +61,46 @@ pub struct ToFileProgress {
 	pub content_length: Option<i64>,
 }
 
+/// The `Response` interface of the Fetch API represents the response to a request.
+///
+/// Faith does not allow its `Response` object to be constructed. If you need to, you may use the
+/// `webResponse()` method to convert one into a Web API `Response` object; note the caveats.
+#[napi]
+#[derive(Debug, Clone)]
+pub struct FaithResponse {
+	pub(crate) inner: Response,
+}
+
+impl From<Response> for FaithResponse {
+	fn from(inner: Response) -> Self {
+		Self { inner }
+	}
+}
+
 impl From<&ToFileOptions> for FileDestination {
 	fn from(options: &ToFileOptions) -> Self {
 		Self {
 			overwrite: options.overwrite.unwrap_or(false),
 			mode: options.mode,
+		}
+	}
+}
+
+impl From<FileProgress> for ToFileProgress {
+	fn from(progress: FileProgress) -> Self {
+		let count = |value: u64| i64::try_from(value).unwrap_or(i64::MAX);
+		Self {
+			bytes_written: count(progress.bytes_written),
+			content_length: progress.content_length.map(count),
+		}
+	}
+}
+
+impl From<FileWritten> for ToFileResult {
+	fn from(written: FileWritten) -> Self {
+		Self {
+			path: written.path,
+			bytes_written: i64::try_from(written.bytes_written).unwrap_or(i64::MAX),
 		}
 	}
 }
@@ -130,7 +123,8 @@ impl FaithResponse {
 	/// This is a function as an internal implementation detail and the wrapper makes it a property.
 	#[napi]
 	pub fn headers(&self) -> Vec<(String, String)> {
-		self.headers
+		self.inner
+			.headers
 			.iter()
 			.filter_map(|(name, value)| {
 				value
@@ -145,7 +139,7 @@ impl FaithResponse {
 	/// response was successful (status in the range 200-299) or not.
 	#[napi(getter)]
 	pub fn ok(&self) -> bool {
-		self.status_code.is_success()
+		self.inner.status_code.is_success()
 	}
 
 	/// Custom to Faith.
@@ -155,10 +149,14 @@ impl FaithResponse {
 	#[napi(getter, ts_return_type = "{ address?: string; certificate?: Buffer }")]
 	pub fn peer<'env>(&self, env: &'env Env) -> Result<Object<'env>, napi::Error> {
 		let mut obj = Object::new(env)?;
-		obj.set("address", self.peer.address.map(|addr| addr.to_string()))?;
+		obj.set(
+			"address",
+			self.inner.peer.address.map(|addr| addr.to_string()),
+		)?;
 		obj.set(
 			"certificate",
-			self.peer
+			self.inner
+				.peer
 				.certificate
 				.as_deref()
 				.map(|cert| Buffer::from(cert)),
@@ -179,7 +177,7 @@ impl FaithResponse {
 	/// `false` on those responses.
 	#[napi(getter)]
 	pub fn redirected(&self) -> bool {
-		self.redirected
+		self.inner.redirected
 	}
 
 	/// The `status` read-only property of the `Response` interface contains the HTTP status codes of the
@@ -188,7 +186,7 @@ impl FaithResponse {
 	/// A value is `0` is returned for a response whose `type` is `opaque`, `opaqueredirect`, or `error`.
 	#[napi(getter)]
 	pub fn status(&self) -> u16 {
-		self.status_code.as_u16()
+		self.inner.status_code.as_u16()
 	}
 
 	/// The `statusText` read-only property of the `Response` interface contains the status message
@@ -201,7 +199,10 @@ impl FaithResponse {
 	/// string.
 	#[napi(getter)]
 	pub fn status_text(&self) -> &'static str {
-		self.status_code.canonical_reason().unwrap_or_default()
+		self.inner
+			.status_code
+			.canonical_reason()
+			.unwrap_or_default()
 	}
 
 	/// The `type` read-only property of the `Response` interface contains the type of the response. The
@@ -217,7 +218,7 @@ impl FaithResponse {
 	/// value of the `url` property will be the final URL obtained after any redirects.
 	#[napi(getter)]
 	pub fn url(&self) -> String {
-		self.url.to_string()
+		self.inner.url.to_string()
 	}
 
 	/// The `version` read-only property of the `Response` interface contains the HTTP version of the
@@ -226,7 +227,7 @@ impl FaithResponse {
 	/// This is custom to Faith.
 	#[napi(getter)]
 	pub fn version(&self) -> String {
-		format!("{:?}", self.version)
+		format!("{:?}", self.inner.version)
 	}
 
 	/// The `bodyUsed` read-only property of the `Response` interface is a boolean value that indicates
@@ -237,7 +238,7 @@ impl FaithResponse {
 	/// the `.body` property counts as a read, even if you don't actually consume any bytes of content.
 	#[napi(getter)]
 	pub fn body_used(&self) -> bool {
-		self.disturbed.load(Ordering::SeqCst)
+		self.inner.disturbed.load(Ordering::SeqCst)
 	}
 
 	/// The `body` read-only property of the `Response` interface is a `ReadableStream` of the body
@@ -260,9 +261,9 @@ impl FaithResponse {
 	) -> Result<Option<napi::bindgen_prelude::ReadableStream<'_, BufferSlice<'_>>>, napi::Error> {
 		// we mark the body as disturbed, but we still allow reading it through here
 		// as essentially, the body() can be accessed many times as the same stream
-		let _ = self.check_stream_disturbed();
+		let _ = self.inner.check_stream_disturbed();
 
-		let Some(lock) = &self.body.body else {
+		let Some(lock) = &self.inner.body.body else {
 			return Ok(None);
 		};
 
@@ -272,7 +273,8 @@ impl FaithResponse {
 			.map_err(|_| FaithError::from(FaithErrorKind::ResponseAlreadyDisturbed).into_napi())?;
 
 		let stream = self
-			.ensure_stream(&mut body, self.body.drained.clone())
+			.inner
+			.ensure_stream(&mut body, self.inner.body.drained.clone())
 			.map_err(|e| e.into_napi())?;
 
 		let stream = napi::bindgen_prelude::ReadableStream::create_with_stream_bytes(
@@ -289,142 +291,6 @@ impl FaithResponse {
 		Ok(Some(stream))
 	}
 
-	fn check_stream_disturbed(&self) -> Result<(), FaithError> {
-		if self.disturbed.swap(true, Ordering::SeqCst) {
-			Err(FaithErrorKind::ResponseAlreadyDisturbed.into())
-		} else {
-			Ok(())
-		}
-	}
-
-	/// Ensures the body is converted to a SharedStream, returning a clone of it.
-	///
-	/// This allows multiple consumers (original + clones) to independently read the body.
-	fn ensure_stream(
-		&self,
-		body: &mut Body,
-		drained_flag: Arc<AtomicBool>,
-	) -> Result<SharedStream<Pin<Box<DynStream>>>, FaithError> {
-		match body {
-			Body::Consumed => Err(FaithErrorKind::ResponseAlreadyDisturbed.into()),
-			Body::Stream(stream) => Ok(stream.clone()),
-			lock @ Body::Inner(_) => {
-				// temporarily replace with Consumed until we can put in the Stream
-				let Body::Inner(inner) = replace(lock, Body::Consumed) else {
-					// SAFETY: we're inside the match checking for this exact thing
-					unsafe { unreachable_unchecked() }
-				};
-
-				// Track that we've started consuming a body
-				self.stats.bodies_started.fetch_add(1, Ordering::Relaxed);
-
-				let trailers_stream = self.trailers.clone();
-				let trailers_finish = self.trailers.clone();
-				let stats_finish = self.stats.clone();
-				let timing_finish = self.timing.clone();
-				let drained_finish = drained_flag.clone();
-				// The frame stream pulls trailers off to the side (via `arrived`) and yields
-				// data bytes only, so decoding sees no trailer frames.
-				let bytes = Box::pin(
-					BodyStream::new(inner)
-						.then(move |frame| {
-							let trailers_lock = trailers_stream.clone();
-							async move {
-								match frame {
-									Err(err) => Some(Err(err.to_string())),
-									Ok(frame) => match frame.into_trailers() {
-										Ok(trailers) => {
-											trailers_lock.arrived(trailers);
-											None
-										}
-										Err(frame) => Some(
-											frame
-												.into_data()
-												.map_err(|_| "unknown frame kind".to_string()),
-										),
-									},
-								}
-							}
-						})
-						.filter_map(async |item| item),
-				) as Pin<Box<DynStream>>;
-
-				let bytes = match self.decode {
-					Some(coding) => decode_stream(bytes, coding),
-					None => bytes,
-				};
-
-				// A zero-length chunk carries no bytes, but the body's byte-oriented
-				// ReadableStream cannot take one: `ReadableByteStreamController.enqueue`
-				// rejects an empty buffer outright (`ERR_INVALID_STATE`). Some origins end a
-				// response with an empty DATA frame carrying END_STREAM, so drop empty chunks
-				// here, before the stream is built, letting it close cleanly. The byte count
-				// delivered is unchanged, and the collecting paths (`text()`, `bytes()`) never
-				// noticed the empties anyway.
-				let bytes = Box::pin(bytes.filter(|item| {
-					let empty = matches!(item, Ok(chunk) if chunk.is_empty());
-					async move { !empty }
-				})) as Pin<Box<DynStream>>;
-
-				// Chained onto the stream that is actually delivered, above any decoder: a
-				// decoder reaches the end of its own framing without necessarily polling the
-				// bytes underneath to completion, so bookkeeping chained below it would never
-				// run for a decoded body, leaving the trailers promise and the timing pending
-				// for good.
-				let bytes = Box::pin(
-					bytes.chain(
-						stream::once(async move {
-							trailers_finish.ended();
-							// The last byte of the body: every read path ends here, so
-							// this is where the timing settles
-							// (spec:RESP#request-timing).
-							timing_finish.ended();
-							// Track that we've finished consuming a body
-							stats_finish.bodies_finished.fetch_add(1, Ordering::Relaxed);
-							// Mark body as drained so Drop doesn't try to drain again
-							drained_finish.store(true, Ordering::SeqCst);
-						})
-						.filter_map(async |()| None),
-					),
-				) as Pin<Box<DynStream>>;
-
-				let stream = SharedStream::new(bytes);
-
-				// the _ is the Consumed we put in there earlier
-				let _ = replace(lock, Body::Stream(stream.clone()));
-
-				Ok(stream)
-			}
-		}
-	}
-
-	/// Underlying efficient response body fetcher.
-	///
-	/// Unlike bytes() and co, this grabs all the chunks of the response but doesn't
-	/// copy them. Further processing is needed to obtain a Vec<u8> or whatever needed.
-	async fn gather(&self) -> Result<Arc<[Bytes]>, FaithError> {
-		let Some(lock) = &self.body.body else {
-			return Ok(Default::default());
-		};
-
-		let mut body = lock.lock().await;
-		let stream = self.ensure_stream(&mut body, self.body.drained.clone())?;
-		drop(body); // release lock before consuming stream
-
-		let mut chunks = Vec::new();
-		futures::pin_mut!(stream);
-		while let Some(result) = stream.next().await {
-			let chunk =
-				result.map_err(|err| FaithError::new(FaithErrorKind::BodyStream, Some(err)))?;
-			chunks.push(chunk);
-		}
-
-		// Mark as drained since we consumed everything
-		self.body.mark_drained();
-
-		Ok(Arc::from(chunks.into_boxed_slice()))
-	}
-
 	/// Discard the response body, releasing the connection back to the pool.
 	///
 	/// This is useful when you don't need the body but want to ensure the connection
@@ -438,11 +304,11 @@ impl FaithResponse {
 	/// Returns a promise that resolves when the body has been fully discarded.
 	#[napi]
 	pub fn discard<'env>(&self, env: &'env Env) -> Result<PromiseRaw<'env, ()>, napi::Error> {
-		let body = self.body.body.clone();
-		let drained_flag = self.body.drained.clone();
-		let is_multiplexed = self.body.is_multiplexed();
-		let trailers = self.trailers.clone();
-		let timing = self.timing.clone();
+		let body = self.inner.body.body.clone();
+		let drained_flag = self.inner.body.drained.clone();
+		let is_multiplexed = self.inner.body.is_multiplexed();
+		let trailers = self.inner.trailers.clone();
+		let timing = self.inner.timing.clone();
 		faith_promise(env, async move {
 			if let Some(arc) = body {
 				if is_multiplexed {
@@ -468,22 +334,6 @@ impl FaithResponse {
 		})
 	}
 
-	/// gather() and then copy into one contiguous buffer
-	async fn gather_contiguous(&self) -> Result<Vec<u8>, FaithError> {
-		let body = self.gather().await?;
-		let length = body.iter().map(|chunk| chunk.len()).sum();
-		let mut bytes = Vec::with_capacity(length);
-		for chunk in body.into_iter() {
-			bytes.extend_from_slice(chunk);
-		}
-
-		if let Some(ref integrity) = self.integrity {
-			verify_integrity(&bytes, integrity)?;
-		}
-
-		Ok(bytes)
-	}
-
 	/// The `bytes()` method of the `Response` interface takes a `Response` stream and reads it to
 	/// completion. It returns a promise that resolves with a `Uint8Array`.
 	///
@@ -492,8 +342,8 @@ impl FaithResponse {
 	pub fn bytes<'env>(&self, env: &'env Env) -> Result<PromiseRaw<'env, Buffer>, napi::Error> {
 		let this = Clone::clone(self);
 		faith_promise(env, async move {
-			this.check_stream_disturbed()?;
-			this.gather_contiguous().await.map(Buffer::from)
+			this.inner.check_stream_disturbed()?;
+			this.inner.gather_contiguous().await.map(Buffer::from)
 		})
 	}
 
@@ -505,8 +355,8 @@ impl FaithResponse {
 	pub fn text<'env>(&self, env: &'env Env) -> Result<PromiseRaw<'env, String>, napi::Error> {
 		let this = Clone::clone(self);
 		faith_promise(env, async move {
-			this.check_stream_disturbed()?;
-			let bytes = this.gather_contiguous().await?;
+			this.inner.check_stream_disturbed()?;
+			let bytes = this.inner.gather_contiguous().await?;
 			Ok(String::from_utf8(bytes)
 				.unwrap_or_else(|e| String::from_utf8_lossy(e.as_bytes()).into_owned()))
 		})
@@ -526,8 +376,8 @@ impl FaithResponse {
 	pub fn json<'env>(&self, env: &'env Env) -> Result<PromiseRaw<'env, Value>, napi::Error> {
 		let this = Clone::clone(self);
 		faith_promise(env, async move {
-			this.check_stream_disturbed()?;
-			let bytes = this.gather_contiguous().await?;
+			this.inner.check_stream_disturbed()?;
+			let bytes = this.inner.gather_contiguous().await?;
 			let value = serde_json::from_slice(&bytes)
 				.map_err(|e| FaithError::new(FaithErrorKind::JsonParse, Some(e.to_string())))?;
 			Ok(Value(value))
@@ -567,124 +417,21 @@ impl FaithResponse {
 		let this = Clone::clone(self);
 		let options = options.unwrap_or_default();
 		faith_promise(env, async move {
-			this.write_to_file(path, options, on_progress).await
-		})
-	}
-
-	async fn write_to_file(
-		&self,
-		path: String,
-		options: ToFileOptions,
-		on_progress: Option<ProgressCallback>,
-	) -> Result<ToFileResult, FaithError> {
-		// A response that cannot carry a body has nothing to write, and this is settled
-		// before any file is created (spec:BODY#tofile).
-		let Some(lock) = self.body.body.clone() else {
-			return Err(FaithErrorKind::ResponseBodyNull.into());
-		};
-
-		// A body already read, or whose stream was handed out, has no second read to give.
-		// Checked without committing so an open failure below still leaves the body
-		// undisturbed and the caller free to retry to another path.
-		if self.disturbed.load(Ordering::SeqCst) {
-			return Err(FaithErrorKind::ResponseAlreadyDisturbed.into());
-		}
-
-		// Reject a malformed integrity value up front, before the body is touched, the same
-		// as the other verified reads reject it when the whole body is in hand.
-		let mut checker = integrity_checker(self.integrity.as_deref())?;
-
-		// The advertised length, when the server sent one. It is only visible here for a body
-		// delivered as received: a decoded body has had its Content-Length stripped, so the
-		// bytes written equal the wire bytes wherever this is Some (spec:BODY#tofile, ENC).
-		let content_length = self
-			.headers
-			.get(CONTENT_LENGTH)
-			.and_then(|value| value.to_str().ok())
-			.and_then(|value| value.trim().parse::<u64>().ok());
-
-		// The destination is opened before any of the body is read, so a failure to open it
-		// leaves the body unread and undisturbed.
-		let mut file = open_destination(&path, &FileDestination::from(&options)).await?;
-
-		// Commit the read now the destination is in hand. A concurrent read that slipped in
-		// since the load above wins, and this one finds the body already spent.
-		self.check_stream_disturbed()?;
-
-		let stream = {
-			let mut body = lock.lock().await;
-			let stream = self.ensure_stream(&mut body, self.body.drained.clone())?;
-			drop(body); // release lock before consuming stream
-			stream
-		};
-
-		// Reporting is rate limited rather than per chunk, so a large body does not cross
-		// into JavaScript thousands of times (spec:BODY#tofile).
-		let report = |written: u64| {
-			if let Some(callback) = &on_progress {
-				callback.call(
-					ToFileProgress {
-						bytes_written: written as i64,
-						content_length: content_length.map(|len| len as i64),
-					},
-					// Progress is observational: a report the queue cannot take is dropped
-					// rather than made to hold up the write it is describing.
-					ThreadsafeFunctionCallMode::NonBlocking,
-				);
-			}
-		};
-
-		let mut written: u64 = 0;
-		let mut reported_at = Instant::now();
-		futures::pin_mut!(stream);
-		while let Some(result) = stream.next().await {
-			let chunk =
-				result.map_err(|err| FaithError::new(FaithErrorKind::BodyStream, Some(err)))?;
-			if let Some(checker) = checker.as_mut() {
-				checker.input(&chunk);
-			}
-			file.write_all(&chunk)
-				.await
-				.map_err(|err| FaithError::new(FaithErrorKind::FileWrite, Some(err.to_string())))?;
-			written += chunk.len() as u64;
-			// A server cannot send more than it promised: once the bytes off the wire exceed
-			// the advertised length, the write fails and the bytes so far stay on disk
-			// (spec:BODY#tofile).
-			if let Some(limit) = content_length {
-				if written > limit {
-					return Err(FaithErrorKind::ContentLengthOverrun.into());
-				}
-			}
-			if reported_at.elapsed() >= PROGRESS_INTERVAL {
-				reported_at = Instant::now();
-				report(written);
-			}
-		}
-
-		file.flush()
-			.await
-			.map_err(|err| FaithError::new(FaithErrorKind::FileWrite, Some(err.to_string())))?;
-
-		// The last report always lands, whatever the rate limit allowed along the way, so a
-		// caller's final view of a completed write is the whole body rather than the last
-		// interval boundary. An empty body reports once, with nothing written.
-		report(written);
-
-		// The digest is only known once the last byte has been written, so the file that
-		// fails verification is on disk when the error arrives (spec:SRI).
-		if let Some(checker) = checker {
-			finish_integrity(checker)?;
-		}
-
-		self.body.mark_drained();
-
-		Ok(ToFileResult {
-			// A relative path resolves against the process's working directory; the caller
-			// is handed the absolute path the bytes landed at.
-			path: std::path::absolute(&path)
-				.map(|abs| abs.to_string_lossy().into_owned())
-				.unwrap_or(path),
-			bytes_written: written as i64,
+			let destination = FileDestination::from(&options);
+			let written = this
+				.inner
+				.write_to_file(&path, &destination, |progress| {
+					if let Some(callback) = &on_progress {
+						callback.call(
+							ToFileProgress::from(progress),
+							// Progress is observational: a report the queue cannot take is
+							// dropped rather than made to hold up the write it describes.
+							ThreadsafeFunctionCallMode::NonBlocking,
+						);
+					}
+				})
+				.await?;
+			Ok(ToFileResult::from(written))
 		})
 	}
 
@@ -703,11 +450,10 @@ impl FaithResponse {
 	///
 	/// This is an async fn as an internal implementation detail and the wrapper makes it a
 	/// property.
-	///
-	/// spec:RESP#request-timing
+	// spec:RESP#request-timing
 	#[napi]
 	pub async fn timing(&self) -> TimingBreakdown {
-		self.timing.settled().await.into()
+		self.inner.timing.settled().await.into()
 	}
 
 	/// The `trailers()` read-only property of the `Response` interface returns a promise that
@@ -729,7 +475,7 @@ impl FaithResponse {
 	/// This is an async fn as an internal implementation detail and the wrapper makes it a property.
 	#[napi]
 	pub async fn trailers(&self) -> Option<Vec<(String, String)>> {
-		match self.trailers.settled().await {
+		match self.inner.trailers.settled().await {
 			// NotYet cannot come back from `settled`, which is what it waits on.
 			Trailers::NotYet | Trailers::None => None,
 			Trailers::Some(headers) => Some(
@@ -755,15 +501,15 @@ impl FaithResponse {
 	/// possible with Faith.)
 	#[napi]
 	pub fn clone(&self, env: Env) -> Result<Self, napi::Error> {
-		if self.disturbed.load(Ordering::SeqCst) {
+		if self.inner.disturbed.load(Ordering::SeqCst) {
 			return Err(FaithError::from(FaithErrorKind::ResponseAlreadyDisturbed)
 				.into_js_error(&env)
 				.into());
 		}
 
-		Ok(Self {
+		Ok(Self::from(Response {
 			disturbed: Arc::new(AtomicBool::new(false)),
-			..Clone::clone(self)
-		})
+			..Clone::clone(&self.inner)
+		}))
 	}
 }

@@ -27,14 +27,13 @@ strum.workspace = true
 tokio.workspace = true
 url.workspace = true
 web-faith-conn-tracker.workspace = true
+web-faith-encoding.workspace = true
 web-faith-cookies = { workspace = true, features = ["reqwest"] }
 web-faith-dns = { workspace = true, features = ["reqwest"] }
 web-faith-alt-svc = { workspace = true, optional = true }
-web-faith-integrity = { workspace = true, optional = true }
+web-faith-integrity.workspace = true
 
 [features]
-default = ["http3", "integrity"]
+default = ["http3"]
 # Transparent HTTP/3, and the Alt-Svc machinery that upgrades an origin to it.
 http3 = ["reqwest/http3", "dep:web-faith-alt-svc"]
-# Subresource Integrity: parsing and verifying `integrity` values.
-integrity = ["dep:web-faith-integrity"]

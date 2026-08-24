@@ -152,7 +152,6 @@ impl From<reqwest::Error> for FaithError {
 
 /// A component crate names its own errors; they become the client's as they cross into it, which is
 /// what keeps the code a caller sees the same whichever layer failed.
-#[cfg(feature = "integrity")]
 impl From<web_faith_integrity::IntegrityError> for FaithError {
 	fn from(err: web_faith_integrity::IntegrityError) -> Self {
 		use web_faith_integrity::IntegrityError as E;
