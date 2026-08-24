@@ -7,14 +7,12 @@ ships as `@passcod/faith`. Then publish to crates.io. Target architecture is spe
 
 ## Scope reality
 
-This is a multi-week, 8-crate restructure of ~11,500 lines, not a single focused change. The
-work almost certainly wants to become a **card breakdown** (one card per crate extraction plus a
-publishing card), because a plan of this size does not survive as one green PR on `s1` and, per the
-workspace norm, only breakdown entries survive a merge as real cards. The steps below are the build
-order whichever way we sequence it — either as the checklist for a single long-lived branch, or as
-the spine for the breakdown.
+This is an 8-crate restructure of ~11,500 lines, not a single focused change. It is being built on
+this branch as one long-lived PR, at the user's direction, rather than split into a card breakdown.
 
-**Sequencing decision needed from the user before grinding the tree** (see the chat message).
+The split itself (steps 0–7) is done: the workspace stands, and all six components plus the error
+core are out. What remains (steps 8–13) is the larger half, and step 9 in particular is new API
+design rather than relocation.
 
 ## What the discovery turned up
 
@@ -66,11 +64,11 @@ QUIC/TLS stay inside `web-faith` as reqwest features (aws-lc-rs default, ring al
   `web-faith`, with components naming their own error types that the client converts — per
   [RUST](../../specs/rust/overview.md) "A component crate stands alone").
 - [x] **2. Extract `web-faith-integrity`** — own error type, own docs, `cargo test -p web-faith-integrity` with no JS runtime.
-- [ ] **3. Extract `web-faith-encoding`** — decouple from `crate::body::DynStream` (take a generic/`bytes` stream).
-- [ ] **4. Extract `web-faith-cookies`** — `url::Url`; reqwest `CookieStore` behind a feature.
-- [ ] **5. Extract `web-faith-dns`.**
-- [ ] **6. Extract `web-faith-conn-tracker`** (Linux/macOS/Windows submodules).
-- [ ] **7. Extract `web-faith-alt-svc`** — carry `HeadersStamp` (or take it generically); depend on `web-faith-dns`.
+- [x] **3. Extract `web-faith-encoding`** — decouple from `crate::body::DynStream` (take a generic/`bytes` stream).
+- [x] **4. Extract `web-faith-cookies`** — `url::Url`; reqwest `CookieStore` behind a feature.
+- [x] **5. Extract `web-faith-dns`.**
+- [x] **6. Extract `web-faith-conn-tracker`** (Linux/macOS/Windows submodules).
+- [x] **7. Extract `web-faith-alt-svc`** — carry `HeadersStamp` (or take it generically); depend on `web-faith-dns`.
 - [ ] **8. Stand up `web-faith`** — move agent/request/response/fetch/options here as a pure-Rust
   client; component crates converted into it at the boundary. Reduce `web-faith-napi` to the binding
   over `web-faith`.
@@ -87,6 +85,33 @@ QUIC/TLS stay inside `web-faith` as reqwest features (aws-lc-rs default, ring al
   versioning from `1.0.0`. Measure CI cost before adding jobs (see project memory).
 - [ ] **13. First publish** to crates.io: the six components, then `web-faith`; `@passcod/faith`
   continues from npm via `web-faith-napi`.
+
+## What the extractions settled
+
+Decisions taken while doing steps 0–7, worth not relitigating:
+
+- **The lib is still named `faith`.** `web-faith-napi`'s `[lib] name = "faith"` keeps the artifact
+  `libfaith.so`, which the release workflow's zigbuild steps copy by name.
+- **The benchmark HTTP/3 server is a workspace `exclude`,** not a member: its own manifest says it
+  keeps a separate lockfile so the quinn/h3 stack stays out of this graph. Adding it as a member
+  would have pulled that stack in; leaving it unlisted broke it outright.
+- **`FaithErrorKind` is gone from the native binding.** It was emitted only because the enum carried
+  napi's attribute. The package's `exports` map admits nothing but the wrapper, so no consumer could
+  reach it (verified: a deep import fails with `ERR_PACKAGE_PATH_NOT_EXPORTED`). The documented
+  surface is `wrapper.js`'s `ERROR_CODES`, unchanged at 22 codes.
+- **Do not route a napi enum through `macro_rules!`.** Doc comments arrive as mangled `r"` literals
+  in the generated `.d.ts`, and the Rust name leaks into `index.js` alongside the `js_name`. This is
+  why the kinds have a single plain definition in `web-faith` and the codes reach JS through
+  `errorCodes()` instead.
+- **`reqwest` integration sits behind a per-crate feature** on `web-faith-cookies` (`CookieStore`)
+  and `web-faith-dns` (`Resolve`). Where a trait impl held the only path to real functionality — the
+  jar's store-and-read — the logic moved to inherent methods and the impl delegates, so the crate is
+  usable without reqwest rather than merely compilable.
+- **`alt_svc` takes the client's timing stamp as a generic,** via an `ArrivalStamp` trait, because
+  the stamp must exist in non-HTTP/3 builds where the alt-svc crate is not compiled at all.
+- **`web-faith` only declares a component dependency once it uses it.** Right now that is
+  `integrity` alone (it has a real error conversion); the rest arrive with step 8. The full
+  feature-per-component set is step 10.
 
 ## Verification discipline
 
