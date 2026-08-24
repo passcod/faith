@@ -110,7 +110,7 @@ pub struct Agent {
 	pub quirk_h1_request_streaming: bool,
 	/// The agent's default `Accept-Encoding`, if one was set among its default headers.
 	/// `fetch` consults it to decide which codings to decode when a request adds none of
-	/// its own (see [`crate::encoding`]).
+	/// its own (see [`web_faith_encoding`]).
 	pub default_accept_encoding: Option<HeaderValue>,
 	/// The agent's default `Content-Encoding`, if one was set among its default headers.
 	/// `fetch` consults it when the `compress` option layers a coding on top of what a

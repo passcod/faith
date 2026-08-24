@@ -406,7 +406,7 @@ impl Response {
 	/// Underlying efficient response body fetcher.
 	///
 	/// Unlike bytes() and co, this grabs all the chunks of the response but doesn't
-	/// copy them. Further processing is needed to obtain a Vec<u8> or whatever needed.
+	/// copy them. Further processing is needed to obtain a `Vec<u8>` or whatever is wanted.
 	pub async fn gather(&self) -> Result<Arc<[Bytes]>, FaithError> {
 		let Some(lock) = &self.body.body else {
 			return Ok(Default::default());

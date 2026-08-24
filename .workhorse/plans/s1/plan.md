@@ -10,9 +10,10 @@ ships as `@passcod/faith`. Then publish to crates.io. Target architecture is spe
 This is an 8-crate restructure of ~11,500 lines, not a single focused change. It is being built on
 this branch as one long-lived PR, at the user's direction, rather than split into a card breakdown.
 
-The split itself (steps 0–7) is done: the workspace stands, and all six components plus the error
-core are out. What remains (steps 8–13) is the larger half, and step 9 in particular is new API
-design rather than relocation.
+Steps 0–8 are done: the workspace stands, the six components are out, and the client owns the agent,
+the request path, and the response. Every crate but `web-faith-napi` builds with no napi in its
+graph. What remains (steps 9–14) is the caller-facing API, the feature wiring, publishing, and the
+spec sweep — step 9 being new design rather than relocation.
 
 ## What the discovery turned up
 
@@ -69,9 +70,10 @@ QUIC/TLS stay inside `web-faith` as reqwest features (aws-lc-rs default, ring al
 - [x] **5. Extract `web-faith-dns`.**
 - [x] **6. Extract `web-faith-conn-tracker`** (Linux/macOS/Windows submodules).
 - [x] **7. Extract `web-faith-alt-svc`** — carry `HeadersStamp` (or take it generically); depend on `web-faith-dns`.
-- [ ] **8. Stand up `web-faith`** — move agent/request/response/fetch/options here as a pure-Rust
-  client; component crates converted into it at the boundary. Reduce `web-faith-napi` to the binding
-  over `web-faith`. **In progress:**
+- [x] **8. Stand up `web-faith`** — done. The client holds the agent, the request path, the response
+  and its reads, the body/timing/retry machinery, and the client recipe. `web-faith-napi` is the
+  binding: JS option shapes, `AgentOptions` validation, the napi classes wrapping the client's types,
+  and napi machinery (promises, streams, threadsafe functions). Nothing outside it carries napi.
   - [x] `body`, `timing` (measuring; the napi object stays behind), `retry` moved.
   - [x] The client-building machinery moved: `ClientRecipe`, `NodeEnvRecipe`, `HttpCacheRecipe`,
         `HttpCacheStore`, `H3UpgradeRecipe`, `ResolvedWindows`, `install_https_sink`, and a pure
@@ -80,13 +82,14 @@ QUIC/TLS stay inside `web-faith` as reqwest features (aws-lc-rs default, ring al
         per-request settings; `web-faith-napi`'s `Agent` is a napi class holding a handle on it, and
         keeps the ~440 lines of `AgentOptions` validation that produce a recipe. `prefetch_dns` and
         `preconnect` return futures the binding wraps, so a refusal happens before the future exists.
-  - [ ] `response.rs` (~966 lines, 40 napi refs) and `fetch.rs` (~447) are what is left. Both are
-        built around the napi response class, so they invert the way the agent did: a pure response
-        and a pure request path in the client, with the napi classes wrapping them. `fetch.rs`
-        already reaches the agent through `agent.inner`, which is the seam to pull on.
-  - [ ] `options.rs` (~246) stays largely JS-facing, holding the `AgentOptions` validation and the
-        per-request option shapes; the recipe it assembles becomes the builder's business in step 9.
-  - [ ] `stream_body.rs` and `async_task.rs` are napi machinery and stay where they are.
+  - [x] `response.rs` inverted: `web_faith::response::Response` holds the state and the reads, and
+        writing a body out takes a progress closure rather than a threadsafe function.
+  - [x] `fetch.rs` inverted: `web_faith::request::send` takes an agent, URL, options, body, and an
+        optional abort future; `fetch.rs` is 59 lines converting a `fetch()` call into those.
+  - **Left for step 9:** the `integrity` feature, which had to stop being optional. The client's read
+        path verifies unconditionally and gating the call sites would mean a build that quietly skips
+        verification, where the spec wants the feature to remove the API offering it. That API is
+        step 9's, so the feature returns with it. Same for the recipe structs' public fields.
 - [ ] **9. Build the fetch-flavoured client API** per [RSAPI](../../specs/rust/client-api.md):
   `Agent`/`Agent::builder()`, cheap-clone shared agent, `agent.fetch(target) -> IntoFuture` builder
   (`#[must_use]`), `Request`/`Request::new`/`try_clone`, layering rules, `http`/`url`/`bytes` types,

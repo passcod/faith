@@ -11,9 +11,9 @@
 //!
 //! <div class="warning">
 //!
-//! The client API is still being built out. What is here so far is the error type, the body and
-//! timing machinery a response is built on, the retry layers in the request path, and the recipe
-//! that builds the HTTP client itself.
+//! The caller-facing API is still being shaped. Everything the client does is here -- building an
+//! agent, sending a request, reading a response -- but it is reached through [`request::send`] and
+//! the modules below rather than through the fetch-flavoured builder that will front it.
 //!
 //! </div>
 
