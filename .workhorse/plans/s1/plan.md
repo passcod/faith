@@ -103,6 +103,9 @@ QUIC/TLS stay inside `web-faith` as reqwest features (aws-lc-rs default, ring al
   versioning from `1.0.0`. Measure CI cost before adding jobs (see project memory).
 - [ ] **13. First publish** to crates.io: the six components, then `web-faith`; `@passcod/faith`
   continues from npm via `web-faith-napi`.
+- [ ] **14. The both-surfaces spec sweep**, as the closing pass over the tree — deliberately last,
+  once the Rust API is settled and its names are known. See the section below for the site-by-site
+  reconnaissance.
 
 ## What the extractions settled
 
@@ -148,12 +151,16 @@ Decisions taken while doing steps 0–7, worth not relitigating:
   comment is emitted verbatim into `index.d.ts`, where `[`X`]` means nothing, so plain backticks
   belong on anything a napi item documents.
 
-## Outstanding: make the spec tree serve both surfaces
+## Step 14: the both-surfaces spec sweep
 
 A spec should be one of three things, never a fourth: generic to both surfaces (naming the concept
 and linking to where it is defined), specified at the correct site, or explicitly about one surface
 so the reader knows which. What it should not be is shared behaviour spelled in one surface's
 identifiers, which is what a JavaScript name in a spec covering both amounts to.
+
+It runs last because the Rust names it will cite are step 9's to settle: sweeping earlier would mean
+guessing at them, and a spec that cites a name which then changes is worse than one that has not
+been swept yet.
 
 [FAITH](../../specs/overview.md) and [ENV](../../specs/environment/variables.md) are done. The
 remaining sites, from a survey of JS-cased identifiers:
