@@ -7,9 +7,13 @@ id: FAITH
 Faith is a fetch API implementation for Node.js and Rust.
 It aims to behave like the browser's fetch wherever that concept translates to a server-side runtime, with transparent HTTP/2 and HTTP/3, IPv4/IPv6 Happy Eyeballs, DNS caching, an optional cookie jar, and HTTP caching.
 
-It reaches callers through two surfaces built from one implementation.
-The native module `@passcod/faith` is the Node.js surface, and the specs here describe its behaviour in JavaScript terms unless they say otherwise.
-The crate `web-faith` is the Rust surface, published to crates.io with the component crates beneath it (see [RUST](rust/overview.md)); it keeps the same behaviour and spells it in Rust (see [RSAPI](rust/client-api.md)).
+It has two public surfaces:
+
+- the Rust crate `web-faith` (see [RSAPI](rust/client-api.md)) and the component crates at that prefix (see [RUST](rust/overview.md));
+- the Node.js module `@passcod/faith`.
+
+Both are built from one implementation, so a behaviour specified here holds on both unless a spec says otherwise.
+The specs describe it in JavaScript terms except where they name the Rust surface.
 
 The library's contract has two halves: fidelity to the fetch standard, and divergence where the standard assumes a browser.
 
