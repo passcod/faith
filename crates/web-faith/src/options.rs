@@ -1,59 +1,25 @@
-use std::{fmt::Debug, str::FromStr as _, time::Duration};
+//! The options an agent is built from, one struct per group.
+//!
+//! [`Agent::from_options`] validates these into the recipe an agent's clients are built from, and
+//! settles the defaults for anything left unset. Both surfaces go through it, so a default is
+//! decided once rather than once per surface.
+//!
+//! [`Agent::from_options`]: crate::agent::Agent::from_options
 
-use napi::bindgen_prelude::{PromiseRaw, within_runtime_if_available};
+// spec:AGENT
 
-use napi::{Either, Env, bindgen_prelude::Buffer};
-use napi_derive::napi;
-use reqwest::Url;
+use std::net::{IpAddr, Ipv6Addr, SocketAddr, UdpSocket};
 
 use http_cache_reqwest::CacheMode;
-use web_faith::client::RedirectPolicy;
-use web_faith::options;
+use web_faith_cookies::CookieLimits;
 
-use web_faith_cookies::{
-	CookieLimits, DEFAULT_MAX_AGE, DEFAULT_MAX_PER_HOST, DEFAULT_MAX_SIZE, DEFAULT_MAX_TOTAL,
+use crate::client::{
+	DEFAULT_CONNECTION_WINDOW, DEFAULT_STREAM_WINDOW, RedirectPolicy, ResolvedWindows,
 };
-
-use crate::{
-	async_task::faith_promise,
-	conn_tracker::{ConnectionInfo, connections_for_napi},
-	error::{FaithError, FaithErrorExt},
-	options::RequestCacheMode,
-};
-
-#[napi]
-pub const FAITH_VERSION: &str = env!("CARGO_PKG_VERSION");
-#[napi]
-pub const REQWEST_VERSION: &str = env!("REQWEST_VERSION");
-/// Custom user agent string.
-///
-/// Default: `Faith/{version} reqwest/{version}`.
-///
-/// You may use the `USER_AGENT` constant if you wish to prepend your own agent to the default, e.g.
-///
-/// ```javascript
-/// import { Agent, USER_AGENT } from '@passcod/faith';
-/// const agent = new Agent({
-///   userAgent: `YourApp/1.2.3 ${USER_AGENT}`,
-/// });
-/// ```
-#[napi]
-pub const USER_AGENT: &str = web_faith::USER_AGENT;
-
-#[napi(string_enum)]
-#[derive(Debug, Clone, Copy)]
-pub enum CacheStore {
-	#[napi(value = "disk")]
-	Disk,
-
-	#[napi(value = "memory")]
-	Memory,
-}
 
 /// Settings related to the HTTP cache. This is a nested object.
-#[napi(object)]
-#[derive(Debug, Clone, Default)]
-pub struct AgentCacheOptions {
+#[derive(Clone, Debug, Default)]
+pub struct CacheOptions {
 	/// Which cache store to use: either `disk` or `memory`.
 	///
 	/// Default: none (cache disabled).
@@ -66,7 +32,7 @@ pub struct AgentCacheOptions {
 	/// no cache mode is set on a request.
 	///
 	/// Default: `"default"`.
-	pub mode: Option<RequestCacheMode>,
+	pub mode: Option<CacheMode>,
 	/// If `cache.store: "disk"`, then this is the path at which the cache data is. Must be writeable.
 	///
 	/// Required if `cache.store: "disk"`.
@@ -80,63 +46,22 @@ pub struct AgentCacheOptions {
 	pub shared: Option<bool>,
 }
 
-/// Limits the cookie store enforces, from RFC 6265bis. Each is a cap; a caller who needs more room
-/// raises the number.
-///
-/// The `__Host-` and `__Secure-` name prefix rules are what those prefixes mean, so they always
-/// apply and are not settable here: a cookie that shouldn't carry them is named without one.
-#[napi(object)]
-#[derive(Debug, Clone, Default)]
-pub struct AgentCookieOptions {
-	/// How far ahead of receipt a cookie may expire, in seconds. A cookie asking for longer, via
-	/// `Max-Age` or `Expires`, has its expiry reduced to this; a shorter one is left alone and a
-	/// session cookie stays a session cookie.
-	///
-	/// Default: 34_560_000 (400 days).
-	pub max_age: Option<u32>,
-	/// The largest cookie stored, as the combined length of its name and value in bytes. A larger
-	/// cookie is not stored.
-	///
-	/// Default: 4096.
-	pub max_size: Option<u32>,
-	/// How many cookies are kept for any one domain, which is a cookie's `Domain` attribute when it
-	/// has one and the host that set it otherwise.
-	///
-	/// Default: 180.
-	pub max_per_host: Option<u32>,
-	/// How many cookies are kept across the whole store, bounding a server that spreads cookies
-	/// across subdomains to escape `maxPerHost`.
-	///
-	/// Default: 3000.
-	pub max_total: Option<u32>,
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CacheStore {
+	Disk,
+
+	Memory,
 }
 
-impl From<&AgentCookieOptions> for CookieLimits {
-	fn from(options: &AgentCookieOptions) -> Self {
-		Self {
-			max_age: options
-				.max_age
-				.map_or(DEFAULT_MAX_AGE, |secs| Duration::from_secs(secs.into())),
-			max_size: options.max_size.map_or(DEFAULT_MAX_SIZE, |n| n as usize),
-			max_per_host: options
-				.max_per_host
-				.map_or(DEFAULT_MAX_PER_HOST, |n| n as usize),
-			max_total: options.max_total.map_or(DEFAULT_MAX_TOTAL, |n| n as usize),
-		}
-	}
-}
-
-#[napi(object)]
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug, Default)]
 pub struct DnsOverride {
 	pub domain: String,
 	pub addresses: Vec<String>,
 }
 
 /// Settings related to DNS. This is a nested object.
-#[napi(object)]
-#[derive(Debug, Clone, Default)]
-pub struct AgentDnsOptions {
+#[derive(Clone, Debug, Default)]
+pub struct DnsOptions {
 	/// Use the system's DNS (via `getaddrinfo` or equivalent) rather than Faith's own DNS client (based on
 	/// [Hickory]). If you experience issues with DNS where Faith does not work but e.g. curl or native
 	/// fetch does, this should be your first port of call.
@@ -224,29 +149,24 @@ pub struct AgentDnsOptions {
 /// Sensitive headers (e.g. `Authorization`) should be marked.
 ///
 /// Default: none.
-#[napi(object)]
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug, Default)]
 pub struct Header {
 	pub name: String,
 	pub value: String,
 	pub sensitive: Option<bool>,
 }
 
-#[napi(string_enum)]
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Http3Congestion {
-	#[napi(value = "cubic")]
 	#[default]
 	Cubic,
 
-	#[napi(value = "bbr1")]
 	Bbr1,
 }
 
 /// A hint that HTTP/3 is available at a specific host and port. This pre-populates the Alt-Svc
 /// cache so the first request to this host will attempt HTTP/3 immediately.
-#[napi(object)]
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug, Default)]
 pub struct Http3Hint {
 	/// The hostname (e.g., "example.com").
 	pub host: String,
@@ -255,9 +175,8 @@ pub struct Http3Hint {
 }
 
 /// Settings related to HTTP/3. This is a nested object.
-#[napi(object)]
-#[derive(Debug, Clone, Default)]
-pub struct AgentHttp3Options {
+#[derive(Clone, Debug, Default)]
+pub struct Http3Options {
 	/// The congestion control algorithm. The default is `cubic`, which is the same used in TCP in the
 	/// Linux stack. It's fair for all traffic, but not the most optimal, especially for networks with
 	/// a lot of available bandwidth, high latency, or a lot of packet loss. Cubic reacts to packet loss by
@@ -485,9 +404,8 @@ pub struct AgentHttp3Options {
 }
 
 /// Settings related to HTTP/2. This is a nested object.
-#[napi(object)]
-#[derive(Debug, Clone, Default)]
-pub struct AgentHttp2Options {
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Http2Options {
 	/// Maximum bytes an origin may send on any one HTTP/2 stream before it must wait for
 	/// Faith to acknowledge them. Overrides `flowControl.streamWindow` for HTTP/2 only.
 	///
@@ -523,9 +441,8 @@ pub struct AgentHttp2Options {
 }
 
 /// Settings related to HTTP flow control, shared by HTTP/2 and HTTP/3. This is a nested object.
-#[napi(object)]
-#[derive(Debug, Clone, Default)]
-pub struct AgentFlowControlOptions {
+#[derive(Clone, Copy, Debug, Default)]
+pub struct FlowControlOptions {
 	/// Maximum bytes an origin may send on any one stream before it must wait for Faith to
 	/// acknowledge them, for HTTP/2 and HTTP/3 alike.
 	///
@@ -553,9 +470,8 @@ pub struct AgentFlowControlOptions {
 }
 
 /// Settings related to the connection pool. This is a nested object.
-#[napi(object)]
-#[derive(Debug, Clone, Default)]
-pub struct AgentPoolOptions {
+#[derive(Clone, Copy, Debug, Default)]
+pub struct PoolOptions {
 	/// How many seconds of inactivity before a connection is closed.
 	///
 	/// Default: 90 seconds.
@@ -574,9 +490,8 @@ pub struct AgentPoolOptions {
 /// standards-compliant. A quirk is for a caller who controls the origin, or has otherwise
 /// established that what the rule guards against does not apply to them: turning one on means
 /// requests may fail against origins that expect the standard behaviour.
-#[napi(object)]
-#[derive(Debug, Clone, Copy, Default)]
-pub struct AgentQuirksOptions {
+#[derive(Clone, Copy, Debug, Default)]
+pub struct QuirksOptions {
 	/// Allow a streaming request body to be sent over an HTTP/1.x connection.
 	///
 	/// The fetch standard reserves streaming request bodies for HTTP/2 and HTTP/3: a body read
@@ -588,48 +503,9 @@ pub struct AgentQuirksOptions {
 	pub h1_request_streaming: Option<bool>,
 }
 
-/// Determines the behavior in case the server replies with a redirect status.
-/// One of the following values:
-///
-/// - `follow`: automatically follow redirects. Faith limits this to 10 redirects.
-/// - `error`: reject the promise with a network error when a redirect status is returned.
-/// - ~~`manual`~~: not supported.
-/// - `stop`: (Faith custom) don't follow any redirects, return the responses.
-///
-/// Defaults to `follow`.
-#[napi(string_enum)]
-#[derive(Debug, Clone, Copy, Default)]
-pub enum Redirect {
-	#[napi(value = "follow")]
-	#[default]
-	Follow,
-
-	#[napi(value = "error")]
-	Error,
-
-	#[napi(value = "manual")]
-	Manual,
-
-	#[napi(value = "stop")]
-	Stop,
-}
-
-/// `manual` is not supported and behaves as `follow`, which is what the client's own policy spells
-/// out: it carries no variant for a choice that never differed.
-impl From<Redirect> for RedirectPolicy {
-	fn from(redirect: Redirect) -> Self {
-		match redirect {
-			Redirect::Follow | Redirect::Manual => Self::Follow,
-			Redirect::Error => Self::Error,
-			Redirect::Stop => Self::Stop,
-		}
-	}
-}
-
 /// Timeouts for requests made with this agent. This is a nested object.
-#[napi(object)]
-#[derive(Debug, Clone, Copy, Default)]
-pub struct AgentTimeoutOptions {
+#[derive(Clone, Copy, Debug, Default)]
+pub struct TimeoutOptions {
 	/// Set a timeout for only the connect phase, in milliseconds.
 	///
 	/// Default: none.
@@ -651,9 +527,8 @@ pub struct AgentTimeoutOptions {
 }
 
 /// Settings related to the connection pool. This is a nested object.
-#[napi(object)]
-#[derive(Default)]
-pub struct AgentTlsOptions {
+#[derive(Clone, Debug, Default)]
+pub struct TlsOptions {
 	/// Enable TLS 1.3 Early Data. Early data is an optimisation where the client sends the first packet
 	/// of application data alongside the opening packet of the TLS handshake. That can enable the server
 	/// to answer faster, improving latency by up to one round-trip. However, Early Data has significant
@@ -669,7 +544,7 @@ pub struct AgentTlsOptions {
 	/// The input should contain a PEM encoded private key and at least one PEM encoded certificate. The
 	/// private key must be in RSA, SEC1 Elliptic Curve or PKCS#8 format. This is one of the few options
 	/// that will cause the `Agent` constructor to throw if the input is in the wrong format.
-	pub identity: Option<Either<Buffer, String>>,
+	pub identity: Option<Vec<u8>>,
 	/// Disables plain-text HTTP.
 	///
 	/// Default: false.
@@ -681,47 +556,13 @@ pub struct AgentTlsOptions {
 	/// certificates, such as internal services or local test servers. This is one of the
 	/// few options that will cause the `Agent` constructor to throw if the input is in
 	/// the wrong format.
-	pub extra_roots: Option<Vec<Either<Buffer, String>>>,
+	pub extra_roots: Option<Vec<Vec<u8>>>,
 }
 
-impl Debug for AgentTlsOptions {
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		f.debug_struct("AgentTlsOptions")
-			.field("early_data", &self.early_data)
-			.field("identity", &"[sensitive]")
-			.field("required", &self.required)
-			.field("extra_roots", &self.extra_roots.as_ref().map(|r| r.len()))
-			.finish()
-	}
-}
-
-impl Clone for AgentTlsOptions {
-	fn clone(&self) -> Self {
-		Self {
-			early_data: self.early_data.clone(),
-			identity: self.identity.as_ref().map(|either| match either {
-				Either::A(buf) => Either::A(Buffer::from(buf.as_ref())),
-				Either::B(string) => Either::B(string.clone()),
-			}),
-			required: self.required.clone(),
-			extra_roots: self.extra_roots.as_ref().map(|roots| {
-				roots
-					.iter()
-					.map(|either| match either {
-						Either::A(buf) => Either::A(Buffer::from(buf.as_ref())),
-						Either::B(string) => Either::B(string.clone()),
-					})
-					.collect()
-			}),
-		}
-	}
-}
-
-#[napi(object)]
-#[derive(Debug, Clone, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct AgentOptions {
 	/// Settings related to the HTTP cache. This is a nested object.
-	pub cache: Option<AgentCacheOptions>,
+	pub cache: Option<CacheOptions>,
 	/// Enable a persistent cookie store for the agent. Cookies received in responses will be preserved and
 	/// included in additional requests.
 	///
@@ -732,15 +573,15 @@ pub struct AgentOptions {
 	///
 	/// You may use `agent.getCookie(url: string)` and `agent.addCookie(url: string, value: string)` to add
 	/// and retrieve cookies from the store.
-	pub cookies: Option<Either<bool, AgentCookieOptions>>,
+	pub cookies: Option<CookieLimits>,
 	/// Settings related to DNS. This is a nested object.
-	pub dns: Option<AgentDnsOptions>,
+	pub dns: Option<DnsOptions>,
 	/// Flow-control windows shared by HTTP/2 and HTTP/3. This is a nested object.
 	///
 	/// Setting these is the normal way to tune windows: one value applies to whichever protocol
 	/// a request negotiates, so throughput doesn't change when an origin upgrades from one to
 	/// the other. The `http2` and `http3` groups override them per protocol.
-	pub flow_control: Option<AgentFlowControlOptions>,
+	pub flow_control: Option<FlowControlOptions>,
 	/// Sets the default headers for every request.
 	///
 	/// If header names or values are invalid, they are silently omitted.
@@ -749,9 +590,9 @@ pub struct AgentOptions {
 	/// Default: none.
 	pub headers: Option<Vec<Header>>,
 	/// Settings related to HTTP/2. This is a nested object.
-	pub http2: Option<AgentHttp2Options>,
+	pub http2: Option<Http2Options>,
 	/// Settings related to HTTP/3. This is a nested object.
-	pub http3: Option<AgentHttp3Options>,
+	pub http3: Option<Http3Options>,
 	/// Bind outgoing sockets to this local IP address before connecting.
 	///
 	/// This also selects the address family of the HTTP/3 (QUIC) socket. By default that
@@ -763,395 +604,147 @@ pub struct AgentOptions {
 	/// Default: unset (IPv6 wildcard for QUIC where available, else `0.0.0.0`).
 	pub local_address: Option<String>,
 	/// Settings related to the connection pool. This is a nested object.
-	pub pool: Option<AgentPoolOptions>,
+	pub pool: Option<PoolOptions>,
 	/// Switches that depart from standard behaviour on purpose. This is a nested object.
-	pub quirks: Option<AgentQuirksOptions>,
+	pub quirks: Option<QuirksOptions>,
 	/// Determines the behavior in case the server replies with a redirect status.
-	pub redirect: Option<Redirect>,
+	pub redirect: Option<RedirectPolicy>,
 	/// Timeouts for requests made with this agent. This is a nested object.
-	pub timeout: Option<AgentTimeoutOptions>,
+	pub timeout: Option<TimeoutOptions>,
 	/// Settings related to the connection pool. This is a nested object.
-	pub tls: Option<AgentTlsOptions>,
+	pub tls: Option<TlsOptions>,
 	/// Custom user agent string.
 	///
 	/// Default: `Faith/{version} reqwest/{version}`.
 	pub user_agent: Option<String>,
 }
 
-#[napi]
-#[derive(Debug, Clone, Default)]
-pub struct AgentStats {
-	pub requests_sent: i64,
-	pub responses_received: i64,
-	/// Number of response body streams that have been started (converted from raw body to stream).
-	/// This happens when `.body`, `.text()`, `.json()`, `.bytes()`, or similar methods are called.
-	pub bodies_started: i64,
-	/// Number of response body streams that have been fully consumed.
-	/// When `bodies_started - bodies_finished > 0`, there are bodies holding connections open.
-	pub bodies_finished: i64,
+/// Whether this host can bind the IPv6 wildcard (`[::]`).
+///
+/// This is tested using the exact operation reqwest performs when creating the QUIC
+/// endpoint with no explicit local address, so it predicts whether the default
+/// QUIC bind will succeed. The result is memoised for the life of the process; while
+/// IPv6 bindability can in principle change at runtime, this is considered an
+/// acceptable tradeoff for performance and simplicity.
+pub fn ipv6_wildcard_bindable() -> bool {
+	use std::sync::OnceLock;
+	static BINDABLE: OnceLock<bool> = OnceLock::new();
+	*BINDABLE.get_or_init(|| {
+		UdpSocket::bind(SocketAddr::new(IpAddr::V6(Ipv6Addr::UNSPECIFIED), 0)).is_ok()
+	})
 }
 
-impl From<web_faith::stats::AgentStats> for AgentStats {
-	fn from(stats: web_faith::stats::AgentStats) -> Self {
-		let count = |value: u64| i64::try_from(value).unwrap_or(i64::MAX);
-		Self {
-			requests_sent: count(stats.requests_sent),
-			responses_received: count(stats.responses_received),
-			bodies_started: count(stats.bodies_started),
-			bodies_finished: count(stats.bodies_finished),
+/// Reconcile one protocol's windows: its own setting wins over the common one, which wins over the
+/// default (spec:FLOW#per-protocol-windows).
+pub fn resolve_windows(
+	common: Option<&FlowControlOptions>,
+	protocol_stream: Option<u32>,
+	protocol_connection: Option<u32>,
+) -> ResolvedWindows {
+	ResolvedWindows {
+		stream: protocol_stream
+			.or_else(|| common.and_then(|c| c.stream_window))
+			.unwrap_or(DEFAULT_STREAM_WINDOW),
+		connection: protocol_connection
+			.or_else(|| common.and_then(|c| c.connection_window))
+			.unwrap_or(DEFAULT_CONNECTION_WINDOW),
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use crate::client::ResolvedWindows;
+
+	fn common(stream: Option<u32>, connection: Option<u32>) -> FlowControlOptions {
+		FlowControlOptions {
+			stream_window: stream,
+			connection_window: connection,
 		}
 	}
-}
 
-/// One entry of `Agent.resolvers()`: a DNS server the agent resolves through (spec:OBS#resolvers).
-#[napi(object)]
-#[derive(Debug, Clone)]
-pub struct ResolverInfo {
-	/// The server's address, as `ip:port`.
-	pub address: String,
-	/// The transport in use: `udp`, `tcp`, `tls`, `https`, `quic`, or `h3`.
-	pub transport: String,
-	/// How the transport was arrived at: `configured` by the caller, or `conventional` DNS.
-	pub source: String,
-}
-
-/// The `Agent` interface of the Faith API represents an instance of an HTTP client. Each `Agent` has
-/// its own options, connection pool, caches, etc. There are also conveniences such as `headers` for
-/// setting default headers on all requests done with the agent, and statistics collected by the agent.
-///
-/// Re-using connections between requests is a significant performance improvement: not only because
-/// the TCP and TLS handshake is only performed once across many different requests, but also because
-/// the DNS lookup doesn't need to occur for subsequent requests on the same connection. Depending on
-/// DNS technology (DoH and DoT add a whole separate handshake to the process) and overall latency,
-/// this can not only speed up requests on average, but also reduce system load.
-///
-/// For this reason, and also because in browsers this behaviour is standard, **all** requests with
-/// Faith use an `Agent`. For `fetch()` calls that don't specify one explicitly, a global agent with
-/// default options is created on first use.
-///
-/// There are a lot more options that could be exposed here; if you want one, open an issue.
-#[napi]
-#[derive(Debug, Clone)]
-pub struct Agent {
-	pub(crate) inner: web_faith::agent::Agent,
-}
-
-#[napi]
-impl Agent {
-	pub fn new() -> Result<Self, FaithError> {
-		Self::with_options(AgentOptions::default())
+	#[test]
+	fn windows_fall_back_to_the_defaults() {
+		// An agent configured with nothing at all still gets the large static windows
+		// (spec:FLOW#common-windows).
+		assert_eq!(
+			resolve_windows(None, None, None),
+			ResolvedWindows {
+				stream: 6 * 1024 * 1024,
+				connection: 15 * 1024 * 1024,
+			}
+		);
 	}
 
-	pub fn with_options(options: AgentOptions) -> Result<Self, FaithError> {
-		let options = options::AgentOptions::from(options);
-		// A napi callback can run outside the runtime, and building the HTTP/3 endpoint needs to be
-		// inside one, so the client is constructed within whichever runtime is to hand.
-		within_runtime_if_available(|| web_faith::agent::Agent::from_options(options))
-			.map(|inner| Self { inner })
+	#[test]
+	fn the_common_windows_apply_when_a_protocol_says_nothing() {
+		assert_eq!(
+			resolve_windows(Some(&common(Some(1024), Some(4096))), None, None),
+			ResolvedWindows {
+				stream: 1024,
+				connection: 4096,
+			}
+		);
 	}
 
-	#[napi(constructor)]
-	pub fn construct(env: Env, options: Option<AgentOptions>) -> Result<Self, napi::Error> {
-		Ok(if let Some(options) = options {
-			Self::with_options(options)
-		} else {
-			Self::new()
-		}
-		.map_err(|err| err.into_js_error(&env))?)
+	#[test]
+	fn a_protocol_window_beats_the_common_one() {
+		// The whole point of the per-protocol group: tune one protocol against the other
+		// (spec:FLOW#per-protocol-windows).
+		assert_eq!(
+			resolve_windows(
+				Some(&common(Some(1024), Some(4096))),
+				Some(2048),
+				Some(8192)
+			),
+			ResolvedWindows {
+				stream: 2048,
+				connection: 8192,
+			}
+		);
 	}
 
-	/// Close the agent, releasing its connection pool, DNS resolver, and any
-	/// background tasks it owns, rather than waiting for the garbage collector
-	/// to drop it. This is worth doing when you create many short-lived agents;
-	/// a single long-lived agent can just be left to the GC.
-	///
-	/// Requests already in flight run to completion. Any new request on a closed
-	/// agent throws a `Closed` error. Calling `close()` more than once is a
-	/// no-op. The cookie store, if any, remains readable via `getCookie`.
-	#[napi]
-	pub fn close(&mut self) {
-		self.inner.close();
+	#[test]
+	fn each_window_falls_back_on_its_own() {
+		// Overriding the stream window for one protocol leaves that protocol's connection
+		// window on the common value, rather than dropping it to the default.
+		assert_eq!(
+			resolve_windows(Some(&common(Some(1024), Some(4096))), Some(2048), None),
+			ResolvedWindows {
+				stream: 2048,
+				connection: 4096,
+			}
+		);
+		assert_eq!(
+			resolve_windows(Some(&common(None, None)), None, Some(8192)),
+			ResolvedWindows {
+				stream: DEFAULT_STREAM_WINDOW,
+				connection: 8192,
+			}
+		);
 	}
 
-	/// Tell the agent the network underneath it has changed, so it stops deciding from what it
-	/// learned about a network that is gone.
-	///
-	/// Node has no portable signal for an interface or connectivity change, so Faith cannot
-	/// detect one; this is the reaction, and wiring it to a trigger (an OS notification, a VPN
-	/// transition, a captive-portal sign-in) is the caller's own. It drops pooled connections,
-	/// flushes the DNS cache, demotes the HTTP/3 origins that a real response confirmed back to
-	/// advertised so a background probe re-verifies them, and clears the HTTP/3 failure and slow
-	/// states, their cooldown backoff, and the path-time averages.
-	///
-	/// Configuration, `http3.hints`, `Alt-Svc` advertisements, the cookie jar, the HTTP cache and
-	/// the `stats()` counters are all kept: none of them is a claim about a network path.
-	///
-	/// Requests already in flight are not interrupted and run to completion on the connections
-	/// they hold; the reset shapes what requests started afterwards draw on. Calling it on a
-	/// closed agent does nothing, and calling it repeatedly is harmless.
-	// spec:NETCHG
-	#[napi]
-	pub fn network_changed(&mut self) {
-		self.inner.network_changed();
+	#[test]
+	fn a_protocol_window_applies_without_the_common_group() {
+		assert_eq!(
+			resolve_windows(None, Some(2048), None),
+			ResolvedWindows {
+				stream: 2048,
+				connection: DEFAULT_CONNECTION_WINDOW,
+			}
+		);
 	}
 
-	/// Add a cookie into the agent.
-	///
-	/// The cookie goes through the same rules a `Set-Cookie` header would, with the url supplying
-	/// the scheme and host they read, so this does nothing if:
-	/// - the cookie store is disabled
-	/// - the url is malformed
-	/// - the cookie does not parse
-	/// - a `__Host-` or `__Secure-` name prefix is not satisfied
-	/// - the cookie is larger than `cookies.maxSize`
-	#[napi]
-	pub fn add_cookie(&self, url: String, cookie: String) {
-		let Ok(url) = Url::from_str(&url) else {
-			return;
-		};
+	#[test]
+	fn the_two_protocols_resolve_independently() {
+		// One `flowControl` value covers both protocols, and overriding it for HTTP/3 leaves
+		// HTTP/2 where it was (spec:FLOW#per-protocol-windows).
+		let flow = common(Some(1024), Some(4096));
+		let http2 = resolve_windows(Some(&flow), None, None);
+		let http3 = resolve_windows(Some(&flow), Some(2048), None);
 
-		self.inner.add_cookie(&url, &cookie);
-	}
-
-	/// Retrieve a cookie from the store.
-	///
-	/// Returns `null` if:
-	/// - there's no cookie at this url
-	/// - the cookie store is disabled
-	/// - the url is malformed
-	/// - the cookie cannot be represented as a string
-	#[napi]
-	pub fn get_cookie(&self, url: String) -> Option<String> {
-		let url = Url::from_str(&url).ok()?;
-		self.inner.cookie_header(&url)
-	}
-
-	/// Returns statistics gathered by this agent:
-	///
-	/// - `requestsSent`
-	/// - `responsesReceived`
-	/// - `bodiesStarted`
-	/// - `bodiesFinished`
-	#[napi]
-	pub fn stats(&self) -> AgentStats {
-		AgentStats::from(self.inner.stats())
-	}
-
-	/// Returns information on current connections open by this agent.
-	///
-	/// Only tracks TCP connections currently (upstream limitation). Stats are updated once a second:
-	/// this makes it possible to track indicators over time to find the retransmission rate, for
-	/// example. The `lostPackets` and `deliveryRateBps` stats are only available on Linux. Some other
-	/// fields might also be missing depending on platform support; and no forward guarantees are made
-	/// on field availability. If the platform isn't supported at all, this will always return empty.
-	#[napi]
-	pub fn connections<'env>(&self, env: &'env Env) -> Vec<ConnectionInfo<'env>> {
-		connections_for_napi(&self.inner.conn_tracker, env)
-	}
-
-	/// Returns the DNS servers this agent resolves through, in the order they are queried, so
-	/// "are my lookups actually encrypted" is answerable from inside the process.
-	///
-	/// Each entry gives the server's address, the transport in use (`udp`, `tcp`, `tls`, `https`,
-	/// `quic`, or `h3`), and how that transport was arrived at (`configured` or `conventional`).
-	/// The list is empty until the resolver has been used, because it reads its configuration on
-	/// first use, and empty for an agent using the system resolver.
-	#[napi]
-	pub fn resolvers(&self) -> Vec<ResolverInfo> {
-		self.inner
-			.resolvers()
-			.into_iter()
-			.map(|report| ResolverInfo {
-				address: report.address,
-				transport: report.transport,
-				source: report.source,
-			})
-			.collect()
-	}
-
-	/// Warm the DNS cache for `host`, so a later request to it skips the lookup.
-	///
-	/// Mirrors the browser's `dns-prefetch` resource hint. The argument is a bare host; a scheme,
-	/// port, or path in a fuller string is ignored. The returned promise resolves when the answer
-	/// lands in the cache and never rejects, whatever happens on the network — a resolution failure
-	/// resolves quietly, because the work is advisory. Under the system resolver there is no cache
-	/// to warm, so the call resolves without doing anything. A malformed host throws synchronously,
-	/// as does a call on a closed agent.
-	#[napi]
-	pub fn prefetch_dns<'env>(
-		&self,
-		env: &'env Env,
-		host: String,
-	) -> Result<PromiseRaw<'env, ()>, napi::Error> {
-		let warming = self
-			.inner
-			.prefetch_dns(&host)
-			.map_err(|err| caller_error(env, err))?;
-		faith_promise(env, async move {
-			warming.await;
-			Ok(())
-		})
-	}
-
-	/// Open a pooled connection to `origin`, so the first request to it skips DNS, TCP, and TLS
-	/// setup.
-	///
-	/// Mirrors the browser's `preconnect` resource hint. The argument is an origin
-	/// (`scheme://host[:port]`); a longer URL is reduced to its origin. The warm-up sends a
-	/// synthetic `HEAD` to the origin's root — the origin sees it — over the transport the next
-	/// foreground request would use: a confirmed HTTP/3 origin gets a warm QUIC connection, every
-	/// other origin a TCP one. The returned promise resolves when the attempt finishes and never
-	/// rejects: every network failure resolves quietly. A malformed origin throws synchronously, as
-	/// does a call on a closed agent.
-	#[napi]
-	pub fn preconnect<'env>(
-		&self,
-		env: &'env Env,
-		origin: String,
-	) -> Result<PromiseRaw<'env, ()>, napi::Error> {
-		let warming = self
-			.inner
-			.preconnect(&origin)
-			.map_err(|err| caller_error(env, err))?;
-		faith_promise(env, async move {
-			warming.await;
-			Ok(())
-		})
-	}
-}
-
-/// Build the JS error a warm-up throws synchronously for a caller mistake, preserving its `.code`
-/// and JS error class. Network failures never reach here — they resolve quietly (spec:WARM).
-fn caller_error(env: &Env, err: FaithError) -> napi::Error {
-	napi::Error::from(err.into_js_error(env))
-}
-
-/// Read the JavaScript options object into the shape the client validates.
-///
-/// A field-for-field mapping wherever the two agree, which is most of them; what differs is where
-/// JavaScript expresses a choice as a union or a string that Rust has a type for.
-impl From<AgentOptions> for options::AgentOptions {
-	fn from(opts: AgentOptions) -> Self {
-		Self {
-			cache: opts.cache.map(|cache| options::CacheOptions {
-				store: cache.store.map(|store| match store {
-					CacheStore::Disk => options::CacheStore::Disk,
-					CacheStore::Memory => options::CacheStore::Memory,
-				}),
-				capacity: cache.capacity,
-				mode: cache.mode.map(CacheMode::from),
-				path: cache.path,
-				shared: cache.shared,
-			}),
-			// `false` and an absent value both mean no jar; `true` means one with default limits.
-			cookies: match opts.cookies {
-				None | Some(Either::A(false)) => None,
-				Some(Either::A(true)) => Some(CookieLimits::default()),
-				Some(Either::B(cookies)) => Some((&cookies).into()),
-			},
-			dns: opts.dns.map(|dns| options::DnsOptions {
-				system: dns.system,
-				overrides: dns.overrides.map(|overrides| {
-					overrides
-						.into_iter()
-						.map(|o| options::DnsOverride {
-							domain: o.domain,
-							addresses: o.addresses,
-						})
-						.collect()
-				}),
-				servers: dns.servers,
-				timeout: dns.timeout,
-				search_domains: dns.search_domains,
-				ndots: dns.ndots,
-				hosts_file: dns.hosts_file,
-				exempt_domains: dns.exempt_domains,
-				serve_stale: dns.serve_stale,
-				max_stale: dns.max_stale,
-			}),
-			flow_control: opts.flow_control.map(|flow| options::FlowControlOptions {
-				stream_window: flow.stream_window,
-				connection_window: flow.connection_window,
-			}),
-			headers: opts.headers.map(|headers| {
-				headers
-					.into_iter()
-					.map(|header| options::Header {
-						name: header.name,
-						value: header.value,
-						sensitive: header.sensitive,
-					})
-					.collect()
-			}),
-			http2: opts.http2.map(|http2| options::Http2Options {
-				stream_window: http2.stream_window,
-				connection_window: http2.connection_window,
-				adaptive_window: http2.adaptive_window,
-			}),
-			http3: opts.http3.map(|http3| options::Http3Options {
-				congestion: http3.congestion.map(|c| match c {
-					Http3Congestion::Cubic => options::Http3Congestion::Cubic,
-					Http3Congestion::Bbr1 => options::Http3Congestion::Bbr1,
-				}),
-				max_idle_timeout: http3.max_idle_timeout,
-				upgrade_enabled: http3.upgrade_enabled,
-				upgrade_probe: http3.upgrade_probe,
-				upgrade_probe_timeout: http3.upgrade_probe_timeout,
-				upgrade_slow_factor: http3.upgrade_slow_factor,
-				upgrade_slow_ttl: http3.upgrade_slow_ttl,
-				upgrade_advertised_ttl: http3.upgrade_advertised_ttl,
-				upgrade_confirmed_ttl: http3.upgrade_confirmed_ttl,
-				upgrade_failed_ttl: http3.upgrade_failed_ttl,
-				upgrade_failed_max_ttl: http3.upgrade_failed_max_ttl,
-				upgrade_cancel_strikes: http3.upgrade_cancel_strikes,
-				upgrade_attempt_timeout: http3.upgrade_attempt_timeout,
-				upgrade_follow_advertised_port: http3.upgrade_follow_advertised_port,
-				upgrade_cache_capacity: http3.upgrade_cache_capacity,
-				hints: http3.hints.map(|hints| {
-					hints
-						.into_iter()
-						.map(|hint| options::Http3Hint {
-							host: hint.host,
-							port: hint.port,
-						})
-						.collect()
-				}),
-				stream_window: http3.stream_window,
-				connection_window: http3.connection_window,
-				send_window: http3.send_window,
-			}),
-			local_address: opts.local_address,
-			pool: opts.pool.map(|pool| options::PoolOptions {
-				idle_timeout: pool.idle_timeout,
-				max_idle_per_host: pool.max_idle_per_host,
-			}),
-			quirks: opts.quirks.map(|quirks| options::QuirksOptions {
-				h1_request_streaming: quirks.h1_request_streaming,
-			}),
-			redirect: opts.redirect.map(RedirectPolicy::from),
-			timeout: opts.timeout.map(|timeout| options::TimeoutOptions {
-				connect: timeout.connect,
-				read: timeout.read,
-				total: timeout.total,
-			}),
-			tls: opts.tls.map(|tls| options::TlsOptions {
-				early_data: tls.early_data,
-				// Either spelling of a PEM is the same bytes to the client.
-				identity: tls.identity.map(|pem| pem_bytes(&pem)),
-				required: tls.required,
-				extra_roots: tls
-					.extra_roots
-					.map(|roots| roots.iter().map(pem_bytes).collect()),
-			}),
-			user_agent: opts.user_agent,
-		}
-	}
-}
-
-/// PEM input arrives as a buffer or a string; both are just the bytes.
-fn pem_bytes(pem: &Either<Buffer, String>) -> Vec<u8> {
-	match pem {
-		Either::A(buf) => buf.to_vec(),
-		Either::B(string) => string.as_bytes().to_vec(),
+		assert_eq!(http2.stream, 1024);
+		assert_eq!(http3.stream, 2048);
+		assert_eq!(http2.connection, http3.connection);
 	}
 }

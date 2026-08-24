@@ -22,6 +22,7 @@ pub mod body;
 pub mod client;
 pub mod error;
 pub mod integrity;
+pub mod options;
 pub mod request;
 pub mod response;
 pub mod retry;

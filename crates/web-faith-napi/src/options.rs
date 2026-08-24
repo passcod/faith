@@ -136,9 +136,6 @@ pub enum DuplexOption {
 	Half,
 }
 
-/// The RFC 9218 header the `priority` option maps onto.
-pub(crate) const PRIORITY: &str = "priority";
-
 /// Maps the `priority` option onto an RFC 9218 `Priority` header value.
 ///
 /// Urgency runs from 0 (most urgent) to 7 (least urgent), and a request that sends no header
