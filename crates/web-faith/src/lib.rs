@@ -21,6 +21,7 @@ pub mod agent;
 pub mod body;
 pub mod client;
 pub mod error;
+pub mod response;
 pub mod retry;
 pub mod stats;
 pub mod timing;
