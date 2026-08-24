@@ -578,46 +578,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "faith"
-version = "0.7.0"
-dependencies = [
- "async-compression",
- "async-stream",
- "async-trait",
- "bytes",
- "cookie",
- "cookie_store",
- "futures",
- "hickory-resolver",
- "http",
- "http-body-util",
- "http-cache-reqwest",
- "hyper",
- "hyper-util",
- "libc",
- "moka",
- "napi",
- "napi-build",
- "napi-derive",
- "netlink-packet-core",
- "netlink-packet-sock-diag",
- "netlink-sys",
- "reqwest",
- "reqwest-middleware",
- "serde",
- "serde_json",
- "ssri",
- "stream_shared",
- "strum",
- "time",
- "tokio",
- "tokio-stream",
- "tokio-util",
- "url",
- "windows",
-]
-
-[[package]]
 name = "fastrand"
 version = "2.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2832,6 +2792,46 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
+]
+
+[[package]]
+name = "web-faith-napi"
+version = "0.7.0"
+dependencies = [
+ "async-compression",
+ "async-stream",
+ "async-trait",
+ "bytes",
+ "cookie",
+ "cookie_store",
+ "futures",
+ "hickory-resolver",
+ "http",
+ "http-body-util",
+ "http-cache-reqwest",
+ "hyper",
+ "hyper-util",
+ "libc",
+ "moka",
+ "napi",
+ "napi-build",
+ "napi-derive",
+ "netlink-packet-core",
+ "netlink-packet-sock-diag",
+ "netlink-sys",
+ "reqwest",
+ "reqwest-middleware",
+ "serde",
+ "serde_json",
+ "ssri",
+ "stream_shared",
+ "strum",
+ "time",
+ "tokio",
+ "tokio-stream",
+ "tokio-util",
+ "url",
+ "windows",
 ]
 
 [[package]]

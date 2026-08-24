@@ -1,0 +1,62 @@
+[package]
+name = "web-faith-napi"
+description = "Faith: a Rust-powered JS fetch (Node.js binding)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish = false
+
+[lib]
+# Kept as `faith` so the built artifact stays `libfaith.so`/`faith.dll`, which the
+# release workflow's cross-compile steps copy by name.
+name = "faith"
+crate-type = ["cdylib"]
+
+[dependencies]
+async-compression.workspace = true
+async-stream.workspace = true
+async-trait.workspace = true
+bytes.workspace = true
+cookie.workspace = true
+cookie_store.workspace = true
+futures.workspace = true
+hickory-resolver.workspace = true
+moka.workspace = true
+http.workspace = true
+http-body-util.workspace = true
+hyper.workspace = true
+http-cache-reqwest.workspace = true
+hyper-util.workspace = true
+libc.workspace = true
+napi.workspace = true
+napi-derive.workspace = true
+reqwest.workspace = true
+reqwest-middleware.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+ssri.workspace = true
+stream_shared.workspace = true
+strum.workspace = true
+tokio.workspace = true
+tokio-stream.workspace = true
+time.workspace = true
+tokio-util.workspace = true
+url.workspace = true
+
+[target.'cfg(target_os = "linux")'.dependencies]
+netlink-packet-core.workspace = true
+netlink-packet-sock-diag.workspace = true
+netlink-sys.workspace = true
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows.workspace = true
+
+[build-dependencies]
+napi-build.workspace = true
+
+[features]
+default = ["http3"]
+http3 = ["reqwest/http3"]
