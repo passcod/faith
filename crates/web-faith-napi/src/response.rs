@@ -659,7 +659,7 @@ impl FaithResponse {
 	/// written to and `bytesWritten` counts the bytes that landed there.
 	///
 	/// `onProgress` is reported to as the bytes land, at most every
-	/// [`PROGRESS_INTERVAL`], with a final report once the last byte is written. The
+	/// `PROGRESS_INTERVAL`, with a final report once the last byte is written. The
 	/// wrapper takes it from the options object; it arrives here as its own argument
 	/// because a threadsafe function cannot be a field of a `#[napi(object)]`.
 	///

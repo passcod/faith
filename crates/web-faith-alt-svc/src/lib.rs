@@ -1,3 +1,27 @@
+//! An Alt-Svc store, and the machinery that upgrades an origin to HTTP/3 on the strength of it.
+//!
+//! An origin advertises HTTP/3 in an `Alt-Svc` header, or in an `HTTPS` DNS record. Acting on that
+//! is not as simple as believing it: the alternative may be unreachable even though it was
+//! advertised, and finding out costs the request that tries. What this does is keep the
+//! advertisements ([`AltSvcCache`]) and decide, per origin, whether HTTP/3 is worth attempting.
+//!
+//! [`AltSvcMiddleware`] is the layer that acts on the decision. Two shapes are available:
+//!
+//! - With an [`H3Prober`], an advertisement is verified in the background and foreground requests
+//!   are routed over HTTP/3 only once an origin is confirmed, so no user-visible request pays for
+//!   discovering a broken alternative.
+//! - Without one, the next foreground request is itself the verification, falling back to TCP if the
+//!   attempt does not produce headers in time.
+//!
+//! Either way an origin that starts failing, or that turns out to be slower over HTTP/3 than the
+//! path it replaced ([`PathTime`]), is demoted, and the cooldown before it is tried again lengthens
+//! with each consecutive failure.
+//!
+//! [`parse_alt_svc_header`] reads a header on its own if all you want is the advertisement, and
+//! [`H3HttpsSink`] feeds the store from `HTTPS` record lookups.
+
+// spec:H3UP spec:PROBE
+
 use std::{
 	marker::PhantomData,
 	sync::Arc,
@@ -40,8 +64,7 @@ pub struct AltSvcAdvertisement {
 /// because they differ per origin and from each other: the entry deliberately
 /// outlives the cooldown it set, so that a count survives the block it caused and
 /// can escalate the next one. `advertised` does the same for `ma`.
-///
-/// spec:H3UP#failure-backoff
+// spec:H3UP#failure-backoff
 #[derive(Debug, Clone, Copy)]
 struct FailureEntry {
 	/// Consecutive failures with no confirmation in between.
@@ -72,7 +95,7 @@ const EWMA_ALPHA: f64 = 0.2;
 const EWMA_MIN_SAMPLES: u32 = 8;
 /// Absolute gap the QUIC average must exceed the TCP one by, on top of the
 /// factor, so LAN-fast origins don't flap on sub-millisecond noise.
-const SLOW_FLOOR_MS: f64 = 10.0;
+pub const SLOW_FLOOR_MS: f64 = 10.0;
 
 pub struct AltSvcCacheConfig {
 	pub advertised_ttl: Duration,
@@ -119,7 +142,8 @@ pub struct AltSvcCache {
 	/// put there: [`Self::network_changed`] demotes the observed ones and
 	/// re-seeds from here. Unbounded by TTL and outside the capacity bound,
 	/// because the hints are configuration and there are as many as the caller
-	/// passed. (spec:NETCHG#what-the-signal-keeps)
+	/// passed.
+	// spec:NETCHG#what-the-signal-keeps
 	hints: Cache<String, u16>,
 	/// Time-to-headers over TCP (h1 and h2 together), per origin.
 	tcp_times: Cache<String, PathTime>,
@@ -220,8 +244,7 @@ impl AltSvcCache {
 
 	/// The cooldown the `count`-th consecutive failure earns: the base doubled
 	/// once per failure before it, capped.
-	///
-	/// spec:H3UP#failure-backoff
+	// spec:H3UP#failure-backoff
 	fn failure_cooldown(&self, count: u32) -> Duration {
 		let doublings = count.saturating_sub(1).min(u32::BITS - 1);
 		self.failed_ttl
@@ -291,8 +314,7 @@ impl AltSvcCache {
 	/// (blocked whatever a record says), slow (demoted on measurement, which a record cannot
 	/// overturn), or already carrying a live advertisement (the probe it warrants is already
 	/// warranted). Each of those states expires, and the query resumes when it does.
-	///
-	/// spec:DNS#https-records
+	// spec:DNS#https-records
 	pub fn wants_https_record(&self, url: &reqwest::Url) -> bool {
 		let Some(origin) = Self::origin_key(url) else {
 			return false;
@@ -315,8 +337,7 @@ impl AltSvcCache {
 	/// and same-host rules are the header's too — [`Self::record_alt_svc`] applies them — because
 	/// the reasons for them are about what Faith can connect to rather than about where the
 	/// advertisement was read.
-	///
-	/// spec:H3UP#advertisements-from-dns
+	// spec:H3UP#advertisements-from-dns
 	pub fn record_https_record(&self, url: &reqwest::Url, port: Option<u16>, ttl: Duration) {
 		// A record naming no port describes the origin's own, exactly as an `Alt-Svc` header with
 		// no alt-authority port would.
@@ -615,8 +636,7 @@ impl AltSvcCache {
 	/// failure must not unblock the origin that failure just blocked: the failure
 	/// is the more recent evidence about the path, and [`Self::confirm_h3`]
 	/// relies on its own entry being masked until the block lapses.
-	///
-	/// spec:H3UP#failure-backoff
+	// spec:H3UP#failure-backoff
 	fn clear_failure_count(&self, origin: &str) {
 		let Some(entry) = self.failed.get(origin) else {
 			return;
@@ -644,8 +664,7 @@ impl AltSvcCache {
 	///
 	/// What the origin said about itself (`advertised`) and what the caller
 	/// asserted (`hints`) are not observations, so both survive.
-	///
-	/// spec:NETCHG
+	// spec:NETCHG
 	pub fn network_changed(&self) {
 		let now = Instant::now();
 
@@ -696,8 +715,7 @@ impl AltSvcCache {
 
 	/// Record a failed HTTP/3 attempt, blocking the origin for a cooldown that
 	/// lengthens the longer it keeps failing.
-	///
-	/// spec:H3UP#failure-backoff
+	// spec:H3UP#failure-backoff
 	pub fn record_h3_failure(&self, url: &reqwest::Url) {
 		let Some(origin) = Self::origin_key(url) else {
 			return;
@@ -943,7 +961,7 @@ impl H3Prober {
 
 	/// Kick off a background probe for the URL's origin if one is warranted: an actionable
 	/// advertisement present, the origin neither confirmed, failed, nor slow, and no probe
-	/// already in flight. The same decision [`AltSvcMiddleware::maybe_probe`] makes, exposed so a
+	/// already in flight. The same decision the Alt-Svc layer makes on a request, exposed so a
 	/// `preconnect` TCP warm-up to a probe-worthy origin triggers a probe as a real request would.
 	pub fn maybe_probe(&self, url: &reqwest::Url) {
 		let Some(port) = self.cache.probe_candidate(url) else {
@@ -978,8 +996,8 @@ impl H3Prober {
 /// default HTTPS port; the resolver sees only a hostname, so that is also the only origin it could
 /// name. Recording it there is right whichever request triggered the lookup, because what the
 /// record describes does not depend on who asked.
-///
-/// spec:H3UP#advertisements-from-dns spec:DNS#https-records
+// spec:H3UP#advertisements-from-dns
+// spec:DNS#https-records
 pub struct H3HttpsSink {
 	cache: Arc<AltSvcCache>,
 	/// Weak, and load-bearingly so: the prober holds the client, the client holds the resolver,
@@ -989,7 +1007,8 @@ pub struct H3HttpsSink {
 	/// agent's prober does.
 	///
 	/// `None` rather than a dead handle when probing is off, where an advertisement is acted on
-	/// inline by the next foreground request instead (spec:PROBE).
+	/// inline by the next foreground request instead.
+	// spec:PROBE
 	prober: Option<std::sync::Weak<H3Prober>>,
 }
 
@@ -1107,8 +1126,7 @@ impl<S: ArrivalStamp> AltSvcMiddleware<S> {
 /// This is the one place a response's arrival is observed: the returned instant is what the
 /// path-time average measures against, and the same instant reaches the caller through the
 /// request's extensions to become the surfaced timing, so the two can never disagree.
-///
-/// spec:RESP#request-timing
+// spec:RESP#request-timing
 async fn run_stamped<S: ArrivalStamp>(
 	next: Next<'_>,
 	req: Request,

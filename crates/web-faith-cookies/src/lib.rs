@@ -1,14 +1,44 @@
-//! A cookie jar for HTTP clients, with the rules that hold outside a browser. (spec:COOK)
+//! A cookie jar for HTTP clients, with the storage rules that hold outside a browser.
 //!
-//! `cookie_store` implements the classic RFC 6265 storage model, and reqwest's `Jar` wraps it in a
-//! private field, so extending it means wrapping the store ourselves rather than the jar. What this
-//! adds is the RFC 6265bis rules that mean something without a browsing context: the `__Host-` and
-//! `__Secure-` name prefixes, a cap on how far ahead a cookie may expire, and caps on how many
-//! cookies and how many bytes one server can accumulate. `SameSite` is left to the `cookie` crate to
-//! parse and is never read, governing cross-site behaviour that only a first-party context has.
+//! Cookies were specified for browsers, and the parts of RFC 6265 that assume a browsing context do
+//! not carry over to a client making requests on its own account. This jar keeps the model that
+//! does: the classic storage and matching rules, and the RFC 6265bis additions that still mean
+//! something with no browser around them.
 //!
-//! The `reqwest` feature implements that client's `CookieStore` trait, so the jar can be handed to
-//! it as a cookie provider.
+//! - The `__Host-` and `__Secure-` name prefixes, which bind a cookie to the exact host that set it
+//!   and to a secure transport.
+//! - A ceiling on how far ahead a cookie may expire, so a server cannot claim a decade.
+//! - Caps on the size of one cookie, and on how many are kept per host and in total.
+//!
+//! Every rule is applied when a cookie is stored rather than when one is sent. That is what makes
+//! the caps bound real memory, and what holds a cookie inserted by hand to the same rules as one
+//! that arrived in a `Set-Cookie` header.
+//!
+//! `SameSite` is parsed but never read: it governs cross-site behaviour that only a first-party
+//! context has.
+//!
+//! # Example
+//!
+//! ```
+//! use url::Url;
+//! use web_faith_cookies::{CookieLimits, FaithJar};
+//!
+//! let jar = FaithJar::new(CookieLimits::default());
+//! let url = Url::parse("https://example.com/")?;
+//!
+//! jar.add_cookie_str("session=abc; Path=/", &url);
+//!
+//! let header = jar.request_cookie_header(&url).expect("a cookie to send");
+//! assert_eq!(header.to_str()?, "session=abc");
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
+//!
+//! # Features
+//!
+//! `reqwest` implements that client's `CookieStore` for the jar, so it can be handed to a
+//! `ClientBuilder` as a cookie provider.
+
+// spec:COOK
 
 use std::{collections::HashMap, sync::RwLock, time::Duration};
 

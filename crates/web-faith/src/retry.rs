@@ -135,8 +135,8 @@ fn failed_to_connect(err: &reqwest_middleware::Error) -> bool {
 /// Re-resolves and attempts a request again when connecting to a stale-served address failed.
 ///
 /// Serving an expired DNS answer trades a round trip against the chance the address has moved, and
-/// this layer is what bounds the cost of being wrong to one re-resolve rather than a failed request
-/// (spec:DNS#when-a-stale-address-is-wrong).
+/// this layer is what bounds the cost of being wrong to one re-resolve rather than a failed request.
+// spec:DNS#when-a-stale-address-is-wrong
 #[derive(Debug, Clone)]
 pub struct StaleAddressRetry {
 	/// `None` under `dns.system: true`, where Faith holds no cache and so serves nothing stale.

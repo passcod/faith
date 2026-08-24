@@ -1,12 +1,18 @@
-//! Live per-connection statistics, read from the operating system. (spec:OBS)
+//! Live per-connection TCP statistics, read from the operating system.
 //!
-//! The pool's own view says which connections exist; the kernel knows how each one is actually
-//! behaving. This tracker keeps an entry per connection the caller reports traffic on, expiring it
-//! once it has been idle for the configured timeout, and refreshes each entry's TCP statistics from
-//! the OS once a second.
+//! A connection pool can say which connections it holds, but not how any of them is actually
+//! behaving: round-trip time, retransmits, congestion window, delivery rate. The kernel knows, and
+//! this reads it.
 //!
-//! Reading those statistics is per-platform: Linux over netlink, macOS and Windows through their own
-//! interfaces. On any other platform the entries are tracked without statistics.
+//! Report traffic on a connection with [`ConnectionTracker::track`], which also answers whether that
+//! connection had been seen before, and take the current view with
+//! [`ConnectionTracker::snapshot`]. Each entry's statistics are refreshed once a second, and an
+//! entry that goes idle for longer than the configured timeout expires out of the tracker.
+//!
+//! Reading the statistics is per-platform: Linux over netlink, macOS and Windows through their own
+//! interfaces. Anywhere else, connections are still tracked but carry no statistics.
+
+// spec:OBS
 
 #[cfg(target_os = "linux")]
 #[path = "platform/linux.rs"]
@@ -175,10 +181,11 @@ impl ConnectionTracker {
 
 	/// Register a warm-up connection that no request has yet been credited to.
 	///
-	/// A `preconnect` connection is listed before any foreground request uses it, at a response
-	/// count of zero (spec:WARM). An entry already tracked is left untouched: a warm-up to an
-	/// origin that already holds a pooled connection does no new work, and must not disturb the
-	/// count or timestamps of the connection it would reuse.
+	/// A warm-up connection is listed before any foreground request uses it, at a response count of
+	/// zero. An entry already tracked is left untouched: a warm-up to an origin that already holds a
+	/// pooled connection does no new work, and must not disturb the count or timestamps of the
+	/// connection it would reuse.
+	// spec:WARM
 	pub fn track_warmup(&self, local_addr: SocketAddr, remote_addr: SocketAddr) {
 		let now = SystemTime::now();
 		let key = ConnectionKey {

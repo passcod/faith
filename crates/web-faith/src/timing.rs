@@ -1,6 +1,6 @@
 //! Per-request timing.
-//!
-//! spec:RESP#request-timing
+
+// spec:RESP#request-timing
 
 use std::{
 	sync::{Arc, OnceLock},

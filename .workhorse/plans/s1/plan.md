@@ -136,6 +136,17 @@ Decisions taken while doing steps 0–7, worth not relitigating:
   features — `cargo build` and `cargo build -p web-faith-napi --no-default-features`.
 - **The recipe structs carry public fields for now.** The binding assembles them directly; step 9's
   builder is what should own that assembly, at which point they can close up again.
+- **Spec references go in normal comments, never in doc comments.** A `// spec:DNS#transports` line
+  sits under the doc block, above the item. Doc comments are published API documentation, and a spec
+  id means nothing to a reader on docs.rs.
+- **A component crate's docs address an external reader,** not a Faith maintainer: what the crate is
+  for and how to drive it, rather than why Faith needed it factored this way. Keep the reasoning
+  where it is genuinely about the code's shape, drop the rest.
+- **Keep rustdoc clean, and mind that napi doc comments reach TypeScript.** `cargo doc --workspace
+  --no-deps` is warning-free; making the components public surfaced several links to private items,
+  which would have shipped as broken docs.rs pages. Rust intra-doc syntax in a `web-faith-napi` doc
+  comment is emitted verbatim into `index.d.ts`, where `[`X`]` means nothing, so plain backticks
+  belong on anything a napi item documents.
 
 ## Verification discipline
 

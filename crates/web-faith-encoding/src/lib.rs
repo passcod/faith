@@ -1,8 +1,18 @@
-//! Content coding: Faith owns the decode decision rather than the HTTP stack
-//! underneath, so it can rest on the `Accept-Encoding` of the request in hand.
-//! The same codings compress a request body under the `compress` option.
+//! HTTP content coding for request and response bodies: gzip, deflate, brotli, and zstd.
 //!
-//! spec: ENC
+//! An HTTP stack usually decides for itself which codings to advertise and decode. This lets the
+//! caller own that decision instead, so decoding can rest on the `Accept-Encoding` of the request
+//! actually in hand rather than on whatever the layer beneath negotiated.
+//!
+//! On the way back, [`AcceptEncoding::parse`] reads what a request advertised and [`decision`] says
+//! which coding a response should be decoded under, if any; [`decode_stream`] wraps the body in the
+//! decoder for it. On the way out, [`compress_buffer`] and [`compress_stream`] apply a coding to a
+//! request body, and [`layer_content_encoding`] names it alongside whatever the caller had already
+//! declared.
+//!
+//! `deflate` is the zlib-wrapped form of RFC 1950, which is what mainstream clients decode it as.
+
+// spec:ENC
 
 use std::{io, pin::Pin};
 
@@ -46,7 +56,8 @@ impl Coding {
 	/// Unlike [`Self::from_token`], which reads a token off the wire and so takes it as
 	/// loosely as HTTP writes it, this matches the four documented tokens exactly: the
 	/// option is an API surface, and an unrecognised value is refused rather than
-	/// guessed at (spec:ENC#compressing-a-request-body).
+	/// guessed at.
+	// spec:ENC#compressing-a-request-body
 	pub fn from_option(value: &str) -> Option<Self> {
 		match value {
 			"gzip" => Some(Self::Gzip),
@@ -68,8 +79,8 @@ impl Coding {
 	}
 
 	/// Match a single content-coding token, case-insensitively. `None` for
-	/// `identity`, an unknown coding, or a coding Faith cannot decode.
-	fn from_token(token: &str) -> Option<Self> {
+	/// `identity`, an unknown coding, or one this cannot decode.
+	pub fn from_token(token: &str) -> Option<Self> {
 		let token = token.trim();
 		if token.eq_ignore_ascii_case("gzip") || token.eq_ignore_ascii_case("x-gzip") {
 			Some(Self::Gzip)
@@ -242,7 +253,8 @@ pub type RequestStream = Pin<Box<dyn Stream<Item = io::Result<Bytes>> + Send>>;
 /// Compress a buffered request body, yielding the bytes that go on the wire.
 ///
 /// The whole body is known up front, so it compresses in one pass and its length is the
-/// `Content-Length` reqwest derives from it (spec:ENC#what-a-compressed-request-sends).
+/// `Content-Length` the request can declare.
+// spec:ENC#what-a-compressed-request-sends
 pub async fn compress_buffer(input: &[u8], coding: Coding) -> io::Result<Vec<u8>> {
 	let mut output = Vec::new();
 	match coding {
@@ -257,8 +269,9 @@ pub async fn compress_buffer(input: &[u8], coding: Coding) -> io::Result<Vec<u8>
 /// Compress a streaming request body as its chunks arrive.
 ///
 /// There is no compressed length to declare before the body ends, so the result goes out
-/// chunked (spec:ENC#what-a-compressed-request-sends). The encoder buffers on its own
-/// terms, so the bytes for one chunk the caller writes need not leave with it.
+/// chunked. The encoder buffers on its own terms, so the bytes for one chunk the caller
+/// writes need not leave with it.
+// spec:ENC#what-a-compressed-request-sends
 pub fn compress_stream<S>(input: S, coding: Coding) -> RequestStream
 where
 	S: Stream<Item = io::Result<Bytes>> + Send + 'static,
@@ -279,11 +292,11 @@ where
 	Box::pin(ReaderStream::new(reader))
 }
 
-/// Join the codings a request already declares with the one Faith applied.
+/// Join the codings a request already declares with the one applied on top.
 ///
-/// The caller's `Content-Encoding` describes the bytes they handed over, so Faith's coding
-/// is named after theirs, the order the codings were applied in
-/// (spec:ENC#what-a-compressed-request-sends).
+/// The caller's `Content-Encoding` describes the bytes they handed over, so the applied coding is
+/// named after theirs: the order the codings were applied in.
+// spec:ENC#what-a-compressed-request-sends
 pub fn layer_content_encoding(declared: Option<&str>, applied: Coding) -> String {
 	match declared.map(str::trim).filter(|value| !value.is_empty()) {
 		Some(declared) => format!("{declared}, {}", applied.token()),

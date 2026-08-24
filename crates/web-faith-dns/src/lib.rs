@@ -1,23 +1,32 @@
-//! Faith's own DNS resolver.
+//! A caching DNS resolver for HTTP clients, with a cache you can warm.
 //!
-//! `reqwest`'s built-in hickory resolver and its in-memory cache are `pub(crate)`, so the only
-//! way to warm that cache is to make a request through it — which is `preconnect`'s job, not
-//! `prefetchDns`'s (that verb must not touch the origin). To let `prefetchDns` populate the cache
-//! a later request reads, Faith owns the resolver instead: this type is installed on the `reqwest`
-//! client with `ClientBuilder::dns_resolver`, so reqwest routes every lookup through it, and
-//! `prefetch` calls the same resolver directly. Both share one `TokioResolver`, so a name warmed
-//! by `prefetchDns` is already cached when a request looks it up.
+//! A client's built-in resolver usually keeps its cache to itself, so the only way to populate it is
+//! to make a request. That is no good for prefetching a name ahead of time, which must not touch the
+//! origin at all. [`FaithResolver`] is the resolver instead: it can be installed on an HTTP client
+//! so every request resolves through it, while [`FaithResolver::prefetch`] is called directly. Both
+//! share one resolver and one cache, so a name warmed ahead of time is already there when a request
+//! looks it up.
 //!
-//! Beyond warming, this type is where the DNS transports and server order live. `dns.servers`
-//! lists resolver URLs whose scheme picks the transport (`udp`/`tcp`, or the encrypted `tls`,
-//! `https`, `quic`, `h3`); the list is queried in order, held fixed with `UserProvidedOrder`. With
-//! no list, the resolver configures itself from the system and lets hickory's RFC 9539
-//! opportunistic encryption upgrade those servers where it can. Either way, [exempt names] go to
-//! the system resolver instead, so local names keep resolving.
+//! # Transports and server order
 //!
-//! [exempt names]: ResolverSettings::exempt_domains
+//! Resolvers are named by URL, and the scheme picks the transport: plaintext `udp` and `tcp`, or
+//! encrypted `tls`, `https`, `quic`, and `h3`. The list is queried in the order given rather than
+//! reordered by latency. Given no list, the resolver configures itself from the operating system and
+//! lets RFC 9539 opportunistic encryption upgrade those servers where it can.
 //!
-//! spec:WARM spec:DNS
+//! [Exempt names] are sent to the system resolver whichever way the rest is configured, so names
+//! that only the host knows how to resolve keep resolving.
+//!
+//! # Beyond addresses
+//!
+//! Lookups can also read the `HTTPS` record for a name, which is how an origin advertises HTTP/3
+//! before anything has connected to it, and answers can be served stale while a fresh lookup runs.
+//! A [network change][FaithResolver::reset] discards what was learned from a network that no longer
+//! exists while leaving the resolver usable.
+//!
+//! [Exempt names]: ResolverSettings::exempt_domains
+
+// spec:WARM spec:DNS
 
 use std::{
 	collections::HashSet,
@@ -103,7 +112,8 @@ impl Transport {
 	}
 }
 
-/// What an `HTTPS` record said about an origin's HTTP/3 support (spec:DNS#https-records).
+/// What an `HTTPS` record said about an origin's HTTP/3 support.
+// spec:DNS#https-records
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct HttpsAdvertisement {
 	/// The record's `port` SvcParam, or `None` when it named none and the origin's own port
@@ -117,8 +127,8 @@ pub struct HttpsAdvertisement {
 ///
 /// The resolver cannot own the HTTP/3 upgrade cache directly: that cache is built after the
 /// resolver, and the background prober holds a client which holds the resolver in turn. So the
-/// agent installs this afterwards (see [`FaithResolver::set_https_sink`]), which also keeps
-/// `dns.rs` free of the upgrade layer's types.
+/// caller installs this afterwards (see [`FaithResolver::set_https_sink`]), which also keeps this
+/// crate free of the upgrade layer's types.
 pub trait HttpsSink: Send + Sync {
 	/// Whether an `HTTPS` record for `host` is worth querying at all right now.
 	///
@@ -133,7 +143,8 @@ pub trait HttpsSink: Send + Sync {
 /// Whether an ALPN token names a version of HTTP/3.
 ///
 /// The same family test the `Alt-Svc` reader applies, so a draft token like `h3-29` counts here
-/// exactly as it does in a header (spec:H3UP#reading-advertisements).
+/// exactly as it does in a header.
+// spec:H3UP#reading-advertisements
 fn is_h3_alpn(token: &str) -> bool {
 	token == "h3" || token.starts_with("h3-")
 }
@@ -147,10 +158,11 @@ fn is_h3_alpn(token: &str) -> bool {
 ///
 /// A record whose target is neither the root (which per RFC 9460 §2.5.2 means the owner name
 /// itself) nor the queried name designates a *different* host, and Faith only upgrades to the
-/// origin's own host, so such a record is not acted on (spec:H3UP#advertisements-from-dns).
+/// origin's own host, so such a record is not acted on.
 /// `queried` is the name the answer was actually asked for rather than the host as written, since
 /// the search list can requalify a name before it reaches a server; comparison ignores the trailing
 /// root so the two are judged on identity rather than on how each was spelled.
+// spec:H3UP#advertisements-from-dns
 fn read_https_answer(
 	queried: &Name,
 	answers: &[hickory_resolver::proto::rr::Record],
@@ -264,7 +276,8 @@ impl ServerSpec {
 	}
 
 	/// The certificate name to authenticate against once the host resolves to `ip`: an explicit
-	/// fragment, else the hostname, else the address itself (spec:DNS#transports).
+	/// fragment, else the hostname, else the address itself.
+	// spec:DNS#transports
 	fn server_name(&self, ip: IpAddr) -> Arc<str> {
 		if let Some(name) = &self.cert_name {
 			Arc::from(name.as_str())
@@ -310,7 +323,8 @@ impl ServerSpec {
 	}
 }
 
-/// How a server in `resolvers()` came to be reached the way it is (spec:OBS#resolvers).
+/// How a server in `resolvers()` came to be reached the way it is.
+// spec:OBS#resolvers
 #[derive(Clone, Copy, Debug)]
 pub enum ResolverSource {
 	/// Named in `dns.servers` by the caller.
@@ -341,7 +355,8 @@ pub struct ResolverReport {
 /// An hour is long enough that a resolver outage does not stop an agent reaching hosts it already
 /// knows, and short enough that a host which really has moved stops being served a dead address for
 /// the life of a long-running process. The recovery path bounds the cost of being wrong to one
-/// re-resolve, so the window can be generous (spec:DNS#serving-stale-answers).
+/// re-resolve, so the window can be generous.
+// spec:DNS#serving-stale-answers
 pub const DEFAULT_MAX_STALE: Duration = Duration::from_secs(3600);
 
 /// Everything `dns.*` configures about Faith's resolver, resolved from options at construction.
@@ -397,7 +412,8 @@ struct Built {
 }
 
 /// A resolved answer kept past its TTL, so an expired lookup is served from it while a refresh runs
-/// behind (spec:DNS#serving-stale-answers).
+/// behind.
+// spec:DNS#serving-stale-answers
 #[derive(Clone)]
 struct StaleEntry {
 	/// Shared rather than cloned per hit: a hit reads it and hands out a copy of the addresses.
@@ -408,10 +424,11 @@ struct StaleEntry {
 }
 
 /// Everything the resolver reads off the network, held together so a network change can drop it in
-/// one go (spec:NETCHG). Each field describes the network the agent was on when it was read: which
+/// one go. Each field describes the network the agent was on when it was read: which
 /// servers discovery found, which suffixes are local to it, and which of its servers answered an
 /// encryption probe. The caller's [`ResolverSettings`] deliberately sit outside, being options the
 /// agent was constructed with rather than a reading of any network.
+// spec:NETCHG
 struct Generation {
 	/// The configured (or discovered) resolver, built lazily inside a tokio runtime.
 	built: OnceCell<Arc<Built>>,
@@ -424,7 +441,8 @@ struct Generation {
 	/// it: an address learned on the old network is exactly what must not be served on the new one.
 	stale: moka::sync::Cache<String, StaleEntry>,
 	/// Hosts with a refresh already in flight, so a second stale hit serves the entry rather than
-	/// starting another lookup (spec:DNS#serving-stale-answers).
+	/// starting another lookup.
+	// spec:DNS#serving-stale-answers
 	refreshing: Mutex<HashSet<String>>,
 }
 
@@ -441,12 +459,14 @@ impl Default for Generation {
 }
 
 struct Inner {
-	/// The options the agent was constructed with. A network change does not touch these
-	/// (spec:NETCHG#what-the-signal-keeps); they are what the next generation is rebuilt from.
+	/// The options the agent was constructed with. A network change does not touch these; they are
+	/// what the next generation is rebuilt from.
+	// spec:NETCHG#what-the-signal-keeps
 	settings: ResolverSettings,
 	/// Replaced wholesale by [`FaithResolver::reset`]. Read once at the start of a lookup rather
 	/// than at each step, so a lookup that spans the signal finishes against the one set of
-	/// resolvers it started on (spec:NETCHG#in-flight-requests).
+	/// resolvers it started on.
+	// spec:NETCHG#in-flight-requests
 	generation: Mutex<Arc<Generation>>,
 	/// Where `HTTPS` records go, installed by the agent once the upgrade cache and prober exist.
 	///
@@ -486,12 +506,13 @@ impl FaithResolver {
 		}
 	}
 
-	/// Install where `HTTPS` records go, enabling the query (spec:DNS#https-records).
+	/// Install where `HTTPS` records go, enabling the query.
 	///
 	/// Called after the agent's HTTP/3 upgrade cache and prober are built, which cannot happen
 	/// before the resolver exists. Replaces any previous sink, which is what a network change
 	/// needs: the prober is rebuilt with the client, so the sink must be too or it would kick
 	/// probes onto a client that has been dropped.
+	// spec:DNS#https-records
 	pub fn set_https_sink(&self, sink: Arc<dyn HttpsSink>) {
 		*self
 			.inner
@@ -510,7 +531,8 @@ impl FaithResolver {
 
 	/// The generation a piece of work resolves against. Taken once per lookup: a reset swaps the
 	/// generation rather than mutating it, so work already holding one carries on against the
-	/// resolvers it started with (spec:NETCHG#in-flight-requests).
+	/// resolvers it started with.
+	// spec:NETCHG#in-flight-requests
 	fn generation(&self) -> Arc<Generation> {
 		self.inner
 			.generation
@@ -547,8 +569,9 @@ impl FaithResolver {
 	}
 
 	/// The exempt suffixes: `localhost`, `local`, the system's own domain and search suffixes, and
-	/// the caller's `dns.exemptDomains` (spec:DNS#exempt-names). The system's own suffixes are a
+	/// the caller's `dns.exemptDomains`. The system's own suffixes are a
 	/// property of the network, so they are read per generation rather than once per agent.
+	// spec:DNS#exempt-names
 	async fn exempt(&self, generation: &Generation) -> Arc<Vec<Name>> {
 		generation
 			.exempt
@@ -607,13 +630,13 @@ impl FaithResolver {
 	}
 
 	/// Ask for `host`'s `HTTPS` record behind the address lookup, so an origin advertising
-	/// `alpn="h3"` is known before the first connection rather than after the first TCP response
-	/// (spec:DNS#https-records).
+	/// `alpn="h3"` is known before the first connection rather than after the first TCP response.
 	///
 	/// Spawned rather than awaited: an absent, slow, or failed answer must leave address
 	/// resolution and connecting untouched. Its outcome belongs to the upgrade layer rather than
 	/// to the request that triggered it, so nothing here reaches a caller, exactly as a stale
 	/// refresh's outcome does not.
+	// spec:DNS#https-records
 	fn spawn_https_query(&self, generation: &Arc<Generation>, host: &str) {
 		let Some(sink) = self.https_sink() else {
 			return;
@@ -695,7 +718,8 @@ impl FaithResolver {
 	/// Single-flighted per host: the claim is taken before the task is spawned, so concurrent stale
 	/// hits serve the entry rather than each starting a lookup. The task outlives the request that
 	/// triggered it, and its outcome belongs to the cache rather than that request, so nothing here
-	/// is reported to a caller (spec:DNS#serving-stale-answers).
+	/// is reported to a caller.
+	// spec:DNS#serving-stale-answers
 	fn spawn_refresh(&self, generation: &Arc<Generation>, host: &str) {
 		{
 			let mut refreshing = generation
@@ -744,7 +768,8 @@ impl FaithResolver {
 	/// Drop any stale answer held for `host`, so the next lookup waits for a fresh one.
 	///
 	/// Called when connecting to a served address failed, which is the one piece of evidence that the
-	/// address was wrong rather than merely old (spec:DNS#when-a-stale-address-is-wrong).
+	/// address was wrong rather than merely old.
+	// spec:DNS#when-a-stale-address-is-wrong
 	pub fn invalidate_stale(&self, host: &str) {
 		self.generation().stale.invalidate(host);
 	}
@@ -752,7 +777,7 @@ impl FaithResolver {
 	/// Whether a lookup of `host` right now would be served from an expired entry, and so would hand
 	/// out an address that is assumed rather than confirmed.
 	///
-	/// Deliberately the same window [`Self::stale_addrs`] serves from, rather than merely "an expired
+	/// Deliberately the same window a stale answer is served from, rather than merely "an expired
 	/// entry exists": an entry past `dns.maxStale` is resolved for real, and treating that as stale
 	/// would spend a second connection attempt on an address that was already confirmed.
 	pub fn served_stale(&self, host: &str) -> bool {
@@ -767,13 +792,15 @@ impl FaithResolver {
 	}
 
 	/// Resolve `host` and leave the answer in the shared cache, so a later request skips the
-	/// lookup. Any failure is swallowed: the warm-up is advisory (spec:WARM).
+	/// lookup. Any failure is swallowed: the warm-up is advisory.
+	// spec:WARM
 	pub async fn prefetch(&self, host: &str) {
 		let _ = self.lookup(host).await;
 	}
 
-	/// The DNS servers the agent resolves through, in query order (spec:OBS#resolvers). Empty
+	/// The DNS servers the agent resolves through, in query order. Empty
 	/// until the resolver has been used, because it reads its configuration on first use.
+	// spec:OBS#resolvers
 	pub fn resolvers(&self) -> Vec<ResolverReport> {
 		self.generation()
 			.built
@@ -792,14 +819,13 @@ impl FaithResolver {
 	/// it, since they belong to the resolvers being dropped.
 	///
 	/// The caller's options are untouched, so a listed `dns.servers` set is rebuilt exactly as
-	/// configured; what it re-reads is what the system supplies and what the network answers
-	/// (spec:NETCHG#what-the-signal-keeps).
+	/// configured; what it re-reads is what the system supplies and what the network answers.
 	///
 	/// Synchronous, unlike the rest of this type: it swaps an `Arc` rather than building anything,
 	/// which keeps it callable from `networkChanged`, which is not async. Nothing is rebuilt here
 	/// either, so an agent that never resolves again pays nothing for the signal.
-	///
-	/// spec:NETCHG#reach-across-the-subsystems
+	// spec:NETCHG#what-the-signal-keeps
+	// spec:NETCHG#reach-across-the-subsystems
 	pub fn reset(&self) {
 		*self
 			.inner
@@ -876,7 +902,8 @@ async fn build(settings: &ResolverSettings) -> Result<Built, NetError> {
 
 /// Discovery: configure from the system, then let hickory's RFC 9539 opportunistic encryption
 /// upgrade those servers to DoT/DoQ where they answer a probe. `dns.searchDomains` overrides the
-/// system search list when set (spec:DNS#discovery).
+/// system search list when set.
+// spec:DNS#discovery
 fn build_discovery(settings: &ResolverSettings) -> Result<Built, NetError> {
 	let (mut config, options) = read_system_conf().unwrap_or_else(|_| {
 		// A host with no readable resolver configuration falls back to Google Public DNS over
@@ -907,7 +934,9 @@ fn build_discovery(settings: &ResolverSettings) -> Result<Built, NetError> {
 }
 
 /// The listed-servers path: bootstrap any hostname hosts to addresses, then build the resolver
-/// from the parsed specs in order (spec:DNS#transports, spec:DNS#bootstrapping).
+/// from the parsed specs in order.
+// spec:DNS#transports
+// spec:DNS#bootstrapping
 async fn build_listed(settings: &ResolverSettings) -> Result<Built, NetError> {
 	let name_servers = build_name_servers(settings).await?;
 
@@ -926,7 +955,8 @@ async fn build_listed(settings: &ResolverSettings) -> Result<Built, NetError> {
 
 /// Resolve the listed servers to hickory name servers, bootstrapping hostname hosts. A hostname
 /// that will not resolve drops that server for the life of the agent rather than failing the
-/// resolver (spec:DNS#bootstrapping).
+/// resolver.
+// spec:DNS#bootstrapping
 async fn build_name_servers(
 	settings: &ResolverSettings,
 ) -> Result<Vec<NameServerConfig>, NetError> {
@@ -993,14 +1023,14 @@ fn bootstrap_resolver(settings: &ResolverSettings) -> Result<TokioResolver, NetE
 }
 
 /// The suffixes handed to the system resolver rather than Faith's servers: `localhost` and `local`
-/// always, plus the ones the system supplies and the caller's `dns.exemptDomains`
-/// (spec:DNS#exempt-names).
+/// always, plus the ones the system supplies and the caller's `dns.exemptDomains`.
 ///
 /// The root name is never a suffix here, whichever list it arrives in. It is the parent of every
 /// name, so admitting it would exempt the lot and route every lookup to the system resolver with
 /// `dns.servers` configured and unused. It does arrive in practice: a Windows host with no DNS
 /// domain of its own reports the root as its domain, so the check is what keeps the encrypted
 /// transports working there rather than being quietly bypassed.
+// spec:DNS#exempt-names
 fn exempt_suffixes(system: Vec<Name>, configured: &[Name]) -> Vec<Name> {
 	let mut names = vec![
 		Name::from_ascii("localhost").unwrap(),

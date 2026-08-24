@@ -2,7 +2,9 @@
 //!
 //! The recipe here is what lets a client be rebuilt: `network_changed` has to drop the connection
 //! pool, and reqwest offers no way to do that short of dropping the client, so building one is a
-//! pure function of settings that were validated once (spec:NETCHG).
+//! pure function of settings that were validated once.
+
+// spec:NETCHG
 
 use std::{
 	net::{IpAddr, SocketAddr},
@@ -45,14 +47,16 @@ pub enum RedirectPolicy {
 	Stop,
 }
 
-/// Per-stream receive window applied to both protocols when nothing overrides it (spec:FLOW).
+/// Per-stream receive window applied to both protocols when nothing overrides it.
 ///
 /// Chrome's shape: 6 MiB stream inside a 15 MiB connection. Picked over a larger window that
 /// measured faster because it is what browsers have proven at scale, and because a pooled
 /// server-side client multiplies per-connection memory across far more connections.
+// spec:FLOW
 pub const DEFAULT_STREAM_WINDOW: u32 = 6 * 1024 * 1024;
 
-/// Whole-connection receive window applied to both protocols when nothing overrides it (spec:FLOW).
+/// Whole-connection receive window applied to both protocols when nothing overrides it.
+// spec:FLOW
 pub const DEFAULT_CONNECTION_WINDOW: u32 = 15 * 1024 * 1024;
 
 // Concurrent streams share the connection's headroom, so the asymmetry is the point of the
@@ -60,7 +64,8 @@ pub const DEFAULT_CONNECTION_WINDOW: u32 = 15 * 1024 * 1024;
 const _: () = assert!(DEFAULT_CONNECTION_WINDOW > DEFAULT_STREAM_WINDOW);
 
 /// The flow-control windows to apply, once the common group, the per-protocol overrides, and the
-/// defaults have been reconciled (spec:FLOW#per-protocol-windows).
+/// defaults have been reconciled.
+// spec:FLOW#per-protocol-windows
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ResolvedWindows {
 	pub stream: u32,
@@ -74,8 +79,8 @@ pub struct ResolvedWindows {
 /// - `NODE_EXTRA_CA_CERTS`: a path to a PEM file whose certificates are added to
 ///   the trust store on top of the platform roots. As in Node.js, a value that
 ///   is empty, or points at a file that cannot be read or parsed, is ignored
-///   rather than fatal — unlike the explicit [`AgentTlsOptions::extra_roots`]
-///   option, which throws. Certificates load in addition to any `extra_roots`.
+///   rather than fatal, unlike an explicitly configured extra root, which is an
+///   error. Certificates load in addition to any configured explicitly.
 ///
 /// - `NODE_TLS_REJECT_UNAUTHORIZED`: when set to exactly `"0"`, TLS certificate
 ///   validation is disabled for the agent. This is insecure and exists only to
@@ -93,9 +98,10 @@ pub struct ResolvedWindows {
 /// would toggle. `=0` could therefore only mean "trust almost nothing", which is
 /// never what a caller wants, so the platform store is always used.
 ///
-/// Read once, at construction: AGENT has these layered on top of the explicit options when the
-/// agent is built, so a client rebuilt later (spec:NETCHG) replays what was read then rather than
-/// picking up an environment that has changed since.
+/// Read once, at construction: these are layered on top of the explicit options when the agent is
+/// built, so a client rebuilt later replays what was read then rather than picking up an environment
+/// that has changed since.
+// spec:NETCHG
 #[derive(Debug, Clone, Default)]
 pub struct NodeEnvRecipe {
 	extra_ca_certs: Vec<Certificate>,
@@ -145,7 +151,8 @@ impl NodeEnvRecipe {
 /// The manager *is* the store: `MokaManager` holds the cached entries behind an `Arc`, and
 /// `CACacheManager` names the directory holding them. So cloning one shares the cache, while
 /// building a fresh one from the same options would empty an in-memory cache — which is why a
-/// client rebuilt for a network change clones this (spec:NETCHG#what-the-signal-keeps).
+/// client rebuilt for a network change clones this.
+// spec:NETCHG#what-the-signal-keeps
 #[derive(Debug, Clone)]
 pub enum HttpCacheStore {
 	Disk(CACacheManager),
@@ -161,7 +168,8 @@ pub struct HttpCacheRecipe {
 }
 
 /// The HTTP/3 upgrade settings a client's middleware needs. The origin knowledge itself is not
-/// here: it belongs to the agent and outlives any one client (spec:NETCHG).
+/// here: it belongs to the agent and outlives any one client.
+// spec:NETCHG
 #[cfg(feature = "http3")]
 #[derive(Debug, Clone)]
 pub struct H3UpgradeRecipe {
@@ -171,26 +179,28 @@ pub struct H3UpgradeRecipe {
 	pub probe_timeout: Option<Duration>,
 }
 
-/// Everything needed to build the agent's clients, validated once at construction.
+/// Everything needed to build the agent's clients, validated once up front.
 ///
-/// This exists because `networkChanged` has to drop the connection pool, and reqwest offers no way
-/// to do that short of dropping the client, so the client has to be buildable more than once
-/// (spec:NETCHG). `AgentOptions` cannot serve: validating it consumes it, and it carries napi
-/// values belonging to the JS call that passed them. So validation happens once, into these
-/// Rust-native fields, and building a client is a pure function of them and the agent's shared
-/// state.
+/// A client has to be buildable more than once: dropping the connection pool means dropping the
+/// client, which is what a network change asks for, so what the client is built from has to outlive
+/// any one of them. Options are validated once into these fields, and building a client is then a
+/// pure function of them and the agent's shared state.
+// spec:NETCHG
 #[derive(Debug, Clone)]
 pub struct ClientRecipe {
 	pub user_agent: String,
 	pub local_address: Option<IpAddr>,
 	pub default_headers: Option<HeaderMap>,
-	/// Under the system resolver no hickory resolver is installed at all (spec:DNS).
+	/// Under the system resolver no hickory resolver is installed at all.
+	// spec:DNS
 	pub dns_system: bool,
 	/// Validated at construction, and applied whichever resolver is in use: reqwest layers
-	/// overrides on top of the resolver it was given (spec:DNS#overrides).
+	/// overrides on top of the resolver it was given.
+	// spec:DNS#overrides
 	pub dns_overrides: Vec<(String, Vec<SocketAddr>)>,
 	pub http2_adaptive_window: bool,
-	/// `None` when adaptive windowing owns the windows itself (spec:FLOW#adaptive-windowing).
+	/// `None` when adaptive windowing owns the windows itself.
+	// spec:FLOW#adaptive-windowing
 	pub http2_windows: Option<ResolvedWindows>,
 	#[cfg(feature = "http3")]
 	pub http3_max_idle_timeout: Duration,
@@ -222,10 +232,10 @@ pub struct ClientRecipe {
 /// `alpn="h3"` makes an origin probe-worthy before anything has connected to it.
 ///
 /// A no-op without all the parts: the system resolver is not Faith's to add a query to, and with
-/// HTTP/3 upgrade off there is nothing an advertisement could feed, so neither sends one
-/// (spec:DNS#https-records).
+/// HTTP/3 upgrade off there is nothing an advertisement could feed, so neither sends one.
 ///
 /// Re-called on a network change, where the prober is rebuilt with the client it sends on.
+// spec:DNS#https-records
 #[cfg(feature = "http3")]
 pub fn install_https_sink(
 	dns_resolver: Option<&FaithResolver>,
@@ -255,7 +265,10 @@ pub struct BuiltClients {
 
 impl ClientRecipe {
 	/// The window an idle pooled connection lives in, which is also how long a warm-up counts as
-	/// warm and how long a connection stays listed (spec:POOL, spec:WARM, spec:OBS).
+	/// warm and how long a connection stays listed.
+	// spec:POOL
+	// spec:WARM
+	// spec:OBS
 	pub fn conn_timeout(&self) -> Duration {
 		// reqwest's own default, mirrored because the pool timeout it applies is not readable.
 		self.pool_idle_timeout.unwrap_or(Duration::from_secs(90))
@@ -265,7 +278,8 @@ impl ClientRecipe {
 	///
 	/// Everything passed in survives a rebuild by being shared rather than rebuilt: the cookie
 	/// jar, the resolver (and so its cache), and the HTTP/3 origin knowledge all belong to the
-	/// agent rather than to any one client (spec:NETCHG#what-the-signal-keeps).
+	/// agent rather than to any one client.
+	// spec:NETCHG#what-the-signal-keeps
 	pub fn build(
 		&self,
 		cookie_jar: Option<&Arc<FaithJar>>,
