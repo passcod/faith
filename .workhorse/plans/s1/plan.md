@@ -71,7 +71,25 @@ QUIC/TLS stay inside `web-faith` as reqwest features (aws-lc-rs default, ring al
 - [x] **7. Extract `web-faith-alt-svc`** — carry `HeadersStamp` (or take it generically); depend on `web-faith-dns`.
 - [ ] **8. Stand up `web-faith`** — move agent/request/response/fetch/options here as a pure-Rust
   client; component crates converted into it at the boundary. Reduce `web-faith-napi` to the binding
-  over `web-faith`.
+  over `web-faith`. **In progress:**
+  - [x] `body`, `timing` (measuring; the napi object stays behind), `retry` moved.
+  - [x] The client-building machinery moved: `ClientRecipe`, `NodeEnvRecipe`, `HttpCacheRecipe`,
+        `HttpCacheStore`, `H3UpgradeRecipe`, `ResolvedWindows`, `install_https_sink`, and a pure
+        `RedirectPolicy` the napi `Redirect` converts into.
+  - [ ] **The `Agent` inversion — the big remaining piece.** `agent.rs` is down to ~2140 lines:
+        roughly 860 of `#[napi(object)]` option structs (JS-facing, they stay), ~100 of the `Agent`
+        struct, and ~1170 of `#[napi] impl Agent` holding 22 methods. The struct's fields are
+        already pure (reqwest/moka/Arc), so the blocker is that `#[napi] impl` cannot target a
+        foreign type: moving `Agent` to `web-faith` forces the napi `Agent` to become a distinct
+        class wrapping it, in the same change. Each of the 22 methods then splits into a pure core
+        method on `web_faith::Agent` and a thin binding that converts — `close`, `network_changed`,
+        `stats`, `connections`, `resolvers`, `prefetch_dns`, `preconnect`, `cookies` are the verbs
+        [RSAPI](../../specs/rust/client-api.md) names, so this is where the real client API starts
+        rather than a mechanical relocation.
+  - [ ] `response.rs` (~966 lines, 40 napi refs) and `fetch.rs` (~447) follow the agent, since both
+        are built around the napi response class.
+  - [ ] `options.rs` (~246) stays largely JS-facing; the recipe fields it assembles become the
+        builder's business in step 9.
 - [ ] **9. Build the fetch-flavoured client API** per [RSAPI](../../specs/rust/client-api.md):
   `Agent`/`Agent::builder()`, cheap-clone shared agent, `agent.fetch(target) -> IntoFuture` builder
   (`#[must_use]`), `Request`/`Request::new`/`try_clone`, layering rules, `http`/`url`/`bytes` types,
@@ -109,9 +127,15 @@ Decisions taken while doing steps 0–7, worth not relitigating:
   usable without reqwest rather than merely compilable.
 - **`alt_svc` takes the client's timing stamp as a generic,** via an `ArrivalStamp` trait, because
   the stamp must exist in non-HTTP/3 builds where the alt-svc crate is not compiled at all.
-- **`web-faith` only declares a component dependency once it uses it.** Right now that is
-  `integrity` alone (it has a real error conversion); the rest arrive with step 8. The full
+- **`web-faith` only declares a component dependency once it uses it.** The full
   feature-per-component set is step 10.
+- **`web-faith` is depended on with `default-features = false`,** set at the workspace root because
+  Cargo refuses to let a member override a workspace dependency's defaults. Without this the
+  binding's `http3` feature and the client's drifted: turning the binding's off left the client's on,
+  and the `#[cfg]`-gated recipe fields stopped lining up. Check both configurations after touching
+  features — `cargo build` and `cargo build -p web-faith-napi --no-default-features`.
+- **The recipe structs carry public fields for now.** The binding assembles them directly; step 9's
+  builder is what should own that assembly, at which point they can close up again.
 
 ## Verification discipline
 
