@@ -16,12 +16,14 @@ bytes.workspace = true
 futures.workspace = true
 http.workspace = true
 http-body-util.workspace = true
+http-cache-reqwest.workspace = true
 hyper.workspace = true
 reqwest.workspace = true
 reqwest-middleware.workspace = true
 stream_shared.workspace = true
 strum.workspace = true
 tokio.workspace = true
+web-faith-cookies = { workspace = true, features = ["reqwest"] }
 web-faith-dns = { workspace = true, features = ["reqwest"] }
 web-faith-alt-svc = { workspace = true, optional = true }
 web-faith-integrity = { workspace = true, optional = true }

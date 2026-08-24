@@ -45,7 +45,7 @@ tokio-stream.workspace = true
 time.workspace = true
 tokio-util.workspace = true
 url.workspace = true
-web-faith.workspace = true
+web-faith = { workspace = true, features = ["integrity"] }
 web-faith-alt-svc = { workspace = true, optional = true }
 web-faith-conn-tracker.workspace = true
 web-faith-cookies = { workspace = true, features = ["reqwest"] }

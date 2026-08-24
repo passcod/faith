@@ -7,6 +7,7 @@
 //! one type whichever layer failed.
 
 pub mod body;
+pub mod client;
 pub mod error;
 pub mod retry;
 pub mod timing;

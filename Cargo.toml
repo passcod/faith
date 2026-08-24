@@ -72,7 +72,7 @@ tokio-stream = "0.1.16"
 time = "0.3.53"
 tokio-util = { version = "0.7.10", features = ["io"] }
 url = "2.5.7"
-web-faith = { version = "0.7.0", path = "crates/web-faith" }
+web-faith = { version = "0.7.0", path = "crates/web-faith", default-features = false }
 web-faith-alt-svc = { version = "0.7.0", path = "crates/web-faith-alt-svc" }
 web-faith-conn-tracker = { version = "0.7.0", path = "crates/web-faith-conn-tracker" }
 web-faith-cookies = { version = "0.7.0", path = "crates/web-faith-cookies" }
