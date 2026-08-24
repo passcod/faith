@@ -15,7 +15,7 @@ use http::{Extensions, Method};
 use reqwest::{Request, Response};
 use reqwest_middleware::{Middleware, Next, Result};
 
-use crate::dns::FaithResolver;
+use web_faith_dns::FaithResolver;
 
 /// How many times a request may be replayed before the failure reaches the caller.
 ///

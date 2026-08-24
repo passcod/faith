@@ -39,7 +39,6 @@ use hickory_resolver::{
 	},
 	system_conf::read_system_conf,
 };
-use reqwest::dns::{Addrs, Name as ReqName, Resolve, Resolving};
 use tokio::sync::OnceCell;
 use url::{Host, Url};
 
@@ -811,8 +810,11 @@ impl FaithResolver {
 	}
 }
 
-impl Resolve for FaithResolver {
-	fn resolve(&self, name: ReqName) -> Resolving {
+/// Installed on a reqwest client with `ClientBuilder::dns_resolver`, so every lookup a request
+/// makes goes through the same resolver `prefetch` warms.
+#[cfg(feature = "reqwest")]
+impl reqwest::dns::Resolve for FaithResolver {
+	fn resolve(&self, name: reqwest::dns::Name) -> reqwest::dns::Resolving {
 		let this = self.clone();
 		Box::pin(async move {
 			let addrs = this.lookup(name.as_str()).await?;
@@ -820,7 +822,7 @@ impl Resolve for FaithResolver {
 			// `'static`, so collect owned rather than borrowing the lookup.
 			let addrs: Vec<SocketAddr> =
 				addrs.into_iter().map(|ip| SocketAddr::new(ip, 0)).collect();
-			Ok(Box::new(addrs.into_iter()) as Addrs)
+			Ok(Box::new(addrs.into_iter()) as reqwest::dns::Addrs)
 		})
 	}
 }

@@ -32,6 +32,10 @@ use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 use crate::alt_svc::parse_alt_svc_header;
 #[cfg(feature = "http3")]
 use crate::alt_svc::{AltSvcCache, AltSvcCacheConfig, AltSvcMiddleware, H3Prober};
+use web_faith_dns::{
+	DEFAULT_MAX_STALE, FaithResolver, ResolverSettings, ServerSpec, parse_domains,
+};
+
 use web_faith_cookies::{
 	CookieLimits, DEFAULT_MAX_AGE, DEFAULT_MAX_PER_HOST, DEFAULT_MAX_SIZE, DEFAULT_MAX_TOTAL,
 	FaithJar,
@@ -40,7 +44,6 @@ use web_faith_cookies::{
 use crate::{
 	async_task::faith_promise,
 	conn_tracker::{ConnectionInfo, ConnectionTracker},
-	dns::{DEFAULT_MAX_STALE, FaithResolver, ResolverSettings, ServerSpec, parse_domains},
 	error::{FaithError, FaithErrorExt, FaithErrorKind},
 	options::{PRIORITY, RequestCacheMode},
 	retry::{DeadConnectionRetry, StaleAddressRetry},

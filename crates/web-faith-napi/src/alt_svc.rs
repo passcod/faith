@@ -962,7 +962,7 @@ impl H3Prober {
 /// probe-worthy from its first request rather than from the first TCP response carrying an
 /// `Alt-Svc` header.
 ///
-/// Installed on the resolver by the agent (see [`crate::dns::FaithResolver::set_https_sink`]),
+/// Installed on the resolver by the agent (see [`web_faith_dns::FaithResolver::set_https_sink`]),
 /// which is the only place that holds all three: the resolver is built before the cache, and the
 /// prober holds a client that holds the resolver, so nothing lower down can own this.
 ///
@@ -1008,12 +1008,12 @@ impl H3HttpsSink {
 	}
 }
 
-impl crate::dns::HttpsSink for H3HttpsSink {
+impl web_faith_dns::HttpsSink for H3HttpsSink {
 	fn wants(&self, host: &str) -> bool {
 		Self::origin_url(host).is_some_and(|url| self.cache.wants_https_record(&url))
 	}
 
-	fn record(&self, host: &str, advertisement: crate::dns::HttpsAdvertisement) {
+	fn record(&self, host: &str, advertisement: web_faith_dns::HttpsAdvertisement) {
 		let Some(url) = Self::origin_url(host) else {
 			return;
 		};

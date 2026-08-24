@@ -1,0 +1,23 @@
+[package]
+name = "web-faith-dns"
+description = "A caching DNS resolver: transports, server order, HTTPS records, and Happy Eyeballs"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+# Flipped on once the release tooling is in place.
+publish = false
+
+[dependencies]
+futures.workspace = true
+hickory-resolver.workspace = true
+moka.workspace = true
+tokio.workspace = true
+url.workspace = true
+reqwest = { workspace = true, optional = true }
+
+[features]
+# Implement reqwest's `Resolve`, so the resolver can be installed on its client.
+reqwest = ["dep:reqwest"]
