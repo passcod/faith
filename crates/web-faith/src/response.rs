@@ -30,7 +30,7 @@ use crate::{
 	timing::TimingSlot,
 };
 
-use web_faith_integrity::{finish_integrity, integrity_checker, verify_integrity};
+use crate::integrity::{finish_integrity, integrity_checker, verify_integrity};
 
 /// What is known about the peer that sent a response.
 ///

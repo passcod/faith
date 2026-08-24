@@ -2809,6 +2809,7 @@ dependencies = [
  "moka",
  "reqwest",
  "reqwest-middleware",
+ "ssri",
  "stream_shared",
  "strum",
  "tokio",
@@ -2818,7 +2819,6 @@ dependencies = [
  "web-faith-cookies",
  "web-faith-dns",
  "web-faith-encoding",
- "web-faith-integrity",
 ]
 
 [[package]]
@@ -2885,13 +2885,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "web-faith-integrity"
-version = "0.7.0"
-dependencies = [
- "ssri",
-]
-
-[[package]]
 name = "web-faith-napi"
 version = "0.7.0"
 dependencies = [
@@ -2934,7 +2927,6 @@ dependencies = [
  "web-faith-cookies",
  "web-faith-dns",
  "web-faith-encoding",
- "web-faith-integrity",
  "windows",
 ]
 

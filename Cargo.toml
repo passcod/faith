@@ -78,7 +78,6 @@ web-faith-conn-tracker = { version = "0.7.0", path = "crates/web-faith-conn-trac
 web-faith-cookies = { version = "0.7.0", path = "crates/web-faith-cookies" }
 web-faith-dns = { version = "0.7.0", path = "crates/web-faith-dns" }
 web-faith-encoding = { version = "0.7.0", path = "crates/web-faith-encoding" }
-web-faith-integrity = { version = "0.7.0", path = "crates/web-faith-integrity" }
 netlink-packet-core = "0.7.0"
 netlink-packet-sock-diag = { version = "0.4.2", features = ["rich_nlas"] }
 netlink-sys = "0.8.7"
