@@ -32,6 +32,7 @@ use web_faith::client::{
 };
 #[cfg(feature = "http3")]
 use web_faith::client::{H3UpgradeRecipe, install_https_sink};
+use web_faith::stats::InnerAgentStats;
 use web_faith::warm_up::{extract_host, origin_key, reduce_to_origin};
 #[cfg(feature = "http3")]
 use web_faith_alt_svc::parse_alt_svc_header;
@@ -848,14 +849,6 @@ pub struct AgentOptions {
 	pub user_agent: Option<String>,
 }
 
-#[derive(Debug, Default)]
-pub(crate) struct InnerAgentStats {
-	pub requests_sent: AtomicU64,
-	pub responses_received: AtomicU64,
-	pub bodies_started: AtomicU64,
-	pub bodies_finished: AtomicU64,
-}
-
 #[napi]
 #[derive(Debug, Clone, Default)]
 pub struct AgentStats {
@@ -867,6 +860,18 @@ pub struct AgentStats {
 	/// Number of response body streams that have been fully consumed.
 	/// When `bodies_started - bodies_finished > 0`, there are bodies holding connections open.
 	pub bodies_finished: i64,
+}
+
+impl From<web_faith::stats::AgentStats> for AgentStats {
+	fn from(stats: web_faith::stats::AgentStats) -> Self {
+		let count = |value: u64| i64::try_from(value).unwrap_or(i64::MAX);
+		Self {
+			requests_sent: count(stats.requests_sent),
+			responses_received: count(stats.responses_received),
+			bodies_started: count(stats.bodies_started),
+			bodies_finished: count(stats.bodies_finished),
+		}
+	}
 }
 
 /// One entry of `Agent.resolvers()`: a DNS server the agent resolves through (spec:OBS#resolvers).
@@ -1640,32 +1645,7 @@ impl Agent {
 	/// - `bodiesFinished`
 	#[napi]
 	pub fn stats(&self) -> AgentStats {
-		AgentStats {
-			requests_sent: self
-				.stats
-				.requests_sent
-				.load(Ordering::Relaxed)
-				.try_into()
-				.unwrap_or(i64::MAX),
-			responses_received: self
-				.stats
-				.responses_received
-				.load(Ordering::Relaxed)
-				.try_into()
-				.unwrap_or(i64::MAX),
-			bodies_started: self
-				.stats
-				.bodies_started
-				.load(Ordering::Relaxed)
-				.try_into()
-				.unwrap_or(i64::MAX),
-			bodies_finished: self
-				.stats
-				.bodies_finished
-				.load(Ordering::Relaxed)
-				.try_into()
-				.unwrap_or(i64::MAX),
-		}
+		AgentStats::from(self.stats.snapshot())
 	}
 
 	/// Returns information on current connections open by this agent.

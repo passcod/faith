@@ -30,13 +30,13 @@ use tokio::{io::AsyncWriteExt, sync::watch};
 
 use web_faith::{
 	body::{Body, BodyHolder, DynStream, drain_body_inner},
+	stats::InnerAgentStats,
 	timing::TimingSlot,
 };
 use web_faith_encoding::{Coding, decode_stream};
 use web_faith_integrity::{finish_integrity, integrity_checker, verify_integrity};
 
 use crate::{
-	agent::InnerAgentStats,
 	async_task::{Value, faith_promise},
 	error::{FaithError, FaithErrorExt, FaithErrorKind},
 	timing::TimingBreakdown,

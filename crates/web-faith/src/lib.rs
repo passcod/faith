@@ -21,6 +21,7 @@ pub mod body;
 pub mod client;
 pub mod error;
 pub mod retry;
+pub mod stats;
 pub mod timing;
 pub mod warm_up;
 
