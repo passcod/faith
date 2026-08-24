@@ -82,10 +82,10 @@ A conversion that fails is held until the builder resolves and surfaces there: a
 Either way it reports the error naming the offender — `InvalidHeader`, `InvalidMethod`, or `InvalidUrl` for a target that does not parse — as [REQ](../fetch/request.md) and [ERR](../errors/errors.md) require.
 Holding the failure is what lets a target be given as a string: an unparseable one is reported where the request is resolved rather than by a call that cannot fail.
 
-## What a disabled component removes
+## What a disabled feature removes
 
-A component's Cargo feature governs the API as much as the build, so turning one off takes away the methods that only mean something with that component present: no cookie jar handle without cookies, and the same for request compression and cache mode (see [RUST](overview.md)).
-Code written against a component that is not built fails to compile rather than compiling into a call that does nothing, so a build reports what it does not carry at the point the caller asks for it.
+A Cargo feature governs the API as much as the build, so turning one off takes away the methods that only mean something with that capability present: no cookie jar handle without cookies, and the same for request compression and cache mode (see [RUST](overview.md)).
+Code written against a capability that is not built fails to compile rather than compiling into a call that does nothing, so a build reports what it does not carry at the point the caller asks for it.
 
 ## Errors and cancellation
 

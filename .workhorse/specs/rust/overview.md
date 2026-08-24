@@ -4,7 +4,7 @@ id: RUST
 
 # The Rust distribution
 
-Faith's network stack is published to crates.io as a family of crates, with `web-faith` as the client a Rust caller reaches for and six component crates beneath it that each stand on their own.
+Faith's network stack is published to crates.io as a family of crates, with `web-faith` as the client a Rust caller reaches for and five component crates beneath it that each stand on their own.
 The Node.js native module is built from the same workspace, so the two surfaces are two faces of one implementation rather than two implementations: a behaviour specified anywhere else in these specs holds on both unless that spec says otherwise.
 The Rust API surface itself is specified in [RSAPI](client-api.md).
 
@@ -14,14 +14,15 @@ The Rust API surface itself is specified in [RSAPI](client-api.md).
 It owns the agent, the request and response types, and the `fetch` entry point, and it draws on the component crates for the subsystems beneath it.
 The name carries a `web-` prefix because the bare `faith` name on crates.io belongs to an unrelated project, and the prefix reads as the browser-shaped client the crate is.
 
-Six component crates are published alongside it, each one useful to a caller who wants that piece without the client above it:
+Five component crates are published alongside it, each one useful to a caller who wants that piece without the client above it:
 
 - `web-faith-cookies` is the cookie jar, with the storage, matching, and eviction rules in [COOK](../agent/cookies.md).
 - `web-faith-dns` is the resolver, its cache, the discovery ladder, the `HTTPS` record query, and Happy Eyeballs, as in [DNS](../agent/dns.md).
 - `web-faith-conn-tracker` reads live per-connection statistics from the operating system, which is the `connections()` view in [OBS](../agent/observability.md); the cumulative counters and the resolver listing that spec also covers belong to `web-faith` and `web-faith-dns` respectively.
 - `web-faith-alt-svc` is the Alt-Svc store and the HTTP/3 upgrade machinery, as in [H3UP](../http3/upgrade.md) and [PROBE](../http3/probing.md).
 - `web-faith-encoding` is content coding for request and response bodies, as in [ENC](../fetch/content-encoding.md).
-- `web-faith-integrity` is Subresource Integrity parsing and verification, as in [SRI](../fetch/integrity.md).
+
+Subresource Integrity parsing and verification is part of `web-faith` itself (see [SRI](../fetch/integrity.md)).
 
 A component crate depends on another component crate where the subsystems genuinely compose, so `web-faith-alt-svc` draws on `web-faith-dns` for the resolution its probes need.
 None of them depends on `web-faith`, which is what makes each one usable on its own.
@@ -48,12 +49,12 @@ What the two subsystems do is specified in [QUIC](../http3/transport.md) and [TL
 
 ## Choosing what is built
 
-Cargo features are how a subsystem is included or left out, so a build that has no use for a piece does not carry it.
-A component a build can do without has a feature on `web-faith` named for it, and every one of them is on by default, so a caller who reaches for the crate without thinking about features gets the whole client.
-Turning a component's feature off drops the dependency and the code that reaches for it, and the client continues to work without it; it also removes the parts of the API that only mean something with the component present, as in [RSAPI](client-api.md).
+Cargo features on `web-faith` are how a subsystem is left out of a build that has no use for it.
+Features are on by default, so a caller who reaches for the crate without thinking about them gets the whole client.
+Turning one off drops the code behind it and the client continues to work without it; the parts of the API that only mean something with that subsystem present go with it, as in [RSAPI](client-api.md).
 
-Integrity has no such feature and is always built.
-It is small enough that leaving it out saves nothing worth measuring, and a caller who asks for a digest to be checked is owed the check rather than a build that quietly skips it.
+A feature names a capability rather than a crate.
+Turning one off may drop a dependency along with the code or may simply compile less of `web-faith` itself, and a subsystem the client is not built without carries no feature at all.
 
 A feature decides what is compiled in rather than what is switched on at run time, and the two need not agree: the cookies feature is on by default while the jar itself stays off until an agent asks for it (see [COOK](../agent/cookies.md)).
 

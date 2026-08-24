@@ -1,7 +1,7 @@
 # S1 — Expose a Rust API and publish to crates.io
 
 Restructure the single `faith` cdylib into a Cargo workspace: a browser-shaped Rust client
-`web-faith`, six standalone component crates beneath it, and a thin `web-faith-napi` binding that
+`web-faith`, five standalone component crates beneath it, and a thin `web-faith-napi` binding that
 ships as `@passcod/faith`. Then publish to crates.io. Target architecture is specified in
 [RUST](../../specs/rust/overview.md) and [RSAPI](../../specs/rust/client-api.md).
 
@@ -10,7 +10,7 @@ ships as `@passcod/faith`. Then publish to crates.io. Target architecture is spe
 This is an 8-crate restructure of ~11,500 lines, not a single focused change. It is being built on
 this branch as one long-lived PR, at the user's direction, rather than split into a card breakdown.
 
-Steps 0–8 are done: the workspace stands, the six components are out, and the client owns the agent,
+Steps 0–8 are done: the workspace stands, the five components are out, and the client owns the agent,
 the request path, and the response. Every crate but `web-faith-napi` builds with no napi in its
 graph. What remains (steps 9–14) is the caller-facing API, the feature wiring, publishing, and the
 spec sweep — step 9 being new design rather than relocation.
@@ -41,13 +41,12 @@ Facts that shape the order and difficulty:
 
 ## Target crate family
 
-- `web-faith` — client: agent, request/response, `fetch`, layering. Depends on the six components.
+- `web-faith` — client: agent, request/response, `fetch`, layering, SRI. Depends on the five components.
 - `web-faith-cookies` — the jar ([COOK](../../specs/agent/cookies.md)).
 - `web-faith-dns` — resolver, cache, discovery ladder, HTTPS record, Happy Eyeballs ([DNS](../../specs/agent/dns.md)).
 - `web-faith-conn-tracker` — live per-connection stats from the OS ([OBS](../../specs/agent/observability.md)).
 - `web-faith-alt-svc` — Alt-Svc store + HTTP/3 upgrade/probing ([H3UP](../../specs/http3/upgrade.md), [PROBE](../../specs/http3/probing.md)); may depend on `web-faith-dns`.
 - `web-faith-encoding` — request/response content coding ([ENC](../../specs/fetch/content-encoding.md)).
-- `web-faith-integrity` — SRI parse + verify ([SRI](../../specs/fetch/integrity.md)).
 - `web-faith-napi` — the only crate with napi types; ships as `@passcod/faith`.
 
 QUIC/TLS stay inside `web-faith` as reqwest features (aws-lc-rs default, ring alternative), not crates.
@@ -64,7 +63,8 @@ QUIC/TLS stay inside `web-faith` as reqwest features (aws-lc-rs default, ring al
   source ([ERR](../../specs/errors/errors.md)). Decide where the shared error core lives (likely in
   `web-faith`, with components naming their own error types that the client converts — per
   [RUST](../../specs/rust/overview.md) "A component crate stands alone").
-- [x] **2. Extract `web-faith-integrity`** — own error type, own docs, `cargo test -p web-faith-integrity` with no JS runtime.
+- [x] **2. SRI** — extracted as `web-faith-integrity`, then folded back into `web-faith` as a module:
+  too small for standing alone to buy a caller anything, and not something a build should switch off.
 - [x] **3. Extract `web-faith-encoding`** — decouple from `crate::body::DynStream` (take a generic/`bytes` stream).
 - [x] **4. Extract `web-faith-cookies`** — `url::Url`; reqwest `CookieStore` behind a feature.
 - [x] **5. Extract `web-faith-dns`.**
@@ -92,15 +92,16 @@ QUIC/TLS stay inside `web-faith` as reqwest features (aws-lc-rs default, ring al
   `Agent`/`Agent::builder()`, cheap-clone shared agent, `agent.fetch(target) -> IntoFuture` builder
   (`#[must_use]`), `Request`/`Request::new`/`try_clone`, layering rules, `http`/`url`/`bytes` types,
   `http_body::Body` response + `Into<http::Response>`, feature-gated API surface, Tokio, drop-cancels.
-- [ ] **10. Feature wiring** — a default-on feature per component a build can do without; disabling
-  one drops the dep, the code, and the API surface it gates (compile error at the call site, not a
-  no-op). Integrity is deliberately not among them: it is always built, per [RUST](../../specs/rust/overview.md).
+- [ ] **10. Feature wiring** — a default-on feature per capability a build can do without; disabling
+  one drops the code and the API surface it gates (compile error at the call site, not a no-op), and
+  the dependency too where the capability is a crate. Component, crate, and feature are three axes
+  and need not line up: a crate can be non-optional, and a feature need not map to a crate.
 - [ ] **11. Rust-facing tests + examples** — per-crate examples that run against that crate alone;
   client integration tests mirroring the JS suite where it translates. Add `.workhorse/test-cases/s1/`.
 - [ ] **12. Publishing infra** — release-plz, `cargo-semver-checks` against previous version per crate,
   MSRV 1.96 declared in every published crate and exercised in CI alongside stable, independent
   versioning from `1.0.0`. Measure CI cost before adding jobs (see project memory).
-- [ ] **13. First publish** to crates.io: the six components, then `web-faith`; `@passcod/faith`
+- [ ] **13. First publish** to crates.io: the five components, then `web-faith`; `@passcod/faith`
   continues from npm via `web-faith-napi`.
 - [ ] **14. The both-surfaces spec sweep**, as the closing pass over the tree — deliberately last,
   once the Rust API is settled and its names are known. See the section below for the site-by-site
