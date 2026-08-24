@@ -142,7 +142,7 @@ impl FaithJar {
 	/// Gate a cookie on the bis rules, then hand it to the classic storage model.
 	///
 	/// Gating on the way in rather than filtering on the way out is what makes the caps bound real
-	/// memory, and what makes the rules apply the same to `addCookie` as to a `Set-Cookie` header.
+	/// memory, and what makes the rules apply the same to [`FaithJar::add_cookie_str`] as to a `Set-Cookie` header.
 	fn store_one(&self, raw: RawCookie<'static>, url: &Url) {
 		let Some(raw) = self.sanitise(raw, url) else {
 			return;

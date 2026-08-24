@@ -27,7 +27,10 @@ impl InnerAgentStats {
 }
 
 /// A reading of an agent's counters, taken at one moment.
+///
+/// Non-exhaustive: what an agent counts can grow, and a new counter should not be a breaking change.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct AgentStats {
 	pub requests_sent: u64,
 	pub responses_received: u64,

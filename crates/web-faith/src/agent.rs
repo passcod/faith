@@ -67,24 +67,28 @@ pub struct Agent {
 	/// client, so dropping it is what actually releases them.
 	pub client: Option<ClientWithMiddleware>,
 	/// The raw `reqwest::Client` underlying [`Self::client`], sharing its connection pool. A
-	/// `preconnect` warm-up sends its synthetic request here rather than through the middleware
+	/// a warm-up sends its synthetic request here rather than through the middleware
 	/// stack, which bypasses the HTTP cache and the Alt-Svc layer (and so keeps the warm-up out of
 	/// request accounting), while still pooling the connection foreground requests reuse. `None`
-	/// once the agent is closed. (spec:WARM)
+	/// once the agent is closed.
+	// spec:WARM
 	pub raw_client: Option<Client>,
-	/// Faith's DNS resolver, shared with [`Self::client`] so `prefetchDns` warms the cache requests
-	/// read. `None` under the system resolver, where there is no such cache. (spec:WARM)
+	/// Faith's DNS resolver, shared with [`Self::client`] so [`Self::prefetch_dns`] warms the cache requests
+	/// read. `None` under the system resolver, where there is no such cache.
+	// spec:WARM
 	pub dns_resolver: Option<FaithResolver>,
 	/// Origins with a warm-up connection opened within the pool idle window, so a repeat
-	/// `preconnect` does no new work. Keyed by `scheme://host:port`; entries expire with the idle
-	/// timeout. (spec:WARM)
+	/// warm-up does no new work. Keyed by `scheme://host:port`; entries expire with the idle
+	/// timeout.
+	// spec:WARM
 	pub warmed: MokaCache<String, ()>,
-	/// Single-flight claims for in-flight `preconnect` warm-ups, so concurrent calls for the same
-	/// origin do not open duplicate connections. (spec:WARM)
+	/// Single-flight claims for warm-ups in flight, so concurrent calls for the same
+	/// origin do not open duplicate connections.
+	// spec:WARM
 	pub warming: MokaCache<String, ()>,
-	/// Bumped by `networkChanged`, so a warm-up that was in flight across the signal does not
-	/// record its origin as warm: its connection went into the pool that was just dropped
-	/// (spec:NETCHG#reach-across-the-subsystems).
+	/// Bumped by [`Self::network_changed`], so a warm-up that was in flight across the signal does not
+	/// record its origin as warm: its connection went into the pool that was just dropped.
+	// spec:NETCHG#reach-across-the-subsystems
 	pub warm_generation: Arc<AtomicU64>,
 	pub cookie_jar: Option<Arc<FaithJar>>,
 	pub stats: Arc<InnerAgentStats>,
@@ -97,32 +101,34 @@ pub struct Agent {
 	/// alive past close for up to the probe timeout.
 	#[cfg(feature = "http3")]
 	pub h3_prober: Option<Arc<H3Prober>>,
-	/// Mirrors `http3.upgradeFollowAdvertisedPort`. Lives here because `fetch` needs
-	/// it to stop a rewritten port from being reported as a redirect.
+	/// Whether an upgrade may follow a port the origin advertised. A request needs it to stop a
+	/// rewritten port from being reported as a redirect.
 	pub h3_follow_advertised_port: bool,
-	/// Mirrors `http3.upgradeEnabled`. A warm-up needs it to route the way a foreground request
-	/// would: with the upgrade machinery off, nothing upgrades, whatever the caches hold.
-	/// (spec:WARM#preconnect)
+	/// Whether the upgrade machinery is on at all. A warm-up needs it to route the way a foreground
+	/// request would: with it off, nothing upgrades, whatever the caches hold.
+	// spec:WARM#preconnect
 	#[cfg(feature = "http3")]
 	pub h3_upgrade_enabled: bool,
-	/// Mirrors `quirks.h1RequestStreaming`. `fetch` consults it to decide whether a streaming
-	/// request body may go out over HTTP/1.x (spec:QUIRK#http-1-x-request-body-streaming).
+	/// Whether a streaming request body may go out over HTTP/1.x, which the fetch standard
+	/// otherwise reserves to HTTP/2 and HTTP/3..
+	// spec:QUIRK#http-1-x-request-body-streaming
 	pub quirk_h1_request_streaming: bool,
 	/// The agent's default `Accept-Encoding`, if one was set among its default headers.
-	/// `fetch` consults it to decide which codings to decode when a request adds none of
+	/// which decides the codings a response is decoded under when a request adds none of
 	/// its own (see [`web_faith_encoding`]).
 	pub default_accept_encoding: Option<HeaderValue>,
 	/// The agent's default `Content-Encoding`, if one was set among its default headers.
-	/// `fetch` consults it when the `compress` option layers a coding on top of what a
-	/// request already declares, since setting the joined value on the request would
-	/// otherwise displace this default rather than build on it (spec:ENC).
+	/// A request layers its own coding on top of this rather than
+	/// displacing it.
+	// spec:ENC
 	pub default_content_encoding: Option<HeaderValue>,
-	/// Whether a `Priority` header sits among the agent's default headers. `fetch` consults
-	/// it so that default wins over the header the `priority` option would derive.
+	/// Whether a `Priority` header sits among the agent's default headers. That default wins over the header a
+	/// request's priority would derive.
 	pub has_default_priority: bool,
-	/// How to build this agent's clients, so `networkChanged` can build them again
-	/// (spec:NETCHG). Shared rather than cloned per agent clone: every clone builds the same
-	/// client from the same recipe, and `fetch` clones the agent per request.
+	/// How to build this agent's clients, so [`Self::network_changed`] can build them again
+	///. Shared rather than cloned per agent clone: every clone builds the same
+	/// client from the same recipe, and a request takes a handle per send.
+	// spec:NETCHG
 	pub recipe: Arc<ClientRecipe>,
 }
 
@@ -195,12 +201,12 @@ impl Agent {
 	///
 	/// Requests already in flight run to completion. Any new request on a closed
 	/// agent throws a `Closed` error. Calling `close()` more than once is a
-	/// no-op. The cookie store, if any, remains readable via `getCookie`.
+	/// no-op. The cookie store, if any, remains readable through [`Self::cookie_header`].
 	pub fn close(&mut self) {
 		// Dropping the client releases the reqwest connection pool and the
 		// Hickory resolver task; the alt-svc cache goes with it. The raw client
 		// shares that pool and the resolver, so it goes too, and both are what a
-		// later `preconnect`/`prefetchDns` checks to throw the closed-agent error.
+		// later warm-up checks to refuse with the closed-agent error.
 		self.client = None;
 		self.raw_client = None;
 		self.dns_resolver = None;
@@ -231,8 +237,7 @@ impl Agent {
 	/// Requests already in flight are not interrupted and run to completion on the connections
 	/// they hold; the reset shapes what requests started afterwards draw on. Calling it on a
 	/// closed agent does nothing, and calling it repeatedly is harmless.
-	///
-	/// spec:NETCHG
+	// spec:NETCHG
 	pub fn network_changed(&mut self) {
 		// A closed agent has already released all of this.
 		if self.client.is_none() {
@@ -304,7 +309,7 @@ impl Agent {
 	/// - the cookie store is disabled
 	/// 	/// - the cookie does not parse
 	/// - a `__Host-` or `__Secure-` name prefix is not satisfied
-	/// - the cookie is larger than `cookies.maxSize`
+	/// - the cookie is larger than the jar's size limit
 	pub fn add_cookie(&self, url: &Url, cookie: &str) {
 		let Some(jar) = &self.cookie_jar else {
 			return;
@@ -328,12 +333,7 @@ impl Agent {
 			.and_then(|val| val.to_str().ok().map(ToOwned::to_owned))
 	}
 
-	/// Returns statistics gathered by this agent:
-	///
-	/// - `requestsSent`
-	/// - `responsesReceived`
-	/// - `bodiesStarted`
-	/// - `bodiesFinished`
+	/// The counters this agent has gathered, as they stand.
 	pub fn stats(&self) -> AgentStats {
 		self.stats.snapshot()
 	}
@@ -342,7 +342,7 @@ impl Agent {
 	///
 	/// Only tracks TCP connections currently (upstream limitation). Stats are updated once a second:
 	/// this makes it possible to track indicators over time to find the retransmission rate, for
-	/// example. The `lostPackets` and `deliveryRateBps` stats are only available on Linux. Some other
+	/// example. The lost-packet count and delivery rate are only available on Linux. Some other
 	/// fields might also be missing depending on platform support; and no forward guarantees are made
 	/// on field availability. If the platform isn't supported at all, this will always return empty.
 	pub fn connections(&self) -> Vec<ConnectionSnapshot> {
@@ -355,7 +355,8 @@ impl Agent {
 	/// Each entry gives the server's address, the transport in use (`udp`, `tcp`, `tls`, `https`,
 	/// `quic`, or `h3`), and how that transport was arrived at (`configured` or `conventional`).
 	/// The list is empty until the resolver has been used, because it reads its configuration on
-	/// first use, and empty for an agent using the system resolver. (spec:OBS#resolvers)
+	/// first use, and empty for an agent using the system resolver.
+	// spec:OBS#resolvers
 	pub fn resolvers(&self) -> Vec<ResolverReport> {
 		self.dns_resolver
 			.as_ref()
@@ -364,10 +365,11 @@ impl Agent {
 	}
 
 	/// Note that a request reached this origin, so it holds a connection the pool keeps idle for
-	/// the idle window and a `preconnect` for it has no new work to do (spec:WARM).
+	/// the idle window and a `preconnect` for it has no new work to do.
 	///
 	/// Called for foreground requests as well as warm-ups, because the criterion is about the
 	/// origin holding an idle pooled connection, not about how it came to hold one.
+	// spec:WARM
 	pub fn mark_warm(&self, url: &Url) {
 		self.warmed.insert(origin_key(url), ());
 	}

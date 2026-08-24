@@ -476,7 +476,7 @@ impl AltSvcCache {
 	///
 	/// Legacy (probe-less) routing: advertisements are acted on inline, so this
 	/// consults `advertised` as well as `confirmed`. Only used when
-	/// `upgradeProbe` is off.
+	/// probing is off.
 	pub fn should_use_h3(&self, url: &reqwest::Url) -> Option<u16> {
 		self.confirmed_port(url)
 			.or_else(|| self.probe_candidate(url))

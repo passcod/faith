@@ -477,7 +477,7 @@ struct Inner {
 	https_sink: Mutex<Option<Arc<dyn HttpsSink>>>,
 }
 
-/// A hickory resolver Faith owns, shared between reqwest's request path and `prefetchDns`.
+/// A hickory resolver Faith owns, shared between a client's request path and [`FaithResolver::prefetch`].
 #[derive(Clone)]
 pub struct FaithResolver {
 	inner: Arc<Inner>,
@@ -822,7 +822,7 @@ impl FaithResolver {
 	/// configured; what it re-reads is what the system supplies and what the network answers.
 	///
 	/// Synchronous, unlike the rest of this type: it swaps an `Arc` rather than building anything,
-	/// which keeps it callable from `networkChanged`, which is not async. Nothing is rebuilt here
+	/// which keeps it callable from a network-change signal, which is not async. Nothing is rebuilt here
 	/// either, so an agent that never resolves again pays nothing for the signal.
 	// spec:NETCHG#what-the-signal-keeps
 	// spec:NETCHG#reach-across-the-subsystems
