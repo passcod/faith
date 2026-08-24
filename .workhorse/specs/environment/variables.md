@@ -24,17 +24,16 @@ Both surfaces read `SSL_CERT_FILE` and `SSL_CERT_DIR`; `NODE_EXTRA_CA_CERTS` bel
 On Unix platforms other than macOS, `SSL_CERT_FILE` and `SSL_CERT_DIR` override where the system trust store is loaded from, with standard OpenSSL semantics: `SSL_CERT_FILE` replaces the system roots.
 On macOS and Windows the OS trust store is used directly and these are ignored, as Node does on those platforms.
 
-`NODE_EXTRA_CA_CERTS` names a PEM file whose certificates are added to the trust store on top of the platform roots and any `tls.extraRoots` (see [TLS](../agent/tls.md)); certificates from both sources combine, and where `SSL_CERT_FILE` replaces the system roots this adds to them.
+`NODE_EXTRA_CA_CERTS` names a PEM file whose certificates are added to the trust store on top of the platform roots and any extra roots set on the agent (see [TLS](../agent/tls.md)); certificates from both sources combine, and where `SSL_CERT_FILE` replaces the system roots this adds to them.
 It is lenient, matching Node's warn-and-continue behaviour: an empty value, an unreadable file, or an unparseable file is ignored rather than fatal.
-(The `tls.extraRoots` option, being an explicit programmatic choice, throws on malformed input instead.)
-On the Rust surface, extra roots come from the agent's TLS options alone.
+Extra roots set on the agent are an explicit programmatic choice and fail loudly on malformed input instead.
 
 ## Certificate validation
 
 This applies to the Node surface alone.
 
 `NODE_TLS_REJECT_UNAUTHORIZED` set to exactly `0` disables TLS certificate validation for the agent; any other value or unset keeps validation on.
-This matches Node's semantics and exists only for that compatibility; trusting a specific private CA via `NODE_EXTRA_CA_CERTS` or `tls.extraRoots` is the supported path.
+This matches Node's semantics and exists only for that compatibility; trusting a specific private CA, through `NODE_EXTRA_CA_CERTS` or the agent's extra roots, is the supported path.
 
 ## Proxies
 
