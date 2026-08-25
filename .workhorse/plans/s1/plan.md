@@ -88,8 +88,9 @@ QUIC/TLS stay inside `web-faith` as reqwest features (aws-lc-rs default, ring al
         optional abort future; `fetch.rs` is 59 lines converting a `fetch()` call into those.
   - **Left for step 9:** the recipe structs' public fields, which the builder should own the
         assembly of.
-- [ ] **9. Build the fetch-flavoured client API** per [RSAPI](../../specs/rust/client-api.md).
-  **In progress:**
+- [x] **9. Build the fetch-flavoured client API** per [RSAPI](../../specs/rust/client-api.md).
+  A Rust caller now reaches everything through the client: `Agent::new`/`builder`, `agent.fetch`,
+  `Request`, and the response's own reads.
   - [x] `USER_AGENT` is the client's, composed from its own version and reqwest's, which `web-faith`
         now reads in a build script of its own. The binding's constant reads from it.
   - [x] Reading a response: the accessors and `bytes`/`text`/`json`/`body_stream`/`discard`/
@@ -106,8 +107,20 @@ QUIC/TLS stay inside `web-faith` as reqwest features (aws-lc-rs default, ring al
         [AGENT](../../specs/agent/overview.md) means by in flight from the moment it is issued. The
         JS suite caught the difference: capturing inside the promise instead of at issue stranded a
         request that was issued just before a close.
-  - [ ] `Agent::builder()` — the nested builders RSAPI asks for, as sugar over the option groups,
-        after which the recipe structs' fields can close up.
+  - [x] `Agent::builder()` with nested builders reached through a closure, so a group left alone is
+        absent from the call. Setters take `Duration` and `IpAddr` rather than the units and strings
+        the options carry.
+  - [x] `Request`, `Request::new`, `try_clone`, and `agent.fetch(target)` over `IntoFuture`, with the
+        layering rules: outermost explicit value wins, untouched settings inherit, headers merge by
+        name and a removal clears what is underneath, the URL comes from the bottom of the stack.
+  - [x] Setters take the canonical `http` types or anything converting into them, and a failed
+        conversion is held until the builder resolves — at `build()` for a request, at the await for
+        a fetch. The first failure met is the one reported.
+  - [x] `Agent::cookies()` hands back the jar itself.
+  - [x] `http::Request` as a target, bringing its method, URL, headers, and body across.
+  - [ ] Remaining: closing up the recipe and option structs' public fields now that the builder owns
+        the assembly. Left deliberately: the binding still fills the option structs directly, so
+        these close up when step 10 settles what the public surface is.
   - [ ] `Request`, `Request::new`, `try_clone`, and the fetch builder over `IntoFuture`, with the
         layering rules (outermost wins; headers merge by name).
   - [ ] Setters taking anything convertible, holding a failed conversion until the builder resolves.

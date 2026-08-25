@@ -9,13 +9,26 @@
 //! [`FaithErrorKind`] is the stable code to match on: a component crate names its own errors, and
 //! they are converted at the boundary as they cross into the client.
 //!
-//! <div class="warning">
+//! ```no_run
+//! # use web_faith::agent::Agent;
+//! # async fn example() -> Result<(), web_faith::FaithError> {
+//! let agent = Agent::new()?;
+//! let body = agent.fetch("https://example.com/").await?.text().await?;
+//! # Ok(())
+//! # }
+//! ```
 //!
-//! The caller-facing API is still being shaped. Everything the client does is here -- building an
-//! agent, sending a request, reading a response -- but it is reached through [`request::send`] and
-//! the modules below rather than through the fetch-flavoured builder that will front it.
+//! An [`Agent`] owns the connection pool, resolver, cookie jar, and caches; [`Agent::builder`]
+//! configures one. Cloning an agent is cheap and every clone names the same one.
 //!
-//! </div>
+//! [`Agent::fetch`] returns a builder that sends when awaited, so there is no separate send step.
+//! [`Request`] prepares one without sending it, to adjust at each call site or send unchanged on
+//! more than one agent.
+//!
+//! [`Agent`]: agent::Agent
+//! [`Agent::builder`]: agent::Agent::builder
+//! [`Agent::fetch`]: agent::Agent::fetch
+//! [`Request`]: request::Request
 
 pub mod agent;
 pub mod body;

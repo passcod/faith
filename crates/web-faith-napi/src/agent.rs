@@ -910,7 +910,11 @@ impl Agent {
 			return;
 		};
 
-		self.inner.add_cookie(&url, &cookie);
+		let Some(jar) = self.inner.cookies() else {
+			return;
+		};
+
+		jar.add_cookie_str(&cookie, &url);
 	}
 
 	/// Retrieve a cookie from the store.
@@ -923,7 +927,10 @@ impl Agent {
 	#[napi]
 	pub fn get_cookie(&self, url: String) -> Option<String> {
 		let url = Url::from_str(&url).ok()?;
-		self.inner.cookie_header(&url)
+		self.inner
+			.cookies()?
+			.request_cookie_header(&url)
+			.and_then(|value| value.to_str().ok().map(ToOwned::to_owned))
 	}
 
 	/// Returns statistics gathered by this agent:

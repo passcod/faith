@@ -155,6 +155,16 @@ pub struct Agent {
 }
 
 impl Agent {
+	/// The agent's cookie jar, if it keeps one.
+	///
+	/// The jar itself, rather than per-cookie methods wrapped around it, so cookies go in and out
+	/// through the type `web-faith-cookies` documents. It outlives a close and stays readable from a
+	/// closed agent.
+	// spec:COOK
+	pub fn cookies(&self) -> Option<&Arc<FaithJar>> {
+		self.cookie_jar.as_ref()
+	}
+
 	/// Take a handle on the client, or `None` once the agent is closed.
 	///
 	/// A request takes its own handle at the moment it is issued, which is what lets one already in
@@ -733,7 +743,7 @@ impl Agent {
 	///
 	/// Requests already in flight run to completion. Any new request on a closed
 	/// agent throws a `Closed` error. Calling `close()` more than once is a
-	/// no-op. The cookie store, if any, remains readable through [`Self::cookie_header`].
+	/// no-op. The cookie jar, if any, remains readable through [`Self::cookies`].
 	pub fn close(&self) {
 		// Dropping the client releases the reqwest connection pool and the
 		// Hickory resolver task; the alt-svc cache goes with it. The raw client
@@ -838,37 +848,6 @@ impl Agent {
 		// it recording an origin as warm on the strength of a connection in the dropped pool.
 		self.warmed.invalidate_all();
 		self.warm_generation.fetch_add(1, Ordering::Relaxed);
-	}
-
-	/// Add a cookie into the agent.
-	///
-	/// The cookie goes through the same rules a `Set-Cookie` header would, with the url supplying
-	/// the scheme and host they read, so this does nothing if:
-	/// - the cookie store is disabled
-	/// 	/// - the cookie does not parse
-	/// - a `__Host-` or `__Secure-` name prefix is not satisfied
-	/// - the cookie is larger than the jar's size limit
-	pub fn add_cookie(&self, url: &Url, cookie: &str) {
-		let Some(jar) = &self.cookie_jar else {
-			return;
-		};
-
-		jar.add_cookie_str(cookie, url);
-	}
-
-	/// Retrieve a cookie from the store.
-	///
-	/// `None` if:
-	/// - there's no cookie at this url
-	/// - the cookie store is disabled
-	/// 	/// - the cookie cannot be represented as a string
-	pub fn cookie_header(&self, url: &Url) -> Option<String> {
-		let Some(jar) = &self.cookie_jar else {
-			return None;
-		};
-
-		jar.request_cookie_header(url)
-			.and_then(|val| val.to_str().ok().map(ToOwned::to_owned))
 	}
 
 	/// The counters this agent has gathered, as they stand.

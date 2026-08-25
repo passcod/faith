@@ -124,6 +124,14 @@ fn faith_kind_in_chain(err: &(dyn Error + 'static)) -> Option<FaithErrorKind> {
 	None
 }
 
+/// A conversion that cannot fail still has to satisfy the bound on a target, and this is how it
+/// does: there is no value to convert.
+impl From<std::convert::Infallible> for FaithError {
+	fn from(never: std::convert::Infallible) -> Self {
+		match never {}
+	}
+}
+
 impl From<reqwest::Error> for FaithError {
 	fn from(err: reqwest::Error) -> Self {
 		// Always include full error chain for debugging
