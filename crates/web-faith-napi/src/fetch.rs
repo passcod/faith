@@ -24,6 +24,21 @@ pub fn faith_fetch<'env>(
 	signal: Option<AbortSignal>,
 	stream_body: Option<&StreamBody>,
 ) -> Result<PromiseRaw<'env, FaithResponse>, napi::Error> {
+	// Refused rather than ignored: a build without the coding layer cannot compress a body, and a
+	// caller who asked for it should hear so. See `refuse_absent_capabilities` for the agent-level
+	// equivalent.
+	#[cfg(not(feature = "encoding"))]
+	if options.compress.is_some() {
+		return Err(napi::Error::from_reason(
+			"this build has no content-coding support",
+		));
+	}
+
+	#[cfg(not(feature = "cache"))]
+	if options.cache.is_some() {
+		return Err(napi::Error::from_reason("this build has no HTTP cache"));
+	}
+
 	let (options, agent, body) = options::extract(options);
 	// Taken here, while `fetch()` is still on the stack, so the request counts as in flight from
 	// the moment it was issued: closing the agent afterwards does not strand it.

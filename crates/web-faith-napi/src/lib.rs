@@ -1,5 +1,6 @@
 mod agent;
 mod async_task;
+#[cfg(feature = "connection-tracking")]
 mod conn_tracker;
 mod error;
 mod fetch;

@@ -59,16 +59,6 @@ export declare class Agent {
    */
   stats(): AgentStats
   /**
-   * Returns information on current connections open by this agent.
-   *
-   * Only tracks TCP connections currently (upstream limitation). Stats are updated once a second:
-   * this makes it possible to track indicators over time to find the retransmission rate, for
-   * example. The `lostPackets` and `deliveryRateBps` stats are only available on Linux. Some other
-   * fields might also be missing depending on platform support; and no forward guarantees are made
-   * on field availability. If the platform isn't supported at all, this will always return empty.
-   */
-  connections(): Array<ConnectionInfo>
-  /**
    * Warm the DNS cache for `host`, so a later request to it skips the lookup.
    *
    * Mirrors the browser's `dns-prefetch` resource hint. The argument is a bare host; a scheme,
@@ -92,6 +82,16 @@ export declare class Agent {
    * does a call on a closed agent.
    */
   preconnect(origin: string): Promise<undefined>
+  /**
+   * Returns information on current connections open by this agent.
+   *
+   * Only tracks TCP connections currently (upstream limitation). Stats are updated once a second:
+   * this makes it possible to track indicators over time to find the retransmission rate, for
+   * example. The `lostPackets` and `deliveryRateBps` stats are only available on Linux. Some other
+   * fields might also be missing depending on platform support; and no forward guarantees are made
+   * on field availability. If the platform isn't supported at all, this will always return empty.
+   */
+  connections(): Array<ConnectionInfo>
   /**
    * Returns the DNS servers this agent resolves through, in the order they are queried, so
    * "are my lookups actually encrypted" is answerable from inside the process.

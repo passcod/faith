@@ -6,6 +6,8 @@ use std::{
 
 use bytes::Bytes;
 use futures::Stream;
+
+#[cfg(feature = "cache")]
 use http_cache_reqwest::CacheMode;
 use reqwest::{
 	Method,
@@ -104,7 +106,9 @@ struct Layer {
 
 #[derive(Default)]
 struct SetFlags {
+	#[cfg(feature = "cache")]
 	cache: bool,
+	#[cfg(feature = "encoding")]
 	compress: bool,
 	credentials: bool,
 	integrity: bool,
@@ -146,9 +150,11 @@ impl Layer {
 			Target::Request(inner) => (inner.url, inner.options, inner.body),
 		};
 
+		#[cfg(feature = "cache")]
 		if self.set.cache {
 			options.cache = self.options.cache;
 		}
+		#[cfg(feature = "encoding")]
 		if self.set.compress {
 			options.compress = self.options.compress;
 		}
@@ -288,6 +294,7 @@ macro_rules! layer_setters {
 
 			/// Compress the request body in this coding, named by its wire token.
 			// spec:ENC
+			#[cfg(feature = "encoding")]
 			pub fn compress(mut self, coding: impl Into<String>) -> Self {
 				self.layer.options.compress = Some(coding.into());
 				self.layer.set.compress = true;
@@ -296,6 +303,7 @@ macro_rules! layer_setters {
 
 			/// How the HTTP cache is consulted for this request.
 			// spec:CACHE
+			#[cfg(feature = "cache")]
 			pub fn cache(mut self, mode: CacheMode) -> Self {
 				self.layer.options.cache = mode;
 				self.layer.set.cache = true;

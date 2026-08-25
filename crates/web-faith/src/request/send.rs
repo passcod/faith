@@ -6,15 +6,24 @@ use std::{
 	time::Instant,
 };
 
-use http_cache_reqwest::CacheMode;
-use hyper_util::client::legacy::connect::HttpInfo;
 use reqwest::{
 	Method, StatusCode,
-	header::{ACCEPT_ENCODING, CONTENT_ENCODING, HeaderName, HeaderValue},
+	header::{CONTENT_ENCODING, HeaderName, HeaderValue},
 	tls::TlsInfo,
 };
 use reqwest_middleware::ClientWithMiddleware;
+
+#[cfg(feature = "connection-tracking")]
+use hyper_util::client::legacy::connect::HttpInfo;
+
+#[cfg(feature = "cache")]
+use http_cache_reqwest::CacheMode;
+
+#[cfg(feature = "encoding")]
+use reqwest::header::ACCEPT_ENCODING;
+
 use tokio::sync::Mutex;
+#[cfg(feature = "encoding")]
 use web_faith_encoding::{self as encoding, AcceptEncoding, Coding, DEFAULT_ACCEPT_ENCODING};
 
 use crate::{
@@ -58,6 +67,7 @@ pub async fn send(
 	// A `compress` naming no coding Faith can compress in is misuse whether or not the
 	// request turns out to carry a body, so it is refused before anything else looks at
 	// it (spec:ENC#compressing-a-request-body).
+	#[cfg(feature = "encoding")]
 	let compress = options
 		.compress
 		.as_deref()
@@ -87,8 +97,11 @@ pub async fn send(
 
 	let mut request = client
 		.request(method, parsed_url.clone())
-		.with_extension(CacheMode::from(options.cache))
 		.with_extension(headers_stamp.clone());
+	#[cfg(feature = "cache")]
+	{
+		request = request.with_extension(CacheMode::from(options.cache));
+	}
 
 	if let Some(headers) = &options.headers {
 		for (key, value) in headers {
@@ -116,6 +129,7 @@ pub async fn send(
 			// here would put a second `Content-Encoding` beside the joined one -- the same
 			// list read twice over (spec:ENC#what-a-compressed-request-sends). The value is
 			// still validated above, then withheld and re-emitted once below.
+			#[cfg(feature = "encoding")]
 			if compress.is_some() && header_name == CONTENT_ENCODING {
 				continue;
 			}
@@ -127,6 +141,7 @@ pub async fn send(
 	// What the caller says they handed over: their own `Content-Encoding`, else the
 	// agent's, per-request headers winning per name as they do generally (spec: REQ).
 	// Several lines are the one list, so they are joined as they are read.
+	#[cfg(feature = "encoding")]
 	let declared_content_encoding = compress.and_then(|_| {
 		let from_request = options.headers.as_ref().and_then(|headers| {
 			let declared = headers
@@ -149,12 +164,14 @@ pub async fn send(
 	// default headers, else the default Faith sends itself. Neither the request nor the
 	// agent advertising a value means nothing beneath Faith adds one now that it owns
 	// the codings, so Faith sends the default explicitly.
+	#[cfg(feature = "encoding")]
 	let request_accept_encoding = options.headers.as_ref().and_then(|headers| {
 		headers
 			.iter()
 			.find(|(name, _)| name.eq_ignore_ascii_case("accept-encoding"))
 			.map(|(_, value)| value.clone())
 	});
+	#[cfg(feature = "encoding")]
 	let accept_encoding = AcceptEncoding::parse(
 		&request_accept_encoding
 			.clone()
@@ -166,6 +183,7 @@ pub async fn send(
 			})
 			.unwrap_or_else(|| DEFAULT_ACCEPT_ENCODING.to_owned()),
 	);
+	#[cfg(feature = "encoding")]
 	if request_accept_encoding.is_none() && agent.default_accept_encoding.is_none() {
 		request = request.header(
 			ACCEPT_ENCODING,
@@ -195,6 +213,7 @@ pub async fn send(
 	// apply it to: the option does nothing on a request carrying none, so no
 	// `Content-Encoding` describes bytes that were never sent
 	// (spec:ENC#compressing-a-request-body).
+	#[cfg(feature = "encoding")]
 	let mut applied_coding = None;
 
 	// Handle body: prefer streaming body over buffered body
@@ -223,7 +242,8 @@ pub async fn send(
 				request = request.version(http::Version::HTTP_2);
 			}
 
-			request = request.body(match compress {
+			#[cfg(feature = "encoding")]
+			let body = match compress {
 				// Compressed as the chunks arrive, and chunked on the wire either way:
 				// a stream has no length to declare up front.
 				// spec:ENC#what-a-compressed-request-sends
@@ -232,10 +252,14 @@ pub async fn send(
 					reqwest::Body::wrap_stream(encoding::compress_stream(byte_stream, coding))
 				}
 				None => reqwest::Body::wrap_stream(byte_stream),
-			});
+			};
+			#[cfg(not(feature = "encoding"))]
+			let body = reqwest::Body::wrap_stream(byte_stream);
+			request = request.body(body);
 		}
 		RequestBody::Bytes(bytes) => {
-			request = request.body(match compress {
+			#[cfg(feature = "encoding")]
+			let body = match compress {
 				// The compressed bytes are what reqwest sizes `Content-Length` from, so the
 				// header counts what goes on the wire.
 				// spec:ENC#what-a-compressed-request-sends
@@ -251,13 +275,17 @@ pub async fn send(
 						})?
 				}
 				None => bytes.to_vec(),
-			});
+			};
+			#[cfg(not(feature = "encoding"))]
+			let body = bytes.to_vec();
+			request = request.body(body);
 		}
 		RequestBody::None => {}
 	}
 
 	// One `Content-Encoding` naming the caller's codings then Faith's, in the order they
 	// were applied (spec:ENC#what-a-compressed-request-sends).
+	#[cfg(feature = "encoding")]
 	if let Some(coding) = applied_coding {
 		let value = encoding::layer_content_encoding(declared_content_encoding.as_deref(), coding);
 		let value = HeaderValue::from_str(&value).map_err(|_| {
@@ -326,6 +354,7 @@ pub async fn send(
 	// Track connection for TCP stats (if we can get both local and remote addr).
 	// A connection the tracker has already seen is one the pool handed back, which is
 	// what `reused` reports (spec:RESP#request-timing).
+	#[cfg(feature = "connection-tracking")]
 	let reused = if let Some(http_info) = response.extensions().get::<HttpInfo>() {
 		let local_addr = http_info.local_addr();
 		let remote_addr = http_info.remote_addr();
@@ -333,6 +362,10 @@ pub async fn send(
 	} else {
 		false
 	};
+	// Whether the pool handed a connection back is what the tracker knows, so without it there is
+	// no answer to report.
+	#[cfg(not(feature = "connection-tracking"))]
+	let reused = false;
 
 	// The origin now holds a connection the pool keeps idle, so a `preconnect` for it has
 	// nothing left to do (spec:WARM). Keyed on the URL the request was sent to, so a
@@ -375,11 +408,13 @@ pub async fn send(
 
 	// Decode only a body Faith negotiated the coding for; a bodyless response keeps its
 	// `Content-Encoding` and `Content-Length` describing the representation (spec: ENC).
+	#[cfg(feature = "encoding")]
 	let decode = if empty {
 		None
 	} else {
 		encoding::decision(&headers, &accept_encoding)
 	};
+	#[cfg(feature = "encoding")]
 	if decode.is_some() {
 		encoding::strip_decoded_headers(&mut headers);
 	}
@@ -401,6 +436,7 @@ pub async fn send(
 				timing.clone(),
 			)
 		},
+		#[cfg(feature = "encoding")]
 		decode,
 		disturbed: Arc::new(AtomicBool::new(false)),
 		headers,

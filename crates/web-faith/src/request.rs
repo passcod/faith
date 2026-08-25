@@ -14,6 +14,8 @@ use std::{pin::Pin, time::Duration};
 
 use bytes::Bytes;
 use futures::Stream;
+
+#[cfg(feature = "cache")]
 use http_cache_reqwest::CacheMode;
 
 /// Whether a request carries its credentials, and how far.
@@ -47,8 +49,10 @@ pub enum RequestBody {
 /// What a request carries beyond its method, URL, and body.
 #[derive(Clone, Debug, Default)]
 pub struct RequestOptions {
+	#[cfg(feature = "cache")]
 	pub cache: CacheMode,
 	/// A coding to compress the body in, named by its wire token.
+	#[cfg(feature = "encoding")]
 	pub compress: Option<String>,
 	pub credentials: Credentials,
 	pub headers: Option<Vec<(String, String)>>,

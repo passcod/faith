@@ -10,11 +10,21 @@ use std::{
 };
 
 use http::header::{HeaderMap, HeaderName, HeaderValue};
+
+#[cfg(feature = "cache")]
+use crate::{
+	client::{HttpCacheRecipe, HttpCacheStore},
+	options::CacheStore,
+};
+
+#[cfg(feature = "cache")]
 use http_cache_reqwest::{
 	CACacheManager, CacheOptions, HttpCacheOptions, MokaCacheBuilder, MokaManager,
 };
 use moka::sync::Cache as MokaCache;
 use reqwest::{Identity, tls::Certificate};
+
+#[cfg(feature = "connection-tracking")]
 use web_faith_conn_tracker::ConnectionTracker;
 
 #[cfg(feature = "cookies")]
@@ -31,11 +41,9 @@ use web_faith_alt_svc::{AltSvcCache, AltSvcCacheConfig};
 use crate::{
 	USER_AGENT,
 	agent::{Agent, AgentSettings, Live},
-	client::{ClientRecipe, HttpCacheRecipe, HttpCacheStore, NodeEnvRecipe},
+	client::{ClientRecipe, NodeEnvRecipe},
 	error::{FaithError, FaithErrorKind},
-	options::{
-		AgentOptions, CacheStore, DnsOverride, Header, ipv6_wildcard_bindable, resolve_windows,
-	},
+	options::{AgentOptions, DnsOverride, Header, ipv6_wildcard_bindable, resolve_windows},
 	request::PRIORITY,
 };
 
@@ -54,6 +62,7 @@ impl Agent {
 		// without the compiler pointing here, where every option is turned into the recipe the
 		// agent's clients are built from (spec:NETCHG).
 		let AgentOptions {
+			#[cfg(feature = "cache")]
 			cache,
 			#[cfg(feature = "cookies")]
 			cookies,
@@ -184,7 +193,9 @@ impl Agent {
 			}))
 		};
 
+		#[cfg(feature = "encoding")]
 		let mut default_accept_encoding = None;
+		#[cfg(feature = "encoding")]
 		let mut default_content_encoding = None;
 		let mut has_default_priority = false;
 		let mut default_headers = None;
@@ -212,8 +223,11 @@ impl Agent {
 					Some((name, value))
 				},
 			));
-			default_accept_encoding = map.get(reqwest::header::ACCEPT_ENCODING).cloned();
-			default_content_encoding = map.get(reqwest::header::CONTENT_ENCODING).cloned();
+			#[cfg(feature = "encoding")]
+			{
+				default_accept_encoding = map.get(reqwest::header::ACCEPT_ENCODING).cloned();
+				default_content_encoding = map.get(reqwest::header::CONTENT_ENCODING).cloned();
+			}
 			has_default_priority = map.contains_key(PRIORITY);
 			default_headers = Some(map);
 		}
@@ -309,6 +323,7 @@ impl Agent {
 			}
 		};
 
+		#[cfg(feature = "cache")]
 		let http_cache = if let Some(cache) = cache
 			&& let Some(store) = cache.store
 		{
@@ -481,6 +496,7 @@ impl Agent {
 			tls_required,
 			tls_extra_roots,
 			node_env: NodeEnvRecipe::read(),
+			#[cfg(feature = "cache")]
 			http_cache,
 			#[cfg(feature = "http3")]
 			h3_upgrade,
@@ -491,7 +507,9 @@ impl Agent {
 			#[cfg(feature = "http3")]
 			h3_upgrade_enabled: recipe.h3_upgrade.enabled,
 			quirk_h1_request_streaming,
+			#[cfg(feature = "encoding")]
 			default_accept_encoding,
+			#[cfg(feature = "encoding")]
 			default_content_encoding,
 			has_default_priority,
 		};
@@ -573,12 +591,15 @@ impl Agent {
 			#[cfg(feature = "cookies")]
 			cookie_jar,
 			stats: Default::default(),
+			#[cfg(feature = "connection-tracking")]
 			conn_tracker: ConnectionTracker::new(conn_timeout),
 			h3_follow_advertised_port: settings.h3_follow_advertised_port,
 			#[cfg(feature = "http3")]
 			h3_upgrade_enabled: recipe.h3_upgrade.enabled,
 			quirk_h1_request_streaming: settings.quirk_h1_request_streaming,
+			#[cfg(feature = "encoding")]
 			default_accept_encoding: settings.default_accept_encoding,
+			#[cfg(feature = "encoding")]
 			default_content_encoding: settings.default_content_encoding,
 			has_default_priority: settings.has_default_priority,
 			recipe: Arc::new(recipe),

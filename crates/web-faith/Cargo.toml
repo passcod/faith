@@ -17,7 +17,7 @@ futures.workspace = true
 http.workspace = true
 http-body.workspace = true
 http-body-util.workspace = true
-http-cache-reqwest.workspace = true
+http-cache-reqwest = { workspace = true, optional = true }
 hyper.workspace = true
 hyper-util.workspace = true
 moka.workspace = true
@@ -30,18 +30,24 @@ ssri.workspace = true
 strum.workspace = true
 tokio.workspace = true
 url.workspace = true
-web-faith-conn-tracker.workspace = true
-web-faith-encoding.workspace = true
+web-faith-conn-tracker = { workspace = true, optional = true }
+web-faith-encoding = { workspace = true, optional = true }
 web-faith-cookies = { workspace = true, features = ["reqwest"], optional = true }
 web-faith-dns = { workspace = true, features = ["reqwest"], optional = true }
 web-faith-alt-svc = { workspace = true, optional = true }
 
 [features]
-default = ["cookies", "dns", "http3"]
+default = ["cache", "connection-tracking", "cookies", "dns", "encoding", "http3"]
+# The HTTP cache, its store, and the per-request cache mode.
+cache = ["dep:http-cache-reqwest"]
+# Per-connection kernel counters, and the agent verb that reports them.
+connection-tracking = ["dep:web-faith-conn-tracker"]
 # The cookie jar, and the agent option and handle that reach it.
 cookies = ["dep:web-faith-cookies", "reqwest/cookies"]
 # Faith's own caching resolver, which a prefetch warms and an `HTTPS` record lookup reads.
 # Without it names resolve through the platform, as reqwest resolves them.
 dns = ["dep:web-faith-dns", "reqwest/hickory-dns", "web-faith-alt-svc?/dns"]
+# Content codings: negotiating and decoding a response body, and compressing a request one.
+encoding = ["dep:web-faith-encoding"]
 # Transparent HTTP/3, and the Alt-Svc machinery that upgrades an origin to it.
 http3 = ["reqwest/http3", "dep:web-faith-alt-svc"]

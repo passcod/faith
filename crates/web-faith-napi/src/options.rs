@@ -1,6 +1,8 @@
 use std::{fmt::Debug, sync::Arc, time::Duration};
 
+#[cfg(feature = "cache")]
 use http_cache_reqwest::CacheMode;
+
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
 
@@ -70,6 +72,7 @@ pub enum RequestCacheMode {
 	Reload,
 }
 
+#[cfg(feature = "cache")]
 impl From<RequestCacheMode> for CacheMode {
 	fn from(mode: RequestCacheMode) -> Self {
 		match mode {
@@ -186,7 +189,9 @@ pub(crate) fn extract(opts: FaithOptionsAndBody) -> (RequestOptions, Agent, Opti
 
 	(
 		RequestOptions {
+			#[cfg(feature = "cache")]
 			cache: opts.cache.unwrap_or_default().into(),
+			#[cfg(feature = "encoding")]
 			compress: opts.compress,
 			credentials,
 			headers: opts.headers,

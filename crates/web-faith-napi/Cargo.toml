@@ -16,60 +16,28 @@ name = "faith"
 crate-type = ["cdylib"]
 
 [dependencies]
-async-compression.workspace = true
 async-stream.workspace = true
-async-trait.workspace = true
 bytes.workspace = true
-cookie.workspace = true
-cookie_store.workspace = true
 futures.workspace = true
-hickory-resolver.workspace = true
-moka.workspace = true
-http.workspace = true
-http-body-util.workspace = true
-hyper.workspace = true
-http-cache-reqwest.workspace = true
-hyper-util.workspace = true
-libc.workspace = true
+http-cache-reqwest = { workspace = true, optional = true }
 napi.workspace = true
 napi-derive.workspace = true
 reqwest.workspace = true
 reqwest-middleware.workspace = true
-serde.workspace = true
 serde_json.workspace = true
-ssri.workspace = true
-stream_shared.workspace = true
-strum.workspace = true
 tokio.workspace = true
-tokio-stream.workspace = true
-time.workspace = true
-tokio-util.workspace = true
-url.workspace = true
 web-faith.workspace = true
-web-faith-alt-svc = { workspace = true, optional = true }
-web-faith-conn-tracker.workspace = true
+web-faith-conn-tracker = { workspace = true, optional = true }
 web-faith-cookies = { workspace = true, features = ["reqwest"], optional = true }
-web-faith-dns = { workspace = true, features = ["reqwest"], optional = true }
-web-faith-encoding.workspace = true
-
-[target.'cfg(target_os = "linux")'.dependencies]
-netlink-packet-core.workspace = true
-netlink-packet-sock-diag.workspace = true
-netlink-sys.workspace = true
-
-[target.'cfg(target_os = "windows")'.dependencies]
-windows.workspace = true
 
 [build-dependencies]
 napi-build.workspace = true
 
 [features]
-default = ["cookies", "dns", "http3"]
+default = ["cache", "connection-tracking", "cookies", "dns", "encoding", "http3"]
+cache = ["dep:http-cache-reqwest", "web-faith/cache"]
+connection-tracking = ["dep:web-faith-conn-tracker", "web-faith/connection-tracking"]
 cookies = ["dep:web-faith-cookies", "reqwest/cookies", "web-faith/cookies"]
-dns = [
-    "dep:web-faith-dns",
-    "reqwest/hickory-dns",
-    "web-faith/dns",
-    "web-faith-alt-svc?/dns",
-]
-http3 = ["reqwest/http3", "dep:web-faith-alt-svc", "web-faith/http3"]
+dns = ["web-faith/dns"]
+encoding = ["web-faith/encoding"]
+http3 = ["reqwest/http3", "web-faith/http3"]

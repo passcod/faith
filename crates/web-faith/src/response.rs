@@ -24,6 +24,8 @@ use reqwest::{StatusCode, Url, Version};
 use serde::de::DeserializeOwned;
 use stream_shared::SharedStream;
 use tokio::{io::AsyncWriteExt, sync::watch};
+
+#[cfg(feature = "encoding")]
 use web_faith_encoding::{Coding, decode_stream};
 
 use crate::{
@@ -206,6 +208,7 @@ mod tests {
 
 		let response = Response {
 			body: BodyHolder::none(),
+			#[cfg(feature = "encoding")]
 			decode: None,
 			disturbed: Arc::new(AtomicBool::new(false)),
 			headers,
@@ -324,6 +327,7 @@ pub struct FileWritten {
 pub struct Response {
 	pub body: BodyHolder,
 	/// The coding to decode the body under, or `None` to deliver it as received.
+	#[cfg(feature = "encoding")]
 	/// Set once when the response is built, from the request's `Accept-Encoding` and the
 	/// response's `Content-Encoding` (see [`web_faith_encoding`]).
 	pub decode: Option<Coding>,
@@ -546,6 +550,7 @@ impl Response {
 						.filter_map(async |item| item),
 				) as Pin<Box<DynStream>>;
 
+				#[cfg(feature = "encoding")]
 				let bytes = match self.decode {
 					Some(coding) => decode_stream(bytes, coding),
 					None => bytes,

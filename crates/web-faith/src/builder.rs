@@ -24,7 +24,11 @@
 
 use std::{net::IpAddr, time::Duration};
 
+#[cfg(feature = "cache")]
 use http_cache_reqwest::CacheMode;
+
+#[cfg(feature = "cache")]
+use crate::options::{CacheOptions, CacheStore};
 
 #[cfg(feature = "cookies")]
 use web_faith_cookies::CookieLimits;
@@ -34,9 +38,9 @@ use crate::{
 	client::RedirectPolicy,
 	error::FaithError,
 	options::{
-		AgentOptions, CacheOptions, CacheStore, DnsOptions, DnsOverride, FlowControlOptions,
-		Header, Http2Options, Http3Congestion, Http3Hint, Http3Options, PoolOptions, QuirksOptions,
-		TimeoutOptions, TlsOptions,
+		AgentOptions, DnsOptions, DnsOverride, FlowControlOptions, Header, Http2Options,
+		Http3Congestion, Http3Hint, Http3Options, PoolOptions, QuirksOptions, TimeoutOptions,
+		TlsOptions,
 	},
 };
 
@@ -143,6 +147,7 @@ impl AgentBuilder {
 	}
 
 	/// HTTP cache settings. Without this call the agent does not cache.
+	#[cfg(feature = "cache")]
 	pub fn cache(mut self, with: impl FnOnce(CacheBuilder) -> CacheBuilder) -> Self {
 		let group = self.options.cache.take().unwrap_or_default();
 		self.options.cache = Some(with(CacheBuilder { group }).group);
@@ -354,12 +359,14 @@ impl TimeoutBuilder {
 }
 
 /// HTTP cache settings. Reached through [`AgentBuilder::cache`].
+#[cfg(feature = "cache")]
 #[derive(Debug, Default)]
 #[must_use]
 pub struct CacheBuilder {
 	group: CacheOptions,
 }
 
+#[cfg(feature = "cache")]
 impl CacheBuilder {
 	/// Where cached responses are kept.
 	pub fn store(mut self, store: CacheStore) -> Self {

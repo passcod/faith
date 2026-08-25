@@ -16,9 +16,15 @@ use std::{
 use std::sync::Arc;
 
 use http::header::HeaderMap;
-use http_cache_reqwest::{
-	CACacheManager, Cache, CacheMode, HttpCache, HttpCacheOptions, MokaManager,
-};
+
+#[cfg(feature = "cache")]
+mod http_cache;
+
+#[cfg(feature = "cache")]
+pub use http_cache::{HttpCacheRecipe, HttpCacheStore};
+
+#[cfg(feature = "cache")]
+use http_cache_reqwest::{Cache, HttpCache};
 use reqwest::{Client, Identity, redirect::Policy, tls::Certificate};
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 #[cfg(feature = "cookies")]
@@ -154,28 +160,6 @@ impl NodeEnvRecipe {
 	}
 }
 
-/// The HTTP cache store to install on a client, held as the built manager rather than as the
-/// options that produced it.
-///
-/// The manager *is* the store: `MokaManager` holds the cached entries behind an `Arc`, and
-/// `CACacheManager` names the directory holding them. So cloning one shares the cache, while
-/// building a fresh one from the same options would empty an in-memory cache — which is why a
-/// client rebuilt for a network change clones this.
-// spec:NETCHG#what-the-signal-keeps
-#[derive(Debug, Clone)]
-pub enum HttpCacheStore {
-	Disk(CACacheManager),
-	Memory(MokaManager),
-}
-
-/// The HTTP cache middleware to install.
-#[derive(Debug, Clone)]
-pub struct HttpCacheRecipe {
-	pub mode: CacheMode,
-	pub options: HttpCacheOptions,
-	pub store: HttpCacheStore,
-}
-
 /// The HTTP/3 upgrade settings a client's middleware needs. The origin knowledge itself is not
 /// here: it belongs to the agent and outlives any one client.
 // spec:NETCHG
@@ -232,6 +216,7 @@ pub struct ClientRecipe {
 	pub tls_required: Option<bool>,
 	pub tls_extra_roots: Vec<Certificate>,
 	pub node_env: NodeEnvRecipe,
+	#[cfg(feature = "cache")]
 	pub http_cache: Option<HttpCacheRecipe>,
 	#[cfg(feature = "http3")]
 	pub h3_upgrade: H3UpgradeRecipe,
@@ -430,6 +415,7 @@ impl ClientRecipe {
 				})
 		};
 
+		#[cfg(feature = "cache")]
 		if let Some(cache) = &self.http_cache {
 			// The two arms differ only in the manager's type, which `HttpCache` is generic over,
 			// so they cannot share a constructor without boxing the manager.

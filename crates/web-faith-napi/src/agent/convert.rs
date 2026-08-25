@@ -1,13 +1,18 @@
 //! Reading a JavaScript `AgentOptions` into the options the client validates.
 
+#[cfg(feature = "cache")]
 use http_cache_reqwest::CacheMode;
 use napi::{Either, bindgen_prelude::Buffer};
+
 use web_faith::{client::RedirectPolicy, options};
 
 #[cfg(feature = "cookies")]
 use web_faith_cookies::CookieLimits;
 
-use crate::agent::{AgentOptions, CacheStore, Http3Congestion};
+use crate::agent::{AgentOptions, Http3Congestion};
+
+#[cfg(feature = "cache")]
+use crate::agent::CacheStore;
 
 /// Read the JavaScript options object into the shape the client validates.
 ///
@@ -16,6 +21,7 @@ use crate::agent::{AgentOptions, CacheStore, Http3Congestion};
 impl From<AgentOptions> for options::AgentOptions {
 	fn from(opts: AgentOptions) -> Self {
 		Self {
+			#[cfg(feature = "cache")]
 			cache: opts.cache.map(|cache| options::CacheOptions {
 				store: cache.store.map(|store| match store {
 					CacheStore::Disk => options::CacheStore::Disk,

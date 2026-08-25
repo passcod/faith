@@ -7,11 +7,15 @@ use std::sync::{
 	atomic::{AtomicU64, Ordering},
 };
 
-use http::header::HeaderValue;
 use moka::sync::Cache as MokaCache;
 use reqwest::Client;
 use reqwest_middleware::ClientWithMiddleware;
 use url::Url;
+
+#[cfg(feature = "encoding")]
+use http::header::HeaderValue;
+
+#[cfg(feature = "connection-tracking")]
 use web_faith_conn_tracker::{ConnectionSnapshot, ConnectionTracker};
 
 #[cfg(feature = "cookies")]
@@ -52,9 +56,11 @@ pub struct AgentSettings {
 	pub quirk_h1_request_streaming: bool,
 	/// The agent's default `Accept-Encoding`, if one sits among its default headers, which decides
 	/// which codings a response is decoded under when a request adds none of its own.
+	#[cfg(feature = "encoding")]
 	pub default_accept_encoding: Option<HeaderValue>,
 	/// The agent's default `Content-Encoding`, if one sits among its default headers, which a
 	/// request layers its own coding on top of rather than displacing.
+	#[cfg(feature = "encoding")]
 	pub default_content_encoding: Option<HeaderValue>,
 	/// Whether a `Priority` header sits among the agent's default headers, so that default wins
 	/// over the one a request's priority would derive.
@@ -117,6 +123,7 @@ pub struct Agent {
 	#[cfg(feature = "cookies")]
 	pub cookie_jar: Option<Arc<FaithJar>>,
 	pub stats: Arc<InnerAgentStats>,
+	#[cfg(feature = "connection-tracking")]
 	pub conn_tracker: Arc<ConnectionTracker>,
 	/// Whether an upgrade may follow a port the origin advertised. A request needs it to stop a
 	/// rewritten port from being reported as a redirect.
@@ -132,10 +139,12 @@ pub struct Agent {
 	pub quirk_h1_request_streaming: bool,
 	/// The agent's default `Accept-Encoding`, if one sits among its default headers, which decides
 	/// the codings a response is decoded under when a request adds none of its own.
+	#[cfg(feature = "encoding")]
 	pub default_accept_encoding: Option<HeaderValue>,
 	/// The agent's default `Content-Encoding`, if one sits among its default headers. A request
 	/// layers its own coding on top of this rather than displacing it.
 	// spec:ENC
+	#[cfg(feature = "encoding")]
 	pub default_content_encoding: Option<HeaderValue>,
 	/// Whether a `Priority` header sits among the agent's default headers. That default wins over
 	/// the header a request's priority would derive.
@@ -337,6 +346,7 @@ impl Agent {
 	/// example. The lost-packet count and delivery rate are only available on Linux. Some other
 	/// fields might also be missing depending on platform support; and no forward guarantees are made
 	/// on field availability. If the platform isn't supported at all, this will always return empty.
+	#[cfg(feature = "connection-tracking")]
 	pub fn connections(&self) -> Vec<ConnectionSnapshot> {
 		self.conn_tracker.snapshot()
 	}

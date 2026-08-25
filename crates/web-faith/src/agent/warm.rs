@@ -89,6 +89,7 @@ impl Agent {
 		#[cfg(not(feature = "http3"))]
 		let h3_port: Option<u16> = None;
 
+		#[cfg(feature = "connection-tracking")]
 		let conn_tracker = self.conn_tracker.clone();
 		let warmed = self.warmed.clone();
 		let warming = self.warming.clone();
@@ -135,6 +136,7 @@ impl Agent {
 
 			// A TCP warm-up leaves a pooled connection to track; a QUIC one does not (QUIC
 			// connections are not tracked, and a confirmed origin has nothing left to probe).
+			#[cfg(feature = "connection-tracking")]
 			if h3_port.is_none()
 				&& let Ok(response) = &outcome
 				&& let Some(info) = response

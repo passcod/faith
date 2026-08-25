@@ -10,6 +10,7 @@
 
 use std::net::{IpAddr, Ipv6Addr, SocketAddr, UdpSocket};
 
+#[cfg(feature = "cache")]
 use http_cache_reqwest::CacheMode;
 
 #[cfg(feature = "cookies")]
@@ -20,6 +21,7 @@ use crate::client::{
 };
 
 /// Settings related to the HTTP cache. This is a nested object.
+#[cfg(feature = "cache")]
 #[derive(Clone, Debug, Default)]
 pub struct CacheOptions {
 	/// Which cache store to use: either `disk` or `memory`.
@@ -48,6 +50,7 @@ pub struct CacheOptions {
 	pub shared: Option<bool>,
 }
 
+#[cfg(feature = "cache")]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CacheStore {
 	Disk,
@@ -573,6 +576,7 @@ pub struct TlsOptions {
 #[derive(Clone, Debug, Default)]
 pub struct AgentOptions {
 	/// Settings related to the HTTP cache. This is a nested object.
+	#[cfg(feature = "cache")]
 	pub cache: Option<CacheOptions>,
 	/// Enable a persistent cookie store for the agent. Cookies received in responses will be preserved and
 	/// included in additional requests.
