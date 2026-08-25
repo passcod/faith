@@ -121,9 +121,6 @@ QUIC/TLS stay inside `web-faith` as reqwest features (aws-lc-rs default, ring al
   - [ ] Remaining: closing up the recipe and option structs' public fields now that the builder owns
         the assembly. Left deliberately: the binding still fills the option structs directly, so
         these close up when step 10 settles what the public surface is.
-  - [ ] `Request`, `Request::new`, `try_clone`, and the fetch builder over `IntoFuture`, with the
-        layering rules (outermost wins; headers merge by name).
-  - [ ] Setters taking anything convertible, holding a failed conversion until the builder resolves.
 - [ ] **10. Feature wiring** — a default-on feature per capability a build can do without; disabling
   one drops the code and the API surface it gates (compile error at the call site, not a no-op), and
   the dependency too where the capability is a crate. Component, crate, and feature are three axes
