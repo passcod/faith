@@ -54,8 +54,6 @@ napi = { version = "3.7.0", features = [
 napi-build = "2.3.1"
 napi-derive = "3.4.0"
 reqwest = { version = "0.13.4", default-features = false, features = [
-    "cookies",
-    "hickory-dns",
     "http2",
     "json",
     "rustls",
@@ -74,7 +72,7 @@ time = "0.3.53"
 tokio-util = { version = "0.7.10", features = ["io"] }
 url = "2.5.7"
 web-faith = { version = "0.7.0", path = "crates/web-faith", default-features = false }
-web-faith-alt-svc = { version = "0.7.0", path = "crates/web-faith-alt-svc" }
+web-faith-alt-svc = { version = "0.7.0", path = "crates/web-faith-alt-svc", default-features = false }
 web-faith-conn-tracker = { version = "0.7.0", path = "crates/web-faith-conn-tracker" }
 web-faith-cookies = { version = "0.7.0", path = "crates/web-faith-cookies" }
 web-faith-dns = { version = "0.7.0", path = "crates/web-faith-dns" }

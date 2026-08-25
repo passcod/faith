@@ -25,6 +25,8 @@
 use std::{net::IpAddr, time::Duration};
 
 use http_cache_reqwest::CacheMode;
+
+#[cfg(feature = "cookies")]
 use web_faith_cookies::CookieLimits;
 
 use crate::{
@@ -106,6 +108,7 @@ impl AgentBuilder {
 	}
 
 	/// Keep a cookie jar, enforcing these limits. Without this call the agent stores no cookies.
+	#[cfg(feature = "cookies")]
 	pub fn cookies(mut self, limits: CookieLimits) -> Self {
 		self.options.cookies = Some(limits);
 		self
@@ -187,6 +190,7 @@ pub struct DnsBuilder {
 
 impl DnsBuilder {
 	/// Resolve through the operating system rather than Faith's own resolver.
+	#[cfg(feature = "dns")]
 	pub fn system(mut self, system: bool) -> Self {
 		self.group.system = Some(system);
 		self
@@ -209,48 +213,56 @@ impl DnsBuilder {
 	}
 
 	/// The resolvers to query, in order. Each is a URL whose scheme picks the transport.
+	#[cfg(feature = "dns")]
 	pub fn servers(mut self, servers: impl IntoIterator<Item = impl Into<String>>) -> Self {
 		self.group.servers = Some(servers.into_iter().map(Into::into).collect());
 		self
 	}
 
 	/// Bound resolution across the whole server list.
+	#[cfg(feature = "dns")]
 	pub fn timeout(mut self, timeout: Duration) -> Self {
 		self.group.timeout = Some(millis(timeout));
 		self
 	}
 
 	/// Suffixes to try for an unqualified name.
+	#[cfg(feature = "dns")]
 	pub fn search_domains(mut self, domains: impl IntoIterator<Item = impl Into<String>>) -> Self {
 		self.group.search_domains = Some(domains.into_iter().map(Into::into).collect());
 		self
 	}
 
 	/// How many dots a name must contain before it is tried as given, ahead of the search list.
+	#[cfg(feature = "dns")]
 	pub fn ndots(mut self, ndots: u32) -> Self {
 		self.group.ndots = Some(ndots);
 		self
 	}
 
 	/// Consult the system hosts file.
+	#[cfg(feature = "dns")]
 	pub fn hosts_file(mut self, hosts_file: bool) -> Self {
 		self.group.hosts_file = Some(hosts_file);
 		self
 	}
 
 	/// Names to send to the system resolver whatever the rest of the configuration says.
+	#[cfg(feature = "dns")]
 	pub fn exempt_domains(mut self, domains: impl IntoIterator<Item = impl Into<String>>) -> Self {
 		self.group.exempt_domains = Some(domains.into_iter().map(Into::into).collect());
 		self
 	}
 
 	/// Serve an expired answer while a fresh lookup runs.
+	#[cfg(feature = "dns")]
 	pub fn serve_stale(mut self, serve_stale: bool) -> Self {
 		self.group.serve_stale = Some(serve_stale);
 		self
 	}
 
 	/// How far past expiry an answer may still be served.
+	#[cfg(feature = "dns")]
 	pub fn max_stale(mut self, max_stale: Duration) -> Self {
 		self.group.max_stale = Some(millis(max_stale));
 		self

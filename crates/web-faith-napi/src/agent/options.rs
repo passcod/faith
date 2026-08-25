@@ -1,11 +1,15 @@
 //! The `AgentOptions` object as JavaScript spells it, and the option groups under it.
 
-use std::{fmt::Debug, time::Duration};
+use std::fmt::Debug;
 
 use napi::{Either, bindgen_prelude::Buffer};
 use napi_derive::napi;
 
+#[cfg(feature = "cookies")]
+use std::time::Duration;
 use web_faith::client::RedirectPolicy;
+
+#[cfg(feature = "cookies")]
 use web_faith_cookies::{
 	CookieLimits, DEFAULT_MAX_AGE, DEFAULT_MAX_PER_HOST, DEFAULT_MAX_SIZE, DEFAULT_MAX_TOTAL,
 };
@@ -83,6 +87,7 @@ pub struct AgentCookieOptions {
 	pub max_total: Option<u32>,
 }
 
+#[cfg(feature = "cookies")]
 impl From<&AgentCookieOptions> for CookieLimits {
 	fn from(options: &AgentCookieOptions) -> Self {
 		Self {

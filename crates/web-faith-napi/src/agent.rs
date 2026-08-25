@@ -1,12 +1,9 @@
 //! The `Agent` class, as JavaScript sees it.
 
-use std::str::FromStr as _;
-
 use napi::bindgen_prelude::{PromiseRaw, within_runtime_if_available};
 
 use napi::Env;
 use napi_derive::napi;
-use reqwest::Url;
 
 use crate::{
 	async_task::faith_promise,
@@ -64,6 +61,7 @@ impl From<web_faith::stats::AgentStats> for AgentStats {
 }
 
 /// One entry of `Agent.resolvers()`: a DNS server the agent resolves through (spec:OBS#resolvers).
+#[cfg(feature = "dns")]
 #[napi(object)]
 #[derive(Debug, Clone)]
 pub struct ResolverInfo {
@@ -103,6 +101,7 @@ impl Agent {
 	}
 
 	pub fn with_options(options: AgentOptions) -> Result<Self, FaithError> {
+		refuse_absent_capabilities(&options)?;
 		let options = web_faith::options::AgentOptions::from(options);
 		// A napi callback can run outside the runtime, and building the HTTP/3 endpoint needs to be
 		// inside one, so the client is constructed within whichever runtime is to hand.
@@ -155,44 +154,6 @@ impl Agent {
 		self.inner.network_changed();
 	}
 
-	/// Add a cookie into the agent.
-	///
-	/// The cookie goes through the same rules a `Set-Cookie` header would, with the url supplying
-	/// the scheme and host they read, so this does nothing if:
-	/// - the cookie store is disabled
-	/// - the url is malformed
-	/// - the cookie does not parse
-	/// - a `__Host-` or `__Secure-` name prefix is not satisfied
-	/// - the cookie is larger than `cookies.maxSize`
-	#[napi]
-	pub fn add_cookie(&self, url: String, cookie: String) {
-		let Ok(url) = Url::from_str(&url) else {
-			return;
-		};
-
-		let Some(jar) = self.inner.cookies() else {
-			return;
-		};
-
-		jar.add_cookie_str(&cookie, &url);
-	}
-
-	/// Retrieve a cookie from the store.
-	///
-	/// Returns `null` if:
-	/// - there's no cookie at this url
-	/// - the cookie store is disabled
-	/// - the url is malformed
-	/// - the cookie cannot be represented as a string
-	#[napi]
-	pub fn get_cookie(&self, url: String) -> Option<String> {
-		let url = Url::from_str(&url).ok()?;
-		self.inner
-			.cookies()?
-			.request_cookie_header(&url)
-			.and_then(|value| value.to_str().ok().map(ToOwned::to_owned))
-	}
-
 	/// Returns statistics gathered by this agent:
 	///
 	/// - `requestsSent`
@@ -214,26 +175,6 @@ impl Agent {
 	#[napi]
 	pub fn connections<'env>(&self, env: &'env Env) -> Vec<ConnectionInfo<'env>> {
 		connections_for_napi(&self.inner.conn_tracker, env)
-	}
-
-	/// Returns the DNS servers this agent resolves through, in the order they are queried, so
-	/// "are my lookups actually encrypted" is answerable from inside the process.
-	///
-	/// Each entry gives the server's address, the transport in use (`udp`, `tcp`, `tls`, `https`,
-	/// `quic`, or `h3`), and how that transport was arrived at (`configured` or `conventional`).
-	/// The list is empty until the resolver has been used, because it reads its configuration on
-	/// first use, and empty for an agent using the system resolver.
-	#[napi]
-	pub fn resolvers(&self) -> Vec<ResolverInfo> {
-		self.inner
-			.resolvers()
-			.into_iter()
-			.map(|report| ResolverInfo {
-				address: report.address,
-				transport: report.transport,
-				source: report.source,
-			})
-			.collect()
 	}
 
 	/// Warm the DNS cache for `host`, so a later request to it skips the lookup.
@@ -291,4 +232,118 @@ impl Agent {
 /// and JS error class. Network failures never reach here — they resolve quietly (spec:WARM).
 fn caller_error(env: &Env, err: FaithError) -> napi::Error {
 	napi::Error::from(err.into_js_error(env))
+}
+
+/// Refuse an option group this build cannot honour.
+///
+/// A Cargo feature drops the capability and, on the Rust surface, the API that reaches it. napi's
+/// object derive does not honour `#[cfg]` on a field, so an options object here keeps its full shape
+/// whatever the build; asking for a capability that is not compiled in is refused rather than
+/// quietly ignored, so a slim build says so instead of appearing to work.
+fn refuse_absent_capabilities(options: &AgentOptions) -> Result<(), FaithError> {
+	let absent = |group: &str| -> Result<(), FaithError> {
+		Err(FaithError::new(
+			web_faith::FaithErrorKind::Config,
+			Some(format!("this build has no {group} support")),
+		))
+	};
+
+	#[cfg(not(feature = "cookies"))]
+	if options.cookies.is_some() {
+		return absent("cookie");
+	}
+
+	// `dns.overrides` reaches reqwest rather than Faith's resolver, so it is honoured either way;
+	// every other setting in the group configures the resolver this build does not have.
+	#[cfg(not(feature = "dns"))]
+	if options.dns.as_ref().is_some_and(|dns| {
+		dns.system.is_some()
+			|| dns.servers.is_some()
+			|| dns.timeout.is_some()
+			|| dns.search_domains.is_some()
+			|| dns.ndots.is_some()
+			|| dns.hosts_file.is_some()
+			|| dns.exempt_domains.is_some()
+			|| dns.serve_stale.is_some()
+			|| dns.max_stale.is_some()
+	}) {
+		return absent("resolver");
+	}
+
+	let _ = (options, absent);
+	Ok(())
+}
+
+/// The resolver's own observability, which needs a resolver of Faith's own to report on.
+#[cfg(feature = "dns")]
+#[napi]
+impl Agent {
+	/// Returns the DNS servers this agent resolves through, in the order they are queried, so
+	/// "are my lookups actually encrypted" is answerable from inside the process.
+	///
+	/// Each entry gives the server's address, the transport in use (`udp`, `tcp`, `tls`, `https`,
+	/// `quic`, or `h3`), and how that transport was arrived at (`configured` or `conventional`).
+	/// The list is empty until the resolver has been used, because it reads its configuration on
+	/// first use, and empty for an agent using the system resolver.
+	#[napi]
+	pub fn resolvers(&self) -> Vec<ResolverInfo> {
+		self.inner
+			.resolvers()
+			.into_iter()
+			.map(|report| ResolverInfo {
+				address: report.address,
+				transport: report.transport,
+				source: report.source,
+			})
+			.collect()
+	}
+}
+
+/// The cookie jar's verbs, which exist when the build keeps a jar.
+#[cfg(feature = "cookies")]
+use std::str::FromStr as _;
+
+#[cfg(feature = "cookies")]
+use reqwest::Url;
+
+#[cfg(feature = "cookies")]
+#[napi]
+impl Agent {
+	/// Add a cookie into the agent.
+	///
+	/// The cookie goes through the same rules a `Set-Cookie` header would, with the url supplying
+	/// the scheme and host they read, so this does nothing if:
+	/// - the cookie store is disabled
+	/// - the url is malformed
+	/// - the cookie does not parse
+	/// - a `__Host-` or `__Secure-` name prefix is not satisfied
+	/// - the cookie is larger than `cookies.maxSize`
+	#[napi]
+	pub fn add_cookie(&self, url: String, cookie: String) {
+		let Ok(url) = Url::from_str(&url) else {
+			return;
+		};
+
+		let Some(jar) = self.inner.cookies() else {
+			return;
+		};
+
+		jar.add_cookie_str(&cookie, &url);
+	}
+
+	/// Retrieve a cookie from the store.
+	///
+	/// Returns `null` if:
+	/// - there's no cookie at this url
+	/// - the cookie store is disabled
+	/// - the url is malformed
+	/// - the cookie cannot be represented as a string
+	#[napi]
+	pub fn get_cookie(&self, url: String) -> Option<String> {
+		let url = Url::from_str(&url).ok()?;
+		self.inner
+			.cookies()?
+			.request_cookie_header(&url)
+			.and_then(|value| value.to_str().ok().map(ToOwned::to_owned))
+	}
 }

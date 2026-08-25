@@ -13,7 +13,11 @@ use reqwest::Client;
 use reqwest_middleware::ClientWithMiddleware;
 use url::Url;
 use web_faith_conn_tracker::{ConnectionSnapshot, ConnectionTracker};
+
+#[cfg(feature = "cookies")]
 use web_faith_cookies::FaithJar;
+
+#[cfg(feature = "dns")]
 use web_faith_dns::{FaithResolver, ResolverReport};
 
 #[cfg(feature = "http3")]
@@ -25,7 +29,7 @@ use crate::{
 	warm_up::origin_key,
 };
 
-#[cfg(feature = "http3")]
+#[cfg(all(feature = "http3", feature = "dns"))]
 use crate::client::install_https_sink;
 
 mod build;
@@ -75,6 +79,7 @@ pub struct Live {
 	/// The DNS resolver, shared with the client so a prefetch warms the cache requests read. `None`
 	/// under the system resolver, where there is no such cache.
 	// spec:WARM
+	#[cfg(feature = "dns")]
 	pub dns_resolver: Option<FaithResolver>,
 	#[cfg(feature = "http3")]
 	pub alt_svc_cache: Option<Arc<AltSvcCache>>,
@@ -109,6 +114,7 @@ pub struct Agent {
 	// spec:NETCHG#reach-across-the-subsystems
 	pub warm_generation: Arc<AtomicU64>,
 	/// The jar outlives a close and stays readable from a closed agent.
+	#[cfg(feature = "cookies")]
 	pub cookie_jar: Option<Arc<FaithJar>>,
 	pub stats: Arc<InnerAgentStats>,
 	pub conn_tracker: Arc<ConnectionTracker>,
@@ -147,6 +153,7 @@ impl Agent {
 	/// through the type `web-faith-cookies` documents. It outlives a close and stays readable from a
 	/// closed agent.
 	// spec:COOK
+	#[cfg(feature = "cookies")]
 	pub fn cookies(&self) -> Option<&Arc<FaithJar>> {
 		self.cookie_jar.as_ref()
 	}
@@ -166,6 +173,7 @@ impl Agent {
 	}
 
 	/// The DNS resolver, if the agent has one of its own and is still open.
+	#[cfg(feature = "dns")]
 	pub fn dns_resolver(&self) -> Option<FaithResolver> {
 		self.live()
 			.as_ref()
@@ -262,7 +270,9 @@ impl Agent {
 			// validated at construction, so a failure here is not the caller's to answer for, and an
 			// agent that still works on the old network beats one that works nowhere.
 			let built = self.recipe.build(
+				#[cfg(feature = "cookies")]
 				self.cookie_jar.as_ref(),
+				#[cfg(feature = "dns")]
 				live.dns_resolver.as_ref(),
 				#[cfg(feature = "http3")]
 				live.alt_svc_cache.as_ref(),
@@ -279,6 +289,7 @@ impl Agent {
 					// The sink holds the prober, which has just been replaced along with the client
 					// it sends on; leaving the old one installed would aim DNS-triggered probes at a
 					// client that has been dropped.
+					#[cfg(feature = "dns")]
 					install_https_sink(
 						live.dns_resolver.as_ref(),
 						live.alt_svc_cache.as_ref(),
@@ -294,6 +305,7 @@ impl Agent {
 			// resolver drops what it read off the old one and reads again when next used. Under the
 			// system resolver there is no resolver here and so nothing to reset.
 			// spec:DNS
+			#[cfg(feature = "dns")]
 			if let Some(resolver) = &live.dns_resolver {
 				resolver.reset();
 			}
@@ -337,6 +349,7 @@ impl Agent {
 	/// The list is empty until the resolver has been used, because it reads its configuration on
 	/// first use, and empty for an agent using the system resolver.
 	// spec:OBS#resolvers
+	#[cfg(feature = "dns")]
 	pub fn resolvers(&self) -> Vec<ResolverReport> {
 		self.dns_resolver()
 			.as_ref()

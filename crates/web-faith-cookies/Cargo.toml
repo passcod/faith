@@ -24,4 +24,4 @@ url.workspace = true
 
 [features]
 # Implement reqwest's `CookieStore`, so the jar can serve as its cookie provider.
-reqwest = ["dep:reqwest"]
+reqwest = ["dep:reqwest", "reqwest/cookies"]

@@ -18,4 +18,9 @@ reqwest.workspace = true
 reqwest-middleware.workspace = true
 tokio.workspace = true
 url.workspace = true
-web-faith-dns.workspace = true
+web-faith-dns = { workspace = true, optional = true }
+
+[features]
+default = ["dns"]
+# Feed `HTTPS` DNS records into the store, so an origin is probe-worthy before anything connects.
+dns = ["dep:web-faith-dns"]

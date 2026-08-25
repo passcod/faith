@@ -3,6 +3,8 @@
 use http_cache_reqwest::CacheMode;
 use napi::{Either, bindgen_prelude::Buffer};
 use web_faith::{client::RedirectPolicy, options};
+
+#[cfg(feature = "cookies")]
 use web_faith_cookies::CookieLimits;
 
 use crate::agent::{AgentOptions, CacheStore, Http3Congestion};
@@ -25,12 +27,14 @@ impl From<AgentOptions> for options::AgentOptions {
 				shared: cache.shared,
 			}),
 			// `false` and an absent value both mean no jar; `true` means one with default limits.
+			#[cfg(feature = "cookies")]
 			cookies: match opts.cookies {
 				None | Some(Either::A(false)) => None,
 				Some(Either::A(true)) => Some(CookieLimits::default()),
 				Some(Either::B(cookies)) => Some((&cookies).into()),
 			},
 			dns: opts.dns.map(|dns| options::DnsOptions {
+				#[cfg(feature = "dns")]
 				system: dns.system,
 				overrides: dns.overrides.map(|overrides| {
 					overrides
@@ -41,13 +45,21 @@ impl From<AgentOptions> for options::AgentOptions {
 						})
 						.collect()
 				}),
+				#[cfg(feature = "dns")]
 				servers: dns.servers,
+				#[cfg(feature = "dns")]
 				timeout: dns.timeout,
+				#[cfg(feature = "dns")]
 				search_domains: dns.search_domains,
+				#[cfg(feature = "dns")]
 				ndots: dns.ndots,
+				#[cfg(feature = "dns")]
 				hosts_file: dns.hosts_file,
+				#[cfg(feature = "dns")]
 				exempt_domains: dns.exempt_domains,
+				#[cfg(feature = "dns")]
 				serve_stale: dns.serve_stale,
+				#[cfg(feature = "dns")]
 				max_stale: dns.max_stale,
 			}),
 			flow_control: opts.flow_control.map(|flow| options::FlowControlOptions {

@@ -31,11 +31,16 @@ impl Agent {
 			return Err(FaithErrorKind::AddressParse.into());
 		};
 
+		#[cfg(feature = "dns")]
 		let resolver = self.dns_resolver();
 		Ok(async move {
+			// Nothing to warm without Faith's own resolver: the platform's cache is not ours to fill.
+			#[cfg(feature = "dns")]
 			if let Some(resolver) = resolver {
 				resolver.prefetch(&host).await;
 			}
+			#[cfg(not(feature = "dns"))]
+			let _ = host;
 		})
 	}
 

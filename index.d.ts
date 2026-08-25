@@ -50,28 +50,6 @@ export declare class Agent {
    */
   networkChanged(): void
   /**
-   * Add a cookie into the agent.
-   *
-   * The cookie goes through the same rules a `Set-Cookie` header would, with the url supplying
-   * the scheme and host they read, so this does nothing if:
-   * - the cookie store is disabled
-   * - the url is malformed
-   * - the cookie does not parse
-   * - a `__Host-` or `__Secure-` name prefix is not satisfied
-   * - the cookie is larger than `cookies.maxSize`
-   */
-  addCookie(url: string, cookie: string): void
-  /**
-   * Retrieve a cookie from the store.
-   *
-   * Returns `null` if:
-   * - there's no cookie at this url
-   * - the cookie store is disabled
-   * - the url is malformed
-   * - the cookie cannot be represented as a string
-   */
-  getCookie(url: string): string | null
-  /**
    * Returns statistics gathered by this agent:
    *
    * - `requestsSent`
@@ -90,16 +68,6 @@ export declare class Agent {
    * on field availability. If the platform isn't supported at all, this will always return empty.
    */
   connections(): Array<ConnectionInfo>
-  /**
-   * Returns the DNS servers this agent resolves through, in the order they are queried, so
-   * "are my lookups actually encrypted" is answerable from inside the process.
-   *
-   * Each entry gives the server's address, the transport in use (`udp`, `tcp`, `tls`, `https`,
-   * `quic`, or `h3`), and how that transport was arrived at (`configured` or `conventional`).
-   * The list is empty until the resolver has been used, because it reads its configuration on
-   * first use, and empty for an agent using the system resolver.
-   */
-  resolvers(): Array<ResolverInfo>
   /**
    * Warm the DNS cache for `host`, so a later request to it skips the lookup.
    *
@@ -124,6 +92,38 @@ export declare class Agent {
    * does a call on a closed agent.
    */
   preconnect(origin: string): Promise<undefined>
+  /**
+   * Returns the DNS servers this agent resolves through, in the order they are queried, so
+   * "are my lookups actually encrypted" is answerable from inside the process.
+   *
+   * Each entry gives the server's address, the transport in use (`udp`, `tcp`, `tls`, `https`,
+   * `quic`, or `h3`), and how that transport was arrived at (`configured` or `conventional`).
+   * The list is empty until the resolver has been used, because it reads its configuration on
+   * first use, and empty for an agent using the system resolver.
+   */
+  resolvers(): Array<ResolverInfo>
+  /**
+   * Add a cookie into the agent.
+   *
+   * The cookie goes through the same rules a `Set-Cookie` header would, with the url supplying
+   * the scheme and host they read, so this does nothing if:
+   * - the cookie store is disabled
+   * - the url is malformed
+   * - the cookie does not parse
+   * - a `__Host-` or `__Secure-` name prefix is not satisfied
+   * - the cookie is larger than `cookies.maxSize`
+   */
+  addCookie(url: string, cookie: string): void
+  /**
+   * Retrieve a cookie from the store.
+   *
+   * Returns `null` if:
+   * - there's no cookie at this url
+   * - the cookie store is disabled
+   * - the url is malformed
+   * - the cookie cannot be represented as a string
+   */
+  getCookie(url: string): string | null
 }
 
 export declare class AgentStats {

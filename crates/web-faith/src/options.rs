@@ -11,6 +11,8 @@
 use std::net::{IpAddr, Ipv6Addr, SocketAddr, UdpSocket};
 
 use http_cache_reqwest::CacheMode;
+
+#[cfg(feature = "cookies")]
 use web_faith_cookies::CookieLimits;
 
 use crate::client::{
@@ -72,6 +74,7 @@ pub struct DnsOptions {
 	/// Default: false.
 	///
 	/// [Hickory]: https://hickory-dns.org/
+	#[cfg(feature = "dns")]
 	pub system: Option<bool>,
 	/// Override DNS resolution for specific domains. This takes effect even with `dns.system: true`.
 	///
@@ -98,31 +101,37 @@ pub struct DnsOptions {
 	/// its scheme is not one of the above, and combining it with `dns.system` throws.
 	///
 	/// Default: system discovery.
+	#[cfg(feature = "dns")]
 	pub servers: Option<Vec<String>>,
 	/// Bound name resolution across the whole server list, in milliseconds. Exhausting several dead
 	/// servers costs a single timeout rather than one per server.
 	///
 	/// Default: 5000.
+	#[cfg(feature = "dns")]
 	pub timeout: Option<u32>,
 	/// Replace the system's search list, the domains appended to a name that is not fully
 	/// qualified. Independent of `dns.servers`.
 	///
 	/// Default: the system's search list.
+	#[cfg(feature = "dns")]
 	pub search_domains: Option<Vec<String>>,
 	/// How many dots a name must contain before it is tried as given, ahead of the search list.
 	/// Independent of `dns.servers`.
 	///
 	/// Default: the system's setting.
+	#[cfg(feature = "dns")]
 	pub ndots: Option<u32>,
 	/// Turn hosts-file lookup on or off. When unset, follows the platform's own convention.
 	///
 	/// Default: platform convention.
+	#[cfg(feature = "dns")]
 	pub hosts_file: Option<bool>,
 	/// Further domains to exempt from the configured or encrypted resolver, for the internal
 	/// suffixes a network uses. Added to the always-exempt `localhost`, `.local`, and the network's
 	/// own DNS suffix; a domain is exempt when it matches an entry exactly or is a subdomain of one.
 	///
 	/// Default: no extra exemptions.
+	#[cfg(feature = "dns")]
 	pub exempt_domains: Option<Vec<String>>,
 	/// Serve an expired cache entry immediately and refresh it in the background, rather than making
 	/// the lookup wait for a fresh answer. A host's address changes rarely, so an expired answer is
@@ -133,6 +142,7 @@ pub struct DnsOptions {
 	/// expired entry is discarded and the lookup blocks on a fresh answer.
 	///
 	/// Default: true.
+	#[cfg(feature = "dns")]
 	pub serve_stale: Option<bool>,
 	/// How far past expiry an answer may still be served, in milliseconds. An entry older than this
 	/// is discarded rather than served: an answer stale enough stops being evidence about where the
@@ -140,6 +150,7 @@ pub struct DnsOptions {
 	/// did change.
 	///
 	/// Default: 3600000 (one hour).
+	#[cfg(feature = "dns")]
 	pub max_stale: Option<u32>,
 }
 
@@ -573,6 +584,7 @@ pub struct AgentOptions {
 	///
 	/// You may use `agent.getCookie(url: string)` and `agent.addCookie(url: string, value: string)` to add
 	/// and retrieve cookies from the store.
+	#[cfg(feature = "cookies")]
 	pub cookies: Option<CookieLimits>,
 	/// Settings related to DNS. This is a nested object.
 	pub dns: Option<DnsOptions>,

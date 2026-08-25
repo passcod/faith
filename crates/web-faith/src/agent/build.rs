@@ -16,7 +16,11 @@ use http_cache_reqwest::{
 use moka::sync::Cache as MokaCache;
 use reqwest::{Identity, tls::Certificate};
 use web_faith_conn_tracker::ConnectionTracker;
+
+#[cfg(feature = "cookies")]
 use web_faith_cookies::FaithJar;
+
+#[cfg(feature = "dns")]
 use web_faith_dns::{
 	DEFAULT_MAX_STALE, FaithResolver, ResolverSettings, ServerSpec, parse_domains,
 };
@@ -36,10 +40,10 @@ use crate::{
 };
 
 #[cfg(feature = "http3")]
-use crate::{
-	client::{H3UpgradeRecipe, install_https_sink},
-	options::Http3Congestion,
-};
+use crate::{client::H3UpgradeRecipe, options::Http3Congestion};
+
+#[cfg(all(feature = "http3", feature = "dns"))]
+use crate::client::install_https_sink;
 
 impl Agent {
 	/// This is what both surfaces land on, so the defaults a caller gets are settled here rather
@@ -51,6 +55,7 @@ impl Agent {
 		// agent's clients are built from (spec:NETCHG).
 		let AgentOptions {
 			cache,
+			#[cfg(feature = "cookies")]
 			cookies,
 			dns,
 			flow_control,
@@ -91,13 +96,20 @@ impl Agent {
 		// `cookies: true` takes the default limits; an options object tunes them. (spec:COOK)
 		// The jar is installed on the client by the recipe, so it survives a rebuild
 		// (spec:NETCHG#what-the-signal-keeps).
+		#[cfg(feature = "cookies")]
 		let cookie_jar = cookies.map(|limits| Arc::new(FaithJar::new(limits)));
 
 		let dns = dns.unwrap_or_default();
+		// Without Faith's own resolver every name goes to the platform, so that is the only
+		// answer there is to give.
+		#[cfg(feature = "dns")]
 		let dns_system = dns.system.unwrap_or(false);
+		#[cfg(not(feature = "dns"))]
+		let dns_system = true;
 		// Naming servers and asking for the system resolver at once is a contradiction rather than
 		// a preference, since the system resolver is not Faith's to point at listed servers
 		// (spec:DNS#system-resolver).
+		#[cfg(feature = "dns")]
 		if dns_system
 			&& dns
 				.servers
@@ -143,6 +155,7 @@ impl Agent {
 		// order each resolver is reached by (spec:DNS#transports). The system resolver
 		// (getaddrinfo) has no in-process cache Faith can warm, so no resolver is installed there
 		// and `prefetchDns` resolves as a no-op (spec:WARM).
+		#[cfg(feature = "dns")]
 		let dns_resolver = if dns_system {
 			None
 		} else {
@@ -486,7 +499,9 @@ impl Agent {
 		Self::build(
 			recipe,
 			settings,
+			#[cfg(feature = "cookies")]
 			cookie_jar,
+			#[cfg(feature = "dns")]
 			dns_resolver,
 			#[cfg(feature = "http3")]
 			alt_svc_cache,
@@ -510,13 +525,15 @@ impl Agent {
 	pub fn build(
 		recipe: ClientRecipe,
 		settings: AgentSettings,
-		cookie_jar: Option<Arc<FaithJar>>,
-		dns_resolver: Option<FaithResolver>,
+		#[cfg(feature = "cookies")] cookie_jar: Option<Arc<FaithJar>>,
+		#[cfg(feature = "dns")] dns_resolver: Option<FaithResolver>,
 		#[cfg(feature = "http3")] alt_svc_cache: Option<Arc<AltSvcCache>>,
 	) -> Result<Self, FaithError> {
 		let conn_timeout = recipe.conn_timeout();
 		let built = recipe.build(
+			#[cfg(feature = "cookies")]
 			cookie_jar.as_ref(),
+			#[cfg(feature = "dns")]
 			dns_resolver.as_ref(),
 			#[cfg(feature = "http3")]
 			alt_svc_cache.as_ref(),
@@ -525,7 +542,7 @@ impl Agent {
 		// Only now do all three exist: the resolver is built before the cache, and the prober
 		// holds a client that holds the resolver, so this is the earliest the loop can be closed
 		// (spec:DNS#https-records).
-		#[cfg(feature = "http3")]
+		#[cfg(all(feature = "http3", feature = "dns"))]
 		install_https_sink(
 			dns_resolver.as_ref(),
 			alt_svc_cache.as_ref(),
@@ -537,6 +554,7 @@ impl Agent {
 			live: Arc::new(RwLock::new(Some(Live {
 				client: built.client,
 				raw_client: built.raw_client,
+				#[cfg(feature = "dns")]
 				dns_resolver,
 				#[cfg(feature = "http3")]
 				alt_svc_cache,
@@ -552,6 +570,7 @@ impl Agent {
 				.time_to_live(Duration::from_secs(300))
 				.build(),
 			warm_generation: Default::default(),
+			#[cfg(feature = "cookies")]
 			cookie_jar,
 			stats: Default::default(),
 			conn_tracker: ConnectionTracker::new(conn_timeout),

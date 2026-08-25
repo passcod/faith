@@ -48,8 +48,8 @@ url.workspace = true
 web-faith.workspace = true
 web-faith-alt-svc = { workspace = true, optional = true }
 web-faith-conn-tracker.workspace = true
-web-faith-cookies = { workspace = true, features = ["reqwest"] }
-web-faith-dns = { workspace = true, features = ["reqwest"] }
+web-faith-cookies = { workspace = true, features = ["reqwest"], optional = true }
+web-faith-dns = { workspace = true, features = ["reqwest"], optional = true }
 web-faith-encoding.workspace = true
 
 [target.'cfg(target_os = "linux")'.dependencies]
@@ -64,5 +64,12 @@ windows.workspace = true
 napi-build.workspace = true
 
 [features]
-default = ["http3"]
+default = ["cookies", "dns", "http3"]
+cookies = ["dep:web-faith-cookies", "reqwest/cookies", "web-faith/cookies"]
+dns = [
+    "dep:web-faith-dns",
+    "reqwest/hickory-dns",
+    "web-faith/dns",
+    "web-faith-alt-svc?/dns",
+]
 http3 = ["reqwest/http3", "dep:web-faith-alt-svc", "web-faith/http3"]

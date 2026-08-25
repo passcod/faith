@@ -8,9 +8,12 @@
 
 use std::{
 	net::{IpAddr, SocketAddr},
-	sync::Arc,
 	time::Duration,
 };
+
+// Reached only by the pieces the agent shares into a rebuilt client, each behind its own feature.
+#[cfg(any(feature = "cookies", feature = "http3"))]
+use std::sync::Arc;
 
 use http::header::HeaderMap;
 use http_cache_reqwest::{
@@ -18,15 +21,21 @@ use http_cache_reqwest::{
 };
 use reqwest::{Client, Identity, redirect::Policy, tls::Certificate};
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
+#[cfg(feature = "cookies")]
 use web_faith_cookies::FaithJar;
+
+#[cfg(feature = "dns")]
 use web_faith_dns::FaithResolver;
+
+#[cfg(feature = "dns")]
+use crate::retry::StaleAddressRetry;
 
 #[cfg(feature = "http3")]
 use web_faith_alt_svc::{AltSvcCache, AltSvcMiddleware, H3Prober};
 
 use crate::{
 	error::{FaithError, FaithErrorKind},
-	retry::{DeadConnectionRetry, StaleAddressRetry},
+	retry::DeadConnectionRetry,
 };
 
 #[cfg(feature = "http3")]
@@ -236,7 +245,7 @@ pub struct ClientRecipe {
 ///
 /// Re-called on a network change, where the prober is rebuilt with the client it sends on.
 // spec:DNS#https-records
-#[cfg(feature = "http3")]
+#[cfg(all(feature = "http3", feature = "dns"))]
 pub fn install_https_sink(
 	dns_resolver: Option<&FaithResolver>,
 	alt_svc_cache: Option<&Arc<AltSvcCache>>,
@@ -282,8 +291,8 @@ impl ClientRecipe {
 	// spec:NETCHG#what-the-signal-keeps
 	pub fn build(
 		&self,
-		cookie_jar: Option<&Arc<FaithJar>>,
-		dns_resolver: Option<&FaithResolver>,
+		#[cfg(feature = "cookies")] cookie_jar: Option<&Arc<FaithJar>>,
+		#[cfg(feature = "dns")] dns_resolver: Option<&FaithResolver>,
 		#[cfg(feature = "http3")] alt_svc_cache: Option<&Arc<AltSvcCache>>,
 	) -> Result<BuiltClients, FaithError> {
 		let mut client = Client::builder()
@@ -295,6 +304,7 @@ impl ClientRecipe {
 			client = client.local_address(ip);
 		}
 
+		#[cfg(feature = "cookies")]
 		if let Some(jar) = cookie_jar {
 			client = client.cookie_provider(jar.clone());
 		}
@@ -306,6 +316,7 @@ impl ClientRecipe {
 			client = client.resolve_to_addrs(domain, addresses);
 		}
 
+		#[cfg(feature = "dns")]
 		if self.dns_system {
 			client = client.no_hickory_dns();
 		} else if let Some(resolver) = dns_resolver {
@@ -469,7 +480,10 @@ impl ClientRecipe {
 		// treatment as the original one: the two answer different questions, and a
 		// fresh address deserves its own chance to draw a dead pooled connection.
 		// Inside the Alt-Svc and cache layers for the reason given below.
-		client = client.with(StaleAddressRetry::new(dns_resolver.cloned()));
+		#[cfg(feature = "dns")]
+		{
+			client = client.with(StaleAddressRetry::new(dns_resolver.cloned()));
+		}
 
 		// Registered last, so it sits innermost and wraps nothing but the exchange
 		// itself. Inside the Alt-Svc layer rather than outside it, because each

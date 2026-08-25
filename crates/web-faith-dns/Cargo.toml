@@ -20,4 +20,4 @@ reqwest = { workspace = true, optional = true }
 
 [features]
 # Implement reqwest's `Resolve`, so the resolver can be installed on its client.
-reqwest = ["dep:reqwest"]
+reqwest = ["dep:reqwest", "reqwest/hickory-dns"]
