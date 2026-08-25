@@ -7,7 +7,7 @@ use std::{
 	net::{IpAddr, Ipv4Addr, SocketAddr, SocketAddrV4, SocketAddrV6},
 	str::FromStr,
 	sync::{
-		Arc,
+		Arc, RwLock,
 		atomic::{AtomicU64, Ordering},
 	},
 	time::Duration,
@@ -71,27 +71,44 @@ pub struct AgentSettings {
 	pub has_default_priority: bool,
 }
 
-/// An HTTP client with its own connection pool, caches, and resolver.
+/// What an agent holds while it is open, and gives up when it is closed.
 ///
-/// Cloning one is cheap and every clone names the same underlying agent, which is what lets a
-/// request take a handle of its own without opening a second pool.
-#[derive(Debug, Clone)]
-pub struct Agent {
-	/// `None` once [`Agent::close`] has been called. The heavy resources
-	/// (connection pool, DNS resolver, background tasks) live inside this
+/// Behind a shared lock because closing acts on the agent rather than on the handle it was called
+/// through: every clone names the same one, so every clone sees the result.
+#[derive(Debug)]
+pub struct Live {
+	/// The heavy resources (connection pool, DNS resolver, background tasks) live inside this
 	/// client, so dropping it is what actually releases them.
-	pub client: Option<ClientWithMiddleware>,
-	/// The raw `reqwest::Client` underlying [`Self::client`], sharing its connection pool. A
-	/// a warm-up sends its synthetic request here rather than through the middleware
-	/// stack, which bypasses the HTTP cache and the Alt-Svc layer (and so keeps the warm-up out of
-	/// request accounting), while still pooling the connection foreground requests reuse. `None`
-	/// once the agent is closed.
+	pub client: ClientWithMiddleware,
+	/// The raw `reqwest::Client` underlying [`Self::client`], sharing its connection pool. A warm-up
+	/// sends its synthetic request here rather than through the middleware stack, which bypasses the
+	/// HTTP cache and the Alt-Svc layer, and so keeps the warm-up out of request accounting, while
+	/// still pooling the connection foreground requests reuse.
 	// spec:WARM
-	pub raw_client: Option<Client>,
-	/// Faith's DNS resolver, shared with [`Self::client`] so [`Self::prefetch_dns`] warms the cache requests
-	/// read. `None` under the system resolver, where there is no such cache.
+	pub raw_client: Client,
+	/// The DNS resolver, shared with the client so a prefetch warms the cache requests read. `None`
+	/// under the system resolver, where there is no such cache.
 	// spec:WARM
 	pub dns_resolver: Option<FaithResolver>,
+	#[cfg(feature = "http3")]
+	pub alt_svc_cache: Option<Arc<AltSvcCache>>,
+	/// Held so closing can abort in-flight background probes: each one owns a clone of the raw
+	/// client, which would otherwise keep the connection pool alive past close for up to the probe
+	/// timeout.
+	#[cfg(feature = "http3")]
+	pub h3_prober: Option<Arc<H3Prober>>,
+}
+
+/// An HTTP client with its own connection pool, caches, and resolver.
+///
+/// Cloning one is cheap and every clone names the same underlying agent, so cloning is how a request
+/// gets an agent to run on rather than a way to get a second pool. Because clones share, closing
+/// acts on the agent itself and every handle to it sees the result.
+// spec:AGENT
+#[derive(Debug, Clone)]
+pub struct Agent {
+	/// `None` once [`Agent::close`] has been called.
+	live: Arc<RwLock<Option<Live>>>,
 	/// Origins with a warm-up connection opened within the pool idle window, so a repeat
 	/// warm-up does no new work. Keyed by `scheme://host:port`; entries expire with the idle
 	/// timeout.
@@ -101,21 +118,14 @@ pub struct Agent {
 	/// origin do not open duplicate connections.
 	// spec:WARM
 	pub warming: MokaCache<String, ()>,
-	/// Bumped by [`Self::network_changed`], so a warm-up that was in flight across the signal does not
-	/// record its origin as warm: its connection went into the pool that was just dropped.
+	/// Bumped by [`Self::network_changed`], so a warm-up that was in flight across the signal does
+	/// not record its origin as warm: its connection went into the pool that was just dropped.
 	// spec:NETCHG#reach-across-the-subsystems
 	pub warm_generation: Arc<AtomicU64>,
+	/// The jar outlives a close and stays readable from a closed agent.
 	pub cookie_jar: Option<Arc<FaithJar>>,
 	pub stats: Arc<InnerAgentStats>,
 	pub conn_tracker: Arc<ConnectionTracker>,
-	#[cfg(feature = "http3")]
-	#[allow(dead_code)]
-	pub alt_svc_cache: Option<Arc<AltSvcCache>>,
-	/// Held so `close()` can abort in-flight background probes: each one owns a
-	/// clone of the raw client, which would otherwise keep the connection pool
-	/// alive past close for up to the probe timeout.
-	#[cfg(feature = "http3")]
-	pub h3_prober: Option<Arc<H3Prober>>,
 	/// Whether an upgrade may follow a port the origin advertised. A request needs it to stop a
 	/// rewritten port from being reported as a redirect.
 	pub h3_follow_advertised_port: bool,
@@ -124,30 +134,72 @@ pub struct Agent {
 	// spec:WARM#preconnect
 	#[cfg(feature = "http3")]
 	pub h3_upgrade_enabled: bool,
-	/// Whether a streaming request body may go out over HTTP/1.x, which the fetch standard
-	/// otherwise reserves to HTTP/2 and HTTP/3..
+	/// Whether a streaming request body may go out over HTTP/1.x, which the fetch standard otherwise
+	/// reserves to HTTP/2 and HTTP/3.
 	// spec:QUIRK#http-1-x-request-body-streaming
 	pub quirk_h1_request_streaming: bool,
-	/// The agent's default `Accept-Encoding`, if one was set among its default headers.
-	/// which decides the codings a response is decoded under when a request adds none of
-	/// its own (see [`web_faith_encoding`]).
+	/// The agent's default `Accept-Encoding`, if one sits among its default headers, which decides
+	/// the codings a response is decoded under when a request adds none of its own.
 	pub default_accept_encoding: Option<HeaderValue>,
-	/// The agent's default `Content-Encoding`, if one was set among its default headers.
-	/// A request layers its own coding on top of this rather than
-	/// displacing it.
+	/// The agent's default `Content-Encoding`, if one sits among its default headers. A request
+	/// layers its own coding on top of this rather than displacing it.
 	// spec:ENC
 	pub default_content_encoding: Option<HeaderValue>,
-	/// Whether a `Priority` header sits among the agent's default headers. That default wins over the header a
-	/// request's priority would derive.
+	/// Whether a `Priority` header sits among the agent's default headers. That default wins over
+	/// the header a request's priority would derive.
 	pub has_default_priority: bool,
-	/// How to build this agent's clients, so [`Self::network_changed`] can build them again
-	///. Shared rather than cloned per agent clone: every clone builds the same
-	/// client from the same recipe, and a request takes a handle per send.
+	/// How to build this agent's clients, so [`Self::network_changed`] can build them again. Shared
+	/// rather than cloned per handle: every handle builds the same client from the same recipe.
 	// spec:NETCHG
 	pub recipe: Arc<ClientRecipe>,
 }
 
 impl Agent {
+	/// Take a handle on the client, or `None` once the agent is closed.
+	///
+	/// A request takes its own handle at the moment it is issued, which is what lets one already in
+	/// flight finish while a later one is refused.
+	// spec:AGENT
+	pub fn client(&self) -> Option<ClientWithMiddleware> {
+		self.live().as_ref().map(|live| live.client.clone())
+	}
+
+	/// Take a handle on the raw client a warm-up sends through, or `None` once closed.
+	pub fn raw_client(&self) -> Option<Client> {
+		self.live().as_ref().map(|live| live.raw_client.clone())
+	}
+
+	/// The DNS resolver, if the agent has one of its own and is still open.
+	pub fn dns_resolver(&self) -> Option<FaithResolver> {
+		self.live()
+			.as_ref()
+			.and_then(|live| live.dns_resolver.clone())
+	}
+
+	#[cfg(feature = "http3")]
+	fn alt_svc_cache(&self) -> Option<Arc<AltSvcCache>> {
+		self.live()
+			.as_ref()
+			.and_then(|live| live.alt_svc_cache.clone())
+	}
+
+	#[cfg(feature = "http3")]
+	fn h3_prober(&self) -> Option<Arc<H3Prober>> {
+		self.live().as_ref().and_then(|live| live.h3_prober.clone())
+	}
+
+	fn live(&self) -> std::sync::RwLockReadGuard<'_, Option<Live>> {
+		self.live
+			.read()
+			.unwrap_or_else(|poisoned| poisoned.into_inner())
+	}
+
+	fn live_mut(&self) -> std::sync::RwLockWriteGuard<'_, Option<Live>> {
+		self.live
+			.write()
+			.unwrap_or_else(|poisoned| poisoned.into_inner())
+	}
+
 	/// Build an agent from options, validating them into the recipe its clients are built from.
 	///
 	/// This is what both surfaces land on, so the defaults a caller gets are settled here rather
@@ -637,9 +689,15 @@ impl Agent {
 		);
 
 		Ok(Self {
-			client: Some(built.client),
-			raw_client: Some(built.raw_client),
-			dns_resolver,
+			live: Arc::new(RwLock::new(Some(Live {
+				client: built.client,
+				raw_client: built.raw_client,
+				dns_resolver,
+				#[cfg(feature = "http3")]
+				alt_svc_cache,
+				#[cfg(feature = "http3")]
+				h3_prober: built.prober,
+			}))),
 			// A warm-up connection is warm only as long as the pool keeps it idle, so the record
 			// that an origin is warm expires with that same window.
 			warmed: MokaCache::builder().time_to_live(conn_timeout).build(),
@@ -652,10 +710,6 @@ impl Agent {
 			cookie_jar,
 			stats: Default::default(),
 			conn_tracker: ConnectionTracker::new(conn_timeout),
-			#[cfg(feature = "http3")]
-			alt_svc_cache,
-			#[cfg(feature = "http3")]
-			h3_prober: built.prober,
 			h3_follow_advertised_port: settings.h3_follow_advertised_port,
 			#[cfg(feature = "http3")]
 			h3_upgrade_enabled: recipe.h3_upgrade.enabled,
@@ -675,25 +729,26 @@ impl Agent {
 	/// Requests already in flight run to completion. Any new request on a closed
 	/// agent throws a `Closed` error. Calling `close()` more than once is a
 	/// no-op. The cookie store, if any, remains readable through [`Self::cookie_header`].
-	pub fn close(&mut self) {
+	pub fn close(&self) {
 		// Dropping the client releases the reqwest connection pool and the
 		// Hickory resolver task; the alt-svc cache goes with it. The raw client
 		// shares that pool and the resolver, so it goes too, and both are what a
 		// later warm-up checks to refuse with the closed-agent error.
-		self.client = None;
-		self.raw_client = None;
-		self.dns_resolver = None;
+		// Taken out of the shared cell, so every handle on this agent sees it closed.
+		let Some(live) = self.live_mut().take() else {
+			return;
+		};
+
 		#[cfg(feature = "http3")]
-		{
-			// Probes hold a raw client clone; abort them so the pool doesn't
-			// outlive close by up to the probe timeout.
-			if let Some(prober) = &self.h3_prober {
-				prober.abort_all();
-			}
-			self.h3_prober = None;
-			self.alt_svc_cache = None;
+		// Probes hold a raw client clone; abort them so the pool doesn't outlive close by up to
+		// the probe timeout.
+		if let Some(prober) = &live.h3_prober {
+			prober.abort_all();
 		}
+
+		drop(live);
 	}
+
 	/// Tell the agent the network underneath it has changed, so it stops deciding from what it
 	/// learned about a network that is gone.
 	///
@@ -711,59 +766,64 @@ impl Agent {
 	/// they hold; the reset shapes what requests started afterwards draw on. Calling it on a
 	/// closed agent does nothing, and calling it repeatedly is harmless.
 	// spec:NETCHG
-	pub fn network_changed(&mut self) {
-		// A closed agent has already released all of this.
-		if self.client.is_none() {
-			return;
-		}
+	pub fn network_changed(&self) {
+		{
+			// Held across the rebuild so a close cannot land halfway through it.
+			let mut guard = self.live_mut();
+			// A closed agent has already released all of this.
+			let Some(live) = guard.as_mut() else {
+				return;
+			};
 
-		// reqwest cannot drop pooled connections short of dropping the client, so the client is
-		// rebuilt from the recipe the agent kept for this. Requests in flight hold their own
-		// clone of the old client (`fetch` clones the agent per request), so they run to
-		// completion and the old pool goes when the last of them finishes.
-		//
-		// A rebuild that fails leaves the agent on its existing client: the options were already
-		// validated at construction, so a failure here is not the caller's to answer for, and an
-		// agent that still works on the old network beats one that works nowhere.
-		let built = self.recipe.build(
-			self.cookie_jar.as_ref(),
-			self.dns_resolver.as_ref(),
-			#[cfg(feature = "http3")]
-			self.alt_svc_cache.as_ref(),
-		);
-		if let Ok(built) = built {
-			#[cfg(feature = "http3")]
-			{
-				// Abort probes running on the old client: each holds a clone of it, and their
-				// answers would describe the path that has just gone away.
-				if let Some(prober) = &self.h3_prober {
-					prober.abort_all();
+			// reqwest cannot drop pooled connections short of dropping the client, so the client is
+			// rebuilt from the recipe the agent kept for this. Requests in flight hold the handle
+			// they took when they were issued, so they run to completion and the old pool goes when
+			// the last of them finishes.
+			//
+			// A rebuild that fails leaves the agent on its existing client: the options were already
+			// validated at construction, so a failure here is not the caller's to answer for, and an
+			// agent that still works on the old network beats one that works nowhere.
+			let built = self.recipe.build(
+				self.cookie_jar.as_ref(),
+				live.dns_resolver.as_ref(),
+				#[cfg(feature = "http3")]
+				live.alt_svc_cache.as_ref(),
+			);
+			if let Ok(built) = built {
+				#[cfg(feature = "http3")]
+				{
+					// Abort probes running on the old client: each holds a clone of it, and their
+					// answers would describe the path that has just gone away.
+					if let Some(prober) = &live.h3_prober {
+						prober.abort_all();
+					}
+					live.h3_prober = built.prober;
+					// The sink holds the prober, which has just been replaced along with the client
+					// it sends on; leaving the old one installed would aim DNS-triggered probes at a
+					// client that has been dropped.
+					install_https_sink(
+						live.dns_resolver.as_ref(),
+						live.alt_svc_cache.as_ref(),
+						live.h3_prober.as_ref(),
+						self.h3_upgrade_enabled,
+					);
 				}
-				self.h3_prober = built.prober;
-				// The sink holds the prober, which has just been replaced along with the client
-				// it sends on; leaving the old one installed would aim DNS-triggered probes at a
-				// client that has been dropped.
-				install_https_sink(
-					self.dns_resolver.as_ref(),
-					self.alt_svc_cache.as_ref(),
-					self.h3_prober.as_ref(),
-					self.h3_upgrade_enabled,
-				);
+				live.client = built.client;
+				live.raw_client = built.raw_client;
 			}
-			self.client = Some(built.client);
-			self.raw_client = Some(built.raw_client);
-		}
 
-		// Names resolve afresh against the new network, through that network's own servers: the
-		// resolver drops what it read off the old one and reads again when next used. Under the
-		// system resolver there is no resolver here and so nothing to reset (spec:DNS).
-		if let Some(resolver) = &self.dns_resolver {
-			resolver.reset();
-		}
+			// Names resolve afresh against the new network, through that network's own servers: the
+			// resolver drops what it read off the old one and reads again when next used. Under the
+			// system resolver there is no resolver here and so nothing to reset.
+			// spec:DNS
+			if let Some(resolver) = &live.dns_resolver {
+				resolver.reset();
+			}
 
-		#[cfg(feature = "http3")]
-		if let Some(alt_svc_cache) = &self.alt_svc_cache {
-			alt_svc_cache.network_changed();
+			#[cfg(feature = "http3")]
+			if let Some(alt_svc_cache) = &live.alt_svc_cache {
+				alt_svc_cache.network_changed();
+			}
 		}
 
 		// The warm-up records describe pooled connections that have just been dropped, so a
@@ -831,7 +891,7 @@ impl Agent {
 	/// first use, and empty for an agent using the system resolver.
 	// spec:OBS#resolvers
 	pub fn resolvers(&self) -> Vec<ResolverReport> {
-		self.dns_resolver
+		self.dns_resolver()
 			.as_ref()
 			.map(FaithResolver::resolvers)
 			.unwrap_or_default()
@@ -849,7 +909,7 @@ impl Agent {
 
 	/// Whether [`Self::close`] has been called.
 	pub fn is_closed(&self) -> bool {
-		self.client.is_none()
+		self.live().is_none()
 	}
 
 	/// Warm the DNS cache for `host`, so a later request to it skips the lookup.
@@ -869,7 +929,7 @@ impl Agent {
 			return Err(FaithErrorKind::AddressParse.into());
 		};
 
-		let resolver = self.dns_resolver.clone();
+		let resolver = self.dns_resolver();
 		Ok(async move {
 			if let Some(resolver) = resolver {
 				resolver.prefetch(&host).await;
@@ -888,7 +948,7 @@ impl Agent {
 	/// to, or a closed agent, is refused here rather than by the future.
 	// spec:WARM
 	pub fn preconnect(&self, origin: &str) -> Result<impl Future<Output = ()> + use<>, FaithError> {
-		let Some(raw_client) = self.raw_client.clone() else {
+		let Some(raw_client) = self.raw_client() else {
 			return Err(FaithErrorKind::Closed.into());
 		};
 
@@ -910,11 +970,10 @@ impl Agent {
 		// spec:WARM#preconnect
 		#[cfg(feature = "http3")]
 		let h3_port = self
-			.alt_svc_cache
-			.as_ref()
+			.alt_svc_cache()
 			.filter(|_| self.h3_upgrade_enabled)
 			.and_then(|cache| {
-				if self.h3_prober.is_some() {
+				if self.h3_prober().is_some() {
 					cache.confirmed_port(&url)
 				} else {
 					cache.should_use_h3(&url)
@@ -1003,5 +1062,35 @@ mod tests {
 		assert_eq!(agent.recipe.user_agent, crate::USER_AGENT);
 		// No jar until the options ask for one.
 		assert!(agent.cookie_jar.is_none());
+	}
+
+	/// A handle taken before a close still works afterwards, which is what lets a request issued
+	/// just before the close run to completion.
+	#[tokio::test]
+	async fn a_handle_taken_before_a_close_survives_it() {
+		let agent = Agent::new().expect("default options build an agent");
+		let issued = agent.client().expect("an open agent hands out a client");
+
+		agent.close();
+
+		assert!(agent.is_closed());
+		assert!(
+			agent.client().is_none(),
+			"a closed agent hands out no more clients"
+		);
+		// The handle taken earlier is still usable; dropping it is what releases its share.
+		drop(issued);
+	}
+
+	/// Closing acts on the agent itself, so every clone sees it.
+	#[tokio::test]
+	async fn closing_a_clone_closes_the_agent() {
+		let mut agent = Agent::new().expect("default options build an agent");
+		let clone = agent.clone();
+
+		agent.close();
+
+		assert!(agent.is_closed());
+		assert!(clone.is_closed(), "a clone names the same agent");
 	}
 }

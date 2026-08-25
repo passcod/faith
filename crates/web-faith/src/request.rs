@@ -21,6 +21,7 @@ use reqwest::{
 	header::{ACCEPT_ENCODING, CONTENT_ENCODING, HeaderName, HeaderValue},
 	tls::TlsInfo,
 };
+use reqwest_middleware::ClientWithMiddleware;
 use tokio::sync::Mutex;
 use web_faith_encoding::{self as encoding, AcceptEncoding, Coding, DEFAULT_ACCEPT_ENCODING};
 
@@ -77,9 +78,15 @@ pub struct RequestOptions {
 
 /// Send a request on `agent`, and build the response it produces.
 ///
+/// `client` is the handle the caller took when the request was issued, rather than one taken here:
+/// a request counts as in flight from the moment it is issued, so one issued just before the agent
+/// closes runs to completion even though nothing had started on it yet.
+///
 /// `abort` is an optional future that, resolving first, cancels the request.
+// spec:AGENT
 pub async fn send(
 	agent: &Agent,
+	client: ClientWithMiddleware,
 	url: &str,
 	options: RequestOptions,
 	body: RequestBody,
@@ -128,10 +135,7 @@ pub async fn send(
 	// the one surfaced (spec:RESP#request-timing).
 	let headers_stamp = HeadersStamp::default();
 
-	let mut request = agent
-		.client
-		.as_ref()
-		.ok_or(FaithErrorKind::Closed)?
+	let mut request = client
 		.request(method, parsed_url.clone())
 		.with_extension(CacheMode::from(options.cache))
 		.with_extension(headers_stamp.clone());

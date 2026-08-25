@@ -99,13 +99,13 @@ QUIC/TLS stay inside `web-faith` as reqwest features (aws-lc-rs default, ring al
         can find it already being consumed.
   - [x] The option groups and the ~440-line validation moved to `web_faith::options` and
         `Agent::from_options`, so both surfaces settle defaults in one place. `Agent::new()` follows.
-  - [ ] **`close()` and `network_changed()` must act on the agent, not the handle.** A test written
-        against [RSAPI](../../specs/rust/client-api.md)'s "every clone names the same underlying
-        agent" fails: `close()` nulls per-clone fields, so a clone does not see it. The Node surface
-        never needed this — JavaScript holds one object, and `fetch` cloning the agent per request is
-        what lets an in-flight request finish. For Rust the closeable state (client, raw client,
-        resolver, prober, Alt-Svc cache) has to sit behind a shared cell, with a request taking its
-        own handle at the moment it is issued, which is what RSAPI already describes. ~40 read sites.
+  - [x] **`close()` and `network_changed()` act on the agent, not the handle.** The closeable state
+        sits in a `Live` behind a shared lock, so every clone sees a close, as
+        [RSAPI](../../specs/rust/client-api.md) requires. A request takes its handle at the moment it
+        is issued — `request::send` is given the client rather than reaching for it — which is what
+        [AGENT](../../specs/agent/overview.md) means by in flight from the moment it is issued. The
+        JS suite caught the difference: capturing inside the promise instead of at issue stranded a
+        request that was issued just before a close.
   - [ ] `Agent::builder()` — the nested builders RSAPI asks for, as sugar over the option groups,
         after which the recipe structs' fields can close up.
   - [ ] `Request`, `Request::new`, `try_clone`, and the fetch builder over `IntoFuture`, with the

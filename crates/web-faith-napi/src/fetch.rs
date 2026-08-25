@@ -10,6 +10,7 @@ use web_faith::request::{self, RequestBody};
 
 use crate::{
 	async_task::faith_promise,
+	error::FaithErrorKind,
 	options::{self, FaithOptionsAndBody},
 	response::FaithResponse,
 	stream_body::StreamBody,
@@ -24,6 +25,10 @@ pub fn faith_fetch<'env>(
 	stream_body: Option<&StreamBody>,
 ) -> Result<PromiseRaw<'env, FaithResponse>, napi::Error> {
 	let (options, agent, body) = options::extract(options);
+	// Taken here, while `fetch()` is still on the stack, so the request counts as in flight from
+	// the moment it was issued: closing the agent afterwards does not strand it.
+	// spec:AGENT
+	let client = agent.inner.client();
 	let (s, abort) = mpsc::channel(8);
 	let has_signal = signal.is_some();
 	if let Some(signal) = signal {
@@ -52,7 +57,8 @@ pub fn faith_fetch<'env>(
 			let _ = abort.recv().await;
 		});
 
-		request::send(&agent.inner, &url, options, body, abort)
+		let client = client.ok_or(FaithErrorKind::Closed)?;
+		request::send(&agent.inner, client, &url, options, body, abort)
 			.await
 			.map(FaithResponse::from)
 	})
