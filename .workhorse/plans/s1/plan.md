@@ -179,6 +179,18 @@ Decisions taken while doing steps 0–7, worth not relitigating:
   which would have shipped as broken docs.rs pages. Rust intra-doc syntax in a `web-faith-napi` doc
   comment is emitted verbatim into `index.d.ts`, where `[`X`]` means nothing, so plain backticks
   belong on anything a napi item documents.
+- **No source file past 1000 lines, tests-only files excepted.** `dns`, `alt-svc`, the client's
+  agent and request paths, and the binding's agent were each split into modules along their internal
+  seams.
+- **Tests live as a child module of the code they exercise,** `foo/tests.rs` under `foo.rs`, not one
+  flat `tests.rs` at the crate root. A child module reaches its parent's private items, so the split
+  costs no visibility: the first attempt widened a dozen internals to `pub(crate)` purely for a
+  crate-root test module, which is the wrong trade.
+- **Splitting a file relocates doc comments as easily as it drops them.** A cut between an item and
+  its doc block leaves the block dangling at the end of one file and the item bare at the start of
+  the next, which rustc catches, and a `// spec:` line under a doc block extends how far back the
+  block starts. Intra-doc links break more quietly: `[`X`]` that resolved within one file needs
+  `crate::X` once `X` is a sibling module away, and `cargo doc --workspace --no-deps` is what says so.
 
 ## Step 14: the both-surfaces spec sweep
 
