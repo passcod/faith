@@ -19,6 +19,7 @@
 
 pub mod agent;
 pub mod body;
+pub mod builder;
 pub mod client;
 pub mod error;
 pub mod integrity;
