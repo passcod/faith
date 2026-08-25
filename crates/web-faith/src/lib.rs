@@ -30,6 +30,11 @@
 //! [`Agent::fetch`]: agent::Agent::fetch
 //! [`Request`]: request::Request
 
+// A build with no crypto provider cannot speak TLS, and an HTTPS client that cannot is not one.
+// Selecting a provider is therefore a choice between the two rather than an option to decline.
+#[cfg(not(any(feature = "tls-aws-lc-rs", feature = "tls-ring")))]
+compile_error!("web-faith needs a TLS backend: enable either tls-aws-lc-rs or tls-ring");
+
 pub mod agent;
 pub mod body;
 pub mod builder;

@@ -70,8 +70,7 @@ impl Agent {
 			flow_control,
 			headers,
 			http2,
-			// Every use of the HTTP/3 options sits behind the feature.
-			#[cfg_attr(not(feature = "http3"), allow(unused_variables))]
+			#[cfg(feature = "http3")]
 			http3,
 			local_address,
 			pool,

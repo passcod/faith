@@ -9,11 +9,13 @@ async fn a_default_agent_comes_up() {
 	assert!(!agent.is_closed());
 	assert_eq!(agent.recipe.user_agent, crate::USER_AGENT);
 	// No jar until the options ask for one.
+	#[cfg(feature = "cookies")]
 	assert!(agent.cookie_jar.is_none());
 }
 
 /// The builder reaches every group, and a group left alone stays absent rather than being
 /// spelled out as absent.
+#[cfg(all(feature = "dns", feature = "http3"))]
 #[tokio::test]
 async fn the_builder_sets_what_it_is_given_and_nothing_else() {
 	use std::time::Duration;

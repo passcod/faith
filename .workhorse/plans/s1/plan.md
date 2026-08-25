@@ -121,10 +121,15 @@ QUIC/TLS stay inside `web-faith` as reqwest features (aws-lc-rs default, ring al
   - [ ] Remaining: closing up the recipe and option structs' public fields now that the builder owns
         the assembly. Left deliberately: the binding still fills the option structs directly, so
         these close up when step 10 settles what the public surface is.
-- [ ] **10. Feature wiring** — a default-on feature per capability a build can do without; disabling
+- [x] **10. Feature wiring** — a default-on feature per capability a build can do without; disabling
   one drops the code and the API surface it gates (compile error at the call site, not a no-op), and
   the dependency too where the capability is a crate. Component, crate, and feature are three axes
   and need not line up: a crate can be non-optional, and a feature need not map to a crate.
+
+  `web-faith` carries `cache`, `connection-tracking`, `cookies`, `dns`, `encoding`, `http3`, and the
+  `tls-aws-lc-rs`/`tls-ring` backend choice; `web-faith-alt-svc` carries `dns` for the HTTPS-record
+  sink. `web-faith-napi` mirrors the set. Integrity is deliberately not a feature: it is always
+  built.
 - [ ] **11. Rust-facing tests + examples** — per-crate examples that run against that crate alone;
   client integration tests mirroring the JS suite where it translates. Add `.workhorse/test-cases/s1/`.
 - [ ] **12. Publishing infra** — release-plz, `cargo-semver-checks` against previous version per crate,
@@ -191,6 +196,34 @@ Decisions taken while doing steps 0–7, worth not relitigating:
   the next, which rustc catches, and a `// spec:` line under a doc block extends how far back the
   block starts. Intra-doc links break more quietly: `[`X`]` that resolved within one file needs
   `crate::X` once `X` is a sibling module away, and `cargo doc --workspace --no-deps` is what says so.
+- **A feature drops the reqwest feature behind it too.** `cookies`, `dns`, `http3`, and the TLS
+  backend each own their reqwest counterpart, which means those came out of the workspace root's
+  `reqwest` feature list: a feature that leaves the dependency linked has not dropped anything.
+  Cargo refuses a member override of a workspace dependency's `default-features`, so
+  `web-faith-alt-svc` needs `default-features = false` set at the root, as `web-faith` already did.
+- **The TLS backend resolves by priority, not by refusal.** Cargo features are additive, so a
+  build with both `tls-aws-lc-rs` and `tls-ring` — which is what `--all-features` and any `http3`
+  build are — has to mean something rather than fail. aws-lc-rs wins, and ring is installed as the
+  process provider only where it is the sole choice. A `compile_error!` remains for *neither*, which
+  is a real misconfiguration: an HTTPS client that cannot speak TLS is not one. reqwest's `http3`
+  pins its QUIC stack to aws-lc-rs, which is why `http3` enables that backend rather than tolerating
+  either.
+- **napi's derives ignore `#[cfg]` on a field or an impl method.** `#[napi(object)]` re-emits field
+  types and `#[napi] impl` enumerates method names, both at macro time, so a gated field or method
+  leaves generated code referencing an item that is no longer there. Methods can still be removed —
+  by moving them to their own `#[cfg]`-gated `#[napi] impl` block, which napi accepts — but an
+  option object keeps its full shape whatever the build. So the binding refuses what it cannot
+  honour instead: `refuse_absent_capabilities` for an agent option group, and a check in
+  `faith_fetch` for a per-request one. Silently ignoring the option was the alternative, and it
+  would make a slim build look like it worked.
+- **Gating an option group means gating the tests that set it.** `cargo test` on a slim build was
+  broken by tests and a doctest reaching for fields that are no longer compiled. The doctest was the
+  worse of the two, having no per-feature escape: the fix was to illustrate with a group that is
+  never gated. Check the matrix with `cargo test`, not just `cargo build`.
+- **The binding carried two dozen dependencies it no longer used**, left over from before the
+  extraction — including `web-faith-dns` and `web-faith-alt-svc`, which a feature claimed to drop
+  while linking them anyway. Worth re-checking after any extraction: `use` roots in the source
+  against the manifest.
 
 ## Step 14: the both-surfaces spec sweep
 

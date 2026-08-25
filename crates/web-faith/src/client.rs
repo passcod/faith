@@ -257,6 +257,22 @@ pub struct BuiltClients {
 	pub prober: Option<Arc<H3Prober>>,
 }
 
+/// Install ring as the process's rustls crypto provider.
+///
+/// reqwest reads the process default when it builds a client and panics if there is none, so this
+/// runs before the first one is built. Only where ring is the chosen backend: with `tls-aws-lc-rs`
+/// also on, reqwest supplies aws-lc-rs itself, which is also what an HTTP/3 build needs. Installing
+/// is process-wide and once-only, so a provider the embedding program put in place is left alone.
+#[cfg(all(feature = "tls-ring", not(feature = "tls-aws-lc-rs")))]
+fn install_crypto_provider() {
+	use std::sync::Once;
+
+	static ONCE: Once = Once::new();
+	ONCE.call_once(|| {
+		let _ = rustls::crypto::ring::default_provider().install_default();
+	});
+}
+
 impl ClientRecipe {
 	/// The window an idle pooled connection lives in, which is also how long a warm-up counts as
 	/// warm and how long a connection stays listed.
@@ -280,6 +296,9 @@ impl ClientRecipe {
 		#[cfg(feature = "dns")] dns_resolver: Option<&FaithResolver>,
 		#[cfg(feature = "http3")] alt_svc_cache: Option<&Arc<AltSvcCache>>,
 	) -> Result<BuiltClients, FaithError> {
+		#[cfg(all(feature = "tls-ring", not(feature = "tls-aws-lc-rs")))]
+		install_crypto_provider();
+
 		let mut client = Client::builder()
 			.tls_info(true)
 			.tls_sslkeylogfile(true)

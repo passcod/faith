@@ -9,7 +9,7 @@
 //! # use web_faith::agent::Agent;
 //! let agent = Agent::builder()
 //!     .user_agent("YourApp/1.2.3")
-//!     .dns(|dns| dns.timeout(Duration::from_secs(2)))
+//!     .timeout(|timeout| timeout.connect(Duration::from_secs(2)))
 //!     .pool(|pool| pool.max_idle_per_host(8))
 //!     .build()?;
 //! # Ok::<(), web_faith::FaithError>(())
@@ -30,6 +30,9 @@ use http_cache_reqwest::CacheMode;
 #[cfg(feature = "cache")]
 use crate::options::{CacheOptions, CacheStore};
 
+#[cfg(feature = "http3")]
+use crate::options::{Http3Congestion, Http3Hint, Http3Options};
+
 #[cfg(feature = "cookies")]
 use web_faith_cookies::CookieLimits;
 
@@ -39,8 +42,7 @@ use crate::{
 	error::FaithError,
 	options::{
 		AgentOptions, DnsOptions, DnsOverride, FlowControlOptions, Header, Http2Options,
-		Http3Congestion, Http3Hint, Http3Options, PoolOptions, QuirksOptions, TimeoutOptions,
-		TlsOptions,
+		PoolOptions, QuirksOptions, TimeoutOptions, TlsOptions,
 	},
 };
 
@@ -172,6 +174,7 @@ impl AgentBuilder {
 	}
 
 	/// HTTP/3 settings.
+	#[cfg(feature = "http3")]
 	pub fn http3(mut self, with: impl FnOnce(Http3Builder) -> Http3Builder) -> Self {
 		let group = self.options.http3.take().unwrap_or_default();
 		self.options.http3 = Some(with(Http3Builder { group }).group);
@@ -448,12 +451,14 @@ impl Http2Builder {
 }
 
 /// HTTP/3 settings. Reached through [`AgentBuilder::http3`].
+#[cfg(feature = "http3")]
 #[derive(Debug, Default)]
 #[must_use]
 pub struct Http3Builder {
 	group: Http3Options,
 }
 
+#[cfg(feature = "http3")]
 impl Http3Builder {
 	/// The congestion controller QUIC runs.
 	pub fn congestion(mut self, congestion: Http3Congestion) -> Self {

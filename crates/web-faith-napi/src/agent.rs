@@ -243,6 +243,11 @@ fn refuse_absent_capabilities(options: &AgentOptions) -> Result<(), FaithError> 
 		return absent("HTTP cache");
 	}
 
+	#[cfg(not(feature = "http3"))]
+	if options.http3.is_some() {
+		return absent("HTTP/3");
+	}
+
 	#[cfg(not(feature = "cookies"))]
 	if options.cookies.is_some() {
 		return absent("cookie");

@@ -9,7 +9,10 @@ use web_faith::{client::RedirectPolicy, options};
 #[cfg(feature = "cookies")]
 use web_faith_cookies::CookieLimits;
 
-use crate::agent::{AgentOptions, Http3Congestion};
+use crate::agent::AgentOptions;
+
+#[cfg(feature = "http3")]
+use crate::agent::Http3Congestion;
 
 #[cfg(feature = "cache")]
 use crate::agent::CacheStore;
@@ -87,6 +90,7 @@ impl From<AgentOptions> for options::AgentOptions {
 				connection_window: http2.connection_window,
 				adaptive_window: http2.adaptive_window,
 			}),
+			#[cfg(feature = "http3")]
 			http3: opts.http3.map(|http3| options::Http3Options {
 				congestion: http3.congestion.map(|c| match c {
 					Http3Congestion::Cubic => options::Http3Congestion::Cubic,

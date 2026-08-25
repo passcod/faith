@@ -170,6 +170,7 @@ pub struct Header {
 	pub sensitive: Option<bool>,
 }
 
+#[cfg(feature = "http3")]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Http3Congestion {
 	#[default]
@@ -180,6 +181,7 @@ pub enum Http3Congestion {
 
 /// A hint that HTTP/3 is available at a specific host and port. This pre-populates the Alt-Svc
 /// cache so the first request to this host will attempt HTTP/3 immediately.
+#[cfg(feature = "http3")]
 #[derive(Clone, Debug, Default)]
 pub struct Http3Hint {
 	/// The hostname (e.g., "example.com").
@@ -189,6 +191,7 @@ pub struct Http3Hint {
 }
 
 /// Settings related to HTTP/3. This is a nested object.
+#[cfg(feature = "http3")]
 #[derive(Clone, Debug, Default)]
 pub struct Http3Options {
 	/// The congestion control algorithm. The default is `cubic`, which is the same used in TCP in the
@@ -608,6 +611,7 @@ pub struct AgentOptions {
 	/// Settings related to HTTP/2. This is a nested object.
 	pub http2: Option<Http2Options>,
 	/// Settings related to HTTP/3. This is a nested object.
+	#[cfg(feature = "http3")]
 	pub http3: Option<Http3Options>,
 	/// Bind outgoing sockets to this local IP address before connecting.
 	///

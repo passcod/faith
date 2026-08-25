@@ -34,10 +34,20 @@ web-faith-cookies = { workspace = true, features = ["reqwest"], optional = true 
 napi-build.workspace = true
 
 [features]
-default = ["cache", "connection-tracking", "cookies", "dns", "encoding", "http3"]
+default = [
+    "cache",
+    "connection-tracking",
+    "cookies",
+    "dns",
+    "encoding",
+    "http3",
+    "tls-aws-lc-rs",
+]
 cache = ["dep:http-cache-reqwest", "web-faith/cache"]
 connection-tracking = ["dep:web-faith-conn-tracker", "web-faith/connection-tracking"]
 cookies = ["dep:web-faith-cookies", "reqwest/cookies", "web-faith/cookies"]
 dns = ["web-faith/dns"]
 encoding = ["web-faith/encoding"]
-http3 = ["reqwest/http3", "web-faith/http3"]
+http3 = ["reqwest/http3", "tls-aws-lc-rs", "web-faith/http3"]
+tls-aws-lc-rs = ["reqwest/rustls", "web-faith/tls-aws-lc-rs"]
+tls-ring = ["reqwest/rustls-no-provider", "web-faith/tls-ring"]
