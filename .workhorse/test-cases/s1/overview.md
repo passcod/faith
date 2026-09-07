@@ -36,10 +36,13 @@ Verifies spec: RSAPI.
 - [x] Cloning an agent names the same agent: closing through one clone closes it for all, and a
       request issued afterwards reports `Closed`.
 - [x] A request issued before a close runs to completion.
-- [ ] `body_stream()` delivers chunks, and the trailers and timing promises settle after the last
-      one.
-- [ ] `write_to_file` writes the body and refuses an existing destination.
-- [ ] `into_http` hands over an `http::Response` whose body is the undisturbed stream.
+- [x] `body_stream()` delivers the whole body in chunks, and the trailers and timing promises
+      settle once the last one has been read rather than hanging.
+- [x] `write_to_file` writes the body, reports the path and byte count, delivers at least a final
+      progress report, and refuses an occupied destination unless asked to replace it, leaving the
+      original alone when it refuses.
+- [x] `into_http` hands over an `http::Response` carrying the body, and the stream is shared rather
+      than moved: a stream taken beforehand still sees the whole body.
 
 ## Errors keep their codes across the split
 
@@ -87,8 +90,15 @@ Verifies spec: RUST.
 - [x] Enabling both TLS backends resolves to aws-lc-rs rather than failing, so `--all-features` and
       any `http3` build work.
 - [x] Selecting neither TLS backend is a compile error naming both options.
-- [ ] Each feature combination passes the JS suite where the binding is what changed, not just
-      `cargo build`.
+- [x] The shipped build, which is the default-features one, passes the full JS suite. A slim build
+      is held to a smaller bargain instead, the suite itself assuming every capability is present.
+- [x] A slim binding loads, serves an ordinary request, and reads a body (`npm run test:slim`).
+- [x] A slim binding drops the methods whose capability is gone: no `addCookie`/`getCookie`,
+      `resolvers()`, or `connections()`.
+- [x] A slim binding refuses `cookies`, `cache`, `dns` resolver settings, and `http3` at agent
+      construction, and `compress` and a cache mode at `fetch`, each naming what is missing.
+- [x] `dns.overrides` is still honoured on a slim build, reaching reqwest rather than Faith's own
+      resolver.
 
 ## Ready to publish
 

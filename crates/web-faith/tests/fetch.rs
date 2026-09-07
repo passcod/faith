@@ -18,6 +18,7 @@ use web_faith::{
 	FaithErrorKind,
 	agent::Agent,
 	request::{Priority, Request},
+	response::{FileDestination, Trailers},
 };
 
 /// The origin under test, or `None` when there is none configured.
@@ -336,5 +337,171 @@ async fn warming_is_advisory_but_a_closed_agent_refuses_it() {
 			panic!("a closed agent has nothing to warm");
 		};
 		assert_eq!(err.kind, FaithErrorKind::Closed);
+	});
+}
+
+/// The body arrives as a stream of chunks, and what only the end of the body can settle is
+/// settled once the last one has been read.
+#[tokio::test]
+async fn a_streamed_body_settles_its_trailers_and_timing_at_the_end() {
+	against_origin!(origin => {
+		// A drip is chunked, so the body arrives in more than one piece.
+		let response = agent()
+			.fetch(format!("{origin}/drip?duration=0&numbytes=2048&delay=0"))
+			.await
+			.expect("sent");
+
+		// Timing is not settled while the body is still outstanding, and the headers leg is.
+		let stream = response
+			.body_stream()
+			.expect("the body is available")
+			.expect("a drip carries a body");
+		assert!(response.body_used(), "taking the stream disturbs the body");
+
+		let mut chunks = 0;
+		let mut bytes = 0;
+		let mut stream = std::pin::pin!(stream);
+		while let Some(chunk) = futures::StreamExt::next(&mut stream).await {
+			let chunk = chunk.expect("the chunk arrives");
+			chunks += 1;
+			bytes += chunk.len();
+		}
+
+		assert_eq!(bytes, 2048, "every byte the origin sent arrives");
+		assert!(chunks >= 1, "the body arrived in {chunks} chunk(s)");
+
+		// Both promises settle once the body has ended, rather than hanging.
+		let timing = response.timing().await;
+		assert!(timing.headers_ms > 0.0);
+		assert!(
+			timing.body_ms.is_some(),
+			"the body leg is known once the body has ended"
+		);
+		assert!(matches!(
+			response.trailers().await,
+			Trailers::None | Trailers::Some(_)
+		), "the trailers promise settles rather than staying NotYet");
+	});
+}
+
+/// Writing a body straight to a file reports what landed, and refuses an occupied destination
+/// unless told to replace it.
+#[tokio::test]
+async fn writing_to_a_file_refuses_an_occupied_destination() {
+	against_origin!(origin => {
+		let agent = agent();
+		let dir = std::env::temp_dir().join(format!("faith-write-{}", std::process::id()));
+		std::fs::create_dir_all(&dir).expect("a temp directory");
+		let path = dir.join("body.bin");
+		let path = path.to_str().expect("a UTF-8 path");
+
+		let mut reports = 0;
+		let written = agent
+			.fetch(format!("{origin}/bytes/4096"))
+			.await
+			.expect("sent")
+			.write_to_file(path, &FileDestination::default(), |_| reports += 1)
+			.await
+			.expect("the destination is free");
+
+		assert_eq!(written.bytes_written, 4096);
+		assert_eq!(written.path, path, "the path written to is reported back");
+		assert_eq!(
+			std::fs::metadata(path).expect("the file exists").len(),
+			4096,
+			"and the bytes are actually on disk"
+		);
+		assert!(reports >= 1, "the final progress report is always delivered");
+
+		// The default refuses an occupied destination, leaving what is there untouched.
+		let err = agent
+			.fetch(format!("{origin}/bytes/8"))
+			.await
+			.expect("sent")
+			.write_to_file(path, &FileDestination::default(), |_| ())
+			.await
+			.expect_err("the destination is occupied");
+		assert_eq!(err.kind, FaithErrorKind::FileExists);
+		assert_eq!(
+			std::fs::metadata(path).expect("the file is still there").len(),
+			4096,
+			"a refused write leaves the original alone"
+		);
+
+		// Asked to replace it, it does.
+		let written = agent
+			.fetch(format!("{origin}/bytes/8"))
+			.await
+			.expect("sent")
+			.write_to_file(
+				path,
+				&FileDestination {
+					overwrite: true,
+					..FileDestination::default()
+				},
+				|_| (),
+			)
+			.await
+			.expect("the destination may be replaced");
+		assert_eq!(written.bytes_written, 8);
+
+		std::fs::remove_dir_all(&dir).expect("the temp directory goes");
+	});
+}
+
+/// A response hands over as an `http::Response` whose body is the stream, undisturbed.
+#[tokio::test]
+async fn into_http_hands_over_the_undisturbed_body() {
+	against_origin!(origin => {
+		let response = agent()
+			.fetch(format!("{origin}/bytes/1024"))
+			.await
+			.expect("sent");
+
+		let status = response.status();
+		let handed_over = response.into_http().expect("the body is undisturbed");
+
+		assert_eq!(handed_over.status(), status, "the status carries across");
+		assert!(handed_over.headers().contains_key("content-type"));
+
+		// The body is the stream rather than a copy of it, so reading it here reads the response.
+		let collected = http_body_util::BodyExt::collect(handed_over.into_body())
+			.await
+			.expect("the body reads")
+			.to_bytes();
+		assert_eq!(collected.len(), 1024);
+	});
+}
+
+/// The body stream is shared rather than moved, so handing over as an `http::Response` leaves an
+/// earlier stream still readable, and both see the whole body.
+#[tokio::test]
+async fn the_body_stream_is_shared_between_its_consumers() {
+	against_origin!(origin => {
+		let response = agent()
+			.fetch(format!("{origin}/bytes/64"))
+			.await
+			.expect("sent");
+
+		let taken = response
+			.body_stream()
+			.expect("the body is available")
+			.expect("a body");
+
+		// Handing over is not refused by the stream already having been taken: both hand out the
+		// same shared stream rather than one moving it away from the other.
+		let handed_over = response.into_http().expect("the body is shared, not moved");
+		let collected = http_body_util::BodyExt::collect(handed_over.into_body())
+			.await
+			.expect("the body reads")
+			.to_bytes();
+		assert_eq!(collected.len(), 64);
+
+		let mut taken = std::pin::pin!(taken);
+		let mut bytes = 0;
+		while let Some(chunk) = futures::StreamExt::next(&mut taken).await {
+			bytes += chunk.expect("the chunk arrives").len();
+		}
+		assert_eq!(bytes, 64, "the earlier stream still sees the whole body");
 	});
 }

@@ -37,6 +37,8 @@ web-faith-alt-svc = { workspace = true, optional = true }
 
 [dev-dependencies]
 # Examples and integration tests link as their own crate, so what they name has to be here too.
+futures.workspace = true
+http-body-util.workspace = true
 serde.workspace = true
 tokio = { workspace = true }
 

@@ -232,6 +232,17 @@ Decisions taken while doing steps 0–7, worth not relitigating:
   broken by tests and a doctest reaching for fields that are no longer compiled. The doctest was the
   worse of the two, having no per-feature escape: the fix was to illustrate with a group that is
   never gated. Check the matrix with `cargo test`, not just `cargo build`.
+- **A slim binding gets a smaller bargain than the full suite, not the same one.** The JS suite
+  assumes every capability is present, so "each feature combination passes it" is not a coverage
+  goal that can be met: `compression`, `timing`, and `dns-server` all need a gated feature even
+  where they never name one. What a slim build is held to instead is `test/slim/`, run against a
+  `--no-default-features` binding by `npm run test:slim`: it loads, serves a request, has lost the
+  methods whose capability is gone, and refuses each absent option group by name. That is the only
+  thing that actually exercises `refuse_absent_capabilities` end to end.
+- **`into_http` after `body_stream()` is allowed, and that is the design.** The body is a
+  `SharedStream`, so both consumers see the whole body rather than one taking it from the other;
+  the refusal fires only while a read holds the body lock. A test asserting the opposite was written
+  and had to be replaced: the JS suite already covers the sharing, on its own side.
 - **An integration test that needs an origin skips rather than fails.** `crates/web-faith/tests/fetch.rs`
   reads `HTTPBIN_URL` with no default and reports the skip when it is unset, so `cargo test` works
   on a machine with no server to hand while CI gets the full run. The JS suite defaults to
