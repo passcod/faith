@@ -18,6 +18,10 @@ tokio.workspace = true
 url.workspace = true
 reqwest = { workspace = true, optional = true }
 
+[dev-dependencies]
+# Examples link as their own crate, so the runtime they need has to be named there too.
+tokio = { workspace = true }
+
 [features]
 # Implement reqwest's `Resolve`, so the resolver can be installed on its client.
 reqwest = ["dep:reqwest", "reqwest/hickory-dns"]

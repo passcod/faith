@@ -79,6 +79,26 @@ pub struct AltSvcCacheConfig {
 	/// How long a path-time demotion holds before the origin may be re-probed.
 	pub slow_ttl: Duration,
 }
+impl Default for AltSvcCacheConfig {
+	/// The same values `web-faith` settles on when a caller names none.
+	fn default() -> Self {
+		Self {
+			advertised_ttl: Duration::from_secs(86_400),
+			confirmed_ttl: Duration::from_secs(86_400),
+			failed_ttl: Duration::from_secs(300),
+			failed_max_ttl: Duration::from_secs(3_600),
+			capacity: 10_000,
+			cancel_strikes: 3,
+			strike_window: Duration::from_secs(60),
+			follow_advertised_port: false,
+			// Long enough to outlive a probe that is never reported, so an aborted one frees its
+			// origin: a probe deadline plus a margin, or the QUIC idle timeout without one.
+			probe_ttl: Duration::from_secs(125),
+			slow_factor: 2.5,
+			slow_ttl: Duration::from_secs(600),
+		}
+	}
+}
 
 #[derive(Clone)]
 pub struct AltSvcCache {

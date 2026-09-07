@@ -19,7 +19,8 @@ url.workspace = true
 reqwest = { workspace = true, optional = true }
 
 [dev-dependencies]
-# Doctests link as their own crate, so the types the API speaks have to be named there too.
+# Doctests and examples link as their own crate, so the types the API speaks have to be named there too.
+http.workspace = true
 url.workspace = true
 
 [features]

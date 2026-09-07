@@ -130,8 +130,12 @@ QUIC/TLS stay inside `web-faith` as reqwest features (aws-lc-rs default, ring al
   `tls-aws-lc-rs`/`tls-ring` backend choice; `web-faith-alt-svc` carries `dns` for the HTTPS-record
   sink. `web-faith-napi` mirrors the set. Integrity is deliberately not a feature: it is always
   built.
-- [ ] **11. Rust-facing tests + examples** — per-crate examples that run against that crate alone;
+- [x] **11. Rust-facing tests + examples** — per-crate examples that run against that crate alone;
   client integration tests mirroring the JS suite where it translates. Add `.workhorse/test-cases/s1/`.
+
+  Five component examples plus the client's, and `crates/web-faith/tests/fetch.rs` covering the
+  fetch-flavoured surface against a live origin. Test cases are in
+  [`.workhorse/test-cases/s1/overview.md`](../../test-cases/s1/overview.md).
 - [ ] **12. Publishing infra** — release-plz, `cargo-semver-checks` against previous version per crate,
   MSRV 1.96 declared in every published crate and exercised in CI alongside stable, independent
   versioning from `1.0.0`. Measure CI cost before adding jobs (see project memory).
@@ -220,6 +224,20 @@ Decisions taken while doing steps 0–7, worth not relitigating:
   broken by tests and a doctest reaching for fields that are no longer compiled. The doctest was the
   worse of the two, having no per-feature escape: the fix was to illustrate with a group that is
   never gated. Check the matrix with `cargo test`, not just `cargo build`.
+- **An integration test that needs an origin skips rather than fails.** `crates/web-faith/tests/fetch.rs`
+  reads `HTTPBIN_URL` with no default and reports the skip when it is unset, so `cargo test` works
+  on a machine with no server to hand while CI gets the full run. The JS suite defaults to
+  `localhost:8888` instead, which is why it cannot be run without one.
+- **Examples are the proof a component crate stands alone.** Each names only its own crate, so a
+  dependency that had leaked upward would not compile. Two API gaps surfaced from writing them:
+  `AltSvcCacheConfig` had no `Default`, which made the store unusable without copying eleven fields
+  out of `web-faith`, and `ConnectionTracker::new` needs a tokio runtime (it spawns the counter
+  refresh), which the example now says out loud.
+- **go-httpbin runs as a native binary, not only a container.** `podman run ghcr.io/mccutchen/go-httpbin`
+  fails on a host with no `/etc/subuid` range, because the image wants uid 65532 and unpacking it
+  chowns to that. `~/go/bin/go-httpbin -port 8888` needs no root and serves the same endpoints. Note
+  its header values arrive as arrays (`{"Name": ["value"]}`), and it echoes a body with no
+  `Content-Type` back as a base64 data URL.
 - **The binding carried two dozen dependencies it no longer used**, left over from before the
   extraction — including `web-faith-dns` and `web-faith-alt-svc`, which a feature claimed to drop
   while linking them anyway. Worth re-checking after any extraction: `use` roots in the source
