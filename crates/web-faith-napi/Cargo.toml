@@ -7,6 +7,8 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 authors.workspace = true
+# Ships as the `@passcod/faith` npm package rather than to crates.io: it is a cdylib whose product
+# is the built `.node` binary, which a crates.io consumer has no use for.
 publish = false
 
 [lib]

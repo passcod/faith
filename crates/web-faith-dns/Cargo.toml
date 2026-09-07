@@ -7,8 +7,6 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 authors.workspace = true
-# Flipped on once the release tooling is in place.
-publish = false
 
 [dependencies]
 futures.workspace = true

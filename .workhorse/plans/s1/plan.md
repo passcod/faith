@@ -12,8 +12,8 @@ this branch as one long-lived PR, at the user's direction, rather than split int
 
 Steps 0–8 are done: the workspace stands, the five components are out, and the client owns the agent,
 the request path, and the response. Every crate but `web-faith-napi` builds with no napi in its
-graph. What remains (steps 9–14) is the caller-facing API, the feature wiring, publishing, and the
-spec sweep — step 9 being new design rather than relocation.
+graph. What remains is the both-surfaces spec sweep. The release tooling and the first publish to
+crates.io are spun off into their own card.
 
 ## What the discovery turned up
 
@@ -136,12 +136,20 @@ QUIC/TLS stay inside `web-faith` as reqwest features (aws-lc-rs default, ring al
   Five component examples plus the client's, and `crates/web-faith/tests/fetch.rs` covering the
   fetch-flavoured surface against a live origin. Test cases are in
   [`.workhorse/test-cases/s1/overview.md`](../../test-cases/s1/overview.md).
-- [ ] **12. Publishing infra** — release-plz, `cargo-semver-checks` against previous version per crate,
-  MSRV 1.96 declared in every published crate and exercised in CI alongside stable, independent
-  versioning from `1.0.0`. Measure CI cost before adding jobs (see project memory).
-- [ ] **13. First publish** to crates.io: the five components, then `web-faith`; `@passcod/faith`
-  continues from npm via `web-faith-napi`.
-- [ ] **14. The both-surfaces spec sweep**, as the closing pass over the tree — deliberately last,
+- [x] **12. Make the crates publishable.** `publish = false` is gone from the six crates that go to
+  crates.io, so the manual first publish can be run at any time without editing a manifest first.
+  `web-faith-napi` keeps the flag and says why: it ships as `@passcod/faith` on npm, its product
+  being a built `.node` that a crates.io consumer has no use for.
+  - [x] All six `web-faith*` names are free on crates.io. The bare `faith` is taken (an unrelated
+        Bible CLI at 0.3.0), which settles the card description's open question.
+  - [x] The four crates with no internal dependencies package and verify: `web-faith-cookies`,
+        `web-faith-conn-tracker`, `web-faith-dns`, `web-faith-encoding`. `web-faith-alt-svc` and
+        `web-faith` cannot be packaged until their path dependencies exist on crates.io, which is
+        the publish order rather than a defect; their required metadata is complete.
+  - **The release tooling and the first publish are their own card** (see the
+    [breakdown](../../breakdowns/s1/breakdown.md)): release-plz, `cargo-semver-checks`, and MSRV CI,
+    with the manual first publish done at any point while that card is in progress.
+- [ ] **13. The both-surfaces spec sweep**, as the closing pass over the tree — deliberately last,
   once the Rust API is settled and its names are known. See the section below for the site-by-site
   reconnaissance.
 
@@ -243,7 +251,7 @@ Decisions taken while doing steps 0–7, worth not relitigating:
   while linking them anyway. Worth re-checking after any extraction: `use` roots in the source
   against the manifest.
 
-## Step 14: the both-surfaces spec sweep
+## Step 13: the both-surfaces spec sweep
 
 A spec should be one of three things, never a fourth: generic to both surfaces (naming the concept
 and linking to where it is defined), specified at the correct site, or explicitly about one surface

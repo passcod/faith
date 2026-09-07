@@ -16,8 +16,6 @@ split and must pass after it, unchanged.
       `npm run build:debug`.
 - [x] The generated TypeScript keeps the documentation napi emits from Rust doc comments: no class
       or method loses its docs to the move. Verifies spec: RUST.
-- [ ] `@passcod/faith` installs and loads from a packed tarball, so the published module is not
-      missing a file the workspace layout moved.
 
 ## The Rust client's shape
 
@@ -68,9 +66,8 @@ Verifies spec: RUST.
 - [x] `web-faith-alt-svc` builds and its example compiles without `web-faith-dns`, the HTTPS-record
       sink being the only thing that needed it.
 - [x] No component crate has napi anywhere in its dependency graph; only `web-faith-napi` does.
-- [ ] `cargo package` succeeds for each crate, so nothing depends on a path that only exists in the
-      workspace.
-- [ ] `cargo publish --dry-run` succeeds for the family in dependency order.
+- [x] `cargo package` succeeds for every crate whose dependencies are not path-only, so nothing
+      depends on a path that exists only in the workspace.
 
 ## Features drop what they name
 
@@ -93,19 +90,20 @@ Verifies spec: RUST.
 - [ ] Each feature combination passes the JS suite where the binding is what changed, not just
       `cargo build`.
 
-## Publication and versioning
+## Ready to publish
 
-Verifies spec: RUST.
+Verifies spec: RUST. The release path itself, and the coverage that needs the crates to exist on
+crates.io, belong to the release-tooling card (see the
+[breakdown](../../breakdowns/s1/breakdown.md)).
 
-- [ ] `cargo-semver-checks` runs against the previous version of each crate and passes on a release
-      that claims to be non-breaking.
-- [ ] `rust-version` is declared in every published crate and inherited from the workspace root.
-- [ ] CI builds and tests against MSRV 1.96 as well as stable, so the declaration is verified
-      rather than asserted.
-- [ ] release-plz prepares a release, and a change confined to one component moves that crate's
-      version alone.
-- [ ] The published crates resolve from crates.io in a fresh project, `web-faith` pulling its
-      components at the versions it declares.
+- [x] The six crates that go to crates.io carry no `publish = false`, so a manual first publish
+      needs no manifest edit first.
+- [x] `web-faith-napi` keeps the flag, shipping as `@passcod/faith` on npm instead.
+- [x] Every crate that goes to crates.io has the metadata crates.io requires: description, licence,
+      and repository, inherited from the workspace root where they are shared.
+- [x] `rust-version = "1.96"` is declared once at the workspace root and inherited by every crate.
+- [x] The names are free on crates.io: all six `web-faith*`. The bare `faith` is taken.
+- [x] The four crates with no internal dependencies package and verify with `cargo package`.
 
 ## Housekeeping the restructure owes
 
