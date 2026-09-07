@@ -4,7 +4,7 @@ S1 delivers the workspace, the Rust client, its component crates, the feature wi
 that are ready to publish. What it deliberately stops short of is the release path: the tooling that
 keeps the crate family versioned, and the first publish itself.
 
-## Release tooling and the first publish to crates.io
+## Release tooling and the first publish to crates.io · L3
 
 Set up the ongoing release path for the workspace's published crates: release-plz to prepare
 releases and move each crate's version independently, `cargo-semver-checks` against the previous
