@@ -151,11 +151,11 @@ impl Agent {
 			.collect::<Result<Vec<_>, FaithError>>()?;
 
 		// Faith owns the hickory resolver rather than leaving it to reqwest's built-in one, so
-		// `prefetchDns` can warm the very cache reqwest's requests read (spec:WARM),
-		// `networkChanged` can flush it (spec:NETCHG), and `dns.servers` can pick the transport and
+		// `prefetch_dns` can warm the very cache reqwest's requests read (spec:WARM),
+		// `network_changed` can flush it (spec:NETCHG), and `dns.servers` can pick the transport and
 		// order each resolver is reached by (spec:DNS#transports). The system resolver
 		// (getaddrinfo) has no in-process cache Faith can warm, so no resolver is installed there
-		// and `prefetchDns` resolves as a no-op (spec:WARM).
+		// and `prefetch_dns` resolves as a no-op (spec:WARM).
 		#[cfg(feature = "dns")]
 		let dns_resolver = if dns_system {
 			None

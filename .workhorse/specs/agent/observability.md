@@ -4,17 +4,18 @@ id: OBS
 
 # Agent observability
 
-Agents expose three views of their own activity: cumulative request counters (`stats()`), live per-connection network statistics (`connections()`), and the DNS servers in use (`resolvers()`).
+Agents expose three views of their own activity on both surfaces: cumulative request counters (`stats()`), live per-connection network statistics (`connections()`), and the DNS servers in use (`resolvers()`).
 They exist so operational problems (connection leaks, retransmission storms, pool churn, DNS silently falling back to plaintext) can be diagnosed from inside the process, without packet captures.
+Each of the three methods carries the same name on both surfaces; the fields it returns are named as concepts here and spelled in each surface's own convention (see [RSAPI](../rust/client-api.md)).
 
 ## stats()
 
-`stats()` returns cumulative counters: `requestsSent`, `responsesReceived`, `bodiesStarted`, `bodiesFinished`, and `backgroundRequests`.
+`stats()` returns cumulative counters: requests sent, responses received, bodies started, bodies finished, and background requests.
 The first four count requests made through the agent rather than exchanges on the wire, so a request served from the HTTP cache counts like any other (see [CACHE](../cache/http-cache.md)).
-`bodiesStarted` counts bodies opened for reading, which a discarded body is not.
-A persistent gap between `bodiesStarted` and `bodiesFinished` is the designed leak indicator for response bodies that were opened but never consumed or discarded.
+The bodies-started counter counts bodies opened for reading, which a discarded body is not.
+A persistent gap between bodies started and bodies finished is the designed leak indicator for response bodies that were opened but never consumed or discarded.
 
-`backgroundRequests` counts the requests the agent made on its own initiative rather than ones the caller asked for, which is why they are absent from the other four counters.
+The background-requests counter counts the requests the agent made on its own initiative rather than ones the caller asked for, which is why they are absent from the other four counters.
 It covers the synthetic `HEAD` a `preconnect` sends (see [WARM](warm-up.md)), an eager HTTP/3 probe (see [PROBE](../http3/probing.md)), and a background cache revalidation (see [CACHE](../cache/http-cache.md)).
 Counting them together gives an operator the wire traffic the agent generates beyond the caller's own requests, which is otherwise invisible: the caller's counters and the origin's logs disagree by exactly this number.
 A background request is counted when it is made, whatever its outcome, since these requests swallow their failures and a counter that moved only on success would hide the case worth seeing.
@@ -22,13 +23,13 @@ A background request is counted when it is made, whatever its outcome, since the
 ## connections()
 
 `connections()` lists the agent's current TCP connections with per-connection statistics.
-QUIC connections are not tracked; each entry's `connectionType` is `tcp`.
-Each entry identifies the connection by local/remote address and port, and carries usage data: `responseCount` (may undercount when redirects are followed internally), `firstSeen`, `lastSeen`, and `expiry` (an estimate of when the connection leaves the pool, pushed back on reuse and derived from the pool idle timeout).
-A connection opened by `preconnect(origin)` is listed before any request has used it, with a `responseCount` of zero (see [WARM](warm-up.md)).
+QUIC connections are not tracked; each entry's connection type is TCP.
+Each entry identifies the connection by local/remote address and port, and carries usage data: a response count (which may undercount when redirects are followed internally), the times the connection was first and last seen, and an expiry (an estimate of when the connection leaves the pool, pushed back on reuse and derived from the pool idle timeout).
+A connection opened by `preconnect(origin)` is listed before any request has used it, with a response count of zero (see [WARM](warm-up.md)).
 Network statistics are sampled from the operating system about once a second, so consumers can difference successive readings into rates (e.g. retransmission rate).
 An agent with nothing tracked does not sample at all.
-Cross-platform fields: `rttUs`, `rttVarUs`, `retransmits`, `totalRetransmits`, `congestionWindow`.
-`lostPackets` and `deliveryRateBps` are Linux-only.
+The cross-platform fields are the round-trip time and its variance in microseconds, the current and total retransmit counts, and the congestion window.
+Lost-packet counts and the delivery rate in bits per second are Linux-only.
 Other fields may be missing per platform, and no forward guarantee is made on field availability; on wholly unsupported platforms the list is empty.
 Statistics come from the operating system's own TCP introspection, so sampling stays passive against the real kernel state.
 

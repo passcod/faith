@@ -13,18 +13,18 @@ So advertisements only make an origin probe-worthy: a background probe verifies 
 A probe is a `HEAD` request to the origin's root (query, fragment, and userinfo stripped), forced to HTTP/3, launched in the background when an advertisement arrives — on a non-HTTP/3 response, or in an `HTTPS` DNS record learnt while resolving the name (see [H3UP](upgrade.md)) — and again opportunistically at the start of any TCP-routed request whose origin is probe-worthy.
 A probe neither reads nor writes the HTTP cache, so a replayed HTTP/3-versioned response cannot fake a confirmation; it cannot itself trigger further probing; and its QUIC connection joins the agent's connection pool, so the first upgraded request starts warm.
 Any HTTP/3 response confirms the origin, whatever its status: a 401 or 405 proves the transport as well as a 200 does.
-Anything else (a non-HTTP/3 response, an error, or the probe timeout, `http3.upgradeProbeTimeout`, default 5 seconds, 0 for unbounded) records a failure, which counts towards the origin's failure backoff like any other (see [H3UP](upgrade.md)).
+Anything else (a non-HTTP/3 response, an error, or the probe timeout, default 5 seconds, 0 for unbounded) records a failure, which counts towards the origin's failure backoff like any other (see [H3UP](upgrade.md)).
 Probes are single-flight per origin: concurrent triggers for the same origin produce one probe.
 Origins already confirmed, failed, or marked slow are not probe-worthy.
 Open probes are aborted by `Agent.close()`.
-`http3.upgradeProbe: false` restores the inline upgrade (foreground requests attempt HTTP/3 straight from an advertisement), for operators who cannot tolerate synthetic requests.
+Turning eager probing off restores the inline upgrade (foreground requests attempt HTTP/3 straight from an advertisement), for operators who cannot tolerate synthetic requests.
 
 ## Slow-path demotion
 
 Beyond broken-vs-working, Faith tracks how fast each path actually is: a smoothed average of time-to-response-headers per protocol family (QUIC vs TCP) per origin.
 The response's arrival is observed once and feeds both this average and the response's own timing breakdown (see [RESP](../response/response.md)), so the two can never disagree about when it arrived.
 The average measures from the start of the attempt that produced the response, so an origin's path is judged on its own showing rather than on time spent attempting another.
-An origin whose QUIC path is sustainedly slower than its TCP path is demoted from confirmed back to advertised: slower means the average exceeds the TCP average by the `http3.upgradeSlowFactor` multiple (default 2.5) and by an absolute floor of about 10ms, with at least 8 samples on each side, so noise and sub-millisecond differences never demote.
+An origin whose QUIC path is sustainedly slower than its TCP path is demoted from confirmed back to advertised: slower means the average exceeds the TCP average by the slow-path factor (default 2.5) and by an absolute floor of about 10ms, with at least 8 samples on each side, so noise and sub-millisecond differences never demote.
 Setting the factor to 0 or less disables demotion.
-A slow origin is not a broken one: it keeps its advertisement and re-enters through a background probe after `http3.upgradeSlowTtl` (default 10 minutes), so asking "has the path improved?" never costs a foreground request either.
+A slow origin is not a broken one: it keeps its advertisement and re-enters through a background probe after the slow-path cooldown (default 10 minutes), so asking "has the path improved?" never costs a foreground request either.
 A network-change signal re-enters it at once and discards the averages that demoted it, the path they measured having gone (see [NETCHG](../agent/network-change.md)).

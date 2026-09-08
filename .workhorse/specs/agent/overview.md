@@ -15,16 +15,16 @@ Creating an agent per request is an anti-pattern the design deliberately does no
 ## Construction
 
 Options are validated at construction.
-Errors that indicate a broken configuration throw: an unparseable `localAddress`, DNS override address, or DNS server URL (syntax error), malformed `tls.identity` or `tls.extraRoots` PEM (syntax error), and a disk cache without a path or DNS servers combined with the system resolver (configuration error).
+Errors that indicate a broken configuration throw: an unparseable local address, DNS override address, or DNS server URL (syntax error), malformed `tls.identity` or extra-roots PEM (syntax error), and a disk cache without a path or DNS servers combined with the system resolver (configuration error).
 Convenience inputs degrade gracefully instead: default headers with invalid names or values are dropped entry by entry, and the `manual` redirect policy is accepted (see [REDIR](../fetch/redirects.md)).
-Options Faith does not recognise are ignored rather than rejected, in any group, matching how a `RequestInit` treats them (see [FAITH](../overview.md)).
+Options Faith does not recognise are ignored rather than rejected, in any group, matching how the fetch standard treats unknown members of a request's options (see [FAITH](../overview.md)).
 Node-compatible environment variables are read at construction and layer on top of explicit options (see [ENV](../environment/variables.md)).
 
 ## Identity and defaults
 
-`userAgent` sets the `User-Agent` for all requests; the default is `Faith/{version} reqwest/{version}`, and the `USER_AGENT` constant is exported so callers can prepend their own product token.
-`headers` sets default headers on every request, marked `sensitive` where appropriate (e.g. `Authorization`); per-request headers override them by name.
-`localAddress` forces the source IP for connections.
+The `User-Agent` option sets that header for all requests; the default is `Faith/{version} reqwest/{version}`, and the `USER_AGENT` constant is exported so callers can prepend their own product token.
+The default-headers option sets headers on every request, marked `sensitive` where appropriate (e.g. `Authorization`); per-request headers override them by name.
+The local-address option forces the source IP for connections.
 When unset, on hosts that cannot bind the IPv6 wildcard, the QUIC socket binds the IPv4 wildcard instead (probed once per process), so HTTP/3 works on IPv4-only hosts rather than silently falling back to TCP.
 Dual-stack hosts are unaffected.
 
@@ -37,7 +37,7 @@ A request counts as in flight from the moment it is issued rather than from when
 `close()` acts on the agent itself rather than on the reference it was called through, so every reference to that agent sees it closed.
 `close()` is idempotent, and the cookie jar remains readable after closing.
 
-`networkChanged()` is the other verb that acts on a live agent's own state, discarding what the agent learned from a network that no longer exists while keeping the agent usable (see [NETCHG](network-change.md)).
+The network-change signal is the other verb that acts on a live agent's own state, discarding what the agent learned from a network that no longer exists while keeping the agent usable (see [NETCHG](network-change.md)).
 
 ## Sub-configuration
 

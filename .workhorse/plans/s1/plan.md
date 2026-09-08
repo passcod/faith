@@ -10,10 +10,10 @@ ships as `@passcod/faith`. Then publish to crates.io. Target architecture is spe
 This is an 8-crate restructure of ~11,500 lines, not a single focused change. It is being built on
 this branch as one long-lived PR, at the user's direction, rather than split into a card breakdown.
 
-Steps 0–8 are done: the workspace stands, the five components are out, and the client owns the agent,
-the request path, and the response. Every crate but `web-faith-napi` builds with no napi in its
-graph. What remains is the both-surfaces spec sweep. The release tooling and the first publish to
-crates.io are spun off into their own card.
+Steps 0–13 are done: the workspace stands, the five components are out, the client owns the agent,
+the request path, and the response, and the both-surfaces spec sweep has run over the tree. Every
+crate but `web-faith-napi` builds with no napi in its graph. The release tooling and the first
+publish to crates.io are spun off into their own card.
 
 ## What the discovery turned up
 
@@ -166,9 +166,27 @@ QUIC/TLS stay inside `web-faith` as reqwest features (aws-lc-rs default, ring al
   - **The release tooling and the first publish are their own card** (see the
     [breakdown](../../breakdowns/s1/breakdown.md)): release-plz, `cargo-semver-checks`, and MSRV CI,
     with the manual first publish done at any point while that card is in progress.
-- [ ] **13. The both-surfaces spec sweep**, as the closing pass over the tree — deliberately last,
-  once the Rust API is settled and its names are known. See the section below for the site-by-site
-  reconnaissance.
+- [x] **13. The both-surfaces spec sweep**, as the closing pass over the tree — deliberately last,
+  once the Rust API is settled and its names are known. The Faith-own identifiers that the two
+  surfaces spell differently (camelCase methods, returned-object fields, and camelCase option leaves)
+  are now named as concepts with a cross-reference, while identifiers byte-identical across surfaces
+  stay: the stable error codes, method names shared verbatim (`stats()`, `connections()`,
+  `resolvers()`, `preconnect()`, `close()`), standard Web/DOM/fetch type names, RFC terms, and
+  Resource-Timing/Server-Timing field names (including Faith's own `reused`/`requestSent` additions
+  that live among them). The response specs took the light touch the reconnaissance called for
+  (`bodyUsed`/`statusText` named as concepts; the Node body-method surface left as the Node
+  narrative, with the Rust reads in [RSAPI](../../specs/rust/client-api.md)). The one heading rename
+  (`## prefetchDns` → `## DNS prefetch`) updated its lone code anchor in `warm_up.rs`, and two
+  `web-faith` build comments dropped the JS spellings (`prefetch_dns`, `network_changed`).
+
+  The sweep went beyond the reconnaissance's enumerated files — which the recon flagged as a rough
+  survey, not a closed set — to keep the treatment consistent: `tls`, `cache`, `quirks`, and the
+  HTTP/3 trio (`upgrade`, `probing`, `transport`) carry the same category of camelCase option leaves,
+  and leaving them JS-spelled while de-JS'ing `dns.serveStale` would have been a half-done pass. The
+  single-word option paths shared verbatim across surfaces (`dns.servers`, `dns.system`, `cache.mode`,
+  `http3.hints`, `tls.identity`, `tls.required`, and the like) were deliberately kept as shared
+  vocabulary. `cargo build` and `cargo fmt --check` are green; the changes are markdown plus
+  comment-only edits, so tests and the napi build are untouched.
 
 ## What the extractions settled
 

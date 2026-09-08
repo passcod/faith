@@ -11,7 +11,7 @@ The system resolver remains available as an escape hatch for environments where 
 ## Built-in resolver
 
 Resolution uses Faith's own client with an in-memory cache; repeat requests to a host skip the lookup entirely (connection reuse skips it further still).
-`prefetchDns(host)` populates this cache ahead of the first request (see [WARM](warm-up.md)).
+DNS prefetch populates this cache ahead of the first request (see [WARM](warm-up.md)).
 IPv4 and IPv6 answers race with the Happy Eyeballs algorithm, so a broken family degrades latency rather than breaking connectivity.
 
 ## HTTPS records
@@ -36,9 +36,9 @@ An expired entry is served immediately and refreshed in the background, so the c
 The trade is deliberate: a host's address changes rarely, so an expired answer is almost always still correct, and the rare wrong one costs a re-resolve on that one request where resolving fresh costs a round trip on every expiry to every caller.
 The gain is only visible against a slow resolver, which is where a lookup is a meaningful part of what a request pays.
 
-`dns.serveStale` governs this and defaults to `true`.
-Set to `false`, an expired entry is discarded and the lookup blocks on a fresh answer, which is the behaviour of an agent that never connects to an address it knows to be out of date.
-`dns.maxStale` bounds how far past expiry an answer is served and defaults to one hour.
+Serving stale is governed by an option that defaults to on.
+Turned off, an expired entry is discarded and the lookup blocks on a fresh answer, which is the behaviour of an agent that never connects to an address it knows to be out of date.
+A max-stale bound sets how far past expiry an answer is served and defaults to one hour.
 An entry older than that is discarded rather than served, because an answer stale enough stops being evidence about where the host is, and a refresh still failing after that long is the case where the address most likely did change.
 Under the system resolver there is no cache, so no answer is ever stale and neither option has anything to govern (see [System resolver](#system-resolver)).
 Exempt names reach that same resolver even when Faith's own client is in use, so `localhost`, `.local`, and the other exempt suffixes are never served stale either (see [Exempt names](#exempt-names)).
@@ -113,9 +113,9 @@ The system's search domains, its dots threshold, and its hosts file govern how a
 The hosts file is consulted before any server, so a name it answers never reaches a resolver at all.
 
 Three options override those inputs independently of `dns.servers`, so how names are prepared can be changed without naming servers, and the reverse.
-`dns.searchDomains` replaces the system's search list.
+The search-domains option replaces the system's search list.
 `dns.ndots` sets how many dots a name must contain before it is tried as given, ahead of the search list.
-`dns.hostsFile` turns hosts-file lookup on or off, and when unset follows the platform's own convention.
+The hosts-file option turns hosts-file lookup on or off, and when unset follows the platform's own convention.
 
 ## Exempt names
 
@@ -124,7 +124,7 @@ Some names must not leave the local network, and sending them to a configured or
 This is also what makes `.local` work at all, since multicast DNS is not something Faith's own client speaks.
 The exemption holds whether the servers came from `dns.servers` or from discovery, because its reason is the correctness of local names rather than a preference about transports.
 
-`dns.exemptDomains` adds further domains, for the internal suffixes a network uses that are not its DNS suffix.
+The exempt-domains option adds further domains, for the internal suffixes a network uses that are not its DNS suffix.
 It adds to the three above rather than replacing them, so a caller extends the exemption without being able to send `localhost` to a public resolver by accident.
 A domain is exempt when it matches an entry exactly or is a subdomain of one.
 
@@ -170,7 +170,7 @@ Servers listed in `dns.servers` are never probed, since an explicit list is a st
 
 ## Network changes
 
-Most of what the resolver holds is a reading of one network rather than a setting of the agent's, so `networkChanged()` rebuilds the resolver from the caller's options and reads the rest again on the next lookup (see [NETCHG](network-change.md)).
+Most of what the resolver holds is a reading of one network rather than a setting of the agent's, so a network-changed signal rebuilds the resolver from the caller's options and reads the rest again on the next lookup (see [NETCHG](network-change.md)).
 Rebuilt are the servers discovery took from the system, the addresses hostname servers bootstrapped to, the suffixes treated as local, the results of encryption probes, and the cached answers, which go with the resolvers holding them.
 Flushing the answers alone would leave the agent looking the same names up again through the previous network's servers, which is the opposite of what the signal is for.
 

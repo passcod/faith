@@ -68,7 +68,7 @@ mod tests {
 	#[test]
 	fn prefetch_dns_ignores_the_parts_a_name_does_not_have() {
 		// A DNS name has no scheme, port, or path, so a fuller string is reduced to its host
-		// rather than rejected (spec:WARM#prefetchdns).
+		// rather than rejected (spec:WARM#dns-prefetch).
 		for input in [
 			"https://example.com",
 			"https://example.com:8443",

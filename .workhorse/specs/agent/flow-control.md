@@ -11,7 +11,7 @@ HTTP/1 has no flow control of its own and is governed by the operating system's 
 
 ## Common windows
 
-`flowControl.streamWindow` and `flowControl.connectionWindow`, each in bytes, set the per-stream and whole-connection receive windows for HTTP/2 and HTTP/3 alike.
+The common per-stream and whole-connection windows, each in bytes, set the receive windows for HTTP/2 and HTTP/3 alike.
 Setting these is how the windows are normally tuned: one value applies to whichever protocol a request negotiates, so throughput does not change when an origin upgrades from one protocol to the other.
 
 They default to a 6 MiB per-stream window and a 15 MiB whole-connection window, following browser practice.
@@ -21,16 +21,16 @@ The defaults sit at the conservative end of browser practice rather than at peak
 
 ## Per-protocol windows
 
-`http2.streamWindow`, `http2.connectionWindow`, `http3.streamWindow`, and `http3.connectionWindow` set the windows for one protocol only, in bytes.
-A per-protocol window takes precedence over the common one, so setting `flowControl.streamWindow` alongside `http3.streamWindow` gives HTTP/3 the latter and leaves HTTP/2 on the former.
+The per-protocol per-stream and whole-connection windows set the windows for one protocol only, in bytes, one pair for HTTP/2 and one for HTTP/3.
+A per-protocol window takes precedence over the common one, so setting the common per-stream window alongside the HTTP/3 per-stream window gives HTTP/3 the latter and leaves HTTP/2 on the former.
 These exist for tuning one protocol against the other; a caller who wants both to behave the same sets the common windows instead.
 
-`http3.sendWindow` (bytes) caps how much data Faith transmits without acknowledgement, bounding upload throughput the way the receive windows bound download; the origin's own flow control applies on top of it.
+The HTTP/3 send window (bytes) caps how much data Faith transmits without acknowledgement, bounding upload throughput the way the receive windows bound download; the origin's own flow control applies on top of it.
 
 ## Adaptive windowing
 
-`http2.adaptiveWindow` (default `false`) replaces HTTP/2's static windows with windows that start small and grow towards a bandwidth-delay estimate sampled from connection pings, capped at 16 MiB.
+HTTP/2 adaptive windowing (default off) replaces HTTP/2's static windows with windows that start small and grow towards a bandwidth-delay estimate sampled from connection pings, capped at 16 MiB.
 
 Adaptive windowing and explicit windows are mutually exclusive: enabling it ignores both the common and the HTTP/2 windows, because the estimator owns them itself.
-HTTP/3 is unaffected and keeps whichever windows apply to it, so an agent with adaptive windowing on still honours `flowControl.streamWindow` for its HTTP/3 connections.
+HTTP/3 is unaffected and keeps whichever windows apply to it, so an agent with adaptive windowing on still honours the common per-stream window for its HTTP/3 connections.
 Adaptive windowing is off by default because a fresh connection opens far below the static default and takes many round trips to ramp up, so it carries less throughput than the static window for all but the largest transfers, and turning it on gives up the ability to tune the windows explicitly.

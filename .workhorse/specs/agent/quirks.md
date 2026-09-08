@@ -19,7 +19,7 @@ A switch that tightens behaviour, or that trades off security within what a stan
 
 ## HTTP/1.x request body streaming
 
-`quirks.h1RequestStreaming` allows a streaming request body to be sent over an HTTP/1.x connection, which the fetch standard reserves for HTTP/2 and HTTP/3 (see [REQ](../fetch/request.md)).
+The HTTP/1.x request-streaming quirk allows a streaming request body to be sent over an HTTP/1.x connection, which the fetch standard reserves for HTTP/2 and HTTP/3 (see [REQ](../fetch/request.md)).
 With it on, a streaming body sends over whichever protocol the connection negotiates and the request is not failed for the protocol's sake.
 
 The rule exists because an HTTP/1.x origin, or an intermediary on the path, may not accept a request whose length is unknown when the headers are sent, and a caller has no way to discover that before committing to the send.
@@ -27,7 +27,7 @@ An origin the caller controls, and has confirmed streams over HTTP/1.1, has no s
 
 ## HTTP/3 advertised ports
 
-`quirks.h3FollowAdvertisedPort` upgrades an origin whose HTTP/3 advertisement names a port other than the origin's own, by rewriting the request's port to the advertised one (see [H3UP](../http3/upgrade.md)).
+The advertised-port quirk upgrades an origin whose HTTP/3 advertisement names a port other than the origin's own, by rewriting the request's port to the advertised one (see [H3UP](../http3/upgrade.md)).
 Without it such an origin does not upgrade at all.
 
 The rule is RFC 7838's: an advertisement names a network endpoint to connect to, while the request still carries the origin's own authority.

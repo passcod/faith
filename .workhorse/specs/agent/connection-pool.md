@@ -7,9 +7,9 @@ id: POOL
 Each agent pools connections so subsequent requests to the same endpoint skip DNS, TCP, and TLS setup.
 Pooling is always on; the options bound how long and how many idle connections are kept.
 
-`pool.idleTimeout` closes a connection after that many seconds of inactivity.
+The pool idle timeout closes a connection after that many seconds of inactivity.
 It defaults to 90 seconds, and the same window bounds how long an idle connection appears in `connections()` (see [OBS](observability.md)).
-`pool.maxIdlePerHost` caps idle connections kept per origin: scheme, host, and port together, so `https://example.com`, `https://example.com:8443`, and `http://example.com` are capped separately despite the option's name.
+The per-host idle cap limits idle connections kept per origin: scheme, host, and port together, so `https://example.com`, `https://example.com:8443`, and `http://example.com` are capped separately, the origin being scheme-host-port rather than host alone.
 Once an origin sits at the cap, a connection that would otherwise return to the pool is closed instead, so the connections already idle are the ones that survive.
 The default is no limit.
 HTTP/1 connections return to the pool once their response body has been fully read or discarded; an unconsumed body holds its connection (see [BODY](../response/reading-the-body.md)).

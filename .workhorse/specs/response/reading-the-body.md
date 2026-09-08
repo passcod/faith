@@ -13,7 +13,7 @@ A body Faith decodes is delivered decoded whichever path reads it (see [ENC](../
 
 `body` is a `ReadableStream` of the body contents, or `null` for responses that cannot carry a body (HEAD requests, `204 No Content`).
 Browsers return a stream there anyway; Faith follows the standard.
-Accessing `body` marks the response disturbed (`bodyUsed` becomes true), even before any bytes are consumed.
+Accessing `body` marks the response disturbed (the body-used flag becomes true), even before any bytes are consumed.
 A response has one body stream: `body` builds it on first access and returns that same `ReadableStream` object thereafter.
 Consumption therefore advances a single position, and a handle taken after part of the body has been read continues from where the earlier one left off.
 Errors surfaced through the body stream carry no `code` property (see [ERR](../errors/errors.md)).
@@ -31,7 +31,7 @@ These methods verify `integrity` when set; the `body` stream path does not (see 
 ## toFile()
 
 `toFile(path, options)` writes the body to a file on disk, the bytes travelling from the network to the filesystem inside Faith without crossing into JavaScript.
-It is a whole-body read alongside `bytes()` and its siblings: the first consumer wins, `bodyUsed` becomes true once the read begins, and `integrity` is verified when set (see [SRI](../fetch/integrity.md)).
+It is a whole-body read alongside `bytes()` and its siblings: the first consumer wins, the body-used flag becomes true once the read begins, and `integrity` is verified when set (see [SRI](../fetch/integrity.md)).
 A caller wanting a file on disk therefore has no reason to route the body through a `ReadableStream` and Node's filesystem APIs.
 It resolves to `{ path, bytesWritten }`, where `path` is the absolute filesystem path written to and `bytesWritten` counts the bytes that landed there.
 The write runs on Faith's own async runtime rather than the libuv worker pool (see [RESP](response.md)).
@@ -80,7 +80,7 @@ Trailers settle once, for original and clones alike.
 
 `discard()` disposes of the body so the connection can be reused, resolving when disposal is done: on HTTP/1 the body is drained; on HTTP/2 and HTTP/3 the stream is cancelled outright, since the connection is reusable regardless.
 It is idempotent, and calling it on a body that has already been read is accepted rather than an error.
-A discarded body cannot be read afterwards: the whole-body methods and `clone()` reject with the already-disturbed error, while `bodyUsed` stays false because disposing of a body is not reading it.
+A discarded body cannot be read afterwards: the whole-body methods and `clone()` reject with the already-disturbed error, while the body-used flag stays false because disposing of a body is not reading it.
 After `discard()`, the trailers promise resolves to `null` (see [TRL](trailers.md)).
 An unread, undiscarded HTTP/1 response holds its connection until the response is garbage collected, at which point the body is drained and the connection returned to the pool on a best-effort basis, or closed when that is not possible.
 `discard()` is the deterministic path; the collector is only the safety net.
