@@ -10,6 +10,7 @@ authors.workspace = true
 
 [dependencies]
 async-trait.workspace = true
+bon.workspace = true
 bytes.workspace = true
 futures.workspace = true
 http.workspace = true

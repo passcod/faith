@@ -21,134 +21,166 @@ use crate::agent::CacheStore;
 ///
 /// A field-for-field mapping wherever the two agree, which is most of them; what differs is where
 /// JavaScript expresses a choice as a union or a string that Rust has a type for.
+///
+/// Every option arrives as an `Option`, so the `maybe_` setters are what this reaches for: absent on
+/// the JavaScript side means absent here, and the client settles the default. A group whose fields
+/// sit behind a Cargo feature is filled in a `#[cfg]`-gated `let`, the builder's type changing with
+/// each setter being what rules out a conditional call mid-chain.
 impl From<AgentOptions> for options::AgentOptions {
 	fn from(opts: AgentOptions) -> Self {
-		Self {
-			#[cfg(feature = "cache")]
-			cache: opts.cache.map(|cache| options::CacheOptions {
-				store: cache.store.map(|store| match store {
-					CacheStore::Disk => options::CacheStore::Disk,
-					CacheStore::Memory => options::CacheStore::Memory,
-				}),
-				capacity: cache.capacity,
-				mode: cache.mode.map(CacheMode::from),
-				path: cache.path,
-				shared: cache.shared,
-			}),
-			// `false` and an absent value both mean no jar; `true` means one with default limits.
-			#[cfg(feature = "cookies")]
-			cookies: match opts.cookies {
-				None | Some(Either::A(false)) => None,
-				Some(Either::A(true)) => Some(CookieLimits::default()),
-				Some(Either::B(cookies)) => Some((&cookies).into()),
-			},
-			dns: opts.dns.map(|dns| options::DnsOptions {
-				#[cfg(feature = "dns")]
-				system: dns.system,
-				overrides: dns.overrides.map(|overrides| {
-					overrides
-						.into_iter()
-						.map(|o| options::DnsOverride {
-							domain: o.domain,
-							addresses: o.addresses,
-						})
-						.collect()
-				}),
-				#[cfg(feature = "dns")]
-				servers: dns.servers,
-				#[cfg(feature = "dns")]
-				timeout: dns.timeout,
-				#[cfg(feature = "dns")]
-				search_domains: dns.search_domains,
-				#[cfg(feature = "dns")]
-				ndots: dns.ndots,
-				#[cfg(feature = "dns")]
-				hosts_file: dns.hosts_file,
-				#[cfg(feature = "dns")]
-				exempt_domains: dns.exempt_domains,
-				#[cfg(feature = "dns")]
-				serve_stale: dns.serve_stale,
-				#[cfg(feature = "dns")]
-				max_stale: dns.max_stale,
-			}),
-			flow_control: opts.flow_control.map(|flow| options::FlowControlOptions {
-				stream_window: flow.stream_window,
-				connection_window: flow.connection_window,
-			}),
-			headers: opts.headers.map(|headers| {
+		let builder = options::AgentOptions::builder()
+			.maybe_local_address(opts.local_address)
+			.maybe_redirect(opts.redirect.map(RedirectPolicy::from))
+			.maybe_user_agent(opts.user_agent)
+			.maybe_headers(opts.headers.map(|headers| {
 				headers
 					.into_iter()
-					.map(|header| options::Header {
-						name: header.name,
-						value: header.value,
-						sensitive: header.sensitive,
+					.map(|header| {
+						options::Header::builder()
+							.name(header.name)
+							.value(header.value)
+							.maybe_sensitive(header.sensitive)
+							.build()
 					})
 					.collect()
-			}),
-			http2: opts.http2.map(|http2| options::Http2Options {
-				stream_window: http2.stream_window,
-				connection_window: http2.connection_window,
-				adaptive_window: http2.adaptive_window,
-			}),
-			#[cfg(feature = "http3")]
-			http3: opts.http3.map(|http3| options::Http3Options {
-				congestion: http3.congestion.map(|c| match c {
+			}))
+			.maybe_dns(opts.dns.map(dns_options))
+			.maybe_flow_control(opts.flow_control.map(|flow| {
+				options::FlowControlOptions::builder()
+					.maybe_stream_window(flow.stream_window)
+					.maybe_connection_window(flow.connection_window)
+					.build()
+			}))
+			.maybe_http2(opts.http2.map(|http2| {
+				options::Http2Options::builder()
+					.maybe_stream_window(http2.stream_window)
+					.maybe_connection_window(http2.connection_window)
+					.maybe_adaptive_window(http2.adaptive_window)
+					.build()
+			}))
+			.maybe_pool(opts.pool.map(|pool| {
+				options::PoolOptions::builder()
+					.maybe_idle_timeout(pool.idle_timeout)
+					.maybe_max_idle_per_host(pool.max_idle_per_host)
+					.build()
+			}))
+			.maybe_quirks(opts.quirks.map(|quirks| {
+				options::QuirksOptions::builder()
+					.maybe_h1_request_streaming(quirks.h1_request_streaming)
+					.build()
+			}))
+			.maybe_timeout(opts.timeout.map(|timeout| {
+				options::TimeoutOptions::builder()
+					.maybe_connect(timeout.connect)
+					.maybe_read(timeout.read)
+					.maybe_total(timeout.total)
+					.build()
+			}))
+			.maybe_tls(opts.tls.map(|tls| {
+				options::TlsOptions::builder()
+					.maybe_early_data(tls.early_data)
+					.maybe_required(tls.required)
+					// Either spelling of a PEM is the same bytes to the client.
+					.maybe_identity(tls.identity.map(|pem| pem_bytes(&pem)))
+					.maybe_extra_roots(
+						tls.extra_roots
+							.map(|roots| roots.iter().map(pem_bytes).collect()),
+					)
+					.build()
+			}));
+
+		#[cfg(feature = "cache")]
+		let builder = builder.maybe_cache(opts.cache.map(|cache| {
+			options::CacheOptions::builder()
+				.maybe_store(cache.store.map(|store| match store {
+					CacheStore::Disk => options::CacheStore::Disk,
+					CacheStore::Memory => options::CacheStore::Memory,
+				}))
+				.maybe_capacity(cache.capacity)
+				.maybe_mode(cache.mode.map(CacheMode::from))
+				.maybe_path(cache.path)
+				.maybe_shared(cache.shared)
+				.build()
+		}));
+
+		// `false` and an absent value both mean no jar; `true` means one with default limits.
+		#[cfg(feature = "cookies")]
+		let builder = builder.maybe_cookies(match opts.cookies {
+			None | Some(Either::A(false)) => None,
+			Some(Either::A(true)) => Some(CookieLimits::default()),
+			Some(Either::B(cookies)) => Some((&cookies).into()),
+		});
+
+		#[cfg(feature = "http3")]
+		let builder = builder.maybe_http3(opts.http3.map(|http3| {
+			options::Http3Options::builder()
+				.maybe_congestion(http3.congestion.map(|c| match c {
 					Http3Congestion::Cubic => options::Http3Congestion::Cubic,
 					Http3Congestion::Bbr1 => options::Http3Congestion::Bbr1,
-				}),
-				max_idle_timeout: http3.max_idle_timeout,
-				upgrade_enabled: http3.upgrade_enabled,
-				upgrade_probe: http3.upgrade_probe,
-				upgrade_probe_timeout: http3.upgrade_probe_timeout,
-				upgrade_slow_factor: http3.upgrade_slow_factor,
-				upgrade_slow_ttl: http3.upgrade_slow_ttl,
-				upgrade_advertised_ttl: http3.upgrade_advertised_ttl,
-				upgrade_confirmed_ttl: http3.upgrade_confirmed_ttl,
-				upgrade_failed_ttl: http3.upgrade_failed_ttl,
-				upgrade_failed_max_ttl: http3.upgrade_failed_max_ttl,
-				upgrade_cancel_strikes: http3.upgrade_cancel_strikes,
-				upgrade_attempt_timeout: http3.upgrade_attempt_timeout,
-				upgrade_follow_advertised_port: http3.upgrade_follow_advertised_port,
-				upgrade_cache_capacity: http3.upgrade_cache_capacity,
-				hints: http3.hints.map(|hints| {
+				}))
+				.maybe_max_idle_timeout(http3.max_idle_timeout)
+				.maybe_upgrade_enabled(http3.upgrade_enabled)
+				.maybe_upgrade_probe(http3.upgrade_probe)
+				.maybe_upgrade_probe_timeout(http3.upgrade_probe_timeout)
+				.maybe_upgrade_slow_factor(http3.upgrade_slow_factor)
+				.maybe_upgrade_slow_ttl(http3.upgrade_slow_ttl)
+				.maybe_upgrade_advertised_ttl(http3.upgrade_advertised_ttl)
+				.maybe_upgrade_confirmed_ttl(http3.upgrade_confirmed_ttl)
+				.maybe_upgrade_failed_ttl(http3.upgrade_failed_ttl)
+				.maybe_upgrade_failed_max_ttl(http3.upgrade_failed_max_ttl)
+				.maybe_upgrade_cancel_strikes(http3.upgrade_cancel_strikes)
+				.maybe_upgrade_attempt_timeout(http3.upgrade_attempt_timeout)
+				.maybe_upgrade_follow_advertised_port(http3.upgrade_follow_advertised_port)
+				.maybe_upgrade_cache_capacity(http3.upgrade_cache_capacity)
+				.maybe_hints(http3.hints.map(|hints| {
 					hints
 						.into_iter()
-						.map(|hint| options::Http3Hint {
-							host: hint.host,
-							port: hint.port,
+						.map(|hint| {
+							options::Http3Hint::builder()
+								.host(hint.host)
+								.port(hint.port)
+								.build()
 						})
 						.collect()
-				}),
-				stream_window: http3.stream_window,
-				connection_window: http3.connection_window,
-				send_window: http3.send_window,
-			}),
-			local_address: opts.local_address,
-			pool: opts.pool.map(|pool| options::PoolOptions {
-				idle_timeout: pool.idle_timeout,
-				max_idle_per_host: pool.max_idle_per_host,
-			}),
-			quirks: opts.quirks.map(|quirks| options::QuirksOptions {
-				h1_request_streaming: quirks.h1_request_streaming,
-			}),
-			redirect: opts.redirect.map(RedirectPolicy::from),
-			timeout: opts.timeout.map(|timeout| options::TimeoutOptions {
-				connect: timeout.connect,
-				read: timeout.read,
-				total: timeout.total,
-			}),
-			tls: opts.tls.map(|tls| options::TlsOptions {
-				early_data: tls.early_data,
-				// Either spelling of a PEM is the same bytes to the client.
-				identity: tls.identity.map(|pem| pem_bytes(&pem)),
-				required: tls.required,
-				extra_roots: tls
-					.extra_roots
-					.map(|roots| roots.iter().map(pem_bytes).collect()),
-			}),
-			user_agent: opts.user_agent,
-		}
+				}))
+				.maybe_stream_window(http3.stream_window)
+				.maybe_connection_window(http3.connection_window)
+				.maybe_send_window(http3.send_window)
+				.build()
+		}));
+
+		builder.into_options()
 	}
+}
+
+/// The `dns` group, whose resolver settings sit behind the `dns` feature while `overrides` reaches
+/// reqwest and so is honoured either way.
+fn dns_options(dns: crate::agent::AgentDnsOptions) -> options::DnsOptions {
+	let builder = options::DnsOptions::builder().maybe_overrides(dns.overrides.map(|overrides| {
+		overrides
+			.into_iter()
+			.map(|o| {
+				options::DnsOverride::builder()
+					.domain(o.domain)
+					.addresses(o.addresses)
+					.build()
+			})
+			.collect()
+	}));
+
+	#[cfg(feature = "dns")]
+	let builder = builder
+		.maybe_system(dns.system)
+		.maybe_servers(dns.servers)
+		.maybe_timeout(dns.timeout)
+		.maybe_search_domains(dns.search_domains)
+		.maybe_ndots(dns.ndots)
+		.maybe_hosts_file(dns.hosts_file)
+		.maybe_exempt_domains(dns.exempt_domains)
+		.maybe_serve_stale(dns.serve_stale)
+		.maybe_max_stale(dns.max_stale);
+
+	builder.build()
 }
 
 /// PEM input arrives as a buffer or a string; both are just the bytes.

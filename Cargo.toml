@@ -23,6 +23,7 @@ async-compression = { version = "0.4", default-features = false, features = [
 ] }
 async-stream = "0.3.6"
 async-trait = "0.1.89"
+bon = "3.10.1"
 bytes = "1.9.0"
 cookie = "0.18.1"
 cookie_store = { version = "0.22.0", default-features = false }

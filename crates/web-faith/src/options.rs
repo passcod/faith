@@ -22,7 +22,8 @@ use crate::client::{
 
 /// Settings related to the HTTP cache. This is a nested object.
 #[cfg(feature = "cache")]
-#[derive(Clone, Debug, Default)]
+#[derive(bon::Builder, Clone, Debug, Default)]
+#[non_exhaustive]
 pub struct CacheOptions {
 	/// Which cache store to use: either `disk` or `memory`.
 	///
@@ -58,14 +59,16 @@ pub enum CacheStore {
 	Memory,
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(bon::Builder, Clone, Debug, Default)]
+#[non_exhaustive]
 pub struct DnsOverride {
 	pub domain: String,
 	pub addresses: Vec<String>,
 }
 
 /// Settings related to DNS. This is a nested object.
-#[derive(Clone, Debug, Default)]
+#[derive(bon::Builder, Clone, Debug, Default)]
+#[non_exhaustive]
 pub struct DnsOptions {
 	/// Use the system's DNS (via `getaddrinfo` or equivalent) rather than Faith's own DNS client (based on
 	/// [Hickory]). If you experience issues with DNS where Faith does not work but e.g. curl or native
@@ -163,7 +166,8 @@ pub struct DnsOptions {
 /// Sensitive headers (e.g. `Authorization`) should be marked.
 ///
 /// Default: none.
-#[derive(Clone, Debug, Default)]
+#[derive(bon::Builder, Clone, Debug, Default)]
+#[non_exhaustive]
 pub struct Header {
 	pub name: String,
 	pub value: String,
@@ -182,7 +186,8 @@ pub enum Http3Congestion {
 /// A hint that HTTP/3 is available at a specific host and port. This pre-populates the Alt-Svc
 /// cache so the first request to this host will attempt HTTP/3 immediately.
 #[cfg(feature = "http3")]
-#[derive(Clone, Debug, Default)]
+#[derive(bon::Builder, Clone, Debug, Default)]
+#[non_exhaustive]
 pub struct Http3Hint {
 	/// The hostname (e.g., "example.com").
 	pub host: String,
@@ -192,7 +197,8 @@ pub struct Http3Hint {
 
 /// Settings related to HTTP/3. This is a nested object.
 #[cfg(feature = "http3")]
-#[derive(Clone, Debug, Default)]
+#[derive(bon::Builder, Clone, Debug, Default)]
+#[non_exhaustive]
 pub struct Http3Options {
 	/// The congestion control algorithm. The default is `cubic`, which is the same used in TCP in the
 	/// Linux stack. It's fair for all traffic, but not the most optimal, especially for networks with
@@ -421,7 +427,8 @@ pub struct Http3Options {
 }
 
 /// Settings related to HTTP/2. This is a nested object.
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(bon::Builder, Clone, Copy, Debug, Default)]
+#[non_exhaustive]
 pub struct Http2Options {
 	/// Maximum bytes an origin may send on any one HTTP/2 stream before it must wait for
 	/// Faith to acknowledge them. Overrides `flowControl.streamWindow` for HTTP/2 only.
@@ -458,7 +465,8 @@ pub struct Http2Options {
 }
 
 /// Settings related to HTTP flow control, shared by HTTP/2 and HTTP/3. This is a nested object.
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(bon::Builder, Clone, Copy, Debug, Default)]
+#[non_exhaustive]
 pub struct FlowControlOptions {
 	/// Maximum bytes an origin may send on any one stream before it must wait for Faith to
 	/// acknowledge them, for HTTP/2 and HTTP/3 alike.
@@ -487,7 +495,8 @@ pub struct FlowControlOptions {
 }
 
 /// Settings related to the connection pool. This is a nested object.
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(bon::Builder, Clone, Copy, Debug, Default)]
+#[non_exhaustive]
 pub struct PoolOptions {
 	/// How many seconds of inactivity before a connection is closed.
 	///
@@ -507,7 +516,8 @@ pub struct PoolOptions {
 /// standards-compliant. A quirk is for a caller who controls the origin, or has otherwise
 /// established that what the rule guards against does not apply to them: turning one on means
 /// requests may fail against origins that expect the standard behaviour.
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(bon::Builder, Clone, Copy, Debug, Default)]
+#[non_exhaustive]
 pub struct QuirksOptions {
 	/// Allow a streaming request body to be sent over an HTTP/1.x connection.
 	///
@@ -521,7 +531,8 @@ pub struct QuirksOptions {
 }
 
 /// Timeouts for requests made with this agent. This is a nested object.
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(bon::Builder, Clone, Copy, Debug, Default)]
+#[non_exhaustive]
 pub struct TimeoutOptions {
 	/// Set a timeout for only the connect phase, in milliseconds.
 	///
@@ -544,7 +555,8 @@ pub struct TimeoutOptions {
 }
 
 /// Settings related to the connection pool. This is a nested object.
-#[derive(Clone, Debug, Default)]
+#[derive(bon::Builder, Clone, Debug, Default)]
+#[non_exhaustive]
 pub struct TlsOptions {
 	/// Enable TLS 1.3 Early Data. Early data is an optimisation where the client sends the first packet
 	/// of application data alongside the opening packet of the TLS handshake. That can enable the server
@@ -576,7 +588,9 @@ pub struct TlsOptions {
 	pub extra_roots: Option<Vec<Vec<u8>>>,
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(bon::Builder, Clone, Debug, Default)]
+#[builder(finish_fn = into_options)]
+#[non_exhaustive]
 pub struct AgentOptions {
 	/// Settings related to the HTTP cache. This is a nested object.
 	#[cfg(feature = "cache")]
