@@ -287,7 +287,7 @@ impl Agent {
 	/// on field availability. If the platform isn't supported at all, this will always return empty.
 	#[napi]
 	pub fn connections<'env>(&self, env: &'env Env) -> Vec<ConnectionInfo<'env>> {
-		connections_for_napi(&self.inner.conn_tracker, env)
+		connections_for_napi(self.inner.connections(), env)
 	}
 }
 

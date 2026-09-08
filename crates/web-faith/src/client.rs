@@ -21,7 +21,7 @@ use http::header::HeaderMap;
 mod http_cache;
 
 #[cfg(feature = "cache")]
-pub use http_cache::{HttpCacheRecipe, HttpCacheStore};
+pub(crate) use http_cache::{HttpCacheRecipe, HttpCacheStore};
 
 #[cfg(feature = "cache")]
 use http_cache_reqwest::{Cache, HttpCache};
@@ -82,9 +82,9 @@ const _: () = assert!(DEFAULT_CONNECTION_WINDOW > DEFAULT_STREAM_WINDOW);
 /// defaults have been reconciled.
 // spec:FLOW#per-protocol-windows
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ResolvedWindows {
-	pub stream: u32,
-	pub connection: u32,
+pub(crate) struct ResolvedWindows {
+	pub(crate) stream: u32,
+	pub(crate) connection: u32,
 }
 
 /// What the Node.js networking environment variables asked for, to apply to a reqwest client
@@ -118,7 +118,7 @@ pub struct ResolvedWindows {
 /// that has changed since.
 // spec:NETCHG
 #[derive(Debug, Clone, Default)]
-pub struct NodeEnvRecipe {
+pub(crate) struct NodeEnvRecipe {
 	extra_ca_certs: Vec<Certificate>,
 	accept_invalid_certs: bool,
 	no_proxy: bool,
@@ -165,11 +165,11 @@ impl NodeEnvRecipe {
 // spec:NETCHG
 #[cfg(feature = "http3")]
 #[derive(Debug, Clone)]
-pub struct H3UpgradeRecipe {
-	pub enabled: bool,
-	pub attempt_timeout: Option<Duration>,
-	pub probe: bool,
-	pub probe_timeout: Option<Duration>,
+pub(crate) struct H3UpgradeRecipe {
+	pub(crate) enabled: bool,
+	pub(crate) attempt_timeout: Option<Duration>,
+	pub(crate) probe: bool,
+	pub(crate) probe_timeout: Option<Duration>,
 }
 
 /// Everything needed to build the agent's clients, validated once up front.
@@ -180,46 +180,48 @@ pub struct H3UpgradeRecipe {
 /// pure function of them and the agent's shared state.
 // spec:NETCHG
 #[derive(Debug, Clone)]
-pub struct ClientRecipe {
-	pub user_agent: String,
-	pub local_address: Option<IpAddr>,
-	pub default_headers: Option<HeaderMap>,
-	/// Under the system resolver no hickory resolver is installed at all.
+pub(crate) struct ClientRecipe {
+	pub(crate) user_agent: String,
+	pub(crate) local_address: Option<IpAddr>,
+	pub(crate) default_headers: Option<HeaderMap>,
+	/// Under the system resolver no hickory resolver is installed at all. Only meaningful where
+	/// Faith has a resolver of its own to choose instead.
 	// spec:DNS
-	pub dns_system: bool,
+	#[cfg(feature = "dns")]
+	pub(crate) dns_system: bool,
 	/// Validated at construction, and applied whichever resolver is in use: reqwest layers
 	/// overrides on top of the resolver it was given.
 	// spec:DNS#overrides
-	pub dns_overrides: Vec<(String, Vec<SocketAddr>)>,
-	pub http2_adaptive_window: bool,
+	pub(crate) dns_overrides: Vec<(String, Vec<SocketAddr>)>,
+	pub(crate) http2_adaptive_window: bool,
 	/// `None` when adaptive windowing owns the windows itself.
 	// spec:FLOW#adaptive-windowing
-	pub http2_windows: Option<ResolvedWindows>,
+	pub(crate) http2_windows: Option<ResolvedWindows>,
 	#[cfg(feature = "http3")]
-	pub http3_max_idle_timeout: Duration,
+	pub(crate) http3_max_idle_timeout: Duration,
 	#[cfg(feature = "http3")]
-	pub http3_windows: ResolvedWindows,
+	pub(crate) http3_windows: ResolvedWindows,
 	#[cfg(feature = "http3")]
-	pub http3_congestion_bbr: bool,
+	pub(crate) http3_congestion_bbr: bool,
 	#[cfg(feature = "http3")]
-	pub http3_send_window: Option<u32>,
-	pub pool_idle_timeout: Option<Duration>,
-	pub pool_max_idle_per_host: Option<usize>,
-	pub redirect: Option<RedirectPolicy>,
-	pub connect_timeout: Option<Duration>,
-	pub read_timeout: Option<Duration>,
-	pub total_timeout: Option<Duration>,
+	pub(crate) http3_send_window: Option<u32>,
+	pub(crate) pool_idle_timeout: Option<Duration>,
+	pub(crate) pool_max_idle_per_host: Option<usize>,
+	pub(crate) redirect: Option<RedirectPolicy>,
+	pub(crate) connect_timeout: Option<Duration>,
+	pub(crate) read_timeout: Option<Duration>,
+	pub(crate) total_timeout: Option<Duration>,
 	/// Only reachable over QUIC, so only applied when HTTP/3 is compiled in.
 	#[cfg(feature = "http3")]
-	pub tls_early_data: Option<bool>,
-	pub tls_identity: Option<Identity>,
-	pub tls_required: Option<bool>,
-	pub tls_extra_roots: Vec<Certificate>,
-	pub node_env: NodeEnvRecipe,
+	pub(crate) tls_early_data: Option<bool>,
+	pub(crate) tls_identity: Option<Identity>,
+	pub(crate) tls_required: Option<bool>,
+	pub(crate) tls_extra_roots: Vec<Certificate>,
+	pub(crate) node_env: NodeEnvRecipe,
 	#[cfg(feature = "cache")]
-	pub http_cache: Option<HttpCacheRecipe>,
+	pub(crate) http_cache: Option<HttpCacheRecipe>,
 	#[cfg(feature = "http3")]
-	pub h3_upgrade: H3UpgradeRecipe,
+	pub(crate) h3_upgrade: H3UpgradeRecipe,
 }
 
 /// Point the resolver's `HTTPS` record reading at the upgrade layer, so a record advertising
@@ -250,11 +252,11 @@ pub fn install_https_sink(
 }
 
 /// The clients [`ClientRecipe::build`] produces, and the prober that sends on them.
-pub struct BuiltClients {
-	pub client: ClientWithMiddleware,
-	pub raw_client: Client,
+pub(crate) struct BuiltClients {
+	pub(crate) client: ClientWithMiddleware,
+	pub(crate) raw_client: Client,
 	#[cfg(feature = "http3")]
-	pub prober: Option<Arc<H3Prober>>,
+	pub(crate) prober: Option<Arc<H3Prober>>,
 }
 
 /// Install ring as the process's rustls crypto provider.

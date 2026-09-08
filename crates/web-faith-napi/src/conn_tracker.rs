@@ -8,7 +8,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use napi::{Env, JsDate};
 use napi_derive::napi;
-use web_faith_conn_tracker::{ConnectionSnapshot, ConnectionTracker};
+use web_faith_conn_tracker::ConnectionSnapshot;
 
 #[napi(object)]
 #[derive(Clone)]
@@ -47,11 +47,10 @@ fn js_date<'env>(env: &'env Env, at: SystemTime) -> Option<JsDate<'env>> {
 
 /// The tracker's view, as `agent.connections()` returns it.
 pub fn connections_for_napi<'env>(
-	tracker: &ConnectionTracker,
+	snapshot: Vec<ConnectionSnapshot>,
 	env: &'env Env,
 ) -> Vec<ConnectionInfo<'env>> {
-	tracker
-		.snapshot()
+	snapshot
 		.into_iter()
 		.map(|conn| {
 			let ConnectionSnapshot { stats, .. } = &conn;

@@ -11,15 +11,15 @@ use http_cache_reqwest::{CACacheManager, CacheMode, HttpCacheOptions, MokaManage
 /// client rebuilt for a network change clones this.
 // spec:NETCHG#what-the-signal-keeps
 #[derive(Debug, Clone)]
-pub enum HttpCacheStore {
+pub(crate) enum HttpCacheStore {
 	Disk(CACacheManager),
 	Memory(MokaManager),
 }
 
 /// The HTTP cache middleware to install.
 #[derive(Debug, Clone)]
-pub struct HttpCacheRecipe {
-	pub mode: CacheMode,
-	pub options: HttpCacheOptions,
-	pub store: HttpCacheStore,
+pub(crate) struct HttpCacheRecipe {
+	pub(crate) mode: CacheMode,
+	pub(crate) options: HttpCacheOptions,
+	pub(crate) store: HttpCacheStore,
 }

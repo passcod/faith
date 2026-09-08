@@ -108,12 +108,10 @@ impl Agent {
 		let cookie_jar = cookies.map(|limits| Arc::new(FaithJar::new(limits)));
 
 		let dns = dns.unwrap_or_default();
-		// Without Faith's own resolver every name goes to the platform, so that is the only
-		// answer there is to give.
+		// Without Faith's own resolver there is nothing to choose: every name goes to the platform,
+		// and no part of the build asks the question.
 		#[cfg(feature = "dns")]
 		let dns_system = dns.system.unwrap_or(false);
-		#[cfg(not(feature = "dns"))]
-		let dns_system = true;
 		// Naming servers and asking for the system resolver at once is a contradiction rather than
 		// a preference, since the system resolver is not Faith's to point at listed servers
 		// (spec:DNS#system-resolver).
@@ -471,6 +469,7 @@ impl Agent {
 			user_agent: user_agent.unwrap_or_else(|| USER_AGENT.to_owned()),
 			local_address,
 			default_headers,
+			#[cfg(feature = "dns")]
 			dns_system,
 			dns_overrides,
 			http2_adaptive_window,
@@ -503,8 +502,6 @@ impl Agent {
 
 		let settings = AgentSettings {
 			h3_follow_advertised_port,
-			#[cfg(feature = "http3")]
-			h3_upgrade_enabled: recipe.h3_upgrade.enabled,
 			quirk_h1_request_streaming,
 			#[cfg(feature = "encoding")]
 			default_accept_encoding,
@@ -539,7 +536,7 @@ impl Agent {
 	///
 	/// The recipe is what a client is built from, and the settings are what each request consults;
 	/// validating whatever a caller expressed them as belongs to the surface that took it.
-	pub fn build(
+	pub(crate) fn build(
 		recipe: ClientRecipe,
 		settings: AgentSettings,
 		#[cfg(feature = "cookies")] cookie_jar: Option<Arc<FaithJar>>,

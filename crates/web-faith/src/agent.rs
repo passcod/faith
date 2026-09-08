@@ -44,27 +44,23 @@ mod tests;
 
 /// The agent settings a request consults, as opposed to those a client is built from.
 #[derive(Debug, Clone, Default)]
-pub struct AgentSettings {
+pub(crate) struct AgentSettings {
 	/// Whether an HTTP/3 upgrade may follow a port the origin advertised, which a request needs so
 	/// a rewritten port is not reported as a redirect.
-	pub h3_follow_advertised_port: bool,
-	/// Whether the upgrade machinery is on at all. A warm-up needs it to route the way a foreground
-	/// request would.
-	#[cfg(feature = "http3")]
-	pub h3_upgrade_enabled: bool,
+	pub(crate) h3_follow_advertised_port: bool,
 	/// Whether a streaming request body may go out over HTTP/1.x.
-	pub quirk_h1_request_streaming: bool,
+	pub(crate) quirk_h1_request_streaming: bool,
 	/// The agent's default `Accept-Encoding`, if one sits among its default headers, which decides
 	/// which codings a response is decoded under when a request adds none of its own.
 	#[cfg(feature = "encoding")]
-	pub default_accept_encoding: Option<HeaderValue>,
+	pub(crate) default_accept_encoding: Option<HeaderValue>,
 	/// The agent's default `Content-Encoding`, if one sits among its default headers, which a
 	/// request layers its own coding on top of rather than displacing.
 	#[cfg(feature = "encoding")]
-	pub default_content_encoding: Option<HeaderValue>,
+	pub(crate) default_content_encoding: Option<HeaderValue>,
 	/// Whether a `Priority` header sits among the agent's default headers, so that default wins
 	/// over the one a request's priority would derive.
-	pub has_default_priority: bool,
+	pub(crate) has_default_priority: bool,
 }
 
 /// What an agent holds while it is open, and gives up when it is closed.
@@ -72,28 +68,28 @@ pub struct AgentSettings {
 /// Behind a shared lock because closing acts on the agent rather than on the handle it was called
 /// through: every clone names the same one, so every clone sees the result.
 #[derive(Debug)]
-pub struct Live {
+pub(crate) struct Live {
 	/// The heavy resources (connection pool, DNS resolver, background tasks) live inside this
 	/// client, so dropping it is what actually releases them.
-	pub client: ClientWithMiddleware,
+	pub(crate) client: ClientWithMiddleware,
 	/// The raw `reqwest::Client` underlying [`Self::client`], sharing its connection pool. A warm-up
 	/// sends its synthetic request here rather than through the middleware stack, which bypasses the
 	/// HTTP cache and the Alt-Svc layer, and so keeps the warm-up out of request accounting, while
 	/// still pooling the connection foreground requests reuse.
 	// spec:WARM
-	pub raw_client: Client,
+	pub(crate) raw_client: Client,
 	/// The DNS resolver, shared with the client so a prefetch warms the cache requests read. `None`
 	/// under the system resolver, where there is no such cache.
 	// spec:WARM
 	#[cfg(feature = "dns")]
-	pub dns_resolver: Option<FaithResolver>,
+	pub(crate) dns_resolver: Option<FaithResolver>,
 	#[cfg(feature = "http3")]
-	pub alt_svc_cache: Option<Arc<AltSvcCache>>,
+	pub(crate) alt_svc_cache: Option<Arc<AltSvcCache>>,
 	/// Held so closing can abort in-flight background probes: each one owns a clone of the raw
 	/// client, which would otherwise keep the connection pool alive past close for up to the probe
 	/// timeout.
 	#[cfg(feature = "http3")]
-	pub h3_prober: Option<Arc<H3Prober>>,
+	pub(crate) h3_prober: Option<Arc<H3Prober>>,
 }
 
 /// An HTTP client with its own connection pool, caches, and resolver.
@@ -110,49 +106,49 @@ pub struct Agent {
 	/// warm-up does no new work. Keyed by `scheme://host:port`; entries expire with the idle
 	/// timeout.
 	// spec:WARM
-	pub warmed: MokaCache<String, ()>,
+	pub(crate) warmed: MokaCache<String, ()>,
 	/// Single-flight claims for warm-ups in flight, so concurrent calls for the same
 	/// origin do not open duplicate connections.
 	// spec:WARM
-	pub warming: MokaCache<String, ()>,
+	pub(crate) warming: MokaCache<String, ()>,
 	/// Bumped by [`Self::network_changed`], so a warm-up that was in flight across the signal does
 	/// not record its origin as warm: its connection went into the pool that was just dropped.
 	// spec:NETCHG#reach-across-the-subsystems
-	pub warm_generation: Arc<AtomicU64>,
+	pub(crate) warm_generation: Arc<AtomicU64>,
 	/// The jar outlives a close and stays readable from a closed agent.
 	#[cfg(feature = "cookies")]
-	pub cookie_jar: Option<Arc<FaithJar>>,
-	pub stats: Arc<InnerAgentStats>,
+	pub(crate) cookie_jar: Option<Arc<FaithJar>>,
+	pub(crate) stats: Arc<InnerAgentStats>,
 	#[cfg(feature = "connection-tracking")]
-	pub conn_tracker: Arc<ConnectionTracker>,
+	pub(crate) conn_tracker: Arc<ConnectionTracker>,
 	/// Whether an upgrade may follow a port the origin advertised. A request needs it to stop a
 	/// rewritten port from being reported as a redirect.
-	pub h3_follow_advertised_port: bool,
+	pub(crate) h3_follow_advertised_port: bool,
 	/// Whether the upgrade machinery is on at all. A warm-up needs it to route the way a foreground
 	/// request would: with it off, nothing upgrades, whatever the caches hold.
 	// spec:WARM#preconnect
 	#[cfg(feature = "http3")]
-	pub h3_upgrade_enabled: bool,
+	pub(crate) h3_upgrade_enabled: bool,
 	/// Whether a streaming request body may go out over HTTP/1.x, which the fetch standard otherwise
 	/// reserves to HTTP/2 and HTTP/3.
 	// spec:QUIRK#http-1-x-request-body-streaming
-	pub quirk_h1_request_streaming: bool,
+	pub(crate) quirk_h1_request_streaming: bool,
 	/// The agent's default `Accept-Encoding`, if one sits among its default headers, which decides
 	/// the codings a response is decoded under when a request adds none of its own.
 	#[cfg(feature = "encoding")]
-	pub default_accept_encoding: Option<HeaderValue>,
+	pub(crate) default_accept_encoding: Option<HeaderValue>,
 	/// The agent's default `Content-Encoding`, if one sits among its default headers. A request
 	/// layers its own coding on top of this rather than displacing it.
 	// spec:ENC
 	#[cfg(feature = "encoding")]
-	pub default_content_encoding: Option<HeaderValue>,
+	pub(crate) default_content_encoding: Option<HeaderValue>,
 	/// Whether a `Priority` header sits among the agent's default headers. That default wins over
 	/// the header a request's priority would derive.
-	pub has_default_priority: bool,
+	pub(crate) has_default_priority: bool,
 	/// How to build this agent's clients, so [`Self::network_changed`] can build them again. Shared
 	/// rather than cloned per handle: every handle builds the same client from the same recipe.
 	// spec:NETCHG
-	pub recipe: Arc<ClientRecipe>,
+	pub(crate) recipe: Arc<ClientRecipe>,
 }
 
 impl Agent {

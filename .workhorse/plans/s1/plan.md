@@ -118,9 +118,19 @@ QUIC/TLS stay inside `web-faith` as reqwest features (aws-lc-rs default, ring al
         a fetch. The first failure met is the one reported.
   - [x] `Agent::cookies()` hands back the jar itself.
   - [x] `http::Request` as a target, bringing its method, URL, headers, and body across.
-  - [ ] Remaining: closing up the recipe and option structs' public fields now that the builder owns
-        the assembly. Left deliberately: the binding still fills the option structs directly, so
-        these close up when step 10 settles what the public surface is.
+  - [x] The recipe structs are closed up, now that step 10 has settled the public surface:
+        `ClientRecipe`, `AgentSettings`, `Live`, `BuiltClients`, `NodeEnvRecipe`, `H3UpgradeRecipe`,
+        `HttpCacheRecipe`, `HttpCacheStore`, `ResolvedWindows`, `Agent::build`, and `resolve_windows`
+        are `pub(crate)`, along with `Agent`'s own state fields. None of them was named outside
+        `web-faith`, so a published crate no longer carries them on its semver surface.
+        `Agent::connections()` is what the binding reads for per-connection reporting, rather than
+        the tracker handle.
+  - The **option** structs stay public, and that is not a leftover. `web-faith-napi` constructs
+        `options::AgentOptions` and each group across a crate boundary, which is the seam that lets
+        both surfaces settle defaults in one place (`Agent::from_options`). Closing them would mean
+        rewriting the binding's conversion through the builder and losing the exhaustive destructure
+        that forces a decision when a new option is added. What is still open is the semver
+        question: public fields with no `#[non_exhaustive]` make adding an option a breaking change.
 - [x] **10. Feature wiring** — a default-on feature per capability a build can do without; disabling
   one drops the code and the API surface it gates (compile error at the call site, not a no-op), and
   the dependency too where the capability is a crate. Component, crate, and feature are three axes
@@ -183,8 +193,12 @@ Decisions taken while doing steps 0–7, worth not relitigating:
   binding's `http3` feature and the client's drifted: turning the binding's off left the client's on,
   and the `#[cfg]`-gated recipe fields stopped lining up. Check both configurations after touching
   features — `cargo build` and `cargo build -p web-faith-napi --no-default-features`.
-- **The recipe structs carry public fields for now.** The binding assembles them directly; step 9's
-  builder is what should own that assembly, at which point they can close up again.
+- **Closing up visibility is a way to find dead code.** Making the recipe structs `pub(crate)` let
+  rustc see two fields it could not judge while they were `pub`: `AgentSettings.h3_upgrade_enabled`
+  was written from `recipe.h3_upgrade.enabled` and never read, because `build` goes to the recipe
+  directly, and `ClientRecipe.dns_system` has no reader without the `dns` feature. Both are gone.
+  A `pub` field on a library type silences the dead-code lint, so a type that is public before it
+  needs to be hides its own redundancies.
 - **Spec references go in normal comments, never in doc comments.** A `// spec:DNS#transports` line
   sits under the doc block, above the item. Doc comments are published API documentation, and a spec
   id means nothing to a reader on docs.rs.
