@@ -90,13 +90,8 @@ impl Agent {
 		// IPv6 wildcard `[::]` by default, which fails to construct on IPv4-only hosts and
 		// makes HTTP/3 silently fall back to TCP. Binding 0.0.0.0 there costs nothing (such
 		// a host can't use IPv6 for TCP either) and keeps HTTP/3 working.
-		let local_address = match &local_address {
-			Some(addr) => Some(IpAddr::from_str(addr).map_err(|err| {
-				FaithError::new(
-					FaithErrorKind::AddressParse,
-					Some(format!("{addr:?}: {err}")),
-				)
-			})?),
+		let local_address = match local_address {
+			Some(address) => Some(address),
 			None if !ipv6_wildcard_bindable() => Some(IpAddr::V4(Ipv4Addr::UNSPECIFIED)),
 			None => None,
 		};
@@ -527,9 +522,9 @@ impl Agent {
 		Self::from_options(AgentOptions::default())
 	}
 
-	/// Build an agent a setting at a time. See [`AgentBuilder`](crate::builder::AgentBuilder).
-	pub fn builder() -> crate::builder::AgentBuilder {
-		crate::builder::AgentBuilder::default()
+	/// Build an agent a setting at a time. See [the builder module](crate::builder).
+	pub fn builder() -> crate::options::AgentOptionsBuilder {
+		crate::options::AgentOptions::builder()
 	}
 
 	/// Build an agent from a validated recipe.

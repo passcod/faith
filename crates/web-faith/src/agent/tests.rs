@@ -22,8 +22,8 @@ async fn the_builder_sets_what_it_is_given_and_nothing_else() {
 
 	let options = Agent::builder()
 		.user_agent("YourApp/1.2.3")
-		.dns(|dns| dns.timeout(Duration::from_secs(2)).ndots(3))
-		.pool(|pool| pool.max_idle_per_host(8))
+		.dns(|dns| dns.timeout(Duration::from_secs(2)).ndots(3).build())
+		.pool(|pool| pool.max_idle_per_host(8).build())
 		.into_options();
 
 	assert_eq!(options.user_agent.as_deref(), Some("YourApp/1.2.3"));

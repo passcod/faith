@@ -20,6 +20,16 @@ use crate::client::{
 	DEFAULT_CONNECTION_WINDOW, DEFAULT_STREAM_WINDOW, RedirectPolicy, ResolvedWindows,
 };
 
+/// Milliseconds, saturating rather than wrapping on a duration no setting could mean.
+fn millis(duration: std::time::Duration) -> u32 {
+	duration.as_millis().try_into().unwrap_or(u32::MAX)
+}
+
+/// Whole seconds, rounded down, saturating as above.
+fn secs(duration: std::time::Duration) -> u32 {
+	duration.as_secs().try_into().unwrap_or(u32::MAX)
+}
+
 /// Settings related to the HTTP cache. This is a nested object.
 #[cfg(feature = "cache")]
 #[derive(bon::Builder, Clone, Debug, Default)]
@@ -41,6 +51,7 @@ pub struct CacheOptions {
 	/// If `cache.store: "disk"`, then this is the path at which the cache data is. Must be writeable.
 	///
 	/// Required if `cache.store: "disk"`.
+	#[builder(into)]
 	pub path: Option<String>,
 	/// If `true`, then the response is evaluated from a perspective of a shared cache (i.e. `private` is
 	/// not cacheable and `s-maxage` is respected). If `false`, then the response is evaluated from a
@@ -62,7 +73,9 @@ pub enum CacheStore {
 #[derive(bon::Builder, Clone, Debug, Default)]
 #[non_exhaustive]
 pub struct DnsOverride {
+	#[builder(into)]
 	pub domain: String,
+	#[builder(with = |items: impl IntoIterator<Item = impl Into<String>>| items.into_iter().map(Into::into).collect())]
 	pub addresses: Vec<String>,
 }
 
@@ -91,6 +104,7 @@ pub struct DnsOptions {
 	/// blocks that domain from this agent.
 	///
 	/// Default: no overrides.
+	#[builder(with = |items: impl IntoIterator<Item = DnsOverride>| items.into_iter().collect())]
 	pub overrides: Option<Vec<DnsOverride>>,
 	/// An ordered list of resolver URLs, each URL's scheme selecting the transport Faith speaks to
 	/// that resolver: `udp://` and `tcp://` for conventional DNS on port 53, `tls://` for DNS over
@@ -108,18 +122,21 @@ pub struct DnsOptions {
 	///
 	/// Default: system discovery.
 	#[cfg(feature = "dns")]
+	#[builder(with = |items: impl IntoIterator<Item = impl Into<String>>| items.into_iter().map(Into::into).collect())]
 	pub servers: Option<Vec<String>>,
 	/// Bound name resolution across the whole server list, in milliseconds. Exhausting several dead
 	/// servers costs a single timeout rather than one per server.
 	///
 	/// Default: 5000.
 	#[cfg(feature = "dns")]
+	#[builder(with = |t: std::time::Duration| millis(t))]
 	pub timeout: Option<u32>,
 	/// Replace the system's search list, the domains appended to a name that is not fully
 	/// qualified. Independent of `dns.servers`.
 	///
 	/// Default: the system's search list.
 	#[cfg(feature = "dns")]
+	#[builder(with = |items: impl IntoIterator<Item = impl Into<String>>| items.into_iter().map(Into::into).collect())]
 	pub search_domains: Option<Vec<String>>,
 	/// How many dots a name must contain before it is tried as given, ahead of the search list.
 	/// Independent of `dns.servers`.
@@ -138,6 +155,7 @@ pub struct DnsOptions {
 	///
 	/// Default: no extra exemptions.
 	#[cfg(feature = "dns")]
+	#[builder(with = |items: impl IntoIterator<Item = impl Into<String>>| items.into_iter().map(Into::into).collect())]
 	pub exempt_domains: Option<Vec<String>>,
 	/// Serve an expired cache entry immediately and refresh it in the background, rather than making
 	/// the lookup wait for a fresh answer. A host's address changes rarely, so an expired answer is
@@ -157,6 +175,7 @@ pub struct DnsOptions {
 	///
 	/// Default: 3600000 (one hour).
 	#[cfg(feature = "dns")]
+	#[builder(with = |t: std::time::Duration| millis(t))]
 	pub max_stale: Option<u32>,
 }
 
@@ -169,7 +188,9 @@ pub struct DnsOptions {
 #[derive(bon::Builder, Clone, Debug, Default)]
 #[non_exhaustive]
 pub struct Header {
+	#[builder(into)]
 	pub name: String,
+	#[builder(into)]
 	pub value: String,
 	pub sensitive: Option<bool>,
 }
@@ -190,6 +211,7 @@ pub enum Http3Congestion {
 #[non_exhaustive]
 pub struct Http3Hint {
 	/// The hostname (e.g., "example.com").
+	#[builder(into)]
 	pub host: String,
 	/// The port number (e.g., 443).
 	pub port: u16,
@@ -220,6 +242,7 @@ pub struct Http3Options {
 	/// defines bounds for safety: minimum 1 second, maximum 2 minutes (120 seconds).
 	///
 	/// Default: 30.
+	#[builder(with = |t: std::time::Duration| u8::try_from(t.as_secs()).unwrap_or(u8::MAX))]
 	pub max_idle_timeout: Option<u8>,
 	/// Whether HTTP/3 upgrade via Alt-Svc is enabled. When enabled, the agent will track Alt-Svc
 	/// headers from responses and automatically upgrade subsequent requests to HTTP/3 when available.
@@ -261,6 +284,7 @@ pub struct Http3Options {
 	/// only by the QUIC idle timeout.
 	///
 	/// Default: 5000 (5 seconds).
+	#[builder(with = |t: std::time::Duration| millis(t))]
 	pub upgrade_probe_timeout: Option<u32>,
 	/// Demote an origin off HTTP/3 when its QUIC path is provenly slower than
 	/// its TCP path by this factor. Set to 0 to disable path-time demotion.
@@ -283,15 +307,18 @@ pub struct Http3Options {
 	/// re-evaluated. See `upgradeSlowFactor`.
 	///
 	/// Default: 600 (10 minutes).
+	#[builder(with = |t: std::time::Duration| secs(t))]
 	pub upgrade_slow_ttl: Option<u32>,
 	/// How long (in seconds) to cache an Alt-Svc advertisement before the first HTTP/3 attempt.
 	/// This is overridden by the `ma` (max-age) parameter in the Alt-Svc header if present.
 	///
 	/// Default: 86400 (24 hours).
+	#[builder(with = |t: std::time::Duration| secs(t))]
 	pub upgrade_advertised_ttl: Option<u32>,
 	/// How long (in seconds) to cache a confirmed working HTTP/3 connection.
 	///
 	/// Default: 86400 (24 hours).
+	#[builder(with = |t: std::time::Duration| secs(t))]
 	pub upgrade_confirmed_ttl: Option<u32>,
 	/// How long (in seconds) a *first* failed HTTP/3 attempt blocks an origin. During this
 	/// time, no HTTP/3 upgrades will be attempted for the origin, even if the server sends
@@ -302,6 +329,7 @@ pub struct Http3Options {
 	/// forever at this interval. A confirmed HTTP/3 response ends the run.
 	///
 	/// Default: 300 (5 minutes).
+	#[builder(with = |t: std::time::Duration| secs(t))]
 	pub upgrade_failed_ttl: Option<u32>,
 	/// Ceiling (in seconds) on the cooldown that consecutive HTTP/3 failures double out of
 	/// `upgradeFailedTtl`.
@@ -311,6 +339,7 @@ pub struct Http3Options {
 	/// cooldown that never backs off.
 	///
 	/// Default: 3600 (1 hour).
+	#[builder(with = |t: std::time::Duration| secs(t))]
 	pub upgrade_failed_max_ttl: Option<u32>,
 	/// How many consecutive cancelled HTTP/3 attempts, within a 60-second window,
 	/// demote an origin back to TCP.
@@ -366,6 +395,7 @@ pub struct Http3Options {
 	/// timeout and the request's own timeout.
 	///
 	/// Default: 60000 (60 seconds).
+	#[builder(with = |t: std::time::Duration| millis(t))]
 	pub upgrade_attempt_timeout: Option<u32>,
 	/// Connect to the port a server advertises HTTP/3 on, even when it differs from
 	/// the origin's own port. **This is not standards-compliant**; it is off by
@@ -403,6 +433,7 @@ pub struct Http3Options {
 	pub upgrade_cache_capacity: Option<u32>,
 	/// Hints for hosts that are known to support HTTP/3. These are added to the Alt-Svc cache
 	/// on agent initialization, so the first request to these hosts will attempt HTTP/3.
+	#[builder(with = |items: impl IntoIterator<Item = Http3Hint>| items.into_iter().collect())]
 	pub hints: Option<Vec<Http3Hint>>,
 	/// Maximum bytes an origin may send on any one HTTP/3 stream before it must wait for
 	/// Faith to acknowledge them. Overrides `flowControl.streamWindow` for HTTP/3 only.
@@ -501,6 +532,7 @@ pub struct PoolOptions {
 	/// How many seconds of inactivity before a connection is closed.
 	///
 	/// Default: 90 seconds.
+	#[builder(with = |t: std::time::Duration| secs(t))]
 	pub idle_timeout: Option<u32>,
 	/// The maximum amount of idle connections per host to allow in the pool. Connections will be closed
 	/// to keep the idle connections (per host) under that number.
@@ -537,6 +569,7 @@ pub struct TimeoutOptions {
 	/// Set a timeout for only the connect phase, in milliseconds.
 	///
 	/// Default: none.
+	#[builder(with = |t: std::time::Duration| millis(t))]
 	pub connect: Option<u32>,
 	/// Set a timeout for read operations, in milliseconds.
 	///
@@ -544,6 +577,7 @@ pub struct TimeoutOptions {
 	/// appropriate for detecting stalled connections when the size isn't known beforehand.
 	///
 	/// Default: none.
+	#[builder(with = |t: std::time::Duration| millis(t))]
 	pub read: Option<u32>,
 	/// Set a timeout for the entire request-response cycle, in milliseconds.
 	///
@@ -551,6 +585,7 @@ pub struct TimeoutOptions {
 	/// Also considered a total deadline.
 	///
 	/// Default: none.
+	#[builder(with = |t: std::time::Duration| millis(t))]
 	pub total: Option<u32>,
 }
 
@@ -573,6 +608,7 @@ pub struct TlsOptions {
 	/// The input should contain a PEM encoded private key and at least one PEM encoded certificate. The
 	/// private key must be in RSA, SEC1 Elliptic Curve or PKCS#8 format. This is one of the few options
 	/// that will cause the `Agent` constructor to throw if the input is in the wrong format.
+	#[builder(into)]
 	pub identity: Option<Vec<u8>>,
 	/// Disables plain-text HTTP.
 	///
@@ -585,15 +621,27 @@ pub struct TlsOptions {
 	/// certificates, such as internal services or local test servers. This is one of the
 	/// few options that will cause the `Agent` constructor to throw if the input is in
 	/// the wrong format.
+	#[builder(with = |items: impl IntoIterator<Item = impl Into<Vec<u8>>>| items.into_iter().map(Into::into).collect())]
 	pub extra_roots: Option<Vec<Vec<u8>>>,
 }
 
 #[derive(bon::Builder, Clone, Debug, Default)]
-#[builder(finish_fn = into_options)]
+#[builder(
+	finish_fn(
+		name = into_options,
+		doc {
+			/// The options as they stand, for a caller passing them on rather than building an
+			/// agent here. [`build`](crate::builder::AgentOptionsBuilder::build) is the terminal
+			/// that produces the agent.
+		}
+	),
+	state_mod(vis = "pub")
+)]
 #[non_exhaustive]
 pub struct AgentOptions {
 	/// Settings related to the HTTP cache. This is a nested object.
 	#[cfg(feature = "cache")]
+	#[builder(with = |with: impl FnOnce(CacheOptionsBuilder) -> CacheOptions| with(CacheOptions::builder()))]
 	pub cache: Option<CacheOptions>,
 	/// Enable a persistent cookie store for the agent. Cookies received in responses will be preserved and
 	/// included in additional requests.
@@ -608,12 +656,14 @@ pub struct AgentOptions {
 	#[cfg(feature = "cookies")]
 	pub cookies: Option<CookieLimits>,
 	/// Settings related to DNS. This is a nested object.
+	#[builder(with = |with: impl FnOnce(DnsOptionsBuilder) -> DnsOptions| with(DnsOptions::builder()))]
 	pub dns: Option<DnsOptions>,
 	/// Flow-control windows shared by HTTP/2 and HTTP/3. This is a nested object.
 	///
 	/// Setting these is the normal way to tune windows: one value applies to whichever protocol
 	/// a request negotiates, so throughput doesn't change when an origin upgrades from one to
 	/// the other. The `http2` and `http3` groups override them per protocol.
+	#[builder(with = |with: impl FnOnce(FlowControlOptionsBuilder) -> FlowControlOptions| with(FlowControlOptions::builder()))]
 	pub flow_control: Option<FlowControlOptions>,
 	/// Sets the default headers for every request.
 	///
@@ -621,11 +671,14 @@ pub struct AgentOptions {
 	/// Sensitive headers (e.g. `Authorization`) should be marked.
 	///
 	/// Default: none.
+	#[builder(with = |items: impl IntoIterator<Item = Header>| items.into_iter().collect())]
 	pub headers: Option<Vec<Header>>,
 	/// Settings related to HTTP/2. This is a nested object.
+	#[builder(with = |with: impl FnOnce(Http2OptionsBuilder) -> Http2Options| with(Http2Options::builder()))]
 	pub http2: Option<Http2Options>,
 	/// Settings related to HTTP/3. This is a nested object.
 	#[cfg(feature = "http3")]
+	#[builder(with = |with: impl FnOnce(Http3OptionsBuilder) -> Http3Options| with(Http3Options::builder()))]
 	pub http3: Option<Http3Options>,
 	/// Bind outgoing sockets to this local IP address before connecting.
 	///
@@ -636,20 +689,25 @@ pub struct AgentOptions {
 	/// force a specific source address. Throws if the value does not parse as an IP address.
 	///
 	/// Default: unset (IPv6 wildcard for QUIC where available, else `0.0.0.0`).
-	pub local_address: Option<String>,
+	pub local_address: Option<std::net::IpAddr>,
 	/// Settings related to the connection pool. This is a nested object.
+	#[builder(with = |with: impl FnOnce(PoolOptionsBuilder) -> PoolOptions| with(PoolOptions::builder()))]
 	pub pool: Option<PoolOptions>,
 	/// Switches that depart from standard behaviour on purpose. This is a nested object.
+	#[builder(with = |with: impl FnOnce(QuirksOptionsBuilder) -> QuirksOptions| with(QuirksOptions::builder()))]
 	pub quirks: Option<QuirksOptions>,
 	/// Determines the behavior in case the server replies with a redirect status.
 	pub redirect: Option<RedirectPolicy>,
 	/// Timeouts for requests made with this agent. This is a nested object.
+	#[builder(with = |with: impl FnOnce(TimeoutOptionsBuilder) -> TimeoutOptions| with(TimeoutOptions::builder()))]
 	pub timeout: Option<TimeoutOptions>,
 	/// Settings related to the connection pool. This is a nested object.
+	#[builder(with = |with: impl FnOnce(TlsOptionsBuilder) -> TlsOptions| with(TlsOptions::builder()))]
 	pub tls: Option<TlsOptions>,
 	/// Custom user agent string.
 	///
 	/// Default: `Faith/{version} reqwest/{version}`.
+	#[builder(into)]
 	pub user_agent: Option<String>,
 }
 

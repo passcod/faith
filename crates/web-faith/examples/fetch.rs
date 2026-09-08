@@ -16,7 +16,7 @@ async fn main() -> Result<(), FaithError> {
 	// clone names the same agent, so it is what a request runs on rather than a second pool.
 	let agent = Agent::builder()
 		.user_agent(format!("fetch-example/1.0 {}", web_faith::USER_AGENT))
-		.timeout(|timeout| timeout.total(Duration::from_secs(30)))
+		.timeout(|timeout| timeout.total(Duration::from_secs(30)).build())
 		.build()?;
 
 	// `fetch` returns a builder that sends when awaited, so there is no separate send step.

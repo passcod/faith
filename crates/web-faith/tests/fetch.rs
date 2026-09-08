@@ -45,7 +45,7 @@ macro_rules! against_origin {
 
 fn agent() -> Agent {
 	Agent::builder()
-		.timeout(|timeout| timeout.total(Duration::from_secs(30)))
+		.timeout(|timeout| timeout.total(Duration::from_secs(30)).build())
 		.build()
 		.expect("the options are valid")
 }

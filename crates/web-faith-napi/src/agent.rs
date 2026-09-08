@@ -104,7 +104,7 @@ impl Agent {
 
 	pub fn with_options(options: AgentOptions) -> Result<Self, FaithError> {
 		refuse_absent_capabilities(&options)?;
-		let options = web_faith::options::AgentOptions::from(options);
+		let options = web_faith::options::AgentOptions::try_from(options)?;
 		// A napi callback can run outside the runtime, and building the HTTP/3 endpoint needs to be
 		// inside one, so the client is constructed within whichever runtime is to hand.
 		within_runtime_if_available(|| web_faith::agent::Agent::from_options(options))

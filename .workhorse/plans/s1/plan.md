@@ -125,6 +125,13 @@ QUIC/TLS stay inside `web-faith` as reqwest features (aws-lc-rs default, ring al
         `web-faith`, so a published crate no longer carries them on its semver surface.
         `Agent::connections()` is what the binding reads for per-connection reporting, rather than
         the tracker handle.
+  - [x] The option structs are `#[non_exhaustive]` with `bon`-generated builders. Adding an option
+        to a struct with public fields is a breaking change, which is the wrong shape for the API
+        this PR designs, and `#[non_exhaustive]` alone would have left the binding unable to
+        construct anything. `bon` is what resolves both: its derive expands in the defining crate,
+        so the struct literal it emits is unaffected, while a caller outside reaches the fields
+        through generated setters. `builder.rs` went from 596 lines to 47, keeping only the `build`
+        terminal that yields an `Agent`; `bon`'s own finisher is `into_options`.
   - The **option** structs stay public, and that is not a leftover. `web-faith-napi` constructs
         `options::AgentOptions` and each group across a crate boundary, which is the seam that lets
         both surfaces settle defaults in one place (`Agent::from_options`). Closing them would mean
@@ -193,6 +200,23 @@ Decisions taken while doing steps 0–7, worth not relitigating:
   binding's `http3` feature and the client's drifted: turning the binding's off left the client's on,
   and the `#[cfg]`-gated recipe fields stopped lining up. Check both configurations after touching
   features — `cargo build` and `cargo build -p web-faith-napi --no-default-features`.
+- **`bon` fits the option structs; the request builder is not a candidate.** The request builder
+  carries layering (outermost wins, a removal reaches through what is beneath), which a generated
+  setter cannot express, and its setters are deliberately re-callable. `bon` rejects setting a
+  member twice, which is also why the agent builder's append-style setters became plural iterator
+  setters. Three things had to be checked rather than assumed, and all three hold: a
+  `#[non_exhaustive]` struct still derives a builder, `#[builder(with = ...)]` gives a setter a
+  different parameter type than the field (which is how `Duration` survives on fields carrying
+  millis), and a `with` closure may take `impl FnOnce(GroupBuilder) -> Group`, which is what keeps
+  the nested groups reachable through a closure. The one visible change is that the closure now
+  ends in `.build()`.
+- **A typestate builder cannot be assembled conditionally.** Each setter returns a different type,
+  so a `#[cfg]` cannot sit on a call mid-chain. The way through is a `#[cfg]`-gated shadowing `let`,
+  attributes being allowed on statements: the binding fills each feature-gated group that way.
+- **Where a unit conversion lives moved to the boundary.** The client's setters speak `Duration`, so
+  the binding converts the millis and seconds JavaScript sends. `local_address` went the same way:
+  the option is an `IpAddr` rather than a string that might parse as one, and the binding is where
+  a malformed one is refused, which is what the JS suite asserts.
 - **Closing up visibility is a way to find dead code.** Making the recipe structs `pub(crate)` let
   rustc see two fields it could not judge while they were `pub`: `AgentSettings.h3_upgrade_enabled`
   was written from `recipe.h3_upgrade.enabled` and never read, because `build` goes to the recipe
