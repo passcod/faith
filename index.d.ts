@@ -47,10 +47,61 @@ export declare class Agent {
    * Requests already in flight are not interrupted and run to completion on the connections
    * they hold; the reset shapes what requests started afterwards draw on. Calling it on a
    * closed agent does nothing, and calling it repeatedly is harmless.
-   *
-   * spec:NETCHG
    */
   networkChanged(): void
+  /**
+   * Returns statistics gathered by this agent:
+   *
+   * - `requestsSent`
+   * - `responsesReceived`
+   * - `bodiesStarted`
+   * - `bodiesFinished`
+   */
+  stats(): AgentStats
+  /**
+   * Warm the DNS cache for `host`, so a later request to it skips the lookup.
+   *
+   * Mirrors the browser's `dns-prefetch` resource hint. The argument is a bare host; a scheme,
+   * port, or path in a fuller string is ignored. The returned promise resolves when the answer
+   * lands in the cache and never rejects, whatever happens on the network — a resolution failure
+   * resolves quietly, because the work is advisory. Under the system resolver there is no cache
+   * to warm, so the call resolves without doing anything. A malformed host throws synchronously,
+   * as does a call on a closed agent.
+   */
+  prefetchDns(host: string): Promise<undefined>
+  /**
+   * Open a pooled connection to `origin`, so the first request to it skips DNS, TCP, and TLS
+   * setup.
+   *
+   * Mirrors the browser's `preconnect` resource hint. The argument is an origin
+   * (`scheme://host[:port]`); a longer URL is reduced to its origin. The warm-up sends a
+   * synthetic `HEAD` to the origin's root — the origin sees it — over the transport the next
+   * foreground request would use: a confirmed HTTP/3 origin gets a warm QUIC connection, every
+   * other origin a TCP one. The returned promise resolves when the attempt finishes and never
+   * rejects: every network failure resolves quietly. A malformed origin throws synchronously, as
+   * does a call on a closed agent.
+   */
+  preconnect(origin: string): Promise<undefined>
+  /**
+   * Returns information on current connections open by this agent.
+   *
+   * Only tracks TCP connections currently (upstream limitation). Stats are updated once a second:
+   * this makes it possible to track indicators over time to find the retransmission rate, for
+   * example. The `lostPackets` and `deliveryRateBps` stats are only available on Linux. Some other
+   * fields might also be missing depending on platform support; and no forward guarantees are made
+   * on field availability. If the platform isn't supported at all, this will always return empty.
+   */
+  connections(): Array<ConnectionInfo>
+  /**
+   * Returns the DNS servers this agent resolves through, in the order they are queried, so
+   * "are my lookups actually encrypted" is answerable from inside the process.
+   *
+   * Each entry gives the server's address, the transport in use (`udp`, `tcp`, `tls`, `https`,
+   * `quic`, or `h3`), and how that transport was arrived at (`configured` or `conventional`).
+   * The list is empty until the resolver has been used, because it reads its configuration on
+   * first use, and empty for an agent using the system resolver.
+   */
+  resolvers(): Array<ResolverInfo>
   /**
    * Add a cookie into the agent.
    *
@@ -73,59 +124,6 @@ export declare class Agent {
    * - the cookie cannot be represented as a string
    */
   getCookie(url: string): string | null
-  /**
-   * Returns statistics gathered by this agent:
-   *
-   * - `requestsSent`
-   * - `responsesReceived`
-   * - `bodiesStarted`
-   * - `bodiesFinished`
-   */
-  stats(): AgentStats
-  /**
-   * Returns information on current connections open by this agent.
-   *
-   * Only tracks TCP connections currently (upstream limitation). Stats are updated once a second:
-   * this makes it possible to track indicators over time to find the retransmission rate, for
-   * example. The `lostPackets` and `deliveryRateBps` stats are only available on Linux. Some other
-   * fields might also be missing depending on platform support; and no forward guarantees are made
-   * on field availability. If the platform isn't supported at all, this will always return empty.
-   */
-  connections(): Array<ConnectionInfo>
-  /**
-   * Returns the DNS servers this agent resolves through, in the order they are queried, so
-   * "are my lookups actually encrypted" is answerable from inside the process.
-   *
-   * Each entry gives the server's address, the transport in use (`udp`, `tcp`, `tls`, `https`,
-   * `quic`, or `h3`), and how that transport was arrived at (`configured` or `conventional`).
-   * The list is empty until the resolver has been used, because it reads its configuration on
-   * first use, and empty for an agent using the system resolver. (spec:OBS#resolvers)
-   */
-  resolvers(): Array<ResolverInfo>
-  /**
-   * Warm the DNS cache for `host`, so a later request to it skips the lookup.
-   *
-   * Mirrors the browser's `dns-prefetch` resource hint. The argument is a bare host; a scheme,
-   * port, or path in a fuller string is ignored. The returned promise resolves when the answer
-   * lands in the cache and never rejects, whatever happens on the network — a resolution failure
-   * resolves quietly, because the work is advisory. Under the system resolver there is no cache
-   * to warm, so the call resolves without doing anything. A malformed host throws synchronously,
-   * as does a call on a closed agent. (spec:WARM)
-   */
-  prefetchDns(host: string): Promise<undefined>
-  /**
-   * Open a pooled connection to `origin`, so the first request to it skips DNS, TCP, and TLS
-   * setup.
-   *
-   * Mirrors the browser's `preconnect` resource hint. The argument is an origin
-   * (`scheme://host[:port]`); a longer URL is reduced to its origin. The warm-up sends a
-   * synthetic `HEAD` to the origin's root — the origin sees it — over the transport the next
-   * foreground request would use: a confirmed HTTP/3 origin gets a warm QUIC connection, every
-   * other origin a TCP one. The returned promise resolves when the attempt finishes and never
-   * rejects: every network failure resolves quietly. A malformed origin throws synchronously, as
-   * does a call on a closed agent. (spec:WARM)
-   */
-  preconnect(origin: string): Promise<undefined>
 }
 
 export declare class AgentStats {
@@ -302,7 +300,7 @@ json(): Promise<any>
  * written to and `bytesWritten` counts the bytes that landed there.
  *
  * `onProgress` is reported to as the bytes land, at most every
- * [`PROGRESS_INTERVAL`], with a final report once the last byte is written. The
+ * `PROGRESS_INTERVAL`, with a final report once the last byte is written. The
  * wrapper takes it from the options object; it arrives here as its own argument
  * because a threadsafe function cannot be a field of a `#[napi(object)]`.
  *
@@ -328,8 +326,6 @@ toFile(path: string, options?: ToFileOptions | undefined | null, onProgress?: ((
  *
  * This is an async fn as an internal implementation detail and the wrapper makes it a
  * property.
- *
- * spec:RESP#request-timing
  */
 timing(): Promise<TimingBreakdown>
 /**
@@ -1225,73 +1221,6 @@ export declare const enum DuplexOption {
 export declare function errorCodes(): Array<string>
 
 export const FAITH_VERSION: string
-
-/**
- * Faith produces fine-grained errors, but maps them to a few javascript error types for fetch
- * compatibility. The `.code` property on errors thrown from Faith is set to a stable name for each
- * error kind, documented in this comprehensive mapping:
- *
- * - JS `AbortError`:
- *   - `Aborted` — request was aborted using `signal`
- *   - `Timeout` — request timed out
- * - JS `NetworkError`:
- *   - `Network` — network error
- *   - `Redirect` — when the agent is configured to error on redirects
- *   - `ContentLengthOverrun` — a body written with `response.toFile()` exceeded the advertised `Content-Length`
- * - JS `SyntaxError`:
- *   - `AddressParse` — IP parse error for `AgentOptions.dns.overrides`
- *   - `InvalidIntegrity` — SRI parse error for `RequestInit.integrity`
- *   - `JsonParse` — JSON parse error for `response.json()`
- *   - `PemParse` — PEM parse error for `AgentOptions.tls.identity` or `AgentOptions.tls.extraRoots`
- * - JS `TypeError`:
- *   - `Closed` — a request was made on an agent that has been closed
- *   - `InvalidCompression` — `RequestInit.compress` naming no coding Faith can compress in
- *   - `InvalidHeader` — invalid header name or value
- *   - `InvalidMethod` — invalid HTTP method
- *   - `InvalidPath` — a `response.toFile()` destination that does not name a local path
- *   - `InvalidUrl` — invalid URL string
- *   - `ResponseAlreadyDisturbed` — body already read (mutually exclusive operations)
- *   - `ResponseBodyNull` — `response.toFile()` on a response that cannot carry a body
- * - JS generic `Error`:
- *   - `BodyStream` — internal stream handling error
- *   - `Config` — invalid agent configuration
- *   - `FileExists` — a `response.toFile()` write refusing an occupied destination
- *   - `FileWrite` — the filesystem refusing a `response.toFile()` write
- *   - `IntegrityMismatch` — SRI checksum mismatch (with `RequestInit.integrity`)
- *
- * The library exports an `ERROR_CODES` object which has every error code the library throws, and
- * every error thrown also has a `code` property that is set to one of those codes. So you can
- * accurately respond to the exact error kind by checking its code and matching against the right
- * constant from `ERROR_CODES`, instead of doing string matching on the error message, or coarse
- * `instance of` matching.
- *
- * Due to technical limitations, when reading a body stream, reads might fail, but that error
- * will not have a `code` property.
- */
-export declare const enum FaithErrorKind {
-  Aborted = 'Aborted',
-  AddressParse = 'AddressParse',
-  BodyStream = 'BodyStream',
-  Closed = 'Closed',
-  Config = 'Config',
-  ContentLengthOverrun = 'ContentLengthOverrun',
-  FileExists = 'FileExists',
-  FileWrite = 'FileWrite',
-  IntegrityMismatch = 'IntegrityMismatch',
-  InvalidCompression = 'InvalidCompression',
-  InvalidHeader = 'InvalidHeader',
-  InvalidIntegrity = 'InvalidIntegrity',
-  InvalidMethod = 'InvalidMethod',
-  InvalidPath = 'InvalidPath',
-  InvalidUrl = 'InvalidUrl',
-  JsonParse = 'JsonParse',
-  Network = 'Network',
-  PemParse = 'PemParse',
-  Redirect = 'Redirect',
-  ResponseAlreadyDisturbed = 'ResponseAlreadyDisturbed',
-  ResponseBodyNull = 'ResponseBodyNull',
-  Timeout = 'Timeout'
-}
 
 export declare function faithFetch(url: string, options: FaithOptionsAndBody, signal?: AbortSignal | undefined | null, streamBody?: StreamBody | undefined | null): Promise<FaithResponse>
 

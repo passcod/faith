@@ -9,7 +9,7 @@ Trust defaults to the platform's certificate store (Faith bundles no roots of it
 ## Trust roots
 
 The platform trust store is the default source of roots on every OS.
-`tls.extraRoots` adds PEM certificates (as strings or Buffers) to the trust store, for private CAs.
+The extra-roots option adds PEM certificates to the trust store, for private CAs.
 Malformed PEM throws at agent construction: an explicit option is a deliberate act, so it fails loudly (the `NODE_EXTRA_CA_CERTS` equivalent is lenient instead; see [ENV](../environment/variables.md)).
 
 ## Client identity
@@ -20,7 +20,7 @@ Malformed input throws at construction.
 ## Connection requirements
 
 `tls.required: true` disables plaintext HTTP for the agent; the default allows it.
-`tls.earlyData: true` enables TLS 1.3 0-RTT, sending the first application data with the handshake.
+Enabling early data turns on TLS 1.3 0-RTT, sending the first application data with the handshake.
 It is off by default because of its security trade-offs (replayability, weaker forward secrecy) and is only effective with HTTP/3.
 
 ## Diagnostics

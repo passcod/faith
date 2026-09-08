@@ -1,0 +1,17 @@
+[package]
+name = "web-faith-encoding"
+description = "HTTP content coding for request and response bodies"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+async-compression.workspace = true
+bytes.workspace = true
+futures.workspace = true
+http.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true

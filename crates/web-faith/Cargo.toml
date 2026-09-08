@@ -1,0 +1,73 @@
+[package]
+name = "web-faith"
+description = "A browser-shaped HTTP client: fetch semantics over a Rust network stack"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+async-trait.workspace = true
+bon.workspace = true
+bytes.workspace = true
+futures.workspace = true
+http.workspace = true
+http-body.workspace = true
+http-body-util.workspace = true
+http-cache-reqwest = { workspace = true, optional = true }
+hyper.workspace = true
+hyper-util.workspace = true
+moka.workspace = true
+reqwest.workspace = true
+rustls = { workspace = true, optional = true }
+reqwest-middleware.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+stream_shared.workspace = true
+ssri.workspace = true
+strum.workspace = true
+tokio.workspace = true
+url.workspace = true
+web-faith-conn-tracker = { workspace = true, optional = true }
+web-faith-encoding = { workspace = true, optional = true }
+web-faith-cookies = { workspace = true, features = ["reqwest"], optional = true }
+web-faith-dns = { workspace = true, features = ["reqwest"], optional = true }
+web-faith-alt-svc = { workspace = true, optional = true }
+
+[dev-dependencies]
+# Examples and integration tests link as their own crate, so what they name has to be here too.
+futures.workspace = true
+http-body-util.workspace = true
+serde.workspace = true
+tokio = { workspace = true }
+
+[features]
+default = [
+    "cache",
+    "connection-tracking",
+    "cookies",
+    "dns",
+    "encoding",
+    "http3",
+    "tls-aws-lc-rs",
+]
+# The HTTP cache, its store, and the per-request cache mode.
+cache = ["dep:http-cache-reqwest"]
+# Per-connection kernel counters, and the agent verb that reports them.
+connection-tracking = ["dep:web-faith-conn-tracker"]
+# The cookie jar, and the agent option and handle that reach it.
+cookies = ["dep:web-faith-cookies", "reqwest/cookies"]
+# Faith's own caching resolver, which a prefetch warms and an `HTTPS` record lookup reads.
+# Without it names resolve through the platform, as reqwest resolves them.
+dns = ["dep:web-faith-dns", "reqwest/hickory-dns", "web-faith-alt-svc?/dns"]
+# Content codings: negotiating and decoding a response body, and compressing a request one.
+encoding = ["dep:web-faith-encoding"]
+# Transparent HTTP/3, and the Alt-Svc machinery that upgrades an origin to it.
+http3 = ["reqwest/http3", "tls-aws-lc-rs", "dep:web-faith-alt-svc"]
+# The rustls crypto provider: aws-lc-rs by default, ring as the alternative. Cargo features are
+# additive, so enabling both is aws-lc-rs, which is also what an `http3` build resolves to because
+# reqwest's QUIC stack is tied to it.
+tls-aws-lc-rs = ["reqwest/rustls"]
+tls-ring = ["reqwest/rustls-no-provider", "dep:rustls", "rustls/ring"]

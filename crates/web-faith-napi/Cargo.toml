@@ -1,0 +1,55 @@
+[package]
+name = "web-faith-napi"
+description = "Faith: a Rust-powered JS fetch (Node.js binding)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+# Ships as the `@passcod/faith` npm package rather than to crates.io: it is a cdylib whose product
+# is the built `.node` binary, which a crates.io consumer has no use for.
+publish = false
+
+[lib]
+# Kept as `faith` so the built artifact stays `libfaith.so`/`faith.dll`, which the
+# release workflow's cross-compile steps copy by name.
+name = "faith"
+crate-type = ["cdylib"]
+
+[dependencies]
+async-stream.workspace = true
+bytes.workspace = true
+futures.workspace = true
+http-cache-reqwest = { workspace = true, optional = true }
+napi.workspace = true
+napi-derive.workspace = true
+reqwest.workspace = true
+reqwest-middleware.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+web-faith.workspace = true
+web-faith-conn-tracker = { workspace = true, optional = true }
+web-faith-cookies = { workspace = true, features = ["reqwest"], optional = true }
+
+[build-dependencies]
+napi-build.workspace = true
+
+[features]
+default = [
+    "cache",
+    "connection-tracking",
+    "cookies",
+    "dns",
+    "encoding",
+    "http3",
+    "tls-aws-lc-rs",
+]
+cache = ["dep:http-cache-reqwest", "web-faith/cache"]
+connection-tracking = ["dep:web-faith-conn-tracker", "web-faith/connection-tracking"]
+cookies = ["dep:web-faith-cookies", "reqwest/cookies", "web-faith/cookies"]
+dns = ["web-faith/dns"]
+encoding = ["web-faith/encoding"]
+http3 = ["reqwest/http3", "tls-aws-lc-rs", "web-faith/http3"]
+tls-aws-lc-rs = ["reqwest/rustls", "web-faith/tls-aws-lc-rs"]
+tls-ring = ["reqwest/rustls-no-provider", "web-faith/tls-ring"]

@@ -6,27 +6,27 @@ id: H3UP
 
 HTTP/3 cannot be negotiated on an existing connection: a server advertises it out of band — in an `Alt-Svc` header or an `HTTPS` DNS record — and the client chooses to try UDP.
 Faith keeps per-origin knowledge of those advertisements and their outcomes, so requests upgrade when HTTP/3 is genuinely reachable and never hang on paths where it is not.
-The whole mechanism is on by default and disabled entirely with `http3.upgradeEnabled: false`.
+The whole mechanism is on by default and disabled entirely by turning the HTTP/3 upgrade option off.
 
 ## Origin knowledge
 
-Knowledge is keyed by origin (`scheme://host:port`, always the origin's own port) and held in a bounded cache (`upgradeCacheCapacity`, default 10,000 origins) so an agent touching many origins stays bounded in memory.
+Knowledge is keyed by origin (`scheme://host:port`, always the origin's own port) and held in a bounded cache (the origin-cache capacity defaults to 10,000 origins) so an agent touching many origins stays bounded in memory.
 An origin is in one of three states, each with its own lifetime.
-**Advertised** means the server said HTTP/3 exists; it lives for `upgradeAdvertisedTtl` (default 1 day), or the advertisement's own `ma` when given, and with probing on, an advertisement alone never routes a foreground request (see [PROBE](probing.md)).
-**Confirmed** means HTTP/3 was proven end to end by an actual HTTP/3 response; it lives for `upgradeConfirmedTtl` (default 1 day) and is the only state foreground requests upgrade from.
+**Advertised** means the server said HTTP/3 exists; it lives for the advertised lifetime (default 1 day), or the advertisement's own `ma` when given, and with probing on, an advertisement alone never routes a foreground request (see [PROBE](probing.md)).
+**Confirmed** means HTTP/3 was proven end to end by an actual HTTP/3 response; it lives for the confirmed lifetime (default 1 day) and is the only state foreground requests upgrade from.
 **Failed** means an attempt failed; it blocks upgrading, probing, and even recording fresh advertisements, so a flapping origin cannot re-enter the cycle until the failure knowledge expires, and it lives for a cooldown that lengthens the longer an origin keeps failing.
 Every one of these states describes a path between this client and the origin, so a network-change signal demotes the origins observation confirmed to advertised and clears the failed ones, leaving the advertisements themselves in place (see [NETCHG](../agent/network-change.md)).
 
 ## Failure backoff
 
 An origin whose UDP path is blocked for good would otherwise be retried at a fixed rate forever, so Faith keeps a consecutive-failure count per origin and derives the cooldown from it.
-The first failure holds the origin for `upgradeFailedTtl` (default 5 minutes) and each consecutive one doubles that, up to `upgradeFailedMaxTtl` (default 1 hour): on the defaults, 5 minutes, then 10, 20, 40, and an hour thereafter.
-The cap is never less than `upgradeFailedTtl`, so setting it at or below the base gives a flat cooldown.
+The first failure holds the origin for the base failure cooldown (default 5 minutes) and each consecutive one doubles that, up to the failure-cooldown ceiling (default 1 hour): on the defaults, 5 minutes, then 10, 20, 40, and an hour thereafter.
+The ceiling is never less than the base cooldown, so setting it at or below the base gives a flat cooldown.
 Every failure counts the same however it arrives, whether a foreground attempt failed, a background probe failed, or a run of cancellation strikes demoted the origin.
 
 A confirmed HTTP/3 response clears the count, so an origin that comes good starts from the base cooldown if it later breaks again.
 Otherwise the count outlives the cooldown it set by one further cooldown of the same length: an origin that fails again as soon as its cooldown lapses escalates, while one left untouched for that much longer is judged from the base again.
-Counts are held per origin within the same `upgradeCacheCapacity` bound as the rest of the origin knowledge.
+Counts are held per origin within the same origin-cache bound as the rest of the origin knowledge.
 
 ## Reading advertisements
 
@@ -62,22 +62,22 @@ Being an assertion rather than an observation, a hint holds its origin confirmed
 A request to a confirmed origin is attempted over HTTP/3, with the original request preserved for fallback; on any failure the same request is retried over TCP, so callers see slower, never broken.
 Only an actual HTTP/3 response confirms and keeps the origin confirmed.
 A request whose body cannot be replayed (a streaming body) skips the HTTP/3 attempt for that request rather than risk an unrepeatable send.
-`http3.upgradeAttemptTimeout` (default 60 seconds, 0 to disable) bounds the attempt, measured to response headers so a slow body is unaffected; expiry counts as a failure and triggers the TCP fallback.
+The upgrade-attempt timeout (default 60 seconds, 0 to disable) bounds the attempt, measured to response headers so a slow body is unaffected; expiry counts as a failure and triggers the TCP fallback.
 This is the backstop for blackholed paths; real refusals arrive much faster.
 
 ## Cancellation strikes
 
 An HTTP/3 attempt cut short from outside (abort via `signal`) is indistinguishable from a hung path, so each mid-flight cancellation counts a strike against the origin.
-Reaching `upgradeCancelStrikes` (default 3) demotes the origin to failed; any successful confirmation resets the count.
+Reaching the cancellation-strike limit (default 3) demotes the origin to failed; any successful confirmation resets the count.
 Strikes only accumulate when they land within about a minute of each other; a retry loop with a longer backoff never accumulates a run, so such callers set the option to 1 for immediate demotion.
 Setting 0 disables strike demotion.
 One fault neither strikes nor the attempt timeout catches: a path that carries small datagrams but drops full-size ones (an MTU blackhole).
-Headers arrive, so both mechanisms count success; the transfer stalls in the body, where only `maxIdleTimeout` or the request's own timeout ends it, and the origin stays confirmed.
+Headers arrive, so both mechanisms count success; the transfer stalls in the body, where only the HTTP/3 idle timeout or the request's own timeout ends it, and the origin stays confirmed.
 
 ## Advertised ports
 
 By default, an advertisement whose port differs from the origin's is recorded but not acted on: honouring it correctly (connect to the advertised endpoint, keep the origin's authority) is not expressible in the current HTTP stack, and guessing that the origin's own port speaks HTTP/3 would be wrong.
 Such origins simply don't upgrade.
-`quirks.h3FollowAdvertisedPort: true` upgrades anyway by rewriting the request's port to the advertised one, which departs from RFC 7838 and so is a quirk (see [QUIRK](../agent/quirks.md)), with three visible consequences: the request's authority carries the advertised port (servers routing on authority may misroute), `response.url` reports the port actually connected to, and `redirected` ignores port-only differences on HTTP/3 responses.
+The advertised-port quirk upgrades anyway by rewriting the request's port to the advertised one, which departs from RFC 7838 and so is a quirk (see [QUIRK](../agent/quirks.md)), with three visible consequences: the request's authority carries the advertised port (servers routing on authority may misroute), `response.url` reports the port actually connected to, and `redirected` ignores port-only differences on HTTP/3 responses.
 TLS still validates against the origin's hostname either way.
 Origin knowledge stays keyed on the origin's port even when the request port was rewritten, and confirmations record the port proven rather than re-reading state that a concurrent failure may have cleared.

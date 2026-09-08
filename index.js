@@ -585,7 +585,6 @@ module.exports.CredentialsOption = nativeBinding.CredentialsOption
 module.exports.DuplexOption = nativeBinding.DuplexOption
 module.exports.errorCodes = nativeBinding.errorCodes
 module.exports.FAITH_VERSION = nativeBinding.FAITH_VERSION
-module.exports.FaithErrorKind = nativeBinding.FaithErrorKind
 module.exports.faithFetch = nativeBinding.faithFetch
 module.exports.Http3Congestion = nativeBinding.Http3Congestion
 module.exports.Redirect = nativeBinding.Redirect

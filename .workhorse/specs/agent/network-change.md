@@ -4,8 +4,8 @@ id: NETCHG
 
 # Network-change signal
 
-Node exposes no portable signal for a change of network interface or connectivity, so Faith cannot detect one for the caller.
-The agent exposes the reaction instead: `agent.networkChanged()` discards the state a network change invalidates, and the caller wires it to whatever trigger their platform offers (an OS notification, a VPN transition, a captive-portal sign-in), calling it when they know the network underneath the agent has changed.
+No portable signal for a change of network interface or connectivity is available to Faith, so it cannot detect one for the caller.
+The agent exposes the reaction instead: a network-changed call discards the state a network change invalidates, and the caller wires it to whatever trigger their platform offers (an OS notification, a VPN transition, a captive-portal sign-in), calling it when they know the network underneath the agent has changed.
 The point is that the next request rebuilds against the new network rather than reusing answers gathered on the old one.
 
 ## What the signal means
@@ -43,7 +43,7 @@ The reset leaves every HTTP/3 origin either advertised or unknown, so the demoti
 
 ## In-flight requests
 
-- [ ] A request already in flight when `networkChanged()` is called runs to completion on its existing connection; the signal never interrupts it.
+- [ ] A request already in flight when the signal is raised runs to completion on its existing connection; the signal never interrupts it.
 - [ ] The reset takes effect for work that starts after the call: it reshapes the state the next request draws on, not the state the requests already running depend on.
 
 - [ ] A request that outlives the signal records its outcome when it completes, like any other request. Its evidence came from the path that has gone, so an HTTP/3 response landing just after the signal re-confirms an origin the signal had demoted. The alternative is discarding the outcome of a request that succeeded, and the window is one request's remaining lifetime, so the outcome is kept.
@@ -54,5 +54,5 @@ A caller who needs in-flight requests abandoned on a network change aborts them 
 
 ## Availability
 
-- [ ] `networkChanged()` returns nothing and is safe to call any number of times; calling it with nothing to reset is harmless, so a caller with a noisy trigger does not need to filter it.
+- [ ] The signal returns nothing and is safe to call any number of times; calling it with nothing to reset is harmless, so a caller with a noisy trigger does not need to filter it.
 - [ ] On a closed agent it does nothing rather than throwing, a closed agent having already released the state the signal clears (see [AGENT](overview.md)).

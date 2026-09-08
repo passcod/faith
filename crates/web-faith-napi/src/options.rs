@@ -1,0 +1,234 @@
+use std::{fmt::Debug, sync::Arc, time::Duration};
+
+#[cfg(feature = "cache")]
+use http_cache_reqwest::CacheMode;
+
+use napi::bindgen_prelude::*;
+use napi_derive::napi;
+
+use web_faith::request::{Credentials, RequestOptions};
+
+use crate::agent::Agent;
+
+/// The cache mode you want to use for the request. This may be any one of the following values:
+///
+/// - `default`: The client looks in its HTTP cache for a response matching the request.
+///   - If there is a match and it is fresh, it will be returned from the cache.
+///   - If there is a match but it is stale, the client will make a conditional request to the remote
+///     server. If the server indicates that the resource has not changed, it will be returned from the
+///     cache. Otherwise the resource will be downloaded from the server and the cache will be updated.
+///   - If there is no match, the client will make a normal request, and will update the cache with
+///     the downloaded resource.
+///
+/// - `no-store`: The client fetches the resource from the remote server without first looking in the
+///   cache, and will not update the cache with the downloaded resource.
+///
+/// - `reload`: The client fetches the resource from the remote server without first looking in the
+///   cache, but then will update the cache with the downloaded resource.
+///
+/// - `no-cache`: The client looks in its HTTP cache for a response matching the request.
+///   - If there is a match, fresh or stale, the client will make a conditional request to the remote
+///     server. If the server indicates that the resource has not changed, it will be returned from the
+///     cache. Otherwise the resource will be downloaded from the server and the cache will be updated.
+///   - If there is no match, the client will make a normal request, and will update the cache with
+///     the downloaded resource.
+///
+/// - `force-cache`: The client looks in its HTTP cache for a response matching the request.
+///   - If there is a match, fresh or stale, it will be returned from the cache.
+///   - If there is no match, the client will make a normal request, and will update the cache with
+///     the downloaded resource.
+///
+/// - `only-if-cached`: The client looks in its HTTP cache for a response matching the request.
+///   - If there is a match, fresh or stale, it will be returned from the cache.
+///   - If there is no match, a network error is returned.
+///
+/// - `ignore-rules`: Custom to Faith. Overrides the check that determines if a response can be cached
+///   to always return true on 200. Uses any response in the HTTP cache matching the request, not
+///   paying attention to staleness. If there was no response, it creates a normal request and updates
+///   the HTTP cache with the response.
+#[napi(string_enum, js_name = "CacheMode")]
+#[derive(Debug, Clone, Copy, Default)]
+pub enum RequestCacheMode {
+	#[napi(value = "default")]
+	#[default]
+	Default,
+
+	#[napi(value = "force-cache")]
+	ForceCache,
+
+	#[napi(value = "ignore-rules")]
+	IgnoreRules,
+
+	#[napi(value = "no-cache")]
+	NoCache,
+
+	#[napi(value = "no-store")]
+	NoStore,
+
+	#[napi(value = "only-if-cached")]
+	OnlyIfCached,
+
+	#[napi(value = "reload")]
+	Reload,
+}
+
+#[cfg(feature = "cache")]
+impl From<RequestCacheMode> for CacheMode {
+	fn from(mode: RequestCacheMode) -> Self {
+		match mode {
+			RequestCacheMode::Default => Self::Default,
+			RequestCacheMode::ForceCache => Self::ForceCache,
+			RequestCacheMode::IgnoreRules => Self::IgnoreRules,
+			RequestCacheMode::NoCache => Self::NoCache,
+			RequestCacheMode::NoStore => Self::NoStore,
+			RequestCacheMode::OnlyIfCached => Self::OnlyIfCached,
+			RequestCacheMode::Reload => Self::Reload,
+		}
+	}
+}
+
+/// Controls whether or not the client sends credentials with the request, as well as whether any
+/// `Set-Cookie` response headers are respected. Credentials are cookies, ~~TLS client certificates,~~
+/// or authentication headers containing a username and password. This option may be any one of the
+/// following values:
+///
+/// - `omit`: Never send credentials in the request or include credentials in the response.
+/// - ~~`same-origin`~~: Faith does not implement this, as there is no concept of "origin" on the server.
+/// - `include`: Always include credentials, ~~even for cross-origin requests.~~
+///
+/// Faith ignores the `Access-Control-Allow-Credentials` and `Access-Control-Allow-Origin` headers.
+///
+/// Faith currently does not `omit` the TLS client certificate when the request's `Agent` has one
+/// configured. This is an upstream limitation.
+///
+/// If the request's `Agent` has cookies enabled, new cookies from the response will be added to the
+/// cookie jar, even as Faith strips them from the request and response headers returned to the user.
+/// This is an upstream limitation.
+///
+/// Defaults to `include` (browsers default to `same-origin`).
+#[napi(string_enum)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CredentialsOption {
+	#[napi(value = "omit")]
+	Omit,
+	#[napi(value = "same-origin")]
+	SameOrigin,
+	#[napi(value = "include")]
+	Include,
+}
+
+impl Default for CredentialsOption {
+	fn default() -> Self {
+		CredentialsOption::Include
+	}
+}
+
+/// Declares the duplex behaviour of the request. If this is present it must have the value `half`,
+/// which is the only value the fetch standard defines.
+///
+/// This option must be present when `body` is a `ReadableStream`.
+///
+/// Faith does not act on the value: every request runs full duplex, so the response is available
+/// as soon as its headers arrive, even while the request body is still being sent. `half` is a
+/// token the standard obliges every streaming upload to carry rather than a preference, so
+/// honouring it would strand code written against runtimes that also run full duplex.
+#[napi(string_enum)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DuplexOption {
+	#[napi(value = "half")]
+	Half,
+}
+
+/// Maps the `priority` option onto an RFC 9218 `Priority` header value.
+///
+/// Urgency runs from 0 (most urgent) to 7 (least urgent), and a request that sends no header
+/// is served at the default urgency of 3. `high` and `low` sit either side of that default.
+/// `auto`, a value Faith does not recognise, and no option at all send no header, which is how
+/// a request asks for the default urgency.
+fn priority_urgency(priority: Option<&str>) -> Option<&'static str> {
+	// spec:REQ#request-priority
+	match priority {
+		Some("high") => Some("u=1"),
+		Some("low") => Some("u=5"),
+		_ => None,
+	}
+}
+
+#[napi(object)]
+pub struct FaithOptionsAndBody {
+	pub agent: Reference<Agent>,
+	pub body: Option<Either3<String, Buffer, Uint8Array>>,
+	pub cache: Option<RequestCacheMode>,
+	/// Compress the request body in this coding, named by its wire token: `gzip`, `deflate`,
+	/// `br`, or `zstd`.
+	///
+	/// Taken as a string rather than an enum so an unrecognised value raises Faith's own
+	/// `InvalidCompression` rather than a NAPI conversion error.
+	pub compress: Option<String>,
+	pub credentials: Option<CredentialsOption>,
+	pub duplex: Option<DuplexOption>,
+	pub headers: Option<Vec<(String, String)>>,
+	pub integrity: Option<String>,
+	pub method: Option<String>,
+	/// The relative priority of this request: `high`, `low`, or `auto`.
+	///
+	/// Taken as a string rather than an enum so that an unrecognised value is ignored like any
+	/// other option Faith does not recognise, rather than rejected.
+	pub priority: Option<String>,
+	pub timeout: Option<u32>,
+}
+
+/// Read a `fetch()` call's options into the shape the client takes.
+pub(crate) fn extract(opts: FaithOptionsAndBody) -> (RequestOptions, Agent, Option<Arc<Buffer>>) {
+	// `same-origin` means nothing without an origin to be same as, so it lands on `include`,
+	// which is what a server-side caller means by it.
+	let credentials = match opts.credentials.unwrap_or_default() {
+		CredentialsOption::Omit => Credentials::Omit,
+		CredentialsOption::Include | CredentialsOption::SameOrigin => Credentials::Include,
+	};
+
+	(
+		RequestOptions {
+			#[cfg(feature = "cache")]
+			cache: opts.cache.unwrap_or_default().into(),
+			#[cfg(feature = "encoding")]
+			compress: opts.compress,
+			credentials,
+			headers: opts.headers,
+			integrity: opts.integrity,
+			method: opts.method,
+			priority: priority_urgency(opts.priority.as_deref()),
+			timeout: opts.timeout.map(Into::into).map(Duration::from_millis),
+		},
+		Agent::clone(&opts.agent),
+		opts.body.map(|either| match either {
+			Either3::A(s) => Arc::new(Buffer::from(s.as_bytes())),
+			Either3::B(b) => Arc::new(b),
+			Either3::C(u) => Arc::new(Buffer::from(u.as_ref())),
+		}),
+	)
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn maps_high_and_low_either_side_of_the_default_urgency() {
+		assert_eq!(priority_urgency(Some("high")), Some("u=1"));
+		assert_eq!(priority_urgency(Some("low")), Some("u=5"));
+	}
+
+	#[test]
+	fn sends_no_header_for_the_default_urgency() {
+		assert_eq!(priority_urgency(Some("auto")), None);
+		assert_eq!(priority_urgency(None), None);
+	}
+
+	#[test]
+	fn ignores_an_unrecognised_value() {
+		assert_eq!(priority_urgency(Some("urgent")), None);
+		assert_eq!(priority_urgency(Some("HIGH")), None);
+		assert_eq!(priority_urgency(Some("")), None);
+	}
+}

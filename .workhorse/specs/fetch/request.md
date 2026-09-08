@@ -58,7 +58,7 @@ A `ReadableStream` body requires `duplex: "half"`, matching the fetch standard; 
 Faith operates in full duplex.
 A response is surfaced as soon as its headers arrive, so a request streaming its body sees the response while the body is still going out, and the response body can be read in the meantime.
 A caller can drive the request body from what it reads off the response body, exchanging messages both ways over one request.
-Exchanging messages both ways needs a streaming request body, so over HTTP/1.x it needs the agent's `quirks.h1RequestStreaming` as well (see [Streaming a request body](#streaming-a-request-body)).
+Exchanging messages both ways needs a streaming request body, so over HTTP/1.x it needs the agent's HTTP/1.x request-streaming quirk as well (see [Streaming a request body](#streaming-a-request-body)).
 
 The `duplex` option is required when the body is a `ReadableStream` and carries no meaning beyond that.
 `half` is the only value the fetch standard defines and so the only value accepted; a request that sets it still runs full duplex.
@@ -71,7 +71,7 @@ Following the fetch standard, a streaming request body is carried only over HTTP
 When a request with a streaming body runs over a connection that negotiates HTTP/1.x, it fails with a network error (code `Network`, see [ERR](../errors/errors.md)) and nothing is written to that connection, so the origin sees no request at all.
 A buffered body sends over any protocol and is never subject to this rule, which includes a body that arrived through a `Request` object, since converting one reads its body to completion.
 
-The agent's `quirks.h1RequestStreaming` lifts the restriction, sending a streaming body over an HTTP/1.x connection like any other body (see [QUIRK](../agent/quirks.md)).
+The agent's HTTP/1.x request-streaming quirk lifts the restriction, sending a streaming body over an HTTP/1.x connection like any other body (see [QUIRK](../agent/quirks.md)).
 
 ## Credentials
 

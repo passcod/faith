@@ -4,8 +4,13 @@ id: FAITH
 
 # Faith
 
-Faith is a fetch API implementation for Node.js backed by a Rust network stack rather than Node's built-in HTTP machinery.
-It is published as the native module `@passcod/faith` and aims to behave like the browser's fetch wherever that concept translates to a server-side runtime, while exposing the capabilities that stack unlocks: transparent HTTP/2 and HTTP/3, IPv4/IPv6 Happy Eyeballs, DNS caching, an optional cookie jar, and HTTP caching.
+Faith is a fetch API implementation for Node.js and Rust.
+It aims to behave like the browser's fetch wherever that concept translates to a server-side runtime, with transparent HTTP/2 and HTTP/3, IPv4/IPv6 Happy Eyeballs, DNS caching, an optional cookie jar, and HTTP caching.
+
+It has two public surfaces:
+
+- the Rust crate `web-faith` (see [RSAPI](rust/client-api.md)) and the component crates at that prefix (see [RUST](rust/overview.md));
+- the Node.js module `@passcod/faith`.
 
 The library's contract has two halves: fidelity to the fetch standard, and divergence where the standard assumes a browser.
 
@@ -21,11 +26,9 @@ A divergence is either a browser concept with no server-side meaning or a choice
 
 ## Compatibility stance
 
-`fetch(resource, options)` accepts the same shapes as WHATWG fetch: a URL string or stringifiable object (including `URL`), or a Web API `Request` object.
-Behaviour follows the fetch standard by default; where browsers and the standards disagree, Faith follows the standards unless a spec here says otherwise (for example, `body` is `null` on responses that cannot have a body).
-Browser-only concepts that assume an origin or a browsing context (CORS, `mode`, `referrer`, `referrerPolicy`, `attributionReporting`, `browsingTopics`, `keepalive`) have no server-side meaning; passing them is harmless and they take no effect.
-Options in a `RequestInit` that Faith does not recognise are ignored rather than rejected.
-Faith-specific extensions (such as `agent`, `timeout`, response `peer`, `version`, `trailers`, `discard()`) are additive: code written against standard fetch runs unmodified.
+Behaviour follows the fetch standard by default; where browsers and the standards disagree, Faith follows the standards unless a spec here says otherwise.
+Concepts that assume an origin or a browsing context, CORS among them, have no server-side meaning, and a surface that admits the options naming them gives them no effect (see [REQ](fetch/request.md)).
+Faith's own extensions add to the standard's surface rather than altering it, so code written against standard fetch runs unmodified.
 
 ## Protocol support
 

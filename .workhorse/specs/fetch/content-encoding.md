@@ -51,7 +51,7 @@ So the request names the caller's codings followed by Faith's, in the order they
 `Content-Length` counts the bytes Faith produced.
 
 A `ReadableStream` body is compressed as its chunks arrive and goes out chunked with no `Content-Length`, there being no compressed length to declare before the body ends.
-It remains a streaming body in every other respect, carried only over HTTP/2 and HTTP/3 unless the agent's `quirks.h1RequestStreaming` says otherwise (see [REQ](request.md)).
+It remains a streaming body in every other respect, carried only over HTTP/2 and HTTP/3 unless the agent's HTTP/1.x request-streaming quirk says otherwise (see [REQ](request.md)).
 
 A 307 or 308 redirect replays the bytes Faith already compressed under the same `Content-Encoding`, compressing nothing a second time.
 A 301, 302, or 303 turns the request into a `GET` and drops the body, and `Content-Encoding` goes with it as `Content-Type` does (see [REDIR](redirects.md)).

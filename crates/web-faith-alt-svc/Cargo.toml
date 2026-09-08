@@ -1,0 +1,30 @@
+[package]
+name = "web-faith-alt-svc"
+description = "An Alt-Svc store and the HTTP/3 upgrade machinery above it"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+async-trait.workspace = true
+http.workspace = true
+moka.workspace = true
+reqwest.workspace = true
+reqwest-middleware.workspace = true
+tokio.workspace = true
+url.workspace = true
+web-faith-dns = { workspace = true, optional = true }
+
+[dev-dependencies]
+# Examples link as their own crate, so the types the API speaks have to be named there too.
+http.workspace = true
+reqwest.workspace = true
+tokio = { workspace = true }
+
+[features]
+default = ["dns"]
+# Feed `HTTPS` DNS records into the store, so an origin is probe-worthy before anything connects.
+dns = ["dep:web-faith-dns"]

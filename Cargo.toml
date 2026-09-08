@@ -1,14 +1,19 @@
-[package]
-name = "faith"
+[workspace]
+members = ["crates/*"]
+# The benchmark HTTP/3 server keeps its own manifest and lockfile on purpose, so
+# the quinn/h3 stack stays out of this workspace's dependency graph.
+exclude = ["bench/h3-server"]
+resolver = "3"
+
+[workspace.package]
 version = "0.7.0"
 edition = "2024"
-description = "Faith: a Rust-powered JS fetch"
-publish = false
+rust-version = "1.96"
+license = "Apache-2.0 OR MIT"
+repository = "https://github.com/passcod/faith"
+authors = ["Félix Saparelli <felix@passcod.name>"]
 
-[lib]
-crate-type = ["cdylib"]
-
-[dependencies]
+[workspace.dependencies]
 async-compression = { version = "0.4", default-features = false, features = [
     "tokio",
     "gzip",
@@ -18,6 +23,7 @@ async-compression = { version = "0.4", default-features = false, features = [
 ] }
 async-stream = "0.3.6"
 async-trait = "0.1.89"
+bon = "3.10.1"
 bytes = "1.9.0"
 cookie = "0.18.1"
 cookie_store = { version = "0.22.0", default-features = false }
@@ -31,22 +37,30 @@ hickory-resolver = { version = "0.26", features = [
 ] }
 moka = { version = "0.12", features = ["sync"] }
 http = "1.4.0"
+http-body = "1.0.1"
 http-body-util = "0.1.3"
 hyper = "1.8.1"
-http-cache-reqwest = { version = "1.0.0-alpha.6", features = ["manager-cacache", "manager-moka"] }
+http-cache-reqwest = { version = "1.0.0-alpha.6", features = [
+    "manager-cacache",
+    "manager-moka",
+] }
 hyper-util = { version = "0.1", features = ["client-legacy", "tokio"] }
 libc = "0.2.179"
-napi = { version = "3.7.0", features = ["napi9", "serde-json", "tokio_rt", "web_stream"] }
+napi = { version = "3.7.0", features = [
+    "napi9",
+    "serde-json",
+    "tokio_rt",
+    "web_stream",
+] }
+napi-build = "2.3.1"
 napi-derive = "3.4.0"
 reqwest = { version = "0.13.4", default-features = false, features = [
-    "cookies",
-    "hickory-dns",
     "http2",
     "json",
-    "rustls",
     "stream",
     "system-proxy",
 ] }
+rustls = { version = "0.23.35", default-features = false }
 reqwest-middleware = { version = "0.5.2", features = ["http2", "rustls"] }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
@@ -54,25 +68,19 @@ ssri = "9.2.0"
 stream_shared = { version = "0.8.5", features = ["stats"] }
 strum = { version = "0.27.2", features = ["derive"] }
 tokio = { version = "1.48.0", features = ["full"] }
-tokio-stream = "0.1.16"
 time = "0.3.53"
 tokio-util = { version = "0.7.10", features = ["io"] }
 url = "2.5.7"
-
-[target.'cfg(target_os = "linux")'.dependencies]
+web-faith = { version = "0.7.0", path = "crates/web-faith", default-features = false }
+web-faith-alt-svc = { version = "0.7.0", path = "crates/web-faith-alt-svc", default-features = false }
+web-faith-conn-tracker = { version = "0.7.0", path = "crates/web-faith-conn-tracker" }
+web-faith-cookies = { version = "0.7.0", path = "crates/web-faith-cookies" }
+web-faith-dns = { version = "0.7.0", path = "crates/web-faith-dns" }
+web-faith-encoding = { version = "0.7.0", path = "crates/web-faith-encoding" }
 netlink-packet-core = "0.7.0"
 netlink-packet-sock-diag = { version = "0.4.2", features = ["rich_nlas"] }
 netlink-sys = "0.8.7"
-
-[target.'cfg(target_os = "windows")'.dependencies]
 windows = { version = "0.62.2", features = [
     "Win32_NetworkManagement_IpHelper",
     "Win32_Networking_WinSock",
 ] }
-
-[build-dependencies]
-napi-build = "2.3.1"
-
-[features]
-default = ["http3"]
-http3 = ["reqwest/http3"]
