@@ -6,7 +6,15 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
+documentation = "https://docs.rs/web-faith"
+readme = "README.md"
 authors.workspace = true
+
+[package.metadata.docs.rs]
+# The default feature set includes `http3`, which turns on reqwest's own `http3` feature; that one
+# refuses to compile unless the `reqwest_unstable` cfg is set. The workspace supplies it through
+# .cargo/config.toml, which is not part of the published crate, so docs.rs has to be told directly.
+rustc-args = ["--cfg", "reqwest_unstable"]
 
 [dependencies]
 async-trait.workspace = true

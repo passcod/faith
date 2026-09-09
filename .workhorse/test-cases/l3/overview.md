@@ -1,4 +1,4 @@
-# L3 — Release tooling and first publish test cases
+# L3: Release tooling and first publish test cases
 
 Coverage for the release path: independent versioning, semver-checks, MSRV in CI,
 and the packaging/publishing that S1 could not exercise before the crates existed
@@ -46,6 +46,10 @@ happened, so they stay unticked until then.
 
 - [ ] A fresh project that depends on `web-faith` resolves it and its component
   crates from crates.io, pulling each component at the version `web-faith` declares.
+  Resolution works (verified against the published 0.7.0), but the build then fails:
+  reqwest's `http3` gate needs `RUSTFLAGS='--cfg reqwest_unstable'`, which no
+  consumer gets by default. Stays unticked until that is settled (see the plan's
+  open question) and re-run against 1.0.0.
 - [ ] The four leaf crates each resolve standalone in a fresh project without
   pulling `web-faith`.
 
@@ -55,3 +59,23 @@ happened, so they stay unticked until then.
   tarball in a fresh project) and loads, so the published module is not missing a
   file the crate-workspace layout moved (`index.js`, `index.d.ts`, the `.node`
   binary, and any wrapper files the package's entry points expect).
+
+## Crate metadata and docs.rs
+
+- [x] Each of the six crates declares `documentation = "https://docs.rs/<crate>"`.
+- [x] `web-faith` declares `readme = "README.md"` and the file is present, so
+  crates.io renders it. Packaging is not yet provable (see the `cargo package` case
+  above), but the manifest resolves the readme and nothing excludes it.
+- [ ] docs.rs builds `web-faith` successfully, i.e. the
+  `[package.metadata.docs.rs] rustc-args` cfg carries through to reqwest. Only
+  checkable once a version carrying that metadata is published, so it is verified
+  on the 1.0.0 release, not on 0.7.0.
+- [x] The other five crates already build on docs.rs (`doc_status: true` at 0.7.0),
+  so the cfg is needed for `web-faith` alone.
+
+## Lockfile hygiene
+
+- [x] No package in `Cargo.lock` is yanked upstream: `chacha20` moved 0.10.1 to
+  0.10.2, and `cargo package` no longer warns.
+- [x] The workspace builds and its tests pass on the updated lockfile, on stable
+  and under MSRV 1.96.

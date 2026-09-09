@@ -6,7 +6,7 @@
 # token in this repo: the release job carries `id-token: write` and release-plz
 # exchanges it for a short-lived crates.io token itself. Two prerequisites, both
 # outside CI and both one-time:
-#   1. Each crate's first version must be published by hand — crates.io does not
+#   1. Each crate's first version must be published by hand: crates.io does not
 #      allow trusted publishing to create a brand-new crate.
 #   2. After that first publish, register this repo + this workflow as a trusted
 #      publisher for each crate on crates.io.
