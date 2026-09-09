@@ -29,13 +29,105 @@ That gives it semantics Faith does not currently extend to it.
    - Spec to update: POOL (`.workhorse/specs/agent/connection-pool.md:34`) lists the
      retryable methods. Add QUERY to that sentence so spec and code stay in step.
 
-3. **Round-trip test.** Add a test asserting a QUERY request round-trips with a body (the
+3. **Default a body's `Content-Type`** so a string body carries the type the fetch standard
+   prescribes, which the QUERY check depends on. See below.
+
+4. **Require a `Content-Type` on a bodied QUERY.** See below.
+
+5. **Round-trip test.** Add a test asserting a QUERY request round-trips with a body (the
    existing `test/http-methods.test.js` `methodEcho` harness fits; assert the method reaches
    the origin as `QUERY`). Consider a case asserting a QUERY that dies before a response is
    retried, alongside the existing retry tests.
+
+## Requiring a `Content-Type` on QUERY
+
+The draft requires query content to carry a `Content-Type` and says servers must reject a QUERY
+whose type is missing. Rejecting is the server's job, but Faith can refuse to send a request it
+knows is malformed and save the round trip. This is Faith's own strictness rather than something
+the standard asks of a client, so it raises a Faith error rather than the `TypeError` the GET/HEAD
+body guard throws (that one is standard-mandated, in `wrapper.js:768`). No existing
+`FaithErrorKind` fits a header that is absent rather than malformed, so this wants a new variant.
+
+Only enforce it when a body is present: the requirement attaches to query content, so a QUERY
+with no body has nothing to declare a type for. A `ReadableStream` body is checkable up front,
+the headers being known before the stream is consumed.
+
+### Three sources can supply the type, so the check goes in Rust
+
+Measured against a raw socket, with an agent built with a default `Content-Type`:
+
+| case | sent |
+| --- | --- |
+| agent default alone, string body | `text/plain` (the agent default) |
+| agent default + explicit per-request header | the per-request value, one line |
+| agent default + `URLSearchParams` body | `application/x-www-form-urlencoded;charset=UTF-8`, agent default lost |
+
+So an agent default alone does supply the header. A check reading only `options.headers` would
+falsely reject that first case, and the wrapper cannot see agent defaults at all — they are baked
+into the reqwest `Client` at build time (`crates/web-faith/src/client.rs:332`). The check
+therefore belongs in Rust `send()`, which sees both.
+
+Making the agent's default visible is a one-line hoist. The agent already lifts the default
+headers it needs to reason about into its own fields — `default_accept_encoding`,
+`default_content_encoding`, `has_default_priority` (`crates/web-faith/src/agent.rs:136-147`,
+populated in `crates/web-faith/src/agent/build.rs:219-224`). Add `has_default_content_type`
+exactly as `has_default_priority` is done: `map.contains_key(CONTENT_TYPE)`.
+
+Note that reqwest's default headers only fill gaps, so a per-request `Content-Type` replaces an
+agent default cleanly rather than doubling it. The append problem that `Content-Encoding` works
+around (`send.rs:126`) is builder-against-builder, and does not arise here.
+
+## Defaulting a body's `Content-Type`
+
+Faith does not give a string body the type the fetch standard prescribes, so the most natural
+QUERY call would be refused by the check above. Closing that gap is part of this card.
+
+Node's native fetch, measured against a raw socket, is the reference:
+
+| body | `Content-Type` |
+| --- | --- |
+| string | `text/plain;charset=UTF-8` |
+| `URLSearchParams` | `application/x-www-form-urlencoded;charset=UTF-8` |
+| `Uint8Array`, `ArrayBuffer` | none |
+| `Blob` with a type | the blob's type |
+| `Blob` with no type | none |
+| `FormData` | `multipart/form-data; boundary=...` |
+
+An explicit `Content-Type` on the request wins over the extracted one.
+
+Against the body kinds Faith accepts (string, `Buffer`, `Uint8Array`, `ArrayBuffer`,
+`Array<number>`, `URLSearchParams`, `ReadableStream`), the only missing type is the string case:
+the byte kinds and the stream correctly send none, and `URLSearchParams` is already handled
+(`wrapper.js:813-825`).
+
+### Where the default is resolved
+
+The wrapper knows the body kind; Rust knows the precedence. Neither alone is enough:
+
+- The NAPI boundary erases the kind. `Either3::A(s) => Buffer::from(s.as_bytes())`
+  (`crates/web-faith-napi/src/options.rs:204`) turns a string into the same bytes a `Buffer`
+  becomes, so Rust cannot tell a string body from a byte body.
+- The wrapper cannot see agent defaults, so setting the type there clobbers a deliberate agent
+  default. That is what the third measured case above shows `URLSearchParams` already doing.
+
+So the wrapper derives the type from the body kind and passes it as its own option, and Rust
+applies the precedence: a `Content-Type` on the request, else the agent's default, else the type
+derived from the body. That is the same shape as the `Accept-Encoding` resolution already in
+`send.rs:170-190` (request value, else agent default, else the default Faith sends itself).
+
+Doing it this way also fixes the `URLSearchParams` clobber, so the two body kinds behave alike.
+
+With the default in place the QUERY check only bites a raw-bytes or streaming body carrying no
+declared type, which is exactly the case where nothing knows what the query content is.
 
 ## Deliberately out of scope
 
 **Caching QUERY** — split to card **N3** ("Cache QUERY responses with a body-aware cache key").
 QUERY is cacheable but its cache key must incorporate the request body; Faith's cache keys on
 method + URI only (`http-cache-reqwest`). Larger, separable piece.
+
+**`Blob` and `FormData` request bodies** — Faith does not accept either. Both fail with a raw
+NAPI conversion error ("Value is non of these types `String`, `Vec<u8>`, `TypedArray<u8>`")
+rather than a `TypeError`. That is an unsupported-body-kind gap rather than a `Content-Type` one,
+and their types (the blob's own type, multipart's generated boundary) only become relevant once
+the bodies are accepted. Not raised as a card yet.
