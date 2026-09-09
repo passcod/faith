@@ -2887,7 +2887,7 @@ dependencies = [
 
 [[package]]
 name = "web-faith"
-version = "0.7.0"
+version = "1.0.0"
 dependencies = [
  "async-trait",
  "bon",
@@ -2919,7 +2919,7 @@ dependencies = [
 
 [[package]]
 name = "web-faith-alt-svc"
-version = "0.7.0"
+version = "1.0.0"
 dependencies = [
  "async-trait",
  "http",
@@ -2933,7 +2933,7 @@ dependencies = [
 
 [[package]]
 name = "web-faith-conn-tracker"
-version = "0.7.0"
+version = "1.0.0"
 dependencies = [
  "libc",
  "moka",
@@ -2946,7 +2946,7 @@ dependencies = [
 
 [[package]]
 name = "web-faith-cookies"
-version = "0.7.0"
+version = "1.0.0"
 dependencies = [
  "cookie",
  "cookie_store",
@@ -2958,7 +2958,7 @@ dependencies = [
 
 [[package]]
 name = "web-faith-dns"
-version = "0.7.0"
+version = "1.0.0"
 dependencies = [
  "futures",
  "hickory-resolver",
@@ -2970,7 +2970,7 @@ dependencies = [
 
 [[package]]
 name = "web-faith-encoding"
-version = "0.7.0"
+version = "1.0.0"
 dependencies = [
  "async-compression",
  "bytes",
@@ -2982,7 +2982,7 @@ dependencies = [
 
 [[package]]
 name = "web-faith-napi"
-version = "0.7.0"
+version = "1.0.0"
 dependencies = [
  "async-stream",
  "bytes",

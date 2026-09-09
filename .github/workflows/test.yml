@@ -44,7 +44,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REQUIRED_CHECK: Tests pass
-          SKIPPABLE_JOBS: test
+          SKIPPABLE_JOBS: test, msrv
         run: .github/scripts/cleanup-only-gate.sh
 
   test:
@@ -98,11 +98,49 @@ jobs:
         env:
           HTTPBIN_URL: http://localhost:8888
 
+  # Verifies the declared MSRV (rust-version = "1.96") actually builds and tests,
+  # so the declaration is checked rather than asserted. One lean job on purpose,
+  # not a matrix axis: MSRV is a property of the Rust toolchain, so a single
+  # ubuntu cell running the Rust build and tests covers it. Fanning 1.96 across
+  # the host x node matrix would add ~12 cells and roughly double this workflow's
+  # ~59 job-minutes for no extra signal — the JS suite doesn't depend on the Rust
+  # MSRV, so it stays on stable.
+  msrv:
+    needs: gate
+    if: needs.gate.outputs.skip != 'true'
+    name: msrv - 1.96
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - run: rustup toolchain install --profile minimal --no-self-update 1.96
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - name: Start httpbin
+        run: |
+          # pinned for the same reason as the stable matrix above
+          go run github.com/mccutchen/go-httpbin/v2/cmd/go-httpbin@v2.23.1 -host 127.0.0.1 -port 8888 &
+          sleep 10
+        shell: bash
+      - name: Install Caddy
+        # The h3 integration tests need a real HTTP/3 server, as in the stable job.
+        run: |
+          go install github.com/caddyserver/caddy/v2/cmd/caddy@v2.11.4
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+        shell: bash
+      - name: Build against MSRV
+        run: cargo +1.96 build --workspace
+      - name: Test against MSRV
+        run: cargo +1.96 test --workspace
+        env:
+          HTTPBIN_URL: http://localhost:8888
+
   # Dummy job to have a stable name for PR requirements
   tests-pass:
     if: always() # always run even if dependencies fail
     name: Tests pass
-    needs: [gate, test]
+    needs: [gate, test, msrv]
     runs-on: ubuntu-latest
     steps:
       - uses: re-actors/alls-green@release/v1

@@ -6,7 +6,10 @@ exclude = ["bench/h3-server"]
 resolver = "3"
 
 [workspace.package]
-version = "0.7.0"
+# Inherited only by web-faith-napi (which ships to npm as @passcod/faith); the
+# `npm run version` script keeps this in step with package.json. The six crates
+# published to crates.io each carry their own version and move independently.
+version = "1.0.0"
 edition = "2024"
 rust-version = "1.96"
 license = "Apache-2.0 OR MIT"
@@ -71,12 +74,12 @@ tokio = { version = "1.48.0", features = ["full"] }
 time = "0.3.53"
 tokio-util = { version = "0.7.10", features = ["io"] }
 url = "2.5.7"
-web-faith = { version = "0.7.0", path = "crates/web-faith", default-features = false }
-web-faith-alt-svc = { version = "0.7.0", path = "crates/web-faith-alt-svc", default-features = false }
-web-faith-conn-tracker = { version = "0.7.0", path = "crates/web-faith-conn-tracker" }
-web-faith-cookies = { version = "0.7.0", path = "crates/web-faith-cookies" }
-web-faith-dns = { version = "0.7.0", path = "crates/web-faith-dns" }
-web-faith-encoding = { version = "0.7.0", path = "crates/web-faith-encoding" }
+web-faith = { version = "1.0.0", path = "crates/web-faith", default-features = false }
+web-faith-alt-svc = { version = "1.0.0", path = "crates/web-faith-alt-svc", default-features = false }
+web-faith-conn-tracker = { version = "1.0.0", path = "crates/web-faith-conn-tracker" }
+web-faith-cookies = { version = "1.0.0", path = "crates/web-faith-cookies" }
+web-faith-dns = { version = "1.0.0", path = "crates/web-faith-dns" }
+web-faith-encoding = { version = "1.0.0", path = "crates/web-faith-encoding" }
 netlink-packet-core = "0.7.0"
 netlink-packet-sock-diag = { version = "0.4.2", features = ["rich_nlas"] }
 netlink-sys = "0.8.7"
