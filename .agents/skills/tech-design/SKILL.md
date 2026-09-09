@@ -2,11 +2,8 @@
 name: tech-design
 description: "Workshop the technical approach and capture notes in the plan"
 label: "Tech design"
-pill-order:
-  specifying: 7
-  implementing: 4
-jockey-hint: "Good fit when the user wants to talk through technical tradeoffs before committing to implementation. Demote once substantial tech notes are already in the plan unless the user signals a fresh area to workshop."
-workhorse-version: 0.3.0
+category: build
+workhorse-version: 0.4.0
 ---
 
 ## Your task: Tech design workshop

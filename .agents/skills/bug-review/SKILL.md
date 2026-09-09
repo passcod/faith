@@ -2,11 +2,8 @@
 name: bug-review
 description: "Review code changes on this card for likely bugs, regressions, and missed edges"
 label: "Bug review"
-pill-order:
-  implementing: 2
-  reviewing: 1
-  complete: 1
-workhorse-version: 0.3.0
+category: verify
+workhorse-version: 0.4.0
 ---
 
 ## Your task: Bug review

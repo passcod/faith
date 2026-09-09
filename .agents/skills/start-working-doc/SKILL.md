@@ -2,11 +2,8 @@
 name: start-working-doc
 description: "Start a working doc — a drafting space where spec-level and implementation thinking co-exist before splitting into specs, plan, and test cases"
 label: "Start working doc"
-pill-order:
-  not-started: 8
-  specifying: 13
-jockey-hint: "Good fit for larger, epic-level cards where behaviour and implementation need shaping together before committing to specs. Low-traffic — most cards skip it. Demote once a working doc exists on the card."
-workhorse-version: 0.3.0
+category: plan
+workhorse-version: 0.4.0
 ---
 
 ## Your task: Start a working doc
