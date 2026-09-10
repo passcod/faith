@@ -45,8 +45,6 @@ rustflags = ["--cfg", "reqwest_unstable"]
 
 ## Features
 
-All on by default except `http3`.
-
 | Feature | Default | What it adds |
 | --- | --- | --- |
 | `cache` | on | The HTTP cache, its store, and the per-request cache mode. |
