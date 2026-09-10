@@ -29,9 +29,6 @@ async fn main() -> Result<(), FaithError> {
 ```
 
 
-Whichever layer a request fails in, the failure arrives as one `FaithError` whose `FaithErrorKind`
-is the stable code to match on.
-
 ## HTTP/3 is opt-in
 
 Everything else is on by default, so the snippet above builds as it stands. HTTP/3 is the exception:
