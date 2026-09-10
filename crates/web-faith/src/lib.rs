@@ -5,6 +5,10 @@
 //! HTTP caching. The subsystems beneath it are published on their own, and each can be left out of a
 //! build with the feature named for it.
 //!
+//! Those features are on by default apart from `http3`, which reqwest gates behind a cfg only the
+//! consuming build can set. Enabling HTTP/3 means naming the feature and setting
+//! `RUSTFLAGS="--cfg reqwest_unstable"`; without it, requests still negotiate HTTP/2.
+//!
 //! Whichever layer a request fails in, the failure arrives as one [`FaithError`] whose
 //! [`FaithErrorKind`] is the stable code to match on: a component crate names its own errors, and
 //! they are converted at the boundary as they cross into the client.

@@ -46,10 +46,8 @@ happened, so they stay unticked until then.
 
 - [ ] A fresh project that depends on `web-faith` resolves it and its component
   crates from crates.io, pulling each component at the version `web-faith` declares.
-  Resolution works (verified against the published 0.7.0), but the build then fails:
-  reqwest's `http3` gate needs `RUSTFLAGS='--cfg reqwest_unstable'`, which no
-  consumer gets by default. Stays unticked until that is settled (see the plan's
-  open question) and re-run against 1.0.0.
+  Needs 1.0.0 published; against 0.7.0 the components resolve but the build fails on
+  reqwest's `http3` gate, which is what making `http3` opt-in fixes.
 - [ ] The four leaf crates each resolve standalone in a fresh project without
   pulling `web-faith`.
 
@@ -79,3 +77,22 @@ happened, so they stay unticked until then.
   0.10.2, and `cargo package` no longer warns.
 - [x] The workspace builds and its tests pass on the updated lockfile, on stable
   and under MSRV 1.96.
+
+## HTTP/3 is opt-in for the Rust crate (spec: RUST)
+
+- [x] A project outside this workspace, with no `RUSTFLAGS` and no access to the
+  repo's `.cargo/config.toml`, builds `web-faith` at default features. Verified
+  with the README's own snippet as the source file, so the documented example is
+  checked at the same time.
+- [x] `cargo check -p web-faith` (default, so no HTTP/3),
+  `--no-default-features --features tls-aws-lc-rs`, and `--features http3` all
+  compile, so the cfg gates behind the feature hold in each shape.
+- [x] `cargo test --workspace` keeps the same test counts as before `http3` left
+  the default set, because feature unification enables it through
+  `web-faith-napi`. The HTTP/3 code stays covered.
+- [x] The `features` job compiles `web-faith` as a consumer gets it, which no other
+  job in CI does, and is required by the `Tests pass` gate.
+- [ ] `@passcod/faith` still has HTTP/3 compiled in: `web-faith-napi` keeps `http3`
+  in its defaults, so the npm module's h3 behaviour is unchanged. Covered by the
+  existing HTTP/3 suite against Caddy in the `test` job, so it wants a green CI run
+  on this branch rather than a local check.

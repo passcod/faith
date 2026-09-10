@@ -87,27 +87,45 @@ The 0.7.0 docs.rs build for `web-faith` failed (the other five are green):
     error: The `http3` feature is unstable, and requires the
     `RUSTFLAGS='--cfg reqwest_unstable'` environment variable to be set.
 
-`web-faith`'s default features include `http3`, which turns on reqwest's `http3`,
-and reqwest refuses to compile without that cfg. The workspace supplies it through
+At 0.7.0 `http3` was a default feature, and it turns on reqwest's `http3`, which
+refuses to compile without that cfg. The workspace supplies the cfg through
 `.cargo/config.toml`, which is not part of a published crate, so docs.rs never saw
-it. Fixed with `[package.metadata.docs.rs] rustc-args = ["--cfg", "reqwest_unstable"]`
-in `crates/web-faith/Cargo.toml`; docs.rs applies those as RUSTFLAGS, so reqwest
-gets the cfg. The fix ships with 1.0.0, so 0.7.0's docs stay broken (a rebuild
-reads 0.7.0's own manifest, which lacks the metadata).
+it. `crates/web-faith/Cargo.toml` now carries both halves of the fix:
 
-## Open question: the same cfg breaks a consumer's first build
+    [package.metadata.docs.rs]
+    features = ["http3"]
+    rustc-args = ["--cfg", "reqwest_unstable"]
 
-Verified against the published 0.7.0 in a fresh project outside this workspace:
-`cargo add web-faith` then `cargo check` fails with the same reqwest error. The
-docs.rs metadata fixes docs.rs only; it does nothing for a consumer, who has to
-set `RUSTFLAGS='--cfg reqwest_unstable'` themselves. The README now documents that,
-which is accurate but still means `cargo add web-faith` does not build out of the box.
+docs.rs applies `rustc-args` as RUSTFLAGS, so reqwest gets the cfg, and `features`
+keeps the HTTP/3 API documented now that it is no longer a default. The fix ships
+with 1.0.0, so 0.7.0's docs stay broken (a rebuild reads 0.7.0's own manifest,
+which lacks the metadata).
 
-Two ways to resolve, and it wants a decision before 1.0.0:
+## HTTP/3 is opt-in for the Rust crate
 
-- **Leave it.** Matches RUST's "features are on by default, so a caller who reaches
-  for the crate without thinking about them gets the whole client", and the README
-  carries the flag. Cost: a compile error is the first thing a new user meets.
-- **Take `http3` out of the default set.** `cargo add web-faith` then builds, and
-  HTTP/3 becomes an opt-in that documents the flag alongside it. This changes what
-  RUST says about default features, so it is a spec change, not just a manifest one.
+Settled: `http3` is out of `web-faith`'s default feature set. The problem it fixes,
+verified against the published 0.7.0 in a fresh project outside this workspace,
+was that `cargo add web-faith` then `cargo check` failed on reqwest's cfg gate, so
+a compile error was the first thing a new user met. The docs.rs metadata fixed
+docs.rs alone and did nothing for a consumer.
+
+- `web-faith` default features are now cache, connection-tracking, cookies, dns,
+  encoding, and tls-aws-lc-rs. A caller wanting HTTP/3 names the feature and sets
+  `RUSTFLAGS="--cfg reqwest_unstable"`.
+- `web-faith-napi` keeps `http3` in its own defaults, so the npm module still ships
+  with HTTP/3 compiled in. Its build gets the cfg from `.cargo/config.toml`.
+- docs.rs builds with `features = ["http3"]` plus the cfg, so the HTTP/3 API stays
+  documented even though it is not a default.
+- RUST is updated under "Choosing what is built": features are on by default save
+  for `http3`, with the reason and the Node carve-out stated.
+
+### The CI gap this opened, and the guard for it
+
+`cargo test --workspace` compiles `web-faith` **with** http3, because feature
+unification pulls it in through `web-faith-napi`'s defaults. So no existing CI job
+compiles `web-faith` the way a consumer gets it, and the 63 cfg-gated sites behind
+the feature could rot unnoticed until a `cargo add` broke again.
+
+A lean `features` job in `test.yml` closes that: three `cargo check -p web-faith`
+runs (default, TLS backend only, and http3 opted in). No Go, httpbin, or Caddy, so
+it is the cheapest job in the workflow.

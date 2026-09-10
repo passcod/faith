@@ -8,7 +8,7 @@ A browser-shaped HTTP client: fetch semantics over a Rust network stack.
 Faith behaves like a browser wherever that translates to a server-side runtime: transparent HTTP/2
 and HTTP/3, Happy Eyeballs across IPv4 and IPv6, DNS caching, an optional cookie jar, and HTTP
 caching. The subsystems beneath it are published on their own, and each can be left out of a build
-with the feature named for it.
+with the feature named for it. HTTP/3 is the one to opt into, as below.
 
 ## Usage
 
@@ -37,49 +37,40 @@ prepares one without sending it.
 Whichever layer a request fails in, the failure arrives as one `FaithError` whose `FaithErrorKind`
 is the stable code to match on.
 
-## HTTP/3 needs a build flag
+## HTTP/3 is opt-in
 
-The default features include `http3`, which turns on reqwest's own `http3` feature. Reqwest treats
-that one as unstable and refuses to compile unless a cfg flag is set, so a default build needs:
-
-```console
-RUSTFLAGS='--cfg reqwest_unstable' cargo build
-```
-
-Putting it in `.cargo/config.toml` saves repeating it:
+Everything else is on by default, so the snippet above builds as it stands. HTTP/3 is the exception:
+it turns on reqwest's own `http3` feature, which reqwest treats as unstable and refuses to compile
+unless the build sets a cfg flag. Enabling it takes both the feature and the flag.
 
 ```toml
+[dependencies]
+web-faith = { version = "1.0", features = ["http3"] }
+```
+
+```toml
+# .cargo/config.toml
 [build]
 rustflags = ["--cfg", "reqwest_unstable"]
 ```
 
-To build without the flag, leave HTTP/3 out and name the rest:
-
-```toml
-[dependencies]
-web-faith = { version = "1.0", default-features = false, features = [
-	"cache",
-	"connection-tracking",
-	"cookies",
-	"dns",
-	"encoding",
-	"tls-aws-lc-rs",
-] }
-```
+Or per invocation, `RUSTFLAGS='--cfg reqwest_unstable' cargo build`. Without the flag, reqwest stops
+the build and says so. Requests still negotiate HTTP/2 without the feature; what it adds is HTTP/3
+and the Alt-Svc machinery that upgrades an origin to it.
 
 ## Features
 
-All of these are on by default.
+All on by default except `http3`.
 
-| Feature | What it adds |
-| --- | --- |
-| `cache` | The HTTP cache, its store, and the per-request cache mode. |
-| `connection-tracking` | Per-connection kernel counters, and the agent verb that reports them. |
-| `cookies` | The cookie jar, and the agent option and handle that reach it. |
-| `dns` | Faith's own caching resolver. Without it, names resolve through the platform. |
-| `encoding` | Content codings: negotiating and decoding a response body, and compressing a request one. |
-| `http3` | Transparent HTTP/3, and the Alt-Svc machinery that upgrades an origin to it. |
-| `tls-aws-lc-rs` | The rustls crypto provider. `tls-ring` selects ring instead. |
+| Feature | Default | What it adds |
+| --- | --- | --- |
+| `cache` | on | The HTTP cache, its store, and the per-request cache mode. |
+| `connection-tracking` | on | Per-connection kernel counters, and the agent verb that reports them. |
+| `cookies` | on | The cookie jar, and the agent option and handle that reach it. |
+| `dns` | on | Faith's own caching resolver. Without it, names resolve through the platform. |
+| `encoding` | on | Content codings: negotiating and decoding a response body, and compressing a request one. |
+| `tls-aws-lc-rs` | on | The rustls crypto provider. `tls-ring` selects ring instead. |
+| `http3` | off | Transparent HTTP/3, and the Alt-Svc machinery that upgrades an origin to it. Needs the cfg flag above. |
 
 Turning one off drops the code behind it, and the parts of the API that only mean something with
 that subsystem present go with it.

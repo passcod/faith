@@ -11,9 +11,11 @@ readme = "README.md"
 authors.workspace = true
 
 [package.metadata.docs.rs]
-# The default feature set includes `http3`, which turns on reqwest's own `http3` feature; that one
-# refuses to compile unless the `reqwest_unstable` cfg is set. The workspace supplies it through
-# .cargo/config.toml, which is not part of the published crate, so docs.rs has to be told directly.
+# Document the HTTP/3 API too, even though `http3` is not a default feature. It turns on reqwest's
+# own `http3`, which refuses to compile unless the `reqwest_unstable` cfg is set; the workspace
+# supplies that through .cargo/config.toml, which is not part of the published crate, so docs.rs
+# has to be told directly.
+features = ["http3"]
 rustc-args = ["--cfg", "reqwest_unstable"]
 
 [dependencies]
@@ -52,13 +54,15 @@ serde.workspace = true
 tokio = { workspace = true }
 
 [features]
+# `http3` is deliberately not in here. Every other feature is on, so a caller who reaches for the
+# crate without thinking about features gets the whole client; HTTP/3 is the one a caller has to ask
+# for, because reqwest gates it behind a cfg only the consuming build can set (see the feature).
 default = [
     "cache",
     "connection-tracking",
     "cookies",
     "dns",
     "encoding",
-    "http3",
     "tls-aws-lc-rs",
 ]
 # The HTTP cache, its store, and the per-request cache mode.
@@ -72,7 +76,9 @@ cookies = ["dep:web-faith-cookies", "reqwest/cookies"]
 dns = ["dep:web-faith-dns", "reqwest/hickory-dns", "web-faith-alt-svc?/dns"]
 # Content codings: negotiating and decoding a response body, and compressing a request one.
 encoding = ["dep:web-faith-encoding"]
-# Transparent HTTP/3, and the Alt-Svc machinery that upgrades an origin to it.
+# Transparent HTTP/3, and the Alt-Svc machinery that upgrades an origin to it. Off by default:
+# reqwest treats its own `http3` as unstable and refuses to compile unless the build sets
+# `RUSTFLAGS="--cfg reqwest_unstable"`, which a consumer has to do for itself.
 http3 = ["reqwest/http3", "tls-aws-lc-rs", "dep:web-faith-alt-svc"]
 # The rustls crypto provider: aws-lc-rs by default, ring as the alternative. Cargo features are
 # additive, so enabling both is aws-lc-rs, which is also what an `http3` build resolves to because

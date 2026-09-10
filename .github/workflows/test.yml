@@ -44,7 +44,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REQUIRED_CHECK: Tests pass
-          SKIPPABLE_JOBS: test, msrv
+          SKIPPABLE_JOBS: test, msrv, features
         run: .github/scripts/cleanup-only-gate.sh
 
   test:
@@ -103,7 +103,7 @@ jobs:
   # not a matrix axis: MSRV is a property of the Rust toolchain, so a single
   # ubuntu cell running the Rust build and tests covers it. Fanning 1.96 across
   # the host x node matrix would add ~12 cells and roughly double this workflow's
-  # ~59 job-minutes for no extra signal — the JS suite doesn't depend on the Rust
+  # ~59 job-minutes for no extra signal, and the JS suite does not depend on the Rust
   # MSRV, so it stays on stable.
   msrv:
     needs: gate
@@ -136,11 +136,33 @@ jobs:
         env:
           HTTPBIN_URL: http://localhost:8888
 
+  # Compiles web-faith the way a consumer gets it. Nothing else in CI does: the
+  # workspace-wide test run pulls `http3` in through web-faith-napi's own defaults,
+  # so feature unification means the default (no-HTTP/3) build is never exercised
+  # there, and the cfg gates behind that feature could rot without anyone noticing
+  # until `cargo add web-faith` broke. Only `cargo check`, so no Go or httpbin here.
+  features:
+    needs: gate
+    if: needs.gate.outputs.skip != 'true'
+    name: features
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - run: rustup toolchain install --profile minimal --no-self-update stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Default features, so without HTTP/3
+        run: cargo check -p web-faith
+      - name: Nothing but a TLS backend
+        run: cargo check -p web-faith --no-default-features --features tls-aws-lc-rs
+      - name: HTTP/3 opted in
+        # The repo's .cargo/config.toml supplies the reqwest_unstable cfg this needs.
+        run: cargo check -p web-faith --features http3
+
   # Dummy job to have a stable name for PR requirements
   tests-pass:
     if: always() # always run even if dependencies fail
     name: Tests pass
-    needs: [gate, test, msrv]
+    needs: [gate, test, msrv, features]
     runs-on: ubuntu-latest
     steps:
       - uses: re-actors/alls-green@release/v1
