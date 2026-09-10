@@ -28,7 +28,6 @@ async fn main() -> Result<(), FaithError> {
 }
 ```
 
-
 ## HTTP/3 is opt-in
 
 Everything else is on by default, so the snippet above builds as it stands. HTTP/3 is the exception:
