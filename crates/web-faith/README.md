@@ -1,6 +1,6 @@
 # web-faith
 
-A browser-shaped HTTP client: fetch semantics over a Rust network stack.
+A browser-shaped HTTP client.
 
 [![crates.io](https://img.shields.io/crates/v/web-faith.svg)](https://crates.io/crates/web-faith)
 [![docs.rs](https://docs.rs/web-faith/badge.svg)](https://docs.rs/web-faith)
