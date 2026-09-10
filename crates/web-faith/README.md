@@ -57,8 +57,7 @@ rustflags = ["--cfg", "reqwest_unstable"]
 
 ## The component crates
 
-- [`web-faith-cookies`](https://docs.rs/web-faith-cookies): the cookie jar, with the rules that
-  hold outside a browser.
+- [`web-faith-cookies`](https://docs.rs/web-faith-cookies)
 - [`web-faith-dns`](https://docs.rs/web-faith-dns): the resolver, its cache, the discovery ladder,
   the `HTTPS` record query, and Happy Eyeballs.
 - [`web-faith-conn-tracker`](https://docs.rs/web-faith-conn-tracker): live per-connection
