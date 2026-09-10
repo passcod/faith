@@ -30,7 +30,7 @@ async fn main() -> Result<(), FaithError> {
 
 ## HTTP/3 is opt-in
 
-Faith uses reqwest internally, and its HTTP/3 support is currently unstable. To enable HTTP/3 support, you will need to set the `http3` feature on Faith, and use the `reqwest_unstable` rustc 
+Faith uses reqwest internally, and its HTTP/3 support is currently unstable. To enable HTTP/3 support, you will need to set the `http3` feature on Faith, and use the `reqwest_unstable` rustc cfg flag:
 
 ```toml
 [dependencies]
