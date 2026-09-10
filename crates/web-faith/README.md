@@ -63,7 +63,7 @@ rustflags = ["--cfg", "reqwest_unstable"]
 - [`web-faith-alt-svc`](https://docs.rs/web-faith-alt-svc)
 - [`web-faith-encoding`](https://docs.rs/web-faith-encoding)
 
-
+## FFI
 
 The same stack ships to Node.js as [`@passcod/faith`](https://www.npmjs.com/package/@passcod/faith).
 
