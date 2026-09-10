@@ -28,6 +28,7 @@ A connect failure is answered first by re-resolving the name when the address ca
 An origin that closes idle connections closes all of them, so the pool can hold several that are already gone and a fresh attempt can draw another one; a request is therefore sent up to five further times before the failure reaches the caller.
 
 Only requests that can be sent again without changing what the origin has done are sent again.
-That means the method is one of `GET`, `HEAD`, `OPTIONS`, `TRACE`, `PUT`, or `DELETE`, and the body is one that can be produced a second time.
+That means the method is one of `GET`, `HEAD`, `OPTIONS`, `TRACE`, `PUT`, `DELETE`, or `QUERY`, and the body is one that can be produced a second time.
+`QUERY` is on that list despite carrying a body: it is safe and idempotent, its query content travelling in the body rather than the URL (see [REQ](../fetch/request.md)).
 `POST` and `PATCH` are never sent again: a connection that died carries no evidence of whether the origin processed the request before it went, so a request whose repetition would count twice surfaces the failure instead.
 A request with a `ReadableStream` body is never sent again either, the stream having already been consumed (see [REQ](../fetch/request.md)).

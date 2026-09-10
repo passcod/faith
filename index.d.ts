@@ -1227,6 +1227,15 @@ export declare function faithFetch(url: string, options: FaithOptionsAndBody, si
 export interface FaithOptionsAndBody {
   agent: Agent
   body?: string | Buffer | Uint8Array
+  /**
+   * The `Content-Type` the body's kind implies, as the fetch standard extracts it: a string
+   * body is `text/plain`, a `URLSearchParams` is form encoding, a `Blob` carries its own type,
+   * and raw bytes imply nothing.
+   *
+   * Set by the wrapper, which is the layer that still knows what kind the body was. Faith sends
+   * it only when neither the request nor the agent declares a type of its own.
+   */
+  bodyContentType?: string
   cache?: CacheMode
   /**
    * Compress the request body in this coding, named by its wire token: `gzip`, `deflate`,
@@ -1240,6 +1249,21 @@ export interface FaithOptionsAndBody {
   duplex?: DuplexOption
   headers?: Array<[string, string]>
   integrity?: string
+  /**
+   * The request method, defaulting to `GET`.
+   *
+   * Any method the HTTP grammar admits as a token is sent, not just the ones the fetch standard
+   * names: `QUERY` and registered extensions like `PROPFIND` or `M-SEARCH` all go out as
+   * written, and a method carrying bytes the grammar does not allow raises `InvalidMethod`.
+   *
+   * `DELETE`, `GET`, `HEAD`, `OPTIONS`, `POST`, and `PUT` are matched case insensitively and
+   * sent upper case, matching the set the fetch standard normalises. Every other method keeps
+   * the case it was given, so an origin routing case sensitively on a custom method sees what
+   * the caller wrote.
+   *
+   * A `QUERY` request carrying a body must have a `Content-Type` describing it, from the
+   * request, the agent, or the body's own kind; one without raises `MissingContentType`.
+   */
   method?: string
   /**
    * The relative priority of this request: `high`, `low`, or `auto`.

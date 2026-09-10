@@ -158,6 +158,13 @@ fn priority_urgency(priority: Option<&str>) -> Option<&'static str> {
 pub struct FaithOptionsAndBody {
 	pub agent: Reference<Agent>,
 	pub body: Option<Either3<String, Buffer, Uint8Array>>,
+	/// The `Content-Type` the body's kind implies, as the fetch standard extracts it: a string
+	/// body is `text/plain`, a `URLSearchParams` is form encoding, a `Blob` carries its own type,
+	/// and raw bytes imply nothing.
+	///
+	/// Set by the wrapper, which is the layer that still knows what kind the body was. Faith sends
+	/// it only when neither the request nor the agent declares a type of its own.
+	pub body_content_type: Option<String>,
 	pub cache: Option<RequestCacheMode>,
 	/// Compress the request body in this coding, named by its wire token: `gzip`, `deflate`,
 	/// `br`, or `zstd`.
@@ -169,6 +176,19 @@ pub struct FaithOptionsAndBody {
 	pub duplex: Option<DuplexOption>,
 	pub headers: Option<Vec<(String, String)>>,
 	pub integrity: Option<String>,
+	/// The request method, defaulting to `GET`.
+	///
+	/// Any method the HTTP grammar admits as a token is sent, not just the ones the fetch standard
+	/// names: `QUERY` and registered extensions like `PROPFIND` or `M-SEARCH` all go out as
+	/// written, and a method carrying bytes the grammar does not allow raises `InvalidMethod`.
+	///
+	/// `DELETE`, `GET`, `HEAD`, `OPTIONS`, `POST`, and `PUT` are matched case insensitively and
+	/// sent upper case, matching the set the fetch standard normalises. Every other method keeps
+	/// the case it was given, so an origin routing case sensitively on a custom method sees what
+	/// the caller wrote.
+	///
+	/// A `QUERY` request carrying a body must have a `Content-Type` describing it, from the
+	/// request, the agent, or the body's own kind; one without raises `MissingContentType`.
 	pub method: Option<String>,
 	/// The relative priority of this request: `high`, `low`, or `auto`.
 	///
@@ -193,6 +213,7 @@ pub(crate) fn extract(opts: FaithOptionsAndBody) -> (RequestOptions, Agent, Opti
 			cache: opts.cache.unwrap_or_default().into(),
 			#[cfg(feature = "encoding")]
 			compress: opts.compress,
+			body_content_type: opts.body_content_type,
 			credentials,
 			headers: opts.headers,
 			integrity: opts.integrity,

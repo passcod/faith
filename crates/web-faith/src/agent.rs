@@ -60,6 +60,7 @@ pub(crate) struct AgentSettings {
 	pub(crate) default_content_encoding: Option<HeaderValue>,
 	/// Whether a `Priority` header sits among the agent's default headers, so that default wins
 	/// over the one a request's priority would derive.
+	pub(crate) has_default_content_type: bool,
 	pub(crate) has_default_priority: bool,
 }
 
@@ -142,6 +143,10 @@ pub struct Agent {
 	// spec:ENC
 	#[cfg(feature = "encoding")]
 	pub(crate) default_content_encoding: Option<HeaderValue>,
+	/// Whether a `Content-Type` sits among the agent's default headers. A type the agent declares
+	/// describes the bodies its requests carry, so it wins over the one a body's kind implies.
+	// spec:REQ#body
+	pub(crate) has_default_content_type: bool,
 	/// Whether a `Priority` header sits among the agent's default headers. That default wins over
 	/// the header a request's priority would derive.
 	pub(crate) has_default_priority: bool,

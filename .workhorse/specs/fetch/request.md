@@ -50,8 +50,17 @@ Any non-null body counts, including an empty string.
 This is a case the fetch standard specifies as a throw, unlike the permissiveness Faith extends where the standard leaves a runtime free to choose.
 
 Accepted body types: string, `ArrayBuffer`, `Blob`, `DataView`, `File`, `FormData`, `TypedArray`, `URLSearchParams`, and `ReadableStream`.
-A `URLSearchParams` body sets `Content-Type: application/x-www-form-urlencoded;charset=UTF-8` when no content type was given.
 A `ReadableStream` body requires `duplex: "half"`, matching the fetch standard; the stream is sent as the request body without buffering the whole payload.
+
+A body's kind implies a `Content-Type`, extracted as the fetch standard extracts it: a string is `text/plain;charset=UTF-8`, a `URLSearchParams` is `application/x-www-form-urlencoded;charset=UTF-8`, a `Blob` or `File` carries its own type, and a `FormData` is `multipart/form-data` with the boundary its bytes are encoded against.
+A `Blob` or `File` with no type of its own, a body of raw bytes, and a streaming body all imply nothing, there being nothing in the bytes that says what they hold.
+
+A type the request declares wins, then one the agent declares among its default headers, and the type the body implies is sent only when neither does.
+The implied type ranks last because it is a description Faith derives rather than anything the caller asked for, so an agent that types every body it sends keeps typing them.
+
+A `QUERY` request carrying a body must have a `Content-Type` describing it, from any of those three sources.
+One without is refused with a missing-content-type error before the request is sent: query content nothing describes cannot be read, and refusing here saves a round trip to an origin that must reject it anyway.
+A `QUERY` with no body has nothing to describe and is sent as it is.
 
 ## Duplex
 

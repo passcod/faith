@@ -804,24 +804,38 @@ async function fetch(resource, options = {}) {
 
 	// Convert body to Buffer if needed
 	// Native binding handles: string, Buffer, Uint8Array
-	// We convert: ArrayBuffer, Array<number>, ReadableStream, URLSearchParams
+	// We convert: ArrayBuffer, Array<number>, Blob, File, FormData, ReadableStream,
+	// URLSearchParams
 	// Validate ReadableStream bodies require duplex option
+	//
+	// A body's kind also implies a Content-Type, which the fetch standard extracts along with the
+	// bytes. This is the last layer that still knows the kind -- the native boundary takes a
+	// string and a buffer as the same bytes -- so the type is derived here and passed down as
+	// bodyContentType. It is not pushed into the headers: a derived type is a default rather than
+	// something the caller asked for, and the layer below sends it only when neither the request
+	// nor the agent declares a type of its own.
 	if (nativeOptions.body !== undefined && nativeOptions.body !== null) {
 		// Handle URLSearchParams
 		if (nativeOptions.body instanceof URLSearchParams) {
 			nativeOptions.body = nativeOptions.body.toString();
-			// Set Content-Type if not already set (per the fetch standard)
-			if (!nativeOptions.headers) {
-				nativeOptions.headers = [];
-			}
-			const hasContentType = nativeOptions.headers.some(
-				([name]) => name.toLowerCase() === "content-type",
-			);
-			if (!hasContentType) {
-				nativeOptions.headers.push([
-					"Content-Type",
-					"application/x-www-form-urlencoded;charset=UTF-8",
-				]);
+			nativeOptions.bodyContentType =
+				"application/x-www-form-urlencoded;charset=UTF-8";
+		}
+		// A Blob, a File, or a FormData is read through Response, which performs the fetch
+		// standard's own body extraction: it yields both the encoded bytes and the type that
+		// describes them, including the boundary a multipart body is parsed against.
+		else if (
+			typeof Blob !== "undefined" &&
+			(nativeOptions.body instanceof Blob ||
+				(typeof FormData !== "undefined" &&
+					nativeOptions.body instanceof FormData))
+		) {
+			// The global Response, not Faith's own class of that name declared below.
+			const extracted = new globalThis.Response(nativeOptions.body);
+			const derived = extracted.headers.get("content-type");
+			nativeOptions.body = Buffer.from(await extracted.arrayBuffer());
+			if (derived !== null) {
+				nativeOptions.bodyContentType = derived;
 			}
 		}
 		// Check if body is a ReadableStream
@@ -906,7 +920,10 @@ async function fetch(resource, options = {}) {
 			nativeOptions.body = Buffer.from(nativeOptions.body);
 		} else if (Array.isArray(nativeOptions.body)) {
 			nativeOptions.body = Buffer.from(nativeOptions.body);
+		} else if (typeof nativeOptions.body === "string") {
+			nativeOptions.bodyContentType = "text/plain;charset=UTF-8";
 		}
+		// Raw bytes imply no type: nothing about a buffer says what it holds.
 	} else if (nativeOptions.body === null) {
 		// Remove null body
 		delete nativeOptions.body;

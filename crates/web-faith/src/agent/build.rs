@@ -189,6 +189,7 @@ impl Agent {
 		let mut default_accept_encoding = None;
 		#[cfg(feature = "encoding")]
 		let mut default_content_encoding = None;
+		let mut has_default_content_type = false;
 		let mut has_default_priority = false;
 		let mut default_headers = None;
 		if let Some(headers) = headers
@@ -220,6 +221,7 @@ impl Agent {
 				default_accept_encoding = map.get(reqwest::header::ACCEPT_ENCODING).cloned();
 				default_content_encoding = map.get(reqwest::header::CONTENT_ENCODING).cloned();
 			}
+			has_default_content_type = map.contains_key(reqwest::header::CONTENT_TYPE);
 			has_default_priority = map.contains_key(PRIORITY);
 			default_headers = Some(map);
 		}
@@ -502,6 +504,7 @@ impl Agent {
 			default_accept_encoding,
 			#[cfg(feature = "encoding")]
 			default_content_encoding,
+			has_default_content_type,
 			has_default_priority,
 		};
 
@@ -592,6 +595,7 @@ impl Agent {
 			default_accept_encoding: settings.default_accept_encoding,
 			#[cfg(feature = "encoding")]
 			default_content_encoding: settings.default_content_encoding,
+			has_default_content_type: settings.has_default_content_type,
 			has_default_priority: settings.has_default_priority,
 			recipe: Arc::new(recipe),
 		})
