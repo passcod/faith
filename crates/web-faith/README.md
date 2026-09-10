@@ -65,7 +65,7 @@ rustflags = ["--cfg", "reqwest_unstable"]
 
 ## Elsewhere
 
-Faith is also a Node.js module as [`@passcod/faith`](https://www.npmjs.com/package/@passcod/faith).
+Faith is also a Node.js module which : [`@passcod/faith`](https://www.npmjs.com/package/@passcod/faith).
 
 ## Minimum supported Rust version
 
