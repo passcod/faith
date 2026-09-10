@@ -69,4 +69,4 @@ Faith is also a Node.js module which lets you use this Rust networking stack as 
 
 ## Licence
 
-Apache-2.0 OR MIT, at your option.
+Apache-2.0 or MIT.
