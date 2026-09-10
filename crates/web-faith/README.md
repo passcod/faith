@@ -63,7 +63,7 @@ rustflags = ["--cfg", "reqwest_unstable"]
 - [`web-faith-alt-svc`](https://docs.rs/web-faith-alt-svc)
 - [`web-faith-encoding`](https://docs.rs/web-faith-encoding)
 
-## FFI
+## Elsewhere
 
 There's no FFI interface at this stage, but  Node.js as [`@passcod/faith`](https://www.npmjs.com/package/@passcod/faith).
 
