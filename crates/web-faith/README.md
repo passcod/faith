@@ -57,8 +57,6 @@ rustflags = ["--cfg", "reqwest_unstable"]
 
 ## The component crates
 
-Each one is useful without the client above it, and none of them depends on `web-faith`:
-
 - [`web-faith-cookies`](https://docs.rs/web-faith-cookies): the cookie jar, with the rules that
   hold outside a browser.
 - [`web-faith-dns`](https://docs.rs/web-faith-dns): the resolver, its cache, the discovery ladder,
