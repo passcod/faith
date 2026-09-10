@@ -7,8 +7,7 @@ A browser-shaped HTTP client.
 
 Faith behaves like a browser ("faithfully") wherever that translates to a server-side runtime: transparent HTTP/2
 and HTTP/3, Happy Eyeballs across IPv4 and IPv6, DNS caching, an optional cookie jar, and HTTP
-caching. The subsystems beneath it are published on their own, and each can be left out of a build
-with the feature named for it. HTTP/3 is the one to opt into, as below.
+caching. We also publish the component
 
 ## Usage
 
