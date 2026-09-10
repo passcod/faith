@@ -55,7 +55,7 @@ rustflags = ["--cfg", "reqwest_unstable"]
 | `tls-aws-lc-rs` | on | The rustls crypto provider. `tls-ring` selects ring instead. |
 | `http3` | off | Transparent HTTP/3, and the Alt-Svc machinery that upgrades an origin to it. Needs the cfg flag above. |
 
-## The component crates
+## Component crates
 
 - [`web-faith-cookies`](https://docs.rs/web-faith-cookies)
 - [`web-faith-dns`](https://docs.rs/web-faith-dns)
