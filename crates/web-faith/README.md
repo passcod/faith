@@ -28,10 +28,6 @@ async fn main() -> Result<(), FaithError> {
 }
 ```
 
-An `Agent` owns the connection pool, resolver, cookie jar, and caches, and `Agent::builder`
-configures one. Cloning an agent is cheap and every clone names the same one. `Agent::fetch`
-returns a builder that sends when awaited, so there is no separate send step, and `Request`
-prepares one without sending it.
 
 Whichever layer a request fails in, the failure arrives as one `FaithError` whose `FaithErrorKind`
 is the stable code to match on.
