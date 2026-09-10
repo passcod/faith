@@ -65,7 +65,7 @@ rustflags = ["--cfg", "reqwest_unstable"]
 
 ## FFI
 
-The same stack ships to Node.js as [`@passcod/faith`](https://www.npmjs.com/package/@passcod/faith).
+There's no  Node.js as [`@passcod/faith`](https://www.npmjs.com/package/@passcod/faith).
 
 ## Minimum supported Rust version
 
