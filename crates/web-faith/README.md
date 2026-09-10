@@ -65,7 +65,7 @@ rustflags = ["--cfg", "reqwest_unstable"]
 
 ## Elsewhere
 
-There's no FFI interface at this stage, but  Node.js as [`@passcod/faith`](https://www.npmjs.com/package/@passcod/faith).
+Faith is also a Node.js as [`@passcod/faith`](https://www.npmjs.com/package/@passcod/faith).
 
 ## Minimum supported Rust version
 
