@@ -43,10 +43,6 @@ web-faith = { version = "1.0", features = ["http3"] }
 rustflags = ["--cfg", "reqwest_unstable"]
 ```
 
-Or per invocation, `RUSTFLAGS='--cfg reqwest_unstable' cargo build`. Without the flag, reqwest stops
-the build and says so. Requests still negotiate HTTP/2 without the feature; what it adds is HTTP/3
-and the Alt-Svc machinery that upgrades an origin to it.
-
 ## Features
 
 All on by default except `http3`.
