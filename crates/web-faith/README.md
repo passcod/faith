@@ -30,7 +30,7 @@ async fn main() -> Result<(), FaithError> {
 
 ## HTTP/3 is opt-in
 
-Faith uses reqwest internally, and  own `http3` feature, which reqwest treats as unstable and refuses to compile
+Faith uses reqwest internally, and its HTTP/3 support is currently unstable and refuses to compile
 unless the build sets a cfg flag. Enabling it takes both the feature and the flag.
 
 ```toml
