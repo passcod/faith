@@ -55,9 +55,6 @@ rustflags = ["--cfg", "reqwest_unstable"]
 | `tls-aws-lc-rs` | on | The rustls crypto provider. `tls-ring` selects ring instead. |
 | `http3` | off | Transparent HTTP/3, and the Alt-Svc machinery that upgrades an origin to it. Needs the cfg flag above. |
 
-Turning one off drops the code behind it, and the parts of the API that only mean something with
-that subsystem present go with it.
-
 ## The component crates
 
 Each one is useful without the client above it, and none of them depends on `web-faith`:
