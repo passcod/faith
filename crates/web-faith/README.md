@@ -60,10 +60,8 @@ rustflags = ["--cfg", "reqwest_unstable"]
 - [`web-faith-cookies`](https://docs.rs/web-faith-cookies)
 - [`web-faith-dns`](https://docs.rs/web-faith-dns)
 - [`web-faith-conn-tracker`](https://docs.rs/web-faith-conn-tracker):
-- [`web-faith-alt-svc`](https://docs.rs/web-faith-alt-svc): the Alt-Svc store and the HTTP/3
-  upgrade machinery.
-- [`web-faith-encoding`](https://docs.rs/web-faith-encoding): content coding for request and
-  response bodies.
+- [`web-faith-alt-svc`](https://docs.rs/web-faith-alt-svc)
+- [`web-faith-encoding`](https://docs.rs/web-faith-encoding)
 
 The same stack ships to Node.js as [`@passcod/faith`](https://www.npmjs.com/package/@passcod/faith).
 
