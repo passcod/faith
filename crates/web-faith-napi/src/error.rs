@@ -35,6 +35,7 @@ enum JsErrorType {
 ///   - `InvalidMethod` — invalid HTTP method
 ///   - `InvalidPath` — a `response.toFile()` destination that does not name a local path
 ///   - `InvalidUrl` — invalid URL string
+///   - `MissingContentType` — a `QUERY` request carrying a body with no `Content-Type` to describe it
 ///   - `ResponseAlreadyDisturbed` — body already read (mutually exclusive operations)
 ///   - `ResponseBodyNull` — `response.toFile()` on a response that cannot carry a body
 /// - JS generic `Error`:
@@ -71,6 +72,7 @@ fn js_type(kind: FaithErrorKind) -> JsErrorType {
 		| K::InvalidMethod
 		| K::InvalidPath
 		| K::InvalidUrl
+		| K::MissingContentType
 		| K::ResponseAlreadyDisturbed
 		| K::ResponseBodyNull => JsErrorType::TypeError,
 	}

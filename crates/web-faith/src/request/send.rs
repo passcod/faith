@@ -8,7 +8,7 @@ use std::{
 
 use reqwest::{
 	Method, StatusCode,
-	header::{CONTENT_ENCODING, HeaderName, HeaderValue},
+	header::{CONTENT_ENCODING, CONTENT_TYPE, HeaderName, HeaderValue},
 	tls::TlsInfo,
 };
 use reqwest_middleware::ClientWithMiddleware;
@@ -30,7 +30,7 @@ use crate::{
 	agent::Agent,
 	body::{Body, BodyHolder},
 	error::{FaithError, FaithErrorKind},
-	request::{Credentials, NORMALISED_METHODS, PRIORITY, RequestBody, RequestOptions},
+	request::{Credentials, NORMALISED_METHODS, PRIORITY, QUERY, RequestBody, RequestOptions},
 	response::{PeerInformation, Response},
 	timing::{HeadersStamp, RequestTiming, TimingSlot, alpn_protocol_id},
 };
@@ -61,6 +61,8 @@ pub async fn send(
 	let method =
 		Method::from_bytes(method.as_bytes()).map_err(|_| FaithErrorKind::InvalidMethod)?;
 	let is_head = method == Method::HEAD;
+	// Captured before the builder takes the method (spec:REQ#body).
+	let is_query = method.as_str() == QUERY;
 
 	let mut parsed_url = reqwest::Url::parse(&url).map_err(|_| FaithErrorKind::InvalidUrl)?;
 
@@ -136,6 +138,44 @@ pub async fn send(
 
 			request = request.header(header_name, header_value);
 		}
+	}
+
+	// A `Content-Type` the request declares, else one the agent declares, else the type the
+	// body's kind implies. The derived type sits last because it describes a default the fetch
+	// standard extracts rather than anything the caller asked for, so an agent that types every
+	// body it sends keeps doing so (spec:REQ#body).
+	let declares_content_type = options.headers.as_ref().is_some_and(|headers| {
+		headers
+			.iter()
+			.any(|(name, _)| name.eq_ignore_ascii_case(CONTENT_TYPE.as_str()))
+	}) || agent.has_default_content_type;
+
+	if !declares_content_type && let Some(derived) = options.body_content_type.as_deref() {
+		let value = HeaderValue::from_str(derived).map_err(|_| {
+			FaithError::new(
+				FaithErrorKind::InvalidHeader,
+				Some(format!(
+					"invalid Content-Type derived from the body: {derived}"
+				)),
+			)
+		})?;
+		request = request.header(CONTENT_TYPE, value);
+	}
+
+	// `QUERY` carries its query content in the body, and content nothing describes cannot be
+	// read (spec:REQ#body). Refused here rather than sent for the origin to reject.
+	if is_query
+		&& !matches!(body, RequestBody::None)
+		&& !declares_content_type
+		&& options.body_content_type.is_none()
+	{
+		return Err(FaithError::new(
+			FaithErrorKind::MissingContentType,
+			Some(
+				"a QUERY request carrying a body must declare a Content-Type describing it"
+					.to_owned(),
+			),
+		));
 	}
 
 	// What the caller says they handed over: their own `Content-Encoding`, else the

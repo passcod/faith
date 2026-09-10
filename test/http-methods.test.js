@@ -166,3 +166,85 @@ test(
     }
   },
 );
+
+test("QUERY reaches the origin as itself, with a body", async (t) => {
+  const origin = await methodEcho();
+
+  try {
+    const response = await fetch(origin.url, {
+      method: "QUERY",
+      body: "select * from things",
+    });
+    t.equal(
+      response.headers.get("x-method"),
+      "QUERY",
+      "QUERY should reach the server as QUERY",
+    );
+  } finally {
+    await origin.close();
+  }
+});
+
+test("a QUERY body is echoed back by the origin", async (t) => {
+  const response = await fetch(url("/anything"), {
+    method: "QUERY",
+    body: "select * from things",
+  });
+  const body = await response.json();
+
+  t.equal(body.method, "QUERY", "the method should reach the origin");
+  t.equal(body.data, "select * from things", "the query content should arrive");
+});
+
+test("a QUERY with a body needs a Content-Type to describe it", async (t) => {
+  t.plan(1);
+
+  try {
+    // Raw bytes imply no type, and neither the request nor the agent declares one.
+    await fetch(url("/anything"), {
+      method: "QUERY",
+      body: new Uint8Array([1, 2, 3]),
+    });
+    t.fail("should have refused a QUERY whose body nothing describes");
+  } catch (error) {
+    t.equal(
+      error.code,
+      ERROR_CODES.MissingContentType,
+      "should set canonical error code 'MissingContentType'",
+    );
+  }
+});
+
+test("a QUERY body typed by the request, the agent, or its own kind is sent", async (t) => {
+  const bytes = new Uint8Array([1, 2, 3]);
+
+  const declared = await fetch(url("/anything"), {
+    method: "QUERY",
+    body: bytes,
+    headers: { "content-type": "application/octet-stream" },
+  });
+  t.equal(declared.status, 200, "a type on the request should satisfy it");
+
+  const agent = new Agent({
+    headers: [{ name: "Content-Type", value: "application/octet-stream" }],
+  });
+  const inherited = await fetch(url("/anything"), {
+    method: "QUERY",
+    body: bytes,
+    agent,
+  });
+  t.equal(inherited.status, 200, "a type on the agent should satisfy it");
+
+  const implied = await fetch(url("/anything"), {
+    method: "QUERY",
+    body: "select * from things",
+  });
+  t.equal(implied.status, 200, "a string body implies text/plain, satisfying it");
+});
+
+test("a QUERY with no body needs no Content-Type", async (t) => {
+  const response = await fetch(url("/anything"), { method: "QUERY" });
+  const body = await response.json();
+
+  t.equal(body.method, "QUERY", "a bodiless QUERY should be sent as it is");
+});

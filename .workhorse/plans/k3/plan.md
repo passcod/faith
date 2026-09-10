@@ -115,7 +115,7 @@ applies the precedence: a `Content-Type` on the request, else the agent's defaul
 derived from the body. That is the same shape as the `Accept-Encoding` resolution already in
 `send.rs:170-190` (request value, else agent default, else the default Faith sends itself).
 
-Doing it this way also fixes the `URLSearchParams` clobber, so the two body kinds behave alike.
+Every body kind resolves the same way, so a `URLSearchParams` body no longer displaces a type the agent declares.
 
 With the default in place the QUERY check only bites a raw-bytes or streaming body carrying no
 declared type, which is exactly the case where nothing knows what the query content is.
@@ -126,8 +126,47 @@ declared type, which is exactly the case where nothing knows what the query cont
 QUERY is cacheable but its cache key must incorporate the request body; Faith's cache keys on
 method + URI only (`http-cache-reqwest`). Larger, separable piece.
 
-**`Blob` and `FormData` request bodies** — Faith does not accept either. Both fail with a raw
-NAPI conversion error ("Value is non of these types `String`, `Vec<u8>`, `TypedArray<u8>`")
-rather than a `TypeError`. That is an unsupported-body-kind gap rather than a `Content-Type` one,
-and their types (the blob's own type, multipart's generated boundary) only become relevant once
-the bodies are accepted. Not raised as a card yet.
+Nothing else. `Blob`, `File`, and `FormData` bodies were folded in: they took no multipart code,
+only routing through `Response`.
+
+
+## Built
+
+All of the above landed, and the direct-body path grew `Blob`, `File`, and `FormData` support
+along the way. Full suite green at 2136 assertions.
+
+- `crates/web-faith/src/error.rs` — `MissingContentType` kind; `crates/web-faith-napi/src/error.rs`
+  maps it to a `TypeError`; `wrapper.d.ts` carries a hand-maintained `ERROR_CODES` list that has to
+  be updated in step, which is what the error-codes test checks.
+- `crates/web-faith/src/request.rs` — `RequestOptions::body_content_type`, and a `QUERY` constant,
+  compared by name because `http` 1.4.0 has no `Method::QUERY`.
+- `crates/web-faith/src/agent.rs`, `agent/build.rs` — `has_default_content_type`, hoisted through
+  `AgentSettings` the way `has_default_priority` is. Note the two struct literals in `build.rs`:
+  `ClientRecipe` and `Agent` sit next to each other and the field belongs to the latter.
+- `crates/web-faith/src/request/send.rs` — resolves the type (request, else agent, else derived)
+  and refuses a bodied `QUERY` that none of the three describes. `is_query` is captured before the
+  builder takes the method, which it moves.
+- `crates/web-faith/src/retry.rs` — `QUERY` is idempotent, so it replays on a dead connection.
+- `wrapper.js` — derives the type per body kind and passes it as `bodyContentType`. A `Blob`,
+  `File`, or `FormData` is read through `new globalThis.Response(body)`, which performs the fetch
+  standard's own body extraction and yields both the encoded bytes and the type describing them.
+  **The `globalThis.` prefix is load-bearing**: `wrapper.js` declares its own `Response` class, so
+  a bare `new Response(...)` picks that one up and fails.
+
+### Two things I had wrong while planning
+
+**Body-derived types do not double up with agent defaults.** reqwest's default headers only fill
+gaps, so a per-request value replaces an agent default rather than appending beside it. The append
+problem `Content-Encoding` works around is builder-against-builder.
+
+**The `URLSearchParams` behaviour was not a bug to fix.** It displaced an agent's default type,
+and the question was which should win. The deciding case is an agent that sets a default
+`Content-Type: application/json` and sends string bodies, which works today; letting a derived
+type win would silently turn those into `text/plain`. So the derived type ranks last, and the
+`URLSearchParams` case was brought into line with that rather than the other way round.
+
+### Verified by measurement, not assumption
+
+Node's own fetch was the reference for the body-kind table, probed against a raw socket. Faith now
+matches it for every kind it accepts: string, `URLSearchParams`, `Blob` (typed and untyped),
+`File`, `FormData`, `Uint8Array`, `ArrayBuffer`, `DataView`, `Array<number>`, `ReadableStream`.

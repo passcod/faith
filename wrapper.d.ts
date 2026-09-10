@@ -41,6 +41,7 @@ export const ERROR_CODES: {
 	readonly InvalidPath: "InvalidPath";
 	readonly InvalidUrl: "InvalidUrl";
 	readonly JsonParse: "JsonParse";
+	readonly MissingContentType: "MissingContentType";
 	readonly Network: "Network";
 	readonly PemParse: "PemParse";
 	readonly Redirect: "Redirect";

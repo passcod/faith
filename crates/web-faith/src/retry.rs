@@ -53,10 +53,13 @@ pub struct DeadConnectionRetry;
 /// the error distinguishes those from a connection that was already gone, so a
 /// request that must not happen twice is not retried at all.
 fn is_idempotent(method: &Method) -> bool {
+	// `QUERY` belongs here despite carrying a body: it is safe and idempotent, its query content
+	// travelling in the body rather than the URL. It is compared by name because `http` has no
+	// constant for a method still in draft (spec:POOL#reusing-a-connection-that-has-died).
 	matches!(
 		*method,
 		Method::GET | Method::HEAD | Method::OPTIONS | Method::TRACE | Method::PUT | Method::DELETE
-	)
+	) || method.as_str() == crate::request::QUERY
 }
 
 /// Whether the error is a connection that ended before a complete response arrived.
@@ -150,6 +153,7 @@ mod tests {
 			Method::TRACE,
 			Method::PUT,
 			Method::DELETE,
+			Method::from_bytes(b"QUERY").unwrap(),
 		] {
 			assert!(is_idempotent(&method), "{method} should be replayable");
 		}
