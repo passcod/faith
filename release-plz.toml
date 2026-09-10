@@ -1,0 +1,17 @@
+# Release-plz prepares releases for the six crates.io-published members. It opens a
+# release PR that bumps each crate independently from its own changes, and on merge
+# it publishes the ones whose version moved. See RUST "Versioning and support"
+# (.workhorse/specs/rust/overview.md).
+
+[workspace]
+# Run cargo-semver-checks against the previous version of each crate, so an API
+# break forces a major bump rather than slipping out as a patch. This is the
+# default, but it is load-bearing for this workspace, so it is stated here.
+semver_check = true
+
+# web-faith-napi ships to npm as @passcod/faith, not to crates.io. Its version is
+# driven by package.json through the `npm run version` script, so release-plz must
+# leave it out of the release entirely rather than try to version or publish it.
+[[package]]
+name = "web-faith-napi"
+release = false

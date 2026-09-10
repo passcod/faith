@@ -1,0 +1,74 @@
+# Release-plz drives the ongoing crates.io release path for the six published
+# crates. On every push to main it opens (or updates) a release PR that bumps each
+# crate independently; merging that PR publishes the crates whose version moved.
+#
+# Publishing uses crates.io trusted publishing (OIDC), so there is no long-lived
+# token in this repo: the release job carries `id-token: write` and release-plz
+# exchanges it for a short-lived crates.io token itself. Two prerequisites, both
+# outside CI and both one-time:
+#   1. Each crate's first version must be published by hand: crates.io does not
+#      allow trusted publishing to create a brand-new crate.
+#   2. After that first publish, register this repo + this workflow as a trusted
+#      publisher for each crate on crates.io.
+name: Release-plz
+permissions:
+  contents: read
+on:
+  push:
+    branches:
+      - main
+jobs:
+  # Publishes crates whose version changed once a release PR lands on main.
+  release-plz-release:
+    name: Release-plz release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # push tags and create releases
+      pull-requests: read # detect the release PR and the commits on it
+      id-token: write # trusted publishing: release-plz exchanges this for a crates.io token
+    # Deliberately no `concurrency` here. GitHub cancels an already-pending run when a newer one
+    # queues into the same group, even with cancel-in-progress false, so grouping this job could
+    # drop a release: push 2 sits pending behind push 1, push 3 arrives, and push 2 never publishes.
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Configure toolchain
+        run: |
+          rustup toolchain install --profile minimal --no-self-update stable
+          rustup default stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Run release-plz
+        uses: release-plz/action@v0.5
+        with:
+          command: release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Keeps the release PR in step with what has landed on main since the last release.
+  release-plz-pr:
+    name: Release-plz PR
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    # Safe to group: only one release PR per branch should be computed at a time, and losing a
+    # pending recomputation costs nothing because the next push redoes it.
+    concurrency:
+      group: release-plz-pr-${{ github.ref }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Configure toolchain
+        run: |
+          rustup toolchain install --profile minimal --no-self-update stable
+          rustup default stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Run release-plz
+        uses: release-plz/action@v0.5
+        with:
+          command: release-pr
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

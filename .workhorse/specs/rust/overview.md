@@ -50,8 +50,11 @@ What the two subsystems do is specified in [QUIC](../http3/transport.md) and [TL
 ## Choosing what is built
 
 Cargo features on `web-faith` are how a subsystem is left out of a build that has no use for it.
-Features are on by default, so a caller who reaches for the crate without thinking about them gets the whole client.
-Turning one off drops the code behind it and the client continues to work without it; the parts of the API that only mean something with that subsystem present go with it, as in [RSAPI](client-api.md).
+Features are on by default, so a caller who reaches for the crate without thinking about them gets the whole client, save for `http3`.
+That one is opt-in, because reqwest gates its HTTP/3 support behind a `reqwest_unstable` cfg that only the consuming build can set: a crate carrying HTTP/3 by default would fail to compile for a caller who had not set that flag, which is a compile error in place of a first request.
+A caller who wants HTTP/3 names the feature and sets `RUSTFLAGS="--cfg reqwest_unstable"` in its own build, and the crate's documentation is built with both so the API is described whether or not a given build carries it.
+The Node module has HTTP/3 compiled in, since its own build sets that cfg.
+Turning a feature off drops the code behind it and the client continues to work without it; the parts of the API that only mean something with that subsystem present go with it, as in [RSAPI](client-api.md).
 
 A feature decides what is compiled in rather than what is switched on at run time, and the two need not agree: the cookies feature is on by default while the jar itself stays off until an agent asks for it (see [COOK](../agent/cookies.md)).
 

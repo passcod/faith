@@ -1,11 +1,12 @@
 [package]
 name = "web-faith-dns"
 description = "A caching DNS resolver: transports, server order, HTTPS records, and Happy Eyeballs"
-version.workspace = true
+version = "1.0.0"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
+documentation = "https://docs.rs/web-faith-dns"
 authors.workspace = true
 
 [dependencies]

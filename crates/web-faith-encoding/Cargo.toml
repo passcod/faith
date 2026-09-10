@@ -1,11 +1,12 @@
 [package]
 name = "web-faith-encoding"
 description = "HTTP content coding for request and response bodies"
-version.workspace = true
+version = "1.0.0"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
+documentation = "https://docs.rs/web-faith-encoding"
 authors.workspace = true
 
 [dependencies]

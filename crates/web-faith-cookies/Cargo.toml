@@ -1,11 +1,12 @@
 [package]
 name = "web-faith-cookies"
 description = "A cookie jar with the RFC 6265bis rules that hold outside a browser"
-version.workspace = true
+version = "1.0.0"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
+documentation = "https://docs.rs/web-faith-cookies"
 authors.workspace = true
 
 [dependencies]

@@ -1,11 +1,12 @@
 [package]
 name = "web-faith-alt-svc"
 description = "An Alt-Svc store and the HTTP/3 upgrade machinery above it"
-version.workspace = true
+version = "1.0.0"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
+documentation = "https://docs.rs/web-faith-alt-svc"
 authors.workspace = true
 
 [dependencies]
