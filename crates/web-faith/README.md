@@ -58,8 +58,7 @@ rustflags = ["--cfg", "reqwest_unstable"]
 ## The component crates
 
 - [`web-faith-cookies`](https://docs.rs/web-faith-cookies)
-- [`web-faith-dns`](https://docs.rs/web-faith-dns): the resolver, its cache, the discovery ladder,
-  the `HTTPS` record query, and Happy Eyeballs.
+- [`web-faith-dns`](https://docs.rs/web-faith-dns)
 - [`web-faith-conn-tracker`](https://docs.rs/web-faith-conn-tracker): live per-connection
   statistics, read from the operating system.
 - [`web-faith-alt-svc`](https://docs.rs/web-faith-alt-svc): the Alt-Svc store and the HTTP/3
