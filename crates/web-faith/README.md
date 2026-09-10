@@ -67,10 +67,6 @@ rustflags = ["--cfg", "reqwest_unstable"]
 
 Faith is also a Node.js module which lets you use this Rust networking stack as a `fetch` drop-in replacement: [`@passcod/faith`](https://www.npmjs.com/package/@passcod/faith).
 
-## Minimum supported Rust version
-
-1.96, built and tested in CI alongside stable.
-
 ## Licence
 
 Apache-2.0 OR MIT, at your option.
