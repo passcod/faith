@@ -61,12 +61,12 @@ pub struct FileDestination {
 /// Reporting every chunk would cross a surface boundary thousands of times for a large body,
 /// which is the cost writing to a file directly exists to avoid. A caller driving a progress bar
 /// cannot use updates faster than this anyway, and the final report is always delivered regardless.
-pub const PROGRESS_INTERVAL: Duration = Duration::from_millis(50);
+pub(crate) const PROGRESS_INTERVAL: Duration = Duration::from_millis(50);
 
 /// Open the destination file for a body write, mapping filesystem refusals to the errors
 /// writing a body to a file surfaces.
 // spec:BODY#tofile
-pub async fn open_destination(
+pub(crate) async fn open_destination(
 	path: &str,
 	options: &FileDestination,
 ) -> Result<tokio::fs::File, FaithError> {
@@ -93,7 +93,7 @@ pub async fn open_destination(
 /// Classify a failure to open the destination. An occupied destination is `FileExists`,
 /// unless what occupies it is a directory: a directory is well-formed but cannot be written
 /// to, which is a `FileWrite`. Every other refusal is a `FileWrite` carrying the OS detail.
-pub async fn classify_open_error(path: &str, err: std::io::Error) -> FaithError {
+pub(crate) async fn classify_open_error(path: &str, err: std::io::Error) -> FaithError {
 	let kind = if err.kind() == std::io::ErrorKind::AlreadyExists {
 		match tokio::fs::symlink_metadata(path).await {
 			Ok(meta) if meta.is_dir() => FaithErrorKind::FileWrite,
@@ -122,7 +122,7 @@ pub enum Trailers {
 /// body now leaves an idle pending promise rather than a pegged core, and the future can be
 /// cancelled while it waits.
 #[derive(Debug)]
-pub struct TrailersSlot(watch::Sender<Trailers>);
+pub(crate) struct TrailersSlot(watch::Sender<Trailers>);
 
 impl Default for TrailersSlot {
 	fn default() -> Self {
@@ -324,23 +324,23 @@ pub struct FileWritten {
 /// second read fails.
 #[derive(Debug, Clone)]
 pub struct Response {
-	pub body: BodyHolder,
+	pub(crate) body: BodyHolder,
 	/// The coding to decode the body under, or `None` to deliver it as received.
 	#[cfg(feature = "encoding")]
 	/// Set once when the response is built, from the request's `Accept-Encoding` and the
 	/// response's `Content-Encoding` (see [`web_faith_encoding`]).
-	pub decode: Option<Coding>,
-	pub disturbed: Arc<AtomicBool>,
-	pub headers: HeaderMap,
-	pub integrity: Option<String>,
-	pub peer: Arc<PeerInformation>,
-	pub redirected: bool,
-	pub stats: Arc<InnerAgentStats>,
-	pub status_code: StatusCode,
-	pub timing: Arc<TimingSlot>,
-	pub trailers: Arc<TrailersSlot>,
-	pub url: Url,
-	pub version: Version,
+	pub(crate) decode: Option<Coding>,
+	pub(crate) disturbed: Arc<AtomicBool>,
+	pub(crate) headers: HeaderMap,
+	pub(crate) integrity: Option<String>,
+	pub(crate) peer: Arc<PeerInformation>,
+	pub(crate) redirected: bool,
+	pub(crate) stats: Arc<InnerAgentStats>,
+	pub(crate) status_code: StatusCode,
+	pub(crate) timing: Arc<TimingSlot>,
+	pub(crate) trailers: Arc<TrailersSlot>,
+	pub(crate) url: Url,
+	pub(crate) version: Version,
 }
 
 impl Response {
@@ -384,6 +384,23 @@ impl Response {
 	/// What is known of the peer that sent the response.
 	pub fn peer(&self) -> &PeerInformation {
 		&self.peer
+	}
+
+	/// Copy the response, so the body can be read twice.
+	///
+	/// Both copies read the same underlying body, and neither is disturbed by the other having
+	/// been cloned. Fails if the body has already been read.
+	pub fn try_clone(&self) -> Result<Self, FaithError> {
+		// A read, not `check_stream_disturbed`: that one swaps the flag, which would disturb the
+		// response being cloned and leave neither copy readable.
+		if self.body_used() {
+			return Err(FaithErrorKind::ResponseAlreadyDisturbed.into());
+		}
+
+		Ok(Self {
+			disturbed: Arc::new(AtomicBool::new(false)),
+			..Clone::clone(self)
+		})
 	}
 
 	/// Whether the body has been read, or handed out as a stream.
@@ -489,7 +506,7 @@ impl Response {
 		self.trailers.settled().await
 	}
 
-	pub fn check_stream_disturbed(&self) -> Result<(), FaithError> {
+	pub(crate) fn check_stream_disturbed(&self) -> Result<(), FaithError> {
 		if self.disturbed.swap(true, Ordering::SeqCst) {
 			Err(FaithErrorKind::ResponseAlreadyDisturbed.into())
 		} else {
@@ -500,7 +517,7 @@ impl Response {
 	/// The body as a shared stream, converting it to one if it isn't already.
 	///
 	/// Shared so a response and its clones read the same body.
-	pub fn ensure_stream(
+	pub(crate) fn ensure_stream(
 		&self,
 		body: &mut Body,
 		drained_flag: Arc<AtomicBool>,
@@ -602,7 +619,7 @@ impl Response {
 	/// Read the whole body as the chunks it arrived in, without copying them.
 	///
 	/// What [`Self::bytes`] and its siblings are built on.
-	pub async fn gather(&self) -> Result<Arc<[Bytes]>, FaithError> {
+	pub(crate) async fn gather(&self) -> Result<Arc<[Bytes]>, FaithError> {
 		let Some(lock) = &self.body.body else {
 			return Ok(Default::default());
 		};
@@ -626,7 +643,7 @@ impl Response {
 	}
 
 	/// [`Self::gather`], then copy the chunks into one contiguous buffer.
-	pub async fn gather_contiguous(&self) -> Result<Vec<u8>, FaithError> {
+	pub(crate) async fn gather_contiguous(&self) -> Result<Vec<u8>, FaithError> {
 		let body = self.gather().await?;
 		let length = body.iter().map(|chunk| chunk.len()).sum();
 		let mut bytes = Vec::with_capacity(length);
@@ -755,6 +772,31 @@ impl Response {
 				.unwrap_or_else(|_| path.to_owned()),
 			bytes_written: written,
 		})
+	}
+}
+
+/// The body plumbing `web-faith-napi` drives directly.
+///
+/// Unstable: this tracks what the Node binding needs and is exempt from semver.
+#[cfg(feature = "internals")]
+impl Response {
+	/// The body as Faith holds it, for a caller driving the stream itself.
+	pub fn body_holder(&self) -> &BodyHolder {
+		&self.body
+	}
+
+	/// Whether the body has already been read or handed out.
+	pub fn check_disturbed(&self) -> Result<(), FaithError> {
+		self.check_stream_disturbed()
+	}
+
+	/// The body as a shared stream, converting it to one if it isn't already.
+	pub fn shared_stream(
+		&self,
+		body: &mut Body,
+		drained: Arc<AtomicBool>,
+	) -> Result<SharedStream<Pin<Box<DynStream>>>, FaithError> {
+		self.ensure_stream(body, drained)
 	}
 }
 

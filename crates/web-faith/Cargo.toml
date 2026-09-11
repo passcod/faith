@@ -15,7 +15,8 @@ authors.workspace = true
 # own `http3`, which refuses to compile unless the `reqwest_unstable` cfg is set; the workspace
 # supplies that through .cargo/config.toml, which is not part of the published crate, so docs.rs
 # has to be told directly.
-features = ["http3"]
+# `raw-client` is here so the escape hatch renders; `internals` deliberately is not.
+features = ["http3", "raw-client"]
 rustc-args = ["--cfg", "reqwest_unstable"]
 
 [dependencies]
@@ -85,3 +86,10 @@ http3 = ["reqwest/http3", "tls-aws-lc-rs", "dep:web-faith-alt-svc"]
 # reqwest's QUIC stack is tied to it.
 tls-aws-lc-rs = ["reqwest/rustls"]
 tls-ring = ["reqwest/rustls-no-provider", "dep:rustls", "rustls/ring"]
+# Exposes `Agent::client` and `Agent::raw_client`, which hand out the reqwest client under the
+# agent. A visibility switch: both are always compiled and used internally.
+raw-client = []
+# Exposes the plumbing `web-faith-napi` builds on: the `options` module, `Agent::from_options`,
+# and the request-sending internals. Unstable and exempt from semver — it tracks what the Node
+# binding needs rather than what a Rust caller should reach for. Also a visibility switch.
+internals = ["raw-client"]

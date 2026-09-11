@@ -42,6 +42,6 @@ pub use crate::options::AgentOptionsBuilder;
 impl<S: agent_options_builder::State> AgentOptionsBuilder<S> {
 	/// Validate what has been set and build the agent.
 	pub fn build(self) -> Result<Agent, FaithError> {
-		Agent::from_options(self.into_options())
+		Agent::from_options_impl(self.into_options())
 	}
 }

@@ -62,18 +62,29 @@
 compile_error!("web-faith needs a TLS backend: enable either tls-aws-lc-rs or tls-ring");
 
 pub mod agent;
-pub mod body;
 pub mod builder;
-pub mod client;
 pub mod error;
-pub mod integrity;
-pub mod options;
 pub mod request;
 pub mod response;
-pub mod retry;
 pub mod stats;
 pub mod timing;
-pub mod warm_up;
+
+mod client;
+mod integrity;
+mod retry;
+mod warm_up;
+
+// `internals` exposes the module path for `web-faith-napi`, which builds `AgentOptions` field by
+// field. The types the ordinary builder path needs are re-exported from `builder` either way.
+#[cfg(feature = "internals")]
+pub mod body;
+#[cfg(not(feature = "internals"))]
+mod body;
+
+#[cfg(feature = "internals")]
+pub mod options;
+#[cfg(not(feature = "internals"))]
+mod options;
 
 /// The `User-Agent` a request carries when nothing overrides it.
 ///
@@ -92,4 +103,7 @@ pub const USER_AGENT: &str = concat!(
 	env!("REQWEST_VERSION")
 );
 
+pub use agent::Agent;
 pub use error::{FaithError, FaithErrorKind, error_codes};
+pub use request::{FetchBuilder, Request, RequestBuilder};
+pub use response::Response;

@@ -6,7 +6,7 @@ use std::{net::IpAddr, str::FromStr as _, time::Duration};
 
 use napi::{Either, bindgen_prelude::Buffer};
 
-use web_faith::{FaithError, FaithErrorKind, client::RedirectPolicy, options};
+use web_faith::{FaithError, FaithErrorKind, options, options::RedirectPolicy};
 
 #[cfg(feature = "cookies")]
 use web_faith_cookies::CookieLimits;

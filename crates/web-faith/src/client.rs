@@ -41,26 +41,12 @@ use web_faith_alt_svc::{AltSvcCache, AltSvcMiddleware, H3Prober};
 
 use crate::{
 	error::{FaithError, FaithErrorKind},
+	options::RedirectPolicy,
 	retry::DeadConnectionRetry,
 };
 
 #[cfg(feature = "http3")]
 use crate::timing::HeadersStamp;
-
-/// What to do with a redirect response.
-///
-/// The Node surface spells these as fetch's own `redirect` values; this is the same choice in the
-/// client's own terms.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub enum RedirectPolicy {
-	/// Follow redirects, up to the standard's limit.
-	#[default]
-	Follow,
-	/// Refuse a redirect, reporting it as an error.
-	Error,
-	/// Return the redirect response itself rather than following it.
-	Stop,
-}
 
 /// Per-stream receive window applied to both protocols when nothing overrides it.
 ///

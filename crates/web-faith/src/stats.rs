@@ -7,7 +7,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 /// Held behind an `Arc` and shared with every response the agent produces, since a body finishing
 /// is what settles two of these and the response is what knows it happened.
 #[derive(Debug, Default)]
-pub struct InnerAgentStats {
+pub(crate) struct InnerAgentStats {
 	pub requests_sent: AtomicU64,
 	pub responses_received: AtomicU64,
 	pub bodies_started: AtomicU64,

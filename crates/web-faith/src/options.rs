@@ -16,9 +16,7 @@ use http_cache_reqwest::CacheMode;
 #[cfg(feature = "cookies")]
 use web_faith_cookies::CookieLimits;
 
-use crate::client::{
-	DEFAULT_CONNECTION_WINDOW, DEFAULT_STREAM_WINDOW, RedirectPolicy, ResolvedWindows,
-};
+use crate::client::{DEFAULT_CONNECTION_WINDOW, DEFAULT_STREAM_WINDOW, ResolvedWindows};
 
 /// Milliseconds, saturating rather than wrapping on a duration no setting could mean.
 fn millis(duration: std::time::Duration) -> u32 {
@@ -28,6 +26,18 @@ fn millis(duration: std::time::Duration) -> u32 {
 /// Whole seconds, rounded down, saturating as above.
 fn secs(duration: std::time::Duration) -> u32 {
 	duration.as_secs().try_into().unwrap_or(u32::MAX)
+}
+
+/// What to do when the server answers with a redirect.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum RedirectPolicy {
+	/// Follow redirects, up to the standard's limit.
+	#[default]
+	Follow,
+	/// Refuse the redirect and report it as an error.
+	Error,
+	/// Return the redirect response itself.
+	Stop,
 }
 
 /// Settings related to the HTTP cache.

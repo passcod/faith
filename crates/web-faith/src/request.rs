@@ -3,20 +3,22 @@
 // spec:REQ spec:ENC spec:CANCEL
 
 mod builder;
+mod parts;
 mod send;
 mod target;
 
 pub use builder::{FetchBuilder, Priority, Request, RequestBuilder};
-pub use send::send;
 pub use target::Target;
 
-use std::{pin::Pin, time::Duration};
-
-use bytes::Bytes;
-use futures::Stream;
-
-#[cfg(feature = "cache")]
-use http_cache_reqwest::CacheMode;
+// `internals` only: the shapes and the send entry point `web-faith-napi` drives directly. Always
+// compiled and used internally; the feature decides whether they are nameable from outside.
+#[cfg(not(feature = "internals"))]
+pub(crate) use parts::{RequestBody, RequestOptions};
+#[cfg(feature = "internals")]
+pub use {
+	parts::{RequestBody, RequestOptions},
+	send::send,
+};
 
 /// Whether a request carries its credentials, and how far.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -37,40 +39,8 @@ const NORMALISED_METHODS: [&str; 6] = ["DELETE", "GET", "HEAD", "OPTIONS", "POST
 /// `http` has no constant for it: `QUERY` is still a draft method, so it arrives as an extension
 /// method and is compared by name.
 // spec:REQ#body
-pub const QUERY: &str = "QUERY";
+pub(crate) const QUERY: &str = "QUERY";
 
 /// The header a request's priority is expressed in.
 // spec:REQ#request-priority
-pub const PRIORITY: &str = "priority";
-
-/// A request body, as the caller has it.
-pub enum RequestBody {
-	/// No body.
-	None,
-	/// A body already in hand, whose length can be declared up front.
-	Bytes(Bytes),
-	/// A body arriving in chunks, which goes out chunked because it has no length to declare.
-	Stream(Pin<Box<dyn Stream<Item = std::io::Result<Bytes>> + Send>>),
-}
-
-/// What a request carries beyond its method, URL, and body.
-#[derive(Clone, Debug, Default)]
-pub struct RequestOptions {
-	#[cfg(feature = "cache")]
-	pub cache: CacheMode,
-	/// A coding to compress the body in, named by its wire token.
-	#[cfg(feature = "encoding")]
-	pub compress: Option<String>,
-	/// The `Content-Type` the request body's kind implies, per the fetch standard's body
-	/// extraction. Faith sends it only when nothing else declares a type, so a header on the
-	/// request or a default on the agent both win over it.
-	// spec:REQ#body
-	pub body_content_type: Option<String>,
-	pub credentials: Credentials,
-	pub headers: Option<Vec<(String, String)>>,
-	pub integrity: Option<String>,
-	pub method: Option<String>,
-	/// The `Priority` header value this request's priority derives, if it derives one.
-	pub priority: Option<&'static str>,
-	pub timeout: Option<Duration>,
-}
+pub(crate) const PRIORITY: &str = "priority";

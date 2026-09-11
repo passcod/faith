@@ -53,13 +53,20 @@ use crate::{client::H3UpgradeRecipe, options::Http3Congestion};
 #[cfg(all(feature = "http3", feature = "dns"))]
 use crate::client::install_https_sink;
 
+/// Building an agent from `AgentOptions` directly, as `web-faith-napi` does.
+///
+/// Unstable: this tracks what the Node binding needs and is exempt from semver. The supported
+/// route is [`Agent::builder`].
+#[cfg(feature = "internals")]
 impl Agent {
-	/// Build an agent from options, validating them into the recipe its clients are built from.
-	///
-	/// This is what both surfaces land on, so the defaults a caller gets are settled here rather
-	/// than once per surface.
-	// spec:AGENT spec:NETCHG
 	pub fn from_options(options: AgentOptions) -> Result<Self, FaithError> {
+		Self::from_options_impl(options)
+	}
+}
+
+impl Agent {
+	// spec:AGENT spec:NETCHG
+	pub(crate) fn from_options_impl(options: AgentOptions) -> Result<Self, FaithError> {
 		// Destructured rather than read field by field so that a new option cannot be added
 		// without the compiler pointing here, where every option is turned into the recipe the
 		// agent's clients are built from (spec:NETCHG).
@@ -524,7 +531,7 @@ impl Agent {
 
 	/// An agent with default options.
 	pub fn new() -> Result<Self, FaithError> {
-		Self::from_options(AgentOptions::default())
+		Self::from_options_impl(AgentOptions::default())
 	}
 
 	/// Build an agent a setting at a time. See [the builder module](crate::builder).

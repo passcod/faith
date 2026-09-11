@@ -68,10 +68,6 @@ impl Request {
 		&self.url
 	}
 
-	pub fn options(&self) -> &RequestOptions {
-		&self.options
-	}
-
 	/// Copy the request, when its body allows it.
 	///
 	/// `None` when the body is a stream, a stream being consumable once.

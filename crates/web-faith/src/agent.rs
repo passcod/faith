@@ -168,17 +168,31 @@ impl Agent {
 		self.cookie_jar.as_ref()
 	}
 
-	/// Take a handle on the client, or `None` once the agent is closed.
+	/// The client this agent sends through, or `None` once it is closed.
 	///
-	/// A request takes its own handle at the moment it is issued, which is what lets one already in
-	/// flight finish while a later one is refused.
+	/// A request takes its handle when it is issued, which is what lets one already in flight
+	/// finish while a later one is refused.
 	// spec:AGENT
+	#[cfg(feature = "raw-client")]
 	pub fn client(&self) -> Option<ClientWithMiddleware> {
 		self.live().as_ref().map(|live| live.client.clone())
 	}
 
-	/// Take a handle on the raw client a warm-up sends through, or `None` once closed.
+	// spec:AGENT
+	#[cfg(not(feature = "raw-client"))]
+	pub(crate) fn client(&self) -> Option<ClientWithMiddleware> {
+		self.live().as_ref().map(|live| live.client.clone())
+	}
+
+	/// The same client without Faith's middleware, so a request on it skips the HTTP cache and the
+	/// Alt-Svc layer while sharing the connection pool.
+	#[cfg(feature = "raw-client")]
 	pub fn raw_client(&self) -> Option<Client> {
+		self.live().as_ref().map(|live| live.raw_client.clone())
+	}
+
+	#[cfg(not(feature = "raw-client"))]
+	pub(crate) fn raw_client(&self) -> Option<Client> {
 		self.live().as_ref().map(|live| live.raw_client.clone())
 	}
 

@@ -1,11 +1,4 @@
-use std::{
-	fmt::Debug,
-	result::Result,
-	sync::{
-		Arc,
-		atomic::{AtomicBool, Ordering},
-	},
-};
+use std::{fmt::Debug, result::Result};
 
 use futures::TryStreamExt;
 use napi::{
@@ -146,12 +139,12 @@ impl FaithResponse {
 		let mut obj = Object::new(env)?;
 		obj.set(
 			"address",
-			self.inner.peer.address.map(|addr| addr.to_string()),
+			self.inner.peer().address.map(|addr| addr.to_string()),
 		)?;
 		obj.set(
 			"certificate",
 			self.inner
-				.peer
+				.peer()
 				.certificate
 				.as_deref()
 				.map(|cert| Buffer::from(cert)),
@@ -219,7 +212,7 @@ impl FaithResponse {
 	/// This is custom to Faith.
 	#[napi(getter)]
 	pub fn version(&self) -> String {
-		format!("{:?}", self.inner.version)
+		format!("{:?}", self.inner.version())
 	}
 
 	/// The `bodyUsed` read-only property of the `Response` interface is a boolean value that indicates
@@ -230,7 +223,7 @@ impl FaithResponse {
 	/// the `.body` property counts as a read, even if you don't actually consume any bytes of content.
 	#[napi(getter)]
 	pub fn body_used(&self) -> bool {
-		self.inner.disturbed.load(Ordering::SeqCst)
+		self.inner.body_used()
 	}
 
 	/// The `body` read-only property of the `Response` interface is a `ReadableStream` of the body
@@ -253,9 +246,9 @@ impl FaithResponse {
 	) -> Result<Option<napi::bindgen_prelude::ReadableStream<'_, BufferSlice<'_>>>, napi::Error> {
 		// we mark the body as disturbed, but we still allow reading it through here
 		// as essentially, the body() can be accessed many times as the same stream
-		let _ = self.inner.check_stream_disturbed();
+		let _ = self.inner.check_disturbed();
 
-		let Some(lock) = &self.inner.body.body else {
+		let Some(lock) = &self.inner.body_holder().body else {
 			return Ok(None);
 		};
 
@@ -266,7 +259,7 @@ impl FaithResponse {
 
 		let stream = self
 			.inner
-			.ensure_stream(&mut body, self.inner.body.drained.clone())
+			.shared_stream(&mut body, self.inner.body_holder().drained.clone())
 			.map_err(|e| e.into_napi())?;
 
 		let stream = napi::bindgen_prelude::ReadableStream::create_with_stream_bytes(
@@ -459,15 +452,9 @@ impl FaithResponse {
 	/// possible with Faith.)
 	#[napi]
 	pub fn clone(&self, env: Env) -> Result<Self, napi::Error> {
-		if self.inner.disturbed.load(Ordering::SeqCst) {
-			return Err(FaithError::from(FaithErrorKind::ResponseAlreadyDisturbed)
-				.into_js_error(&env)
-				.into());
-		}
-
-		Ok(Self::from(Response {
-			disturbed: Arc::new(AtomicBool::new(false)),
-			..Clone::clone(&self.inner)
-		}))
+		self.inner
+			.try_clone()
+			.map(Self::from)
+			.map_err(|err| err.into_js_error(&env).into())
 	}
 }
