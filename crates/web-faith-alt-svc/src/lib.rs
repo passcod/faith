@@ -1,8 +1,9 @@
 //! An HTTP/3 upgrade (via Alt-Svc primarily) mechanism for reqwest.
 //!
 //! An origin advertises HTTP/3 in an `Alt-Svc` header or an `HTTPS` DNS record. The alternative
-//! may be unreachable even so, and finding out costs the request that tries. [`AltSvcCache`] keeps
-//! the advertisements and decides, per origin, whether HTTP/3 is worth attempting.
+//! may be unreachable even so, and trying would unnecessarily fail and waste a request.
+//! [`AltSvcCache`] keeps the advertisements and decides, per origin, whether HTTP/3 is worth
+//! attempting.
 //!
 //! [`AltSvcMiddleware`] acts on that decision, in one of two shapes:
 //!
