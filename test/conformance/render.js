@@ -68,12 +68,15 @@ function render({ kind, cells }) {
 	// table teaches the reader nothing and makes the table look worse than it is.
 	const present = new Set(cells.map((c) => c.outcome));
 	lines.push("");
-	// One per line, with a markdown hard break. Joining them on a separator put a
-	// middle dot between entries, which is also the not-applicable mark: "● covered ·
-	// · not applicable" is not something to make a reader parse.
+	// Fenced, so each entry keeps its own line. A markdown hard break needs two trailing
+	// spaces, which formatters strip; joining them on a separator put a middle dot between
+	// entries, which is also the not-applicable mark, and "● covered · · not applicable" is
+	// not something to make a reader parse.
+	lines.push("```");
 	for (const [name, { mark, legend }] of Object.entries(OUTCOMES)) {
-		if (present.has(name)) lines.push(`${mark} ${legend}  `);
+		if (present.has(name)) lines.push(`${mark} ${legend}`);
 	}
+	lines.push("```");
 	return `${lines.join("\n")}\n`;
 }
 
