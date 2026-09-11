@@ -8,8 +8,6 @@
 //! - brotli ([RFC 7932](https://www.rfc-editor.org/rfc/rfc7932))
 //! - zstd ([RFC 8878](https://www.rfc-editor.org/rfc/rfc8878))
 //!
-//! [`Coding`] names one, and converts to and from the token that names it on the wire.
-//!
 //! # Requests
 //!
 //! - [`compress_buffer`] and [`compress_stream`] apply a coding to a request body.
