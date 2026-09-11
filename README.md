@@ -49,8 +49,10 @@ whatever servers emit, Faith must correctly handle. So far, everything we've tes
 | **HTTP/3** | · | · | ● | ● | · | · | · | · | ● |
 | **HTTP/3 upgrade** | · | · | ● | ● | · | · | · | · | · |
 
+```
 ● covered
 · not applicable to this server
+```
 
 <!-- conformance:end -->
 
