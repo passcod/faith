@@ -88,9 +88,6 @@ struct Inner {
 }
 
 /// A caching DNS resolver.
-///
-/// One resolver and one cache behind both the request path it is installed on and
-/// [`Self::prefetch`], so a name warmed ahead of time is already there when a request looks it up.
 #[derive(Clone)]
 pub struct FaithResolver {
 	inner: Arc<Inner>,
@@ -398,8 +395,9 @@ impl FaithResolver {
 		})
 	}
 
-	/// Resolve `host` and leave the answer in the shared cache, so a later request skips the
-	/// lookup. Any failure is swallowed: the warm-up is advisory.
+	/// Resolve `host` now, so a later lookup for it is answered from cache.
+	///
+	/// Never fails: warming is advisory.
 	// spec:WARM
 	pub async fn prefetch(&self, host: &str) {
 		let _ = self.lookup(host).await;

@@ -65,6 +65,24 @@
 //! # }
 //! ```
 //!
+//! # Warming the cache
+//!
+//! A resolver installed on an HTTP client only fills its cache when a request goes out, which is
+//! no good for a name you know you will want shortly. [`prefetch`](FaithResolver::prefetch)
+//! resolves one ahead of time without touching the origin, into the same cache the request path
+//! reads.
+//!
+//! ```no_run
+//! use web_faith_dns::{FaithResolver, ResolverConfig};
+//!
+//! # async fn example() {
+//! let resolver = FaithResolver::new(ResolverConfig::default());
+//!
+//! // Ahead of the request that needs it, so that one skips the lookup.
+//! resolver.prefetch("example.com").await;
+//! # }
+//! ```
+//!
 //! # Beyond addresses
 //!
 //! Lookups can also read a queried name's `HTTPS` record. This is used to resolve an HTTP/3 server
