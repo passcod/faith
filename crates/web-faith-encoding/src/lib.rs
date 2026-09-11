@@ -16,6 +16,21 @@
 //! - [`layer_content_encoding`] names it in a `Content-Encoding`, alongside anything the caller had
 //!   already declared.
 //!
+//! ```
+//! use web_faith_encoding::{Coding, compress_buffer, layer_content_encoding};
+//!
+//! # async fn example() {
+//! let body = b"the quick brown fox".repeat(8);
+//! let compressed = compress_buffer(&body, Coding::Gzip).await.expect("gzip compresses");
+//! assert!(compressed.len() < body.len());
+//!
+//! // The request declared nothing, so the applied coding stands alone.
+//! assert_eq!(layer_content_encoding(None, Coding::Gzip), "gzip");
+//! // Otherwise it is named last, being applied on top of what was already there.
+//! assert_eq!(layer_content_encoding(Some("br"), Coding::Gzip), "br, gzip");
+//! # }
+//! ```
+//!
 //! # Responses
 //!
 //! - [`AcceptEncoding`] is what a request advertised.
@@ -26,21 +41,15 @@
 //!
 //! ```
 //! use http::{HeaderMap, HeaderValue};
-//! use web_faith_encoding::{AcceptEncoding, DEFAULT_ACCEPT_ENCODING, compress_buffer, decision};
+//! use web_faith_encoding::{AcceptEncoding, Coding, DEFAULT_ACCEPT_ENCODING, decision};
 //!
-//! # async fn example() {
 //! let accept = AcceptEncoding::from(DEFAULT_ACCEPT_ENCODING);
 //!
 //! let mut headers = HeaderMap::new();
 //! headers.insert("content-encoding", HeaderValue::from_static("gzip"));
 //!
 //! // What the response declared, against what the request accepted.
-//! let coding = decision(&headers, &accept).expect("gzip was accepted");
-//!
-//! let body = b"the quick brown fox".repeat(8);
-//! let compressed = compress_buffer(&body, coding).await.expect("gzip compresses");
-//! assert!(compressed.len() < body.len());
-//! # }
+//! assert_eq!(decision(&headers, &accept), Some(Coding::Gzip));
 //! ```
 
 #![deny(missing_docs)]
