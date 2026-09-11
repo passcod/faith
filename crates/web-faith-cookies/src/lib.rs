@@ -30,8 +30,7 @@
 //!
 //! # Features
 //!
-//! `reqwest` implements that client's `CookieStore` for the jar, so it can be handed to a
-//! `ClientBuilder` as a cookie provider.
+//! The `reqwest` feature enables support to use this jar with `reqwest::ClientBuilder`.
 
 #![deny(missing_docs)]
 // Lets docs.rs label each item with the feature or platform it needs.

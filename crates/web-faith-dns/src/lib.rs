@@ -41,6 +41,10 @@
 //! }
 //! # }
 //! ```
+//!
+//! # Features
+//!
+//! The `reqwest` feature enables support to use this resolver with `reqwest::ClientBuilder`.
 
 #![deny(missing_docs)]
 // Lets docs.rs label each item with the feature or platform it needs.
