@@ -14,10 +14,54 @@ use futures::Stream;
 use tokio::io::AsyncReadExt;
 use tokio_util::io::{ReaderStream, StreamReader};
 
-use crate::Coding;
+use http::header::{CONTENT_ENCODING, CONTENT_LENGTH, HeaderMap};
+
+use crate::{Coding, ContentEncoding};
 
 /// A request body stream, as reqwest takes one.
 pub type RequestStream = Pin<Box<dyn Stream<Item = io::Result<Bytes>> + Send>>;
+
+/// Compress a request body in `coding`, and declare it in the headers.
+///
+/// Returns the bytes that go on the wire, with `Content-Encoding` naming `coding` after whatever
+/// the caller had already declared, and `Content-Length` removed: it described the body before
+/// compression. The two cannot disagree about what the body carries.
+///
+/// [`compress_buffer`] and [`ContentEncoding::layer`] are the halves, for a caller driving them
+/// separately.
+pub async fn encode(headers: &mut HeaderMap, body: &[u8], coding: Coding) -> io::Result<Vec<u8>> {
+	let compressed = compress_buffer(body, coding.clone()).await?;
+	declare(headers, coding)?;
+	Ok(compressed)
+}
+
+/// Compress a streaming request body in `coding`, and declare it in the headers.
+///
+/// As [`encode`], for a body arriving in chunks. It goes out chunked, having no length to declare.
+pub fn encode_stream<S>(
+	headers: &mut HeaderMap,
+	body: S,
+	coding: Coding,
+) -> io::Result<RequestStream>
+where
+	S: Stream<Item = io::Result<Bytes>> + Send + 'static,
+{
+	let compressed = compress_stream(body, coding.clone())?;
+	declare(headers, coding)?;
+	Ok(compressed)
+}
+
+/// Add `coding` to what the headers already declare, and drop the length it no longer describes.
+fn declare(headers: &mut HeaderMap, coding: Coding) -> io::Result<()> {
+	let layered = ContentEncoding::from(&*headers).layer(coding);
+	let value = layered
+		.to_header_value()
+		.ok_or_else(|| io::Error::other(format!("cannot declare {layered:?}")))?;
+
+	headers.insert(CONTENT_ENCODING, value);
+	headers.remove(CONTENT_LENGTH);
+	Ok(())
+}
 
 /// Compress a buffered request body, yielding the bytes that go on the wire.
 ///

@@ -10,61 +10,76 @@
 //!
 //! # Requests
 //!
-//! - Use [`compress_buffer`] or [`compress_stream`] to apply a coding to a request body.
-//! - Use [`ContentEncoding::layer`] to add it to whatever the caller already declared, and
-//!   [`to_header_value`](ContentEncoding::to_header_value) to build the header.
+//! - Use [`encode`] or [`encode_stream`] to compress a request body and declare it, together.
 //!
 //! ```
-//! use http::{HeaderMap, HeaderValue};
-//! use web_faith_encoding::{Coding, ContentEncoding, request::compress_buffer};
+//! use http::HeaderMap;
+//! use web_faith_encoding::{Coding, request::encode};
 //!
 //! # async fn example() {
-//! let body = b"the quick brown fox".repeat(8);
-//! let compressed = compress_buffer(&body, Coding::Gzip).await.expect("gzip compresses");
-//! assert!(compressed.len() < body.len());
-//!
 //! let mut headers = HeaderMap::new();
-//! headers.insert("content-encoding", HeaderValue::from_static("br"));
+//! let body = b"the quick brown fox".repeat(8);
 //!
-//! // Applied last, so declared last.
-//! let layered = ContentEncoding::from(&headers).layer(Coding::Gzip);
-//! headers.insert("content-encoding", layered.to_header_value().expect("two codings"));
-//! assert_eq!(headers["content-encoding"], "br, gzip");
+//! let compressed = encode(&mut headers, &body, Coding::Gzip).await.expect("gzip compresses");
+//! assert!(compressed.len() < body.len());
+//! assert_eq!(headers["content-encoding"], "gzip");
 //! # }
 //! ```
+//!
+//! To drive the halves separately, [`compress_buffer`] and [`compress_stream`] do the body, and
+//! [`ContentEncoding::layer`] with [`to_header_value`](ContentEncoding::to_header_value) does the
+//! header.
 //!
 //! # Responses
 //!
 //! - Use [`AcceptEncoding`] to parse the advertised supported coding set from the request.
 //! - Use [`decode`] to take one layer off a response: it decodes the body and updates the headers
-//!   together, so the two cannot disagree about how far it has been decoded.
+//!   together.
 //! - A body encoded more than once takes one call per layer.
 //!
-//! To drive the halves separately, [`ContentEncoding::peel_one_header`] does the headers and
-//! [`decode_stream`] does the body.
-//!
 //! ```
+//! use std::pin::Pin;
+//!
+//! use bytes::Bytes;
+//! use futures::TryStreamExt as _;
 //! use http::{HeaderMap, HeaderValue};
 //! use web_faith_encoding::{
 //!     Coding,
-//!     ContentEncoding,
-//!     response::AcceptEncoding,
+//!     request::encode,
+//!     response::{AcceptEncoding, ByteStream, decode},
 //! };
 //!
+//! # async fn example() {
 //! let mut request = HeaderMap::new();
 //! request.insert("accept-encoding", HeaderValue::from_static("gzip, br;q=0.5"));
 //! let accept = AcceptEncoding::from(&request);
 //!
+//! // A body gzipped over a coding the caller applied themselves.
 //! let mut response = HeaderMap::new();
-//! response.insert("content-encoding", HeaderValue::from_static("br, gzip"));
-//! response.insert("content-length", HeaderValue::from_static("42"));
+//! response.insert("content-encoding", HeaderValue::from_static("custom-thing"));
+//! let gzipped = encode(&mut response, b"pretend this is custom-thing", Coding::Gzip)
+//!     .await
+//!     .expect("gzip compresses");
+//! assert_eq!(response["content-encoding"], "custom-thing, gzip");
 //!
-//! // The outermost layer, and the headers left describing what is still encoded under it.
-//! assert_eq!(ContentEncoding::peel_one_header(&mut response, &accept), Some(Coding::Gzip));
-//! assert_eq!(response["content-encoding"], "br");
-//! assert!(!response.contains_key("content-length"));
+//! let body: Pin<Box<ByteStream>> =
+//!     Box::pin(futures::stream::once(async move { Ok(Bytes::from(gzipped)) }));
+//! let decoded: Vec<u8> = decode(&mut response, body, &accept)
+//!     .try_fold(Vec::new(), |mut acc, chunk| async move {
+//!         acc.extend_from_slice(&chunk);
+//!         Ok(acc)
+//!     })
+//!     .await
+//!     .expect("the gzip decodes");
+//!
+//! // gzip came off, and the header names what is still under it.
+//! assert_eq!(decoded, b"pretend this is custom-thing");
+//! assert_eq!(response["content-encoding"], "custom-thing");
+//! # }
 //! ```
 //!
+//! [`encode`]: request::encode
+//! [`encode_stream`]: request::encode_stream
 //! [`compress_buffer`]: request::compress_buffer
 //! [`compress_stream`]: request::compress_stream
 //! [`AcceptEncoding`]: response::AcceptEncoding
