@@ -534,8 +534,24 @@ impl Agent {
 		Self::from_options_impl(AgentOptions::default())
 	}
 
-	/// Build an agent a setting at a time. See [the builder module](crate::builder).
-	pub fn builder() -> crate::options::AgentOptionsBuilder {
+	/// Build an agent a setting at a time.
+	///
+	/// Each option group is reached through a closure, so a group left alone is absent from the
+	/// call rather than spelled out as absent. Durations are `Duration` whatever unit the setting
+	/// is carried in, and anything unset takes its default.
+	///
+	/// ```no_run
+	/// use std::time::Duration;
+	/// use web_faith::Agent;
+	///
+	/// let agent = Agent::builder()
+	///     .user_agent("YourApp/1.2.3")
+	///     .timeout(|timeout| timeout.connect(Duration::from_secs(2)).build())
+	///     .pool(|pool| pool.max_idle_per_host(8).build())
+	///     .build()?;
+	/// # Ok::<(), web_faith::FaithError>(())
+	/// ```
+	pub fn builder() -> crate::agent::AgentOptionsBuilder {
 		crate::options::AgentOptions::builder()
 	}
 

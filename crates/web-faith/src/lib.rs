@@ -6,7 +6,8 @@
 //! crates.
 //!
 //! ```no_run
-//! # use web_faith::agent::Agent;
+//! use web_faith::Agent;
+//!
 //! # async fn example() -> Result<(), web_faith::FaithError> {
 //! let agent = Agent::new()?;
 //! let body = agent.fetch("https://example.com/").await?.text().await?;
@@ -42,6 +43,8 @@
 //! | `encoding` | on | Content codings: negotiating and decoding a response body, and compressing a request one. |
 //! | `tls-aws-lc-rs` | on | The rustls crypto provider. `tls-ring` selects ring instead. |
 //! | `http3` | off | Transparent HTTP/3, and the Alt-Svc machinery that upgrades an origin to it. Needs the cfg flag above. |
+//! | `raw-client` | off | `Agent::client` and `Agent::raw_client`, which hand out the reqwest client underneath. |
+//! | `internals` | off | What the Node binding drives. Unstable and exempt from semver; do not depend on it. |
 //!
 //! # Component crates
 //!
@@ -62,16 +65,16 @@
 compile_error!("web-faith needs a TLS backend: enable either tls-aws-lc-rs or tls-ring");
 
 pub mod agent;
-pub mod builder;
 pub mod error;
 pub mod request;
 pub mod response;
-pub mod stats;
-pub mod timing;
 
+mod builder;
 mod client;
 mod integrity;
 mod retry;
+mod stats;
+mod timing;
 mod warm_up;
 
 // `internals` exposes the module path for `web-faith-napi`, which builds `AgentOptions` field by
@@ -104,6 +107,9 @@ pub const USER_AGENT: &str = concat!(
 );
 
 pub use agent::Agent;
-pub use error::{FaithError, FaithErrorKind, error_codes};
-pub use request::{FetchBuilder, Request, RequestBuilder};
+pub use error::FaithError;
+pub use request::Request;
 pub use response::Response;
+
+#[cfg(feature = "internals")]
+pub use error::error_codes;

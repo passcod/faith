@@ -1,6 +1,6 @@
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
-pub use web_faith::{FaithError, FaithErrorKind};
+pub use web_faith::error::{FaithError, FaithErrorKind};
 
 #[derive(Debug, Clone, Copy)]
 enum JsErrorType {

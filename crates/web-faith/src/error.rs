@@ -10,9 +10,8 @@ use strum::{EnumIter, IntoEnumIterator};
 /// Callers match on the kind rather than on the message: the kind is the API, and the message is
 /// for humans. Every kind here is reachable, each one naming a failure some request can produce.
 ///
-/// This is the one definition of the set, on either surface. The Node surface hands JavaScript the
-/// codes through [`error_codes`], which reads them from here, so the exported `ERROR_CODES` map and
-/// the errors themselves cannot drift apart.
+/// This is the one definition of the set, on either surface: the Node binding's `ERROR_CODES` map
+/// is generated from these, so the two cannot drift apart.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, EnumIter)]
 pub enum FaithErrorKind {
 	Aborted,
@@ -79,6 +78,7 @@ impl FaithErrorKind {
 ///
 /// The Node surface exports this as `ERROR_CODES`; generating it from the kinds themselves is what
 /// keeps the exported map and the errors from drifting.
+#[cfg(feature = "internals")]
 pub fn error_codes() -> Vec<String> {
 	FaithErrorKind::iter().map(FaithErrorKind::code).collect()
 }

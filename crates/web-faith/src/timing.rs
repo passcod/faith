@@ -121,7 +121,7 @@ impl TimingSlot {
 /// Reported whether or not the connection negotiated over ALPN, which is what a browser does:
 /// cleartext HTTP/2 is `h2c` and cleartext HTTP/1.1 is still `http/1.1`, neither of which any
 /// handshake agreed on.
-pub fn alpn_protocol_id(version: Version, url: &Url) -> String {
+pub(crate) fn alpn_protocol_id(version: Version, url: &Url) -> String {
 	let secure = url.scheme() == "https";
 	match version {
 		Version::HTTP_3 => "h3",

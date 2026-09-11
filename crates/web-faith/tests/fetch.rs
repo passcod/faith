@@ -15,9 +15,9 @@ use std::time::Duration;
 
 use serde::Deserialize;
 use web_faith::{
-	FaithErrorKind,
-	agent::Agent,
-	request::{Priority, Request},
+	Agent, Request,
+	error::FaithErrorKind,
+	request::Priority,
 	response::{FileDestination, Trailers},
 };
 

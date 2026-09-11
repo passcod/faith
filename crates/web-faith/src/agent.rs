@@ -1,5 +1,8 @@
 //! The agent: what owns a connection pool, and the verbs that act on a live one.
 
+pub use crate::builder::AgentOptionsBuilder;
+pub use crate::stats::AgentStats;
+
 // spec:AGENT spec:WARM spec:NETCHG spec:OBS
 
 use std::sync::{
@@ -27,11 +30,7 @@ use web_faith_dns::{FaithResolver, ResolverReport};
 #[cfg(feature = "http3")]
 use web_faith_alt_svc::{AltSvcCache, H3Prober};
 
-use crate::{
-	client::ClientRecipe,
-	stats::{AgentStats, InnerAgentStats},
-	warm_up::origin_key,
-};
+use crate::{client::ClientRecipe, stats::InnerAgentStats, warm_up::origin_key};
 
 #[cfg(all(feature = "http3", feature = "dns"))]
 use crate::client::install_https_sink;
@@ -232,8 +231,8 @@ impl Agent {
 	/// waiting for the last clone to drop. Worth doing if you make many short-lived agents.
 	///
 	/// Requests already in flight run to completion. A request issued on a closed agent fails with
-	/// [`FaithErrorKind::Closed`](crate::FaithErrorKind::Closed). Calling it more than once is a
-	/// no-op, and the cookie jar, if any, stays readable through [`Self::cookies`].
+	/// [`FaithErrorKind::Closed`](crate::error::FaithErrorKind::Closed). Calling it more than once is a
+	/// no-op, and the cookie jar, if any, stays readable through `cookies()`.
 	pub fn close(&self) {
 		// Dropping the client releases the reqwest connection pool and the
 		// Hickory resolver task; the alt-svc cache goes with it. The raw client

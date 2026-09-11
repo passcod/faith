@@ -50,8 +50,8 @@ pub struct AgentStats {
 	pub bodies_finished: i64,
 }
 
-impl From<web_faith::stats::AgentStats> for AgentStats {
-	fn from(stats: web_faith::stats::AgentStats) -> Self {
+impl From<web_faith::agent::AgentStats> for AgentStats {
+	fn from(stats: web_faith::agent::AgentStats) -> Self {
 		let count = |value: u64| i64::try_from(value).unwrap_or(i64::MAX);
 		Self {
 			requests_sent: count(stats.requests_sent),
@@ -233,7 +233,7 @@ fn caller_error(env: &Env, err: FaithError) -> napi::Error {
 fn refuse_absent_capabilities(options: &AgentOptions) -> Result<(), FaithError> {
 	let absent = |group: &str| -> Result<(), FaithError> {
 		Err(FaithError::new(
-			web_faith::FaithErrorKind::Config,
+			web_faith::error::FaithErrorKind::Config,
 			Some(format!("this build has no {group} support")),
 		))
 	};

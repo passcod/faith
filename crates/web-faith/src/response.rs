@@ -1,5 +1,7 @@
 //! Reading a response: where trailers land, what is known of the peer, and writing a body out.
 
+pub use crate::timing::RequestTiming;
+
 // spec:RESP spec:TRL spec:BODY
 
 use std::{
@@ -661,7 +663,7 @@ impl Response {
 	/// Write the body out to a file, reporting progress as the bytes land.
 	///
 	/// `on_progress` is called with the bytes written so far and the advertised length where one is
-	/// known, no more often than [`PROGRESS_INTERVAL`], and once more when the last byte is written.
+	/// known, at most every 50ms, and once more when the last byte is written.
 	// spec:BODY#tofile
 	pub async fn write_to_file(
 		&self,
