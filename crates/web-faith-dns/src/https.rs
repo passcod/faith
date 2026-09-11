@@ -9,6 +9,7 @@ use hickory_resolver::proto::rr::{
 /// An origin's HTTP/3 support, as its `HTTPS` record advertised it.
 // spec:DNS#https-records
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct HttpsAdvertisement {
 	/// The record's `port` SvcParam, or `None` when it named none and the origin's own port
 	/// applies.

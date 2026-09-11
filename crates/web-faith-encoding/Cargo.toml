@@ -16,3 +16,7 @@ futures.workspace = true
 http.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

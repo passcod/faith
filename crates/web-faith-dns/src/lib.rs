@@ -26,6 +26,9 @@
 //!
 //! [Exempt names]: ResolverSettings::exempt_domains
 
+// Lets docs.rs label each item with the feature or platform it needs.
+#![cfg_attr(docsrs, feature(doc_cfg))]
+
 // spec:WARM spec:DNS
 
 mod discovery;

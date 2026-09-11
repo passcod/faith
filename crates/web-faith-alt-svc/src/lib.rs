@@ -20,6 +20,9 @@
 //! [`parse_alt_svc_header`] reads a header on its own if all you want is the advertisement, and
 //! [`H3HttpsSink`] feeds the store from `HTTPS` record lookups.
 
+// Lets docs.rs label each item with the feature or platform it needs.
+#![cfg_attr(docsrs, feature(doc_cfg))]
+
 // spec:H3UP spec:PROBE
 
 mod cache;

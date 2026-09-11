@@ -24,3 +24,7 @@ tokio = { workspace = true }
 [features]
 # Implement reqwest's `Resolve`, so the resolver can be installed on its client.
 reqwest = ["dep:reqwest", "reqwest/hickory-dns"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

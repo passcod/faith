@@ -60,6 +60,9 @@
 //! Faith is also a Node.js module which lets you use this Rust networking stack as a `fetch`
 //! drop-in replacement: [`@passcod/faith`](https://www.npmjs.com/package/@passcod/faith).
 
+// Lets docs.rs label each item with the feature or platform it needs.
+#![cfg_attr(docsrs, feature(doc_cfg))]
+
 // A build with no crypto provider cannot speak TLS, and an HTTPS client that cannot is not one.
 // Selecting a provider is therefore a choice between the two rather than an option to decline.
 #[cfg(not(any(feature = "tls-aws-lc-rs", feature = "tls-ring")))]
@@ -78,16 +81,19 @@ mod stats;
 mod timing;
 mod warm_up;
 
-// The types the ordinary builder path needs are re-exported from `agent` either way; `internals`
-// adds the module path, for building `AgentOptions` field by field.
+// `internals` decides whether these module paths are public. The option types the ordinary
+// builder path needs are re-exported from `agent` either way; `doc(cfg(all()))` on the private
+// arm stops rustdoc labelling those re-exports as needing `not(internals)`.
 #[cfg(feature = "internals")]
 pub mod body;
 #[cfg(not(feature = "internals"))]
+#[cfg_attr(docsrs, doc(cfg(all())))]
 mod body;
 
 #[cfg(feature = "internals")]
 pub mod options;
 #[cfg(not(feature = "internals"))]
+#[cfg_attr(docsrs, doc(cfg(all())))]
 mod options;
 
 /// The `User-Agent` a request carries when nothing overrides it.

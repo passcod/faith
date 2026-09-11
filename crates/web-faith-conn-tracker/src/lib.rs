@@ -12,6 +12,9 @@
 //! Reading the statistics is per-platform: Linux over netlink, macOS and Windows through their own
 //! interfaces. Anywhere else, connections are still tracked but carry no statistics.
 
+// Lets docs.rs label each item with the feature or platform it needs.
+#![cfg_attr(docsrs, feature(doc_cfg))]
+
 // spec:OBS
 
 #[cfg(target_os = "linux")]
@@ -39,7 +42,7 @@ pub struct ConnectionKey {
 }
 
 #[derive(Debug, Clone)]
-pub struct TrackedConnection {
+pub(crate) struct TrackedConnection {
 	pub first_seen: SystemTime,
 	pub last_seen: SystemTime,
 	pub response_count: u64,
@@ -86,6 +89,7 @@ impl Expiry<ConnectionKey, TrackedConnection> for ExpireAfterTimeout {
 }
 
 #[derive(Debug, Clone, Copy, Default)]
+#[non_exhaustive]
 pub struct TcpStats {
 	pub rtt_us: u32,
 	pub rtt_var_us: u32,
@@ -98,6 +102,7 @@ pub struct TcpStats {
 
 /// One tracked connection, as a caller reporting on the pool sees it.
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct ConnectionSnapshot {
 	/// The transport the connection runs over. Only TCP is tracked.
 	pub connection_type: &'static str,

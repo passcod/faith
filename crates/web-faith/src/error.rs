@@ -1,18 +1,20 @@
-//! Errors, and the stable codes they carry.
+//! Errors.
 
 use std::{
 	error::Error,
 	fmt::{Debug, Display},
 };
 
+#[cfg(feature = "internals")]
 use strum::EnumIter;
 #[cfg(feature = "internals")]
 use strum::IntoEnumIterator;
 
-/// The kind of a [`FaithError`], and the stable code it reports.
+/// The kind of a [`FaithError`].
 ///
 /// Match on the kind; the message is for humans and may change.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, EnumIter)]
+#[cfg_attr(feature = "internals", derive(EnumIter))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FaithErrorKind {
 	Aborted,
 	AddressParse,

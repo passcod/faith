@@ -18,6 +18,7 @@ authors.workspace = true
 # `raw-client` is here so the escape hatch renders; `internals` deliberately is not.
 features = ["http3", "raw-client"]
 rustc-args = ["--cfg", "reqwest_unstable"]
+rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
 async-trait.workspace = true

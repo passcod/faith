@@ -11,6 +11,9 @@
 //!
 //! `deflate` is the zlib-wrapped form of RFC 1950, which is what mainstream clients decode it as.
 
+// Lets docs.rs label each item with the feature or platform it needs.
+#![cfg_attr(docsrs, feature(doc_cfg))]
+
 // spec:ENC
 
 use std::{io, pin::Pin};

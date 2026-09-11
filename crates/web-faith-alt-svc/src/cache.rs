@@ -4,6 +4,7 @@ use std::time::{Duration, Instant};
 use moka::sync::Cache;
 
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct AltSvcEntry {
 	pub port: u16,
 	pub expires: Instant,
@@ -38,6 +39,7 @@ struct FailureEntry {
 
 /// A per-origin exponentially-weighted moving average of time-to-response-headers.
 #[derive(Debug, Clone, Copy)]
+#[non_exhaustive]
 pub struct PathTime {
 	/// EWMA of time-to-response-headers, in milliseconds.
 	pub avg_ms: f64,

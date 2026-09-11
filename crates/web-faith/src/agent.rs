@@ -3,6 +3,15 @@
 pub use crate::builder::AgentOptionsBuilder;
 pub use crate::stats::AgentStats;
 
+#[cfg(feature = "cache")]
+pub use crate::options::{CacheOptions, CacheStore};
+pub use crate::options::{
+	DnsOptions, DnsOverride, FlowControlOptions, Header, Http2Options, PoolOptions, QuirksOptions,
+	RedirectPolicy, TimeoutOptions, TlsOptions,
+};
+#[cfg(feature = "http3")]
+pub use crate::options::{Http3Congestion, Http3Hint, Http3Options};
+
 // spec:AGENT spec:WARM spec:NETCHG spec:OBS
 
 use std::sync::{
@@ -190,9 +199,14 @@ impl Agent {
 		self.live().as_ref().map(|live| live.raw_client.clone())
 	}
 
-	/// The DNS resolver, if the agent has one of its own and is still open.
-	#[cfg(feature = "dns")]
+	/// The agent's DNS resolver, or `None` once it is closed.
+	#[cfg(all(feature = "dns", feature = "raw-client"))]
 	pub fn dns_resolver(&self) -> Option<FaithResolver> {
+		self.dns_resolver_inner()
+	}
+
+	#[cfg(feature = "dns")]
+	pub(crate) fn dns_resolver_inner(&self) -> Option<FaithResolver> {
 		self.live()
 			.as_ref()
 			.and_then(|live| live.dns_resolver.clone())
@@ -360,7 +374,7 @@ impl Agent {
 	// spec:OBS#resolvers
 	#[cfg(feature = "dns")]
 	pub fn resolvers(&self) -> Vec<ResolverReport> {
-		self.dns_resolver()
+		self.dns_resolver_inner()
 			.as_ref()
 			.map(FaithResolver::resolvers)
 			.unwrap_or_default()
@@ -371,7 +385,7 @@ impl Agent {
 	/// Called for foreground requests as well as warm-ups: the criterion is that the origin holds
 	/// an idle pooled connection, not how it came to.
 	// spec:WARM
-	pub fn mark_warm(&self, url: &Url) {
+	pub(crate) fn mark_warm(&self, url: &Url) {
 		self.warmed.insert(origin_key(url), ());
 	}
 

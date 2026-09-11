@@ -25,3 +25,7 @@ url.workspace = true
 [features]
 # Implement reqwest's `CookieStore`, so the jar can serve as its cookie provider.
 reqwest = ["dep:reqwest", "reqwest/cookies"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

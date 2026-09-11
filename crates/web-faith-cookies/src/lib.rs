@@ -37,6 +37,9 @@
 //! `reqwest` implements that client's `CookieStore` for the jar, so it can be handed to a
 //! `ClientBuilder` as a cookie provider.
 
+// Lets docs.rs label each item with the feature or platform it needs.
+#![cfg_attr(docsrs, feature(doc_cfg))]
+
 // spec:COOK
 
 use std::{collections::HashMap, sync::RwLock, time::Duration};
