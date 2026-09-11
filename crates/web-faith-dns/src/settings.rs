@@ -12,7 +12,7 @@ use crate::transport::{ServerSpec, Transport};
 // spec:OBS#resolvers
 #[derive(Clone, Copy, Debug)]
 pub enum ResolverSource {
-	/// Named in `dns.servers` by the caller.
+	/// Named by the caller.
 	Configured,
 	/// Discovered from the system's resolver configuration.
 	Conventional,
@@ -39,35 +39,36 @@ pub struct ResolverReport {
 	pub source: String,
 }
 
-/// `dns.maxStale`'s default: how far past expiry an answer may still be served.
+/// [`ResolverConfig::max_stale`]'s default.
 ///
 /// Long enough that a resolver outage does not stop an agent reaching hosts it knows, short enough
 /// that a host which has moved stops being served a dead address for the life of the process.
 // spec:DNS#serving-stale-answers
 pub const DEFAULT_MAX_STALE: Duration = Duration::from_secs(3600);
 
-/// Everything `dns.*` configures about Faith's resolver, resolved from options at construction.
+/// Configuration for initialising a [`FaithResolver`](crate::FaithResolver).
 #[derive(Clone, Debug)]
-pub struct ResolverSettings {
-	/// The `dns.servers` list, in order. Empty means system discovery.
+pub struct ResolverConfig {
+	/// The nameservers to consult, in order. Empty takes the system's own configuration.
 	pub servers: Vec<ServerSpec>,
-	/// `dns.timeout`, bounding the whole list. `None` leaves hickory's five-second default.
+	/// How long a lookup may take across the whole server list, so exhausting several dead
+	/// servers costs one timeout rather than one each.
 	pub timeout: Option<Duration>,
-	/// `dns.ndots`.
+	/// How many dots a name must contain before it is tried as given, ahead of the search list.
 	pub ndots: Option<usize>,
-	/// `dns.searchDomains`, replacing the system's search list when set.
+	/// The domains appended to a name that is not fully qualified, replacing the system's list.
 	pub search_domains: Option<Vec<Name>>,
-	/// `dns.hostsFile`: `Some(true)`/`Some(false)` force it on/off, `None` follows the platform.
+	/// Whether to consult the hosts file. `None` follows the platform's own convention.
 	pub hosts_file: Option<bool>,
-	/// `dns.exemptDomains`, added to the always-exempt `localhost`, `.local`, and system suffix.
+	/// Further domains to send to the system resolver, added to the ones always exempt.
 	pub exempt_domains: Vec<Name>,
-	/// `dns.serveStale`: whether an expired answer is served while a refresh runs behind it.
+	/// Whether an expired answer is served while a refresh runs behind it.
 	pub serve_stale: bool,
-	/// `dns.maxStale`: how far past expiry an answer may still be served.
+	/// How far past expiry an answer may still be served. An older entry is discarded instead.
 	pub max_stale: Duration,
 }
 
-impl Default for ResolverSettings {
+impl Default for ResolverConfig {
 	fn default() -> Self {
 		Self {
 			servers: Vec::new(),
@@ -84,12 +85,12 @@ impl Default for ResolverSettings {
 	}
 }
 
-/// The suffixes handed to the system resolver rather than Faith's servers: `localhost` and `local`
-/// always, plus the ones the system supplies and the caller's `dns.exemptDomains`.
+/// The suffixes handed to the system resolver rather than the configured ones: `localhost` and
+/// `local` always, plus the system's own and the caller's.
 ///
 /// The root name is never a suffix here, whichever list it arrives in. It is the parent of every
 /// name, so admitting it would exempt the lot and route every lookup to the system resolver with
-/// `dns.servers` configured and unused. It does arrive in practice: a Windows host with no DNS
+/// servers configured and unused. It does arrive in practice: a Windows host with no DNS
 /// domain of its own reports the root as its domain, so the check keeps the encrypted
 /// transports working there rather than being quietly bypassed.
 // spec:DNS#exempt-names

@@ -3,14 +3,14 @@ use hickory_resolver::{
 	TokioResolver,
 	config::{
 		GOOGLE, LookupIpStrategy, NameServerConfig, OpportunisticEncryption, ResolveHosts,
-		ResolverConfig, ServerOrderingStrategy,
+		ResolverConfig as HickoryConfig, ServerOrderingStrategy,
 	},
 	net::{NetError, runtime::TokioRuntimeProvider},
 	system_conf::read_system_conf,
 };
 
 use crate::{
-	settings::{ResolverReport, ResolverSettings, ResolverSource, report},
+	settings::{ResolverConfig, ResolverReport, ResolverSource, report},
 	transport::ServerHost,
 };
 
@@ -25,7 +25,7 @@ pub(crate) struct Built {
 /// ndots, and hosts-file settings on top.
 pub(crate) fn apply_options(
 	builder: &mut hickory_resolver::ResolverBuilder<TokioRuntimeProvider>,
-	settings: &ResolverSettings,
+	settings: &ResolverConfig,
 ) {
 	let options = builder.options_mut();
 	options.ip_strategy = LookupIpStrategy::Ipv4AndIpv6;
@@ -48,21 +48,21 @@ pub(crate) fn apply_options(
 }
 
 /// Discovery: configure from the system, then let hickory's RFC 9539 opportunistic encryption
-/// upgrade those servers to DoT/DoQ where they answer a probe. `dns.searchDomains` overrides the
+/// upgrade those servers to DoT/DoQ where they answer a probe. A configured search list overrides the
 /// system search list when set.
 // spec:DNS#discovery
-pub(crate) fn build_discovery(settings: &ResolverSettings) -> Result<Built, NetError> {
+pub(crate) fn build_discovery(settings: &ResolverConfig) -> Result<Built, NetError> {
 	let (mut config, options) = read_system_conf().unwrap_or_else(|_| {
 		// A host with no readable resolver configuration falls back to Google Public DNS over
 		// conventional DNS, probed like any other server (spec:DNS#discovery).
 		(
-			ResolverConfig::udp_and_tcp(&GOOGLE),
+			HickoryConfig::udp_and_tcp(&GOOGLE),
 			hickory_resolver::config::ResolverOpts::default(),
 		)
 	});
 
 	if let Some(search) = &settings.search_domains {
-		config = ResolverConfig::from_parts(None, search.clone(), config.name_servers().to_vec());
+		config = HickoryConfig::from_parts(None, search.clone(), config.name_servers().to_vec());
 	}
 
 	let reports = report(config.name_servers(), ResolverSource::Conventional);
@@ -83,7 +83,7 @@ pub(crate) fn build_discovery(settings: &ResolverSettings) -> Result<Built, NetE
 /// The resolver that bootstraps hostname servers: the listed IP-host servers in order, so an
 /// encrypted server placed first resolves its siblings without exposing the hostname in plaintext.
 /// Where the list has no IP host, the system's own configuration bootstraps instead.
-pub(crate) fn bootstrap_resolver(settings: &ResolverSettings) -> Result<TokioResolver, NetError> {
+pub(crate) fn bootstrap_resolver(settings: &ResolverConfig) -> Result<TokioResolver, NetError> {
 	let ip_servers: Vec<NameServerConfig> = settings
 		.servers
 		.iter()
@@ -93,13 +93,13 @@ pub(crate) fn bootstrap_resolver(settings: &ResolverSettings) -> Result<TokioRes
 	let mut builder = if ip_servers.is_empty() {
 		TokioResolver::builder_tokio().unwrap_or_else(|_| {
 			TokioResolver::builder_with_config(
-				ResolverConfig::udp_and_tcp(&GOOGLE),
+				HickoryConfig::udp_and_tcp(&GOOGLE),
 				TokioRuntimeProvider::default(),
 			)
 		})
 	} else {
 		TokioResolver::builder_with_config(
-			ResolverConfig::from_parts(None, vec![], ip_servers),
+			HickoryConfig::from_parts(None, vec![], ip_servers),
 			TokioRuntimeProvider::default(),
 		)
 	};
@@ -109,7 +109,7 @@ pub(crate) fn bootstrap_resolver(settings: &ResolverSettings) -> Result<TokioRes
 }
 
 /// Build the configured (or discovered) resolver and the report of its servers.
-pub(crate) async fn build(settings: &ResolverSettings) -> Result<Built, NetError> {
+pub(crate) async fn build(settings: &ResolverConfig) -> Result<Built, NetError> {
 	if settings.servers.is_empty() {
 		build_discovery(settings)
 	} else {
@@ -121,11 +121,11 @@ pub(crate) async fn build(settings: &ResolverSettings) -> Result<Built, NetError
 /// from the parsed specs in order.
 // spec:DNS#transports
 // spec:DNS#bootstrapping
-pub(crate) async fn build_listed(settings: &ResolverSettings) -> Result<Built, NetError> {
+pub(crate) async fn build_listed(settings: &ResolverConfig) -> Result<Built, NetError> {
 	let name_servers = build_name_servers(settings).await?;
 
 	let search = settings.search_domains.clone().unwrap_or_default();
-	let config = ResolverConfig::from_parts(None, search, name_servers.clone());
+	let config = HickoryConfig::from_parts(None, search, name_servers.clone());
 	let reports = report(&name_servers, ResolverSource::Configured);
 
 	let mut builder = TokioResolver::builder_with_config(config, TokioRuntimeProvider::default());
@@ -142,7 +142,7 @@ pub(crate) async fn build_listed(settings: &ResolverSettings) -> Result<Built, N
 /// resolver.
 // spec:DNS#bootstrapping
 pub(crate) async fn build_name_servers(
-	settings: &ResolverSettings,
+	settings: &ResolverConfig,
 ) -> Result<Vec<NameServerConfig>, NetError> {
 	let needs_bootstrap = settings.servers.iter().any(|spec| spec.ip().is_none());
 	let bootstrap = if needs_bootstrap {

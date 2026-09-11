@@ -8,7 +8,7 @@ use std::{
 
 use hickory_resolver::{
 	TokioResolver,
-	config::{GOOGLE, LookupIpStrategy, ResolverConfig},
+	config::{GOOGLE, LookupIpStrategy, ResolverConfig as HickoryConfig},
 	net::{DnsError, NetError, runtime::TokioRuntimeProvider},
 	proto::rr::{Name, RecordType},
 	system_conf::read_system_conf,
@@ -21,7 +21,7 @@ use std::net::SocketAddr;
 use crate::{
 	discovery::{Built, build},
 	https::{HttpsSink, read_https_answer},
-	settings::{ResolverReport, ResolverSettings, exempt_suffixes},
+	settings::{ResolverConfig, ResolverReport, exempt_suffixes},
 };
 
 // Matched to hickory's own default answer-cache size, the two holding entries for the same names.
@@ -41,7 +41,7 @@ struct StaleEntry {
 }
 
 /// Everything the resolver reads off the network, held together so a network change drops it in one
-/// go. The caller's [`ResolverSettings`] sit outside, being configuration rather than a reading.
+/// go. The caller's [`ResolverConfig`] sit outside, being configuration rather than a reading.
 // spec:NETCHG
 struct Generation {
 	/// The configured (or discovered) resolver, built lazily inside a tokio runtime.
@@ -75,7 +75,7 @@ struct Inner {
 	/// The options the agent was constructed with. A network change does not touch these; they are
 	/// what the next generation is rebuilt from.
 	// spec:NETCHG#what-the-signal-keeps
-	settings: ResolverSettings,
+	settings: ResolverConfig,
 	/// Replaced wholesale by [`FaithResolver::reset`]. Read once at the start of a lookup, so one
 	/// spanning the signal finishes against the resolvers it started on.
 	// spec:NETCHG#in-flight-requests
@@ -95,7 +95,7 @@ pub struct FaithResolver {
 
 impl Default for FaithResolver {
 	fn default() -> Self {
-		Self::new(ResolverSettings::default())
+		Self::new(ResolverConfig::default())
 	}
 }
 
@@ -107,7 +107,7 @@ impl std::fmt::Debug for FaithResolver {
 
 impl FaithResolver {
 	/// A resolver built from `settings`, which reads its configuration on first use.
-	pub fn new(settings: ResolverSettings) -> Self {
+	pub fn new(settings: ResolverConfig) -> Self {
 		Self {
 			inner: Arc::new(Inner {
 				settings,
@@ -168,7 +168,7 @@ impl FaithResolver {
 			.get_or_try_init(|| async {
 				let mut builder = TokioResolver::builder_tokio().unwrap_or_else(|_| {
 					TokioResolver::builder_with_config(
-						ResolverConfig::udp_and_tcp(&GOOGLE),
+						HickoryConfig::udp_and_tcp(&GOOGLE),
 						TokioRuntimeProvider::default(),
 					)
 				});
@@ -180,7 +180,7 @@ impl FaithResolver {
 	}
 
 	/// The exempt suffixes: `localhost`, `local`, the system's own domain and search suffixes, and
-	/// the caller's `dns.exemptDomains`. The system's own suffixes are a
+	/// the caller's own. The system's suffixes are a
 	/// property of the network, so they are read per generation rather than once per agent.
 	// spec:DNS#exempt-names
 	async fn exempt(&self, generation: &Generation) -> Arc<Vec<Name>> {
@@ -279,7 +279,7 @@ impl FaithResolver {
 	}
 
 	/// The addresses to serve for `host` without waiting, when its answer has expired but is still
-	/// inside `dns.maxStale`.
+	/// inside [`ResolverConfig::max_stale`].
 	///
 	/// `None` for the cases that must go to the resolver: no entry, an entry still fresh, or one so
 	/// old it has stopped being evidence about the host.
@@ -383,7 +383,7 @@ impl FaithResolver {
 	/// Whether a lookup of `host` now would be served from an expired entry, and so hand out an
 	/// address that is assumed rather than confirmed.
 	///
-	/// The same window a stale answer is served from: an entry past `dns.maxStale` is resolved for
+	/// The same window a stale answer is served from: an older entry is resolved for
 	/// real, and counting that as stale would spend a connection attempt on a confirmed address.
 	pub fn served_stale(&self, host: &str) -> bool {
 		if !self.inner.settings.serve_stale {
@@ -419,7 +419,7 @@ impl FaithResolver {
 	///
 	/// The discovered server list, the local suffixes and the encryption-probe results are all
 	/// readings of a network, so dropping the generation takes them and their caches together.
-	/// The caller's options are untouched, so a configured `dns.servers` set is rebuilt as given.
+	/// The configuration is untouched, so a named server list is rebuilt as given.
 	///
 	/// Synchronous, unlike the rest of this type: it swaps an `Arc` and builds nothing, so it is
 	/// callable from a network-change signal.

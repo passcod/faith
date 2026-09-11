@@ -5,7 +5,7 @@
 //!
 //! Run with `cargo run -p web-faith-dns --example resolve -- example.com`.
 
-use web_faith_dns::{FaithResolver, ResolverSettings};
+use web_faith_dns::{FaithResolver, ResolverConfig};
 
 #[tokio::main]
 async fn main() {
@@ -15,7 +15,7 @@ async fn main() {
 
 	// No servers named, so the resolver configures itself from the operating system and lets
 	// opportunistic encryption upgrade those servers where it can.
-	let resolver = FaithResolver::new(ResolverSettings::default());
+	let resolver = FaithResolver::new(ResolverConfig::default());
 
 	// Prefetching populates the very cache a request's lookup reads, and never fails: warming is
 	// advisory, so a name that does not resolve simply leaves the cache as it was.

@@ -31,9 +31,7 @@ use web_faith_conn_tracker::ConnectionTracker;
 use web_faith_cookies::FaithJar;
 
 #[cfg(feature = "dns")]
-use web_faith_dns::{
-	DEFAULT_MAX_STALE, FaithResolver, ResolverSettings, ServerSpec, parse_domains,
-};
+use web_faith_dns::{DEFAULT_MAX_STALE, FaithResolver, ResolverConfig, ServerSpec, parse_domains};
 
 #[cfg(feature = "http3")]
 use web_faith_alt_svc::{AltSvcCache, AltSvcCacheConfig};
@@ -176,7 +174,7 @@ impl Agent {
 					FaithError::new(FaithErrorKind::AddressParse, Some(message))
 				})?);
 			}
-			Some(FaithResolver::new(ResolverSettings {
+			Some(FaithResolver::new(ResolverConfig {
 				servers,
 				timeout: dns.timeout.map(|ms| Duration::from_millis(ms.into())),
 				ndots: dns.ndots.map(|n| n as usize),

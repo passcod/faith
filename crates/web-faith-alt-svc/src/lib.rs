@@ -59,7 +59,7 @@
 )]
 #![cfg_attr(
 	feature = "dns",
-	doc = "use web_faith_dns::{FaithResolver, ResolverSettings};"
+	doc = "use web_faith_dns::{FaithResolver, ResolverConfig};"
 )]
 #![cfg_attr(feature = "dns", doc = "")]
 #![cfg_attr(
@@ -68,7 +68,7 @@
 )]
 #![cfg_attr(
 	feature = "dns",
-	doc = "let resolver = FaithResolver::new(ResolverSettings::default());"
+	doc = "let resolver = FaithResolver::new(ResolverConfig::default());"
 )]
 #![cfg_attr(feature = "dns", doc = "")]
 #![cfg_attr(

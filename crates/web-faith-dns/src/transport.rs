@@ -66,8 +66,10 @@ pub(crate) enum ServerHost {
 	Name(String),
 }
 
-/// One entry of `dns.servers`, parsed at agent construction. The IP is not known yet for a
-/// hostname host: that is resolved when the resolver is first used (see [`ResolverSettings`](crate::ResolverSettings)).
+/// One nameserver to query.
+///
+/// Parsed from a server URL. A hostname host has no IP yet; that is resolved when the resolver is
+/// first used.
 #[derive(Clone, Debug)]
 pub struct ServerSpec {
 	pub(crate) host: ServerHost,
@@ -81,7 +83,7 @@ pub struct ServerSpec {
 }
 
 impl ServerSpec {
-	/// Parse one `dns.servers` URL, or return a message for an unparseable URL or unknown scheme.
+	/// Parse one nameserver URL, or return a message for an unparseable URL or unknown scheme.
 	pub fn parse(input: &str) -> Result<Self, String> {
 		let url = Url::parse(input).map_err(|err| format!("{input:?}: {err}"))?;
 		let transport = Transport::from_scheme(url.scheme())
