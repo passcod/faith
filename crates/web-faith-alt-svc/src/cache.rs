@@ -122,8 +122,6 @@ impl Default for AltSvcCacheConfig {
 /// - what failed, and how many times in a row,
 /// - what turned out slower over QUIC than over TCP,
 /// - what the caller asserted as a hint.
-///
-/// Bounded and aged by [`AltSvcCacheConfig`].
 #[derive(Clone)]
 pub struct AltSvcCache {
 	advertised: Cache<String, AltSvcEntry>,
