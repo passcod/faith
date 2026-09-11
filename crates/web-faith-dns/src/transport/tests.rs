@@ -2,7 +2,7 @@ use std::{net::IpAddr, sync::Arc};
 
 use hickory_resolver::config::ProtocolConfig;
 
-use super::{DEFAULT_DNS_QUERY_PATH, ServerSpec, Transport};
+use super::{DEFAULT_DNS_QUERY_PATH, ServerSpec, ServerSpecError, Transport};
 
 fn spec(input: &str) -> ServerSpec {
 	input.parse::<ServerSpec>().expect("valid server URL")
@@ -77,6 +77,16 @@ fn a_hostname_authenticates_against_itself() {
 #[test]
 fn an_unknown_scheme_is_rejected() {
 	// spec:DNS#transports — throws an address-parse error at construction.
-	assert!("ftp://1.1.1.1".parse::<ServerSpec>().is_err());
-	assert!("not a url".parse::<ServerSpec>().is_err());
+	assert_eq!(
+		"ftp://1.1.1.1".parse::<ServerSpec>().unwrap_err(),
+		ServerSpecError::UnknownScheme
+	);
+	assert!(matches!(
+		"not a url".parse::<ServerSpec>().unwrap_err(),
+		ServerSpecError::Url(_)
+	));
+	assert_eq!(
+		"udp://".parse::<ServerSpec>().unwrap_err(),
+		ServerSpecError::NoHost
+	);
 }

@@ -36,7 +36,7 @@
 //! ```no_run
 //! use web_faith_dns::{FaithResolver, ResolverConfig};
 //!
-//! # async fn example() -> Result<(), String> {
+//! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 //! let resolver = FaithResolver::new(ResolverConfig {
 //!     servers: vec![
 //!         "tls://1.1.1.1#cloudflare-dns.com".parse()?,
@@ -177,7 +177,7 @@ pub use hickory_resolver::proto::rr::Name;
 pub use https::{HttpsAdvertisement, HttpsSink};
 pub use resolver::FaithResolver;
 pub use settings::{DEFAULT_MAX_STALE, ResolverConfig, ResolverReport, ResolverSource};
-pub use transport::{ServerSpec, Transport};
+pub use transport::{ServerSpec, ServerSpecError, Transport};
 
 /// Parse a list of domain names, for the search or exempt lists, or return a message
 /// for the first entry that is not a valid domain name.

@@ -170,8 +170,11 @@ impl Agent {
 			// builds one rather than validated under the system resolver that ignores them.
 			let mut servers = Vec::new();
 			for url in dns.servers.unwrap_or_default() {
-				servers.push(url.parse::<ServerSpec>().map_err(|message| {
-					FaithError::new(FaithErrorKind::AddressParse, Some(message))
+				servers.push(url.parse::<ServerSpec>().map_err(|err| {
+					FaithError::new(
+						FaithErrorKind::AddressParse,
+						Some(format!("{url:?}: {err}")),
+					)
 				})?);
 			}
 			Some(FaithResolver::new(ResolverConfig {
