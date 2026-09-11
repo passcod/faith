@@ -172,7 +172,7 @@ impl std::fmt::Debug for AltSvcCache {
 }
 
 impl AltSvcCache {
-	/// An empty store aged and bounded by `config`.
+	/// A new empty store.
 	pub fn new(config: AltSvcCacheConfig) -> Self {
 		let AltSvcCacheConfig {
 			advertised_ttl,
