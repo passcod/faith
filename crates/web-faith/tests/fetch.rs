@@ -393,21 +393,20 @@ async fn writing_to_a_file_refuses_an_occupied_destination() {
 		let dir = std::env::temp_dir().join(format!("faith-write-{}", std::process::id()));
 		std::fs::create_dir_all(&dir).expect("a temp directory");
 		let path = dir.join("body.bin");
-		let path = path.to_str().expect("a UTF-8 path");
 
 		let mut reports = 0;
 		let written = agent
 			.fetch(format!("{origin}/bytes/4096"))
 			.await
 			.expect("sent")
-			.write_to_file(path, &FileDestination::default(), |_| reports += 1)
+			.write_to_file(&path, &FileDestination::default(), |_| reports += 1)
 			.await
 			.expect("the destination is free");
 
 		assert_eq!(written.bytes_written, 4096);
 		assert_eq!(written.path, path, "the path written to is reported back");
 		assert_eq!(
-			std::fs::metadata(path).expect("the file exists").len(),
+			std::fs::metadata(&path).expect("the file exists").len(),
 			4096,
 			"and the bytes are actually on disk"
 		);
@@ -418,12 +417,12 @@ async fn writing_to_a_file_refuses_an_occupied_destination() {
 			.fetch(format!("{origin}/bytes/8"))
 			.await
 			.expect("sent")
-			.write_to_file(path, &FileDestination::default(), |_| ())
+			.write_to_file(&path, &FileDestination::default(), |_| ())
 			.await
 			.expect_err("the destination is occupied");
 		assert_eq!(err.kind(), FaithErrorKind::FileExists);
 		assert_eq!(
-			std::fs::metadata(path).expect("the file is still there").len(),
+			std::fs::metadata(&path).expect("the file is still there").len(),
 			4096,
 			"a refused write leaves the original alone"
 		);
@@ -434,7 +433,7 @@ async fn writing_to_a_file_refuses_an_occupied_destination() {
 			.await
 			.expect("sent")
 			.write_to_file(
-				path,
+				&path,
 				&FileDestination {
 					overwrite: true,
 					..FileDestination::default()

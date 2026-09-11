@@ -8,12 +8,12 @@ use reqwest::{Url, Version};
 use tokio::sync::watch;
 
 /// The timing of one request, filled in as it progresses.
+///
+/// Timings are best-effort: internal limitations mean they are not always perfectly accurate.
 #[derive(Clone, Debug, Default)]
+#[non_exhaustive]
 pub struct RequestTiming {
 	/// Milliseconds from the start of the request to the response head being read.
-	///
-	/// Taken once the response's head has come back through the whole middleware stack, so it
-	/// carries a little of Faith's own processing. See Q3.
 	pub headers_ms: f64,
 	/// Milliseconds from the start of the request to the body finishing, once it has.
 	pub body_ms: Option<f64>,

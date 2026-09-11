@@ -87,7 +87,7 @@ impl From<FileProgress> for ToFileProgress {
 impl From<FileWritten> for ToFileResult {
 	fn from(written: FileWritten) -> Self {
 		Self {
-			path: written.path,
+			path: written.path.to_string_lossy().into_owned(),
 			bytes_written: i64::try_from(written.bytes_written).unwrap_or(i64::MAX),
 		}
 	}

@@ -8,8 +8,8 @@
 //!   first-party context to be cross-site *from*.
 //! - The public suffix list is not consulted, so a `Domain` that is a public suffix is not
 //!   rejected on that ground. A server-side caller talks to origins it chose.
-//! - A secure transport is `https`, as the standard has it, rather than the wider "potentially
-//!   trustworthy" origin browsers accept. A `__Host-` cookie a browser would keep on
+//! - A secure transport is `https`, rather than the wider "potentially trustworthy" origin
+//!   browsers accept. A `__Host-` cookie a browser would keep on
 //!   `http://localhost` is rejected here.
 //!
 //! # Example

@@ -9,6 +9,7 @@ use std::{
 	hint::unreachable_unchecked,
 	mem::replace,
 	net::SocketAddr,
+	path::{Path, PathBuf},
 	pin::Pin,
 	sync::{
 		Arc,
@@ -66,7 +67,7 @@ pub(crate) const PROGRESS_INTERVAL: Duration = Duration::from_millis(50);
 /// Open the destination file for a body write, mapping filesystem refusals to Faith's errors.
 // spec:BODY#tofile
 pub(crate) async fn open_destination(
-	path: &str,
+	path: &Path,
 	options: &FileDestination,
 ) -> Result<tokio::fs::File, FaithError> {
 	let mut open = tokio::fs::OpenOptions::new();
@@ -91,7 +92,7 @@ pub(crate) async fn open_destination(
 
 /// Classify a failure to open the destination: `FileExists` for an occupied path, `FileWrite` for
 /// a directory or any other refusal, carrying the OS detail.
-pub(crate) async fn classify_open_error(path: &str, err: std::io::Error) -> FaithError {
+pub(crate) async fn classify_open_error(path: &Path, err: std::io::Error) -> FaithError {
 	let kind = if err.kind() == std::io::ErrorKind::AlreadyExists {
 		match tokio::fs::symlink_metadata(path).await {
 			Ok(meta) if meta.is_dir() => FaithErrorKind::FileWrite,
@@ -298,6 +299,7 @@ mod tests {
 
 /// A progress report from a body write in flight.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct FileProgress {
 	/// Bytes written to the file so far.
 	pub bytes_written: u64,
@@ -308,18 +310,18 @@ pub struct FileProgress {
 
 /// The result of writing a body to a file.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct FileWritten {
 	/// The absolute filesystem path written to.
-	pub path: String,
+	pub path: PathBuf,
 	/// The number of bytes that landed at the destination.
 	pub bytes_written: u64,
 }
 
 /// A response to a request.
 ///
-/// Arrives from a request; it is not constructed directly. Reading the body consumes it, as the
-/// fetch standard has it, so a second read fails. [`Self::try_clone`] gets a copy that can be read
-/// separately.
+/// Arrives from a request; it is not constructed directly. Reading the body consumes it, so a
+/// second read fails. [`Self::try_clone`] gets a copy that can be read separately.
 #[derive(Debug, Clone)]
 pub struct Response {
 	pub(crate) body: BodyHolder,
@@ -419,8 +421,7 @@ impl Response {
 
 	/// Read the whole body as text.
 	///
-	/// Decoded as UTF-8, with invalid sequences replaced by U+FFFD, as the fetch standard calls
-	/// for.
+	/// Decoded as UTF-8, with invalid sequences replaced by U+FFFD.
 	pub async fn text(&self) -> Result<String, FaithError> {
 		let bytes = self.bytes().await?;
 		Ok(String::from_utf8(bytes)
@@ -653,10 +654,11 @@ impl Response {
 	// spec:BODY#tofile
 	pub async fn write_to_file(
 		&self,
-		path: &str,
+		path: impl AsRef<Path>,
 		options: &FileDestination,
 		mut on_progress: impl FnMut(FileProgress),
 	) -> Result<FileWritten, FaithError> {
+		let path = path.as_ref();
 		// A response that cannot carry a body has nothing to write, and this is settled
 		// before any file is created (spec:BODY#tofile).
 		let Some(lock) = self.body.body.clone() else {
@@ -754,9 +756,7 @@ impl Response {
 		Ok(FileWritten {
 			// A relative path resolves against the process's working directory; the caller
 			// is handed the absolute path the bytes landed at.
-			path: std::path::absolute(path)
-				.map(|abs| abs.to_string_lossy().into_owned())
-				.unwrap_or_else(|_| path.to_owned()),
+			path: std::path::absolute(path).unwrap_or_else(|_| path.to_path_buf()),
 			bytes_written: written,
 		})
 	}
