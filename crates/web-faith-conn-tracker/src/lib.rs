@@ -108,7 +108,7 @@ pub struct ConnectionSnapshot {
 	/// When the entry falls out of the tracker, unless traffic renews it first.
 	pub expiry: Option<SystemTime>,
 	pub response_count: u64,
-	/// What the operating system last reported for this connection, if it has been asked yet.
+	/// The operating system's last report for this connection, if it has been asked yet.
 	pub stats: Option<TcpStats>,
 }
 

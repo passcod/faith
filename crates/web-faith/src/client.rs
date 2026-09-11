@@ -73,9 +73,9 @@ pub(crate) struct ResolvedWindows {
 	pub(crate) connection: u32,
 }
 
-/// What the Node.js networking environment variables asked for, to apply to a reqwest client
-/// builder as Node.js honours them for its own clients. This is read for every agent, so
-/// `fetch()` behaves like Node's built-in fetch out of the box.
+/// The Node.js networking environment variables, applied to a reqwest client builder as Node
+/// honours them for its own. Read for every agent, so `fetch()` behaves like Node's built-in
+/// fetch out of the box.
 ///
 /// - `NODE_EXTRA_CA_CERTS`: a path to a PEM file whose certificates are added to
 ///   the trust store on top of the platform roots. As in Node.js, a value that

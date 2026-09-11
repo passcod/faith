@@ -41,10 +41,11 @@
 //! | `cookies` | on | The cookie jar, and the agent option and handle that reach it. |
 //! | `dns` | on | Faith's own caching resolver. Without it, names resolve through the platform. |
 //! | `encoding` | on | Content codings: negotiating and decoding a response body, and compressing a request one. |
-//! | `tls-aws-lc-rs` | on | The rustls crypto provider. `tls-ring` selects ring instead. |
+//! | `tls-aws-lc-rs` | on | aws-lc-rs as the rustls crypto provider. |
+//! | `tls-ring` | off | ring as the rustls crypto provider instead. |
 //! | `http3` | off | Transparent HTTP/3, and the Alt-Svc machinery that upgrades an origin to it. Needs the cfg flag above. |
 //! | `raw-client` | off | `Agent::client` and `Agent::raw_client`, which hand out the reqwest client underneath. |
-//! | `internals` | off | What the Node binding drives. Unstable and exempt from semver; do not depend on it. |
+//! | `internals` | off | Faith's internals. Permanently unstable and exempt from semver. |
 //!
 //! # Component crates
 //!
@@ -77,8 +78,8 @@ mod stats;
 mod timing;
 mod warm_up;
 
-// `internals` exposes the module path for `web-faith-napi`, which builds `AgentOptions` field by
-// field. The types the ordinary builder path needs are re-exported from `builder` either way.
+// The types the ordinary builder path needs are re-exported from `agent` either way; `internals`
+// adds the module path, for building `AgentOptions` field by field.
 #[cfg(feature = "internals")]
 pub mod body;
 #[cfg(not(feature = "internals"))]

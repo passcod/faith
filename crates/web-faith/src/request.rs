@@ -1,4 +1,4 @@
-//! Sending a request, and building the response that comes back.
+//! Requests: preparing one, and the builders that send it.
 
 // spec:REQ spec:ENC spec:CANCEL
 
@@ -10,8 +10,7 @@ mod target;
 pub use builder::{FetchBuilder, Priority, Request, RequestBuilder};
 pub use target::Target;
 
-// `internals` only: the shapes and the send entry point `web-faith-napi` drives directly. Always
-// compiled and used internally; the feature decides whether they are nameable from outside.
+// Compiled and used internally either way; `internals` decides whether they are nameable outside.
 #[cfg(not(feature = "internals"))]
 pub(crate) use parts::{RequestBody, RequestOptions};
 #[cfg(feature = "internals")]
@@ -20,12 +19,12 @@ pub use {
 	send::send,
 };
 
-/// Whether a request carries its credentials, and how far.
+/// Whether a request carries its credentials.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Credentials {
 	/// Strip credentials from the URL and send no cookies.
 	Omit,
-	/// Send them, which is what a server-side caller almost always means.
+	/// Send them. Almost always what a server-side caller means.
 	#[default]
 	Include,
 }

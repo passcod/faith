@@ -642,8 +642,8 @@ impl AltSvcCache {
 	/// penalties and measurements the old path earned, and carrying them over
 	/// would judge the new network by the old one's behaviour.
 	///
-	/// What the origin said about itself (`advertised`) and what the caller
-	/// asserted (`hints`) are not observations, so both survive.
+	/// What the origin said about itself (`advertised`) and what the caller asserted (`hints`) are
+	/// not observations, so both survive.
 	// spec:NETCHG
 	pub fn network_changed(&self) {
 		let now = Instant::now();

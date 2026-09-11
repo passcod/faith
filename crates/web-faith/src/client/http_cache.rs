@@ -1,4 +1,4 @@
-//! What an HTTP cache is installed from, held so a rebuilt client keeps the same store.
+//! The HTTP cache's install-time settings, held so a rebuilt client keeps the same store.
 
 use http_cache_reqwest::{CACacheManager, CacheMode, HttpCacheOptions, MokaManager};
 

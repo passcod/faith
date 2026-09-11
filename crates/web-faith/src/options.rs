@@ -28,7 +28,7 @@ fn secs(duration: std::time::Duration) -> u32 {
 	duration.as_secs().try_into().unwrap_or(u32::MAX)
 }
 
-/// What to do when the server answers with a redirect.
+/// How to handle a redirect response.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum RedirectPolicy {
 	/// Follow redirects, up to the standard's limit.
@@ -552,11 +552,9 @@ pub struct PoolOptions {
 
 /// Switches that depart from standard behaviour on purpose.
 ///
-/// Each quirk turns off a rule Faith otherwise upholds, in exchange for a capability the rule
-/// forbids. All of them are off by default, so an agent constructed with no options is
-/// standards-compliant. A quirk is for a caller who controls the origin, or has otherwise
-/// established that what the rule guards against does not apply to them: turning one on means
-/// requests may fail against origins that expect the standard behaviour.
+/// Each quirk trades a rule Faith otherwise upholds for a capability the rule forbids. All are off
+/// by default. Turning one on means requests may fail against origins that expect the standard
+/// behaviour, so they suit a caller who controls the origin.
 #[derive(bon::Builder, Clone, Copy, Debug, Default)]
 #[non_exhaustive]
 pub struct QuirksOptions {
@@ -636,14 +634,17 @@ pub struct TlsOptions {
 
 #[derive(bon::Builder, Clone, Debug, Default)]
 #[builder(
-	finish_fn(
-		name = into_options,
+	builder_type(
+		name = AgentOptionsBuilder,
 		doc {
-			/// The options as they stand, for a caller passing them on rather than building an
-			/// agent here. [`build`](crate::builder::AgentOptionsBuilder::build) is the terminal
-			/// that produces the agent.
+			/// Builds an [`Agent`](crate::Agent), a setting at a time.
+			///
+			/// Each option group is reached through a closure, so a group left alone is absent
+			/// from the call rather than spelled out as absent. Anything unset takes its default.
+			/// [`build`](Self::build) validates the settings and produces the agent.
 		}
 	),
+	finish_fn(name = into_options_inner, vis = "pub(crate)"),
 	state_mod(vis = "pub")
 )]
 #[non_exhaustive]

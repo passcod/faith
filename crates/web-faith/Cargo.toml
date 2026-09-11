@@ -89,7 +89,7 @@ tls-ring = ["reqwest/rustls-no-provider", "dep:rustls", "rustls/ring"]
 # Exposes `Agent::client` and `Agent::raw_client`, which hand out the reqwest client under the
 # agent. A visibility switch: both are always compiled and used internally.
 raw-client = []
-# Exposes the plumbing `web-faith-napi` builds on: the `options` module, `Agent::from_options`,
-# and the request-sending internals. Unstable and exempt from semver — it tracks what the Node
-# binding needs rather than what a Rust caller should reach for. Also a visibility switch.
+# Exposes Faith's internals: the `options` and `body` modules, `Agent::from_options`, the request
+# shapes and `send`, and a response's body plumbing. Permanently unstable and exempt from semver.
+# A visibility switch: all of it is compiled and used internally regardless.
 internals = ["raw-client"]

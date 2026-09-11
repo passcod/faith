@@ -47,7 +47,7 @@ impl web_faith_alt_svc::ArrivalStamp for HeadersStamp {
 	}
 }
 
-/// What Faith measures of a request, filled in as the request progresses.
+/// The timing of one request, filled in as it progresses.
 #[derive(Clone, Debug, Default)]
 pub struct RequestTiming {
 	/// Milliseconds from the start of the request to the response headers arriving.

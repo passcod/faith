@@ -1,4 +1,4 @@
-//! The agent: what owns a connection pool, and the verbs that act on a live one.
+//! The agent, its builder, and the counters it keeps.
 
 pub use crate::builder::AgentOptionsBuilder;
 pub use crate::stats::AgentStats;
@@ -63,7 +63,7 @@ pub(crate) struct AgentSettings {
 	pub(crate) has_default_priority: bool,
 }
 
-/// What an agent holds while it is open, and gives up when it is closed.
+/// The resources an agent holds while open, and gives up when closed.
 ///
 /// Behind a shared lock because closing acts on the agent rather than on the handle it was called
 /// through: every clone names the same one, so every clone sees the result.
@@ -92,11 +92,13 @@ pub(crate) struct Live {
 	pub(crate) h3_prober: Option<Arc<H3Prober>>,
 }
 
-/// An HTTP client with its own connection pool, caches, and resolver.
+/// A Faith HTTP agent: where all fetches start.
 ///
-/// Cloning one is cheap and every clone names the same underlying agent, so cloning is how a request
-/// gets an agent to run on rather than a way to get a second pool. Because clones share, closing
-/// acts on the agent itself and every handle to it sees the result.
+/// An agent holds the resources and state shared across requests — connection pool, caches, DNS
+/// resolver, cookie jar, HTTP/3 upgrade memory — and is the browser instance of this library. A
+/// typical application makes one and starts every request from it.
+///
+/// [`Agent::new`] takes the defaults; [`Agent::builder`] configures one.
 // spec:AGENT
 #[derive(Debug, Clone)]
 pub struct Agent {
@@ -158,9 +160,8 @@ pub struct Agent {
 impl Agent {
 	/// The agent's cookie jar, if it keeps one.
 	///
-	/// The jar itself, rather than per-cookie methods wrapped around it, so cookies go in and out
-	/// through the type `web-faith-cookies` documents. It outlives a close and stays readable from a
-	/// closed agent.
+	/// The jar itself, so cookies go in and out through the type `web-faith-cookies` documents. It
+	/// stays readable after [`Self::close`].
 	// spec:COOK
 	#[cfg(feature = "cookies")]
 	pub fn cookies(&self) -> Option<&Arc<FaithJar>> {
@@ -253,22 +254,19 @@ impl Agent {
 		drop(live);
 	}
 
-	/// Tell the agent the network underneath it has changed, so it stops deciding from what it
-	/// learned about a network that is gone.
+	/// Tell the agent the network under it has changed, so it stops acting on what it learned
+	/// about a network that is gone.
 	///
-	/// Node has no portable signal for an interface or connectivity change, so Faith cannot
-	/// detect one; this is the reaction, and wiring it to a trigger (an OS notification, a VPN
-	/// transition, a captive-portal sign-in) is the caller's own. It drops pooled connections,
-	/// flushes the DNS cache, demotes the HTTP/3 origins that a real response confirmed back to
-	/// advertised so a background probe re-verifies them, and clears the HTTP/3 failure and slow
-	/// states, their cooldown backoff, and the path-time averages.
+	/// There is no portable signal for an interface or connectivity change, so call this yourself
+	/// on whatever trigger fits — an OS notification, a VPN transition, a captive-portal sign-in.
 	///
-	/// Configuration, `http3.hints`, `Alt-Svc` advertisements, the cookie jar, the HTTP cache and
-	/// the `stats()` counters are all kept: none of them is a claim about a network path.
+	/// Drops pooled connections, flushes the DNS cache, demotes confirmed HTTP/3 origins back to
+	/// advertised so a probe re-verifies them, and clears the HTTP/3 failure, slow and path-time
+	/// state. Configuration, `http3.hints`, `Alt-Svc` advertisements, the cookie jar, the HTTP
+	/// cache and the counters are kept — none of those is a claim about a network path.
 	///
-	/// Requests already in flight are not interrupted and run to completion on the connections
-	/// they hold; the reset shapes what requests started afterwards draw on. Calling it on a
-	/// closed agent does nothing, and calling it repeatedly is harmless.
+	/// Requests in flight run to completion on the connections they hold. Harmless to call
+	/// repeatedly, or on a closed agent.
 	// spec:NETCHG
 	pub fn network_changed(&self) {
 		{
@@ -343,7 +341,7 @@ impl Agent {
 		self.warm_generation.fetch_add(1, Ordering::Relaxed);
 	}
 
-	/// The counters this agent has gathered, as they stand.
+	/// The agent's counters, as they stand.
 	pub fn stats(&self) -> AgentStats {
 		self.stats.snapshot()
 	}
@@ -359,13 +357,12 @@ impl Agent {
 		self.conn_tracker.snapshot()
 	}
 
-	/// Returns the DNS servers this agent resolves through, in the order they are queried, so
-	/// "are my lookups actually encrypted" is answerable from inside the process.
+	/// The DNS servers this agent resolves through, in query order.
 	///
-	/// Each entry gives the server's address, the transport in use (`udp`, `tcp`, `tls`, `https`,
-	/// `quic`, or `h3`), and how that transport was arrived at (`configured` or `conventional`).
-	/// The list is empty until the resolver has been used, because it reads its configuration on
-	/// first use, and empty for an agent using the system resolver.
+	/// Each entry gives the server's address, its transport (`udp`, `tcp`, `tls`, `https`, `quic`,
+	/// or `h3`), and whether that was `configured` or `conventional`. Empty until the resolver has
+	/// been used, since it reads its configuration on first use, and empty under the system
+	/// resolver.
 	// spec:OBS#resolvers
 	#[cfg(feature = "dns")]
 	pub fn resolvers(&self) -> Vec<ResolverReport> {

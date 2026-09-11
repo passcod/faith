@@ -22,7 +22,7 @@ pub enum RequestBody {
 	Stream(Pin<Box<dyn Stream<Item = std::io::Result<Bytes>> + Send>>),
 }
 
-/// What a request carries beyond its method, URL, and body.
+/// The settings a request carries beyond its method, URL, and body.
 #[derive(Clone, Debug, Default)]
 pub struct RequestOptions {
 	#[cfg(feature = "cache")]

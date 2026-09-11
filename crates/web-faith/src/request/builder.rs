@@ -42,8 +42,8 @@ impl std::fmt::Debug for RequestBody {
 
 /// A request prepared but not sent.
 ///
-/// Inert: it carries no agent, so it can be sent on more than one, and passing it to
-/// [`Agent::fetch`] returns a builder that layers over it.
+/// Carries no agent, so it can be sent on more than one. Passing it to [`Agent::fetch`] returns a
+/// builder that layers over it.
 // spec:REQ
 #[derive(Debug)]
 pub struct Request {
@@ -70,7 +70,7 @@ impl Request {
 
 	/// Copy the request, when its body allows it.
 	///
-	/// `None` when the body is a stream, a stream being consumable once.
+	/// `None` when the body is a stream, which can only be consumed once.
 	// spec:REQ
 	pub fn try_clone(&self) -> Option<Self> {
 		let body = match &self.body {
@@ -358,7 +358,7 @@ layer_setters!(RequestBuilder);
 impl RequestBuilder {
 	/// Settle the layers into a request.
 	///
-	/// Where a conversion failed on the way in — an unparseable target, say — it is reported here.
+	/// A conversion that failed on the way in — an unparseable target, say — is reported here.
 	pub fn build(self) -> Result<Request, FaithError> {
 		self.layer.settle()
 	}
@@ -366,8 +366,8 @@ impl RequestBuilder {
 
 /// A request bound to an agent, which sends when awaited.
 ///
-/// There is no separate send step: awaiting is what sends. A builder dropped without being awaited
-/// sends nothing, and dropping the future mid-flight cancels the request.
+/// Awaiting is the send; there is no separate step. Dropped without being awaited it sends nothing,
+/// and dropping the future mid-flight cancels the request.
 // spec:REQ spec:CANCEL
 #[must_use = "a fetch builder sends nothing until awaited"]
 pub struct FetchBuilder {
@@ -411,8 +411,7 @@ impl IntoFuture for FetchBuilder {
 impl Agent {
 	/// Aim a request at `target`, to send when awaited.
 	///
-	/// The target is a URL, or a [`Request`] to layer over. Awaiting the builder sends the request;
-	/// see [`FetchBuilder`].
+	/// The target is a URL, or a [`Request`] to layer over. See [`FetchBuilder`].
 	// spec:REQ
 	pub fn fetch<T>(&self, target: T) -> FetchBuilder
 	where

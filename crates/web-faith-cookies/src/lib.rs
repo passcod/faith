@@ -372,7 +372,7 @@ mod tests {
 		FaithJar::new(limits)
 	}
 
-	/// What the jar would send to `url`, as a `Cookie` header value.
+	/// The `Cookie` header value the jar would send to `url`.
 	fn sent(jar: &FaithJar, url: &str) -> Option<String> {
 		jar.request_cookie_header(&self::url(url))
 			.map(|value| value.to_str().unwrap().to_owned())

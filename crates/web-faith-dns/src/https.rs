@@ -5,7 +5,7 @@ use hickory_resolver::proto::rr::{
 	rdata::svcb::{SvcParamKey, SvcParamValue},
 };
 
-/// What an `HTTPS` record said about an origin's HTTP/3 support.
+/// An origin's HTTP/3 support, as its `HTTPS` record advertised it.
 // spec:DNS#https-records
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct HttpsAdvertisement {

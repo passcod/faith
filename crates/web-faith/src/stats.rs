@@ -1,11 +1,9 @@
-//! What an agent counts about the requests it has run.
+//! The agent's request counters.
 
 use std::sync::atomic::{AtomicU64, Ordering};
 
-/// The agent's running counters, incremented as requests and bodies pass through it.
-///
-/// Held behind an `Arc` and shared with every response the agent produces, since a body finishing
-/// is what settles two of these and the response is what knows it happened.
+/// The live counters, shared with every response the agent produces: a body finishing is what
+/// settles two of them.
 #[derive(Debug, Default)]
 pub(crate) struct InnerAgentStats {
 	pub requests_sent: AtomicU64,
@@ -26,9 +24,9 @@ impl InnerAgentStats {
 	}
 }
 
-/// A reading of an agent's counters, taken at one moment.
+/// Statistics gathered by the agent.
 ///
-/// Non-exhaustive: what an agent counts can grow, and a new counter should not be a breaking change.
+/// A snapshot taken when [`Agent::stats`](crate::Agent::stats) is called; it does not update live.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct AgentStats {
@@ -36,7 +34,7 @@ pub struct AgentStats {
 	pub responses_received: u64,
 	/// Response body streams that have been started, which is what reading a body does.
 	pub bodies_started: u64,
-	/// Response body streams that have been read to the end. While more have started than
-	/// finished, that many bodies are holding connections open.
+	/// Response body streams read to the end. The gap against `bodies_started` is how many bodies
+	/// are holding a connection open.
 	pub bodies_finished: u64,
 }

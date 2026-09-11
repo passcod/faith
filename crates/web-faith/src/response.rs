@@ -1,4 +1,4 @@
-//! Reading a response: where trailers land, what is known of the peer, and writing a body out.
+//! Responses, their bodies, and the timing of the request that produced them.
 
 pub use crate::timing::RequestTiming;
 
@@ -39,7 +39,7 @@ use crate::{
 
 use crate::integrity::{finish_integrity, integrity_checker, verify_integrity};
 
-/// What is known about the peer that sent a response.
+/// The peer that sent a response.
 #[derive(Debug)]
 pub struct PeerInformation {
 	/// The peer's address and port, where the connection could report one.
@@ -304,13 +304,12 @@ mod tests {
 pub struct FileProgress {
 	/// Bytes written to the file so far.
 	pub bytes_written: u64,
-	/// What the response advertised in `Content-Length`, when it sent one and the body is not
-	/// being decoded. Absent when the total is not known ahead of time, which is the case for a
-	/// chunked response and for one being decoded.
+	/// The `Content-Length` the response advertised. Absent for a chunked response, and for one
+	/// being decoded, where the final size is not known ahead of time.
 	pub content_length: Option<u64>,
 }
 
-/// What a completed body write reports.
+/// The result of writing a body to a file.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FileWritten {
 	/// The absolute filesystem path written to.
@@ -321,9 +320,9 @@ pub struct FileWritten {
 
 /// A response to a request.
 ///
-/// A response is not constructed by a caller; it arrives from a request. Reading its body consumes
-/// it, following the fetch standard rather than the owned-response model of other Rust clients, so a
-/// second read fails.
+/// Arrives from a request; it is not constructed directly. Reading the body consumes it, as the
+/// fetch standard has it, so a second read fails. [`Self::try_clone`] gets a copy that can be read
+/// separately.
 #[derive(Debug, Clone)]
 pub struct Response {
 	pub(crate) body: BodyHolder,
@@ -383,7 +382,7 @@ impl Response {
 		self.version
 	}
 
-	/// What is known of the peer that sent the response.
+	/// The peer that sent the response.
 	pub fn peer(&self) -> &PeerInformation {
 		&self.peer
 	}
@@ -412,9 +411,8 @@ impl Response {
 
 	/// Read the whole body.
 	///
-	/// Reading consumes the body, so a second read fails with the already-disturbed error, as the
-	/// fetch standard has it rather than the owned-response model other Rust clients use. An
-	/// `integrity` value on the request is verified here, once the whole body is in hand.
+	/// Consumes it, so a second read fails. A request's `integrity` is verified here, once the
+	/// whole body is in hand.
 	// spec:BODY
 	pub async fn bytes(&self) -> Result<Vec<u8>, FaithError> {
 		self.check_stream_disturbed()?;
@@ -423,8 +421,8 @@ impl Response {
 
 	/// Read the whole body as text.
 	///
-	/// Always decoded as UTF-8, with invalid sequences replaced by U+FFFD rather than failing, which
-	/// is what the fetch standard calls for.
+	/// Decoded as UTF-8, with invalid sequences replaced by U+FFFD, as the fetch standard calls
+	/// for.
 	pub async fn text(&self) -> Result<String, FaithError> {
 		let bytes = self.bytes().await?;
 		Ok(String::from_utf8(bytes)
@@ -433,20 +431,18 @@ impl Response {
 
 	/// Read the whole body and deserialise it from JSON.
 	///
-	/// The body is read into memory before it is parsed, which can cost twice its size; read
-	/// [`Self::body_stream`] instead where that matters.
+	/// Reads into memory before parsing, which can cost twice the body's size; [`Self::body_stream`]
+	/// avoids that.
 	pub async fn json<T: DeserializeOwned>(&self) -> Result<T, FaithError> {
 		let bytes = self.bytes().await?;
 		serde_json::from_slice(&bytes)
 			.map_err(|err| FaithError::new(FaithErrorKind::JsonParse, Some(err.to_string())))
 	}
 
-	/// Take the body as a stream of chunks, decoded under whichever coding was negotiated.
+	/// The body as a stream of chunks, decoded under whichever coding was negotiated.
 	///
-	/// `None` for a response that cannot carry a body. Unlike the collecting reads, this can be
-	/// called more than once: each call hands back the same shared stream rather than a second one.
-	/// A body already being consumed elsewhere reports the already-disturbed error rather than
-	/// waiting for the other reader to finish.
+	/// `None` for a response that cannot carry a body. Callable more than once — each call hands
+	/// back the same shared stream. Fails if the body is already being consumed elsewhere.
 	// spec:BODY
 	pub fn body_stream(
 		&self,
@@ -470,15 +466,8 @@ impl Response {
 
 	/// Give up on the body, releasing the connection back to the pool.
 	///
-	/// Worth doing when the body is not wanted: left unread, the connection may be held open until
-	/// the response is dropped. An HTTP/1 body is read and thrown away so the connection can be
-	/// reused; a multiplexed one is dropped instead, cancelling the stream without touching the
-	/// connection it shared.
-	///
-	/// This settles the trailers as none rather than leaving them pending: on a multiplexed
-	/// connection the stream was cancelled before any could arrive, and draining an HTTP/1 body
-	/// here bypasses the stream that would have collected them. A caller who discards the body and
-	/// then awaits trailers would otherwise wait for something that can no longer come.
+	/// Worth doing when the body is not wanted: left unread, the connection is held until the
+	/// response drops. Trailers settle as `None`, since none can arrive after this.
 	// spec:BODY spec:TRL spec:RESP#request-timing
 	pub async fn discard(&self) {
 		if let Some(arc) = self.body.body.clone() {
@@ -502,7 +491,7 @@ impl Response {
 
 	/// The trailers, once the body has ended.
 	///
-	/// A body that is never read never ends, so this waits indefinitely by design; see [`Trailers`].
+	/// A body that is never read never ends, so this waits indefinitely; see [`Trailers`].
 	// spec:TRL
 	pub async fn trailers(&self) -> Trailers {
 		self.trailers.settled().await
@@ -620,7 +609,7 @@ impl Response {
 
 	/// Read the whole body as the chunks it arrived in, without copying them.
 	///
-	/// What [`Self::bytes`] and its siblings are built on.
+	/// [`Self::bytes`] and its siblings are built on this.
 	pub(crate) async fn gather(&self) -> Result<Arc<[Bytes]>, FaithError> {
 		let Some(lock) = &self.body.body else {
 			return Ok(Default::default());
@@ -660,7 +649,7 @@ impl Response {
 		Ok(bytes)
 	}
 
-	/// Write the body out to a file, reporting progress as the bytes land.
+	/// Write the body to a file, reporting progress as the bytes land.
 	///
 	/// `on_progress` is called with the bytes written so far and the advertised length where one is
 	/// known, at most every 50ms, and once more when the last byte is written.
@@ -777,9 +766,7 @@ impl Response {
 	}
 }
 
-/// The body plumbing `web-faith-napi` drives directly.
-///
-/// Unstable: this tracks what the Node binding needs and is exempt from semver.
+/// A response's body plumbing, for driving the stream directly. Permanently unstable.
 #[cfg(feature = "internals")]
 impl Response {
 	/// The body as Faith holds it, for a caller driving the stream itself.
@@ -802,10 +789,8 @@ impl Response {
 	}
 }
 
-/// A [`Response`]'s body, as an [`http_body::Body`].
-///
-/// This is what a response hands to code written against the wider ecosystem: a tower service, a
-/// hyper client, anything that takes a body rather than Faith's own reads.
+/// A [`Response`]'s body as an [`http_body::Body`], for handing to a tower service, a hyper
+/// client, or anything else that takes one.
 pub struct ResponseBody {
 	chunks: Pin<Box<dyn Stream<Item = Result<Bytes, FaithError>> + Send>>,
 }
@@ -832,11 +817,10 @@ impl http_body::Body for ResponseBody {
 }
 
 impl Response {
-	/// Take the response as an [`http::Response`], so it feeds code written against the ecosystem
-	/// rather than against Faith.
+	/// Convert into an [`http::Response`], for code written against the wider ecosystem.
 	///
-	/// Fails where taking the body would: a body already being consumed elsewhere reports the
-	/// already-disturbed error. A response that cannot carry a body yields an empty one.
+	/// Fails if the body is already being consumed elsewhere. A response that cannot carry a body
+	/// yields an empty one.
 	pub fn into_http(self) -> Result<http::Response<ResponseBody>, FaithError> {
 		let chunks: Pin<Box<dyn Stream<Item = Result<Bytes, FaithError>> + Send>> =
 			match self.body_stream()? {

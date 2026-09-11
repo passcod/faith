@@ -53,10 +53,8 @@ use crate::{client::H3UpgradeRecipe, options::Http3Congestion};
 #[cfg(all(feature = "http3", feature = "dns"))]
 use crate::client::install_https_sink;
 
-/// Building an agent from `AgentOptions` directly, as `web-faith-napi` does.
-///
-/// Unstable: this tracks what the Node binding needs and is exempt from semver. The supported
-/// route is [`Agent::builder`].
+/// Building an agent from `AgentOptions` directly. Permanently unstable; [`Agent::builder`] is the
+/// supported route.
 #[cfg(feature = "internals")]
 impl Agent {
 	pub fn from_options(options: AgentOptions) -> Result<Self, FaithError> {

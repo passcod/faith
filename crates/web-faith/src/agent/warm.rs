@@ -16,11 +16,10 @@ use crate::{
 impl Agent {
 	/// Warm the DNS cache for `host`, so a later request to it skips the lookup.
 	///
-	/// The argument is a bare host; a scheme, port, or path in a fuller string is ignored. The
-	/// returned future completes when the answer lands in the cache and never fails, whatever
-	/// happens on the network: the work is advisory. Under the system resolver there is no cache to
-	/// warm, so it completes having done nothing. A host with nothing to resolve, or a closed agent,
-	/// is refused here rather than by the future.
+	/// Takes a bare host; a scheme, port or path is ignored. The future completes when the answer
+	/// lands and never fails — the work is advisory — and does nothing under the system resolver,
+	/// which has no cache to warm. A host with nothing to resolve, or a closed agent, is refused
+	/// here rather than by the future.
 	// spec:WARM
 	pub fn prefetch_dns(&self, host: &str) -> Result<impl Future<Output = ()> + use<>, FaithError> {
 		if self.is_closed() {
@@ -44,15 +43,13 @@ impl Agent {
 		})
 	}
 
-	/// Open a pooled connection to `origin`, so the first request to it skips DNS, TCP, and TLS
+	/// Open a pooled connection to `origin`, so the first request to it skips DNS, TCP and TLS
 	/// setup.
 	///
-	/// The argument is an origin (`scheme://host[:port]`); a longer URL is reduced to one. The
-	/// warm-up sends a synthetic `HEAD` to the origin's root -- the origin sees it -- over the
-	/// transport the next foreground request would use: a confirmed HTTP/3 origin gets a warm QUIC
-	/// connection, every other origin a TCP one. The returned future completes when the attempt
-	/// finishes and never fails: every network failure is quiet. Something that cannot be connected
-	/// to, or a closed agent, is refused here rather than by the future.
+	/// Takes an origin (`scheme://host[:port]`); a longer URL is reduced to one. Sends a synthetic
+	/// `HEAD` to the origin's root — which the origin will see in its logs — over the transport the
+	/// next request would use. The future completes when the attempt finishes and never fails.
+	/// Something unconnectable, or a closed agent, is refused here rather than by the future.
 	// spec:WARM
 	pub fn preconnect(&self, origin: &str) -> Result<impl Future<Output = ()> + use<>, FaithError> {
 		let Some(raw_client) = self.raw_client() else {
