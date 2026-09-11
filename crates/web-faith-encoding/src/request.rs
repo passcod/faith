@@ -1,12 +1,10 @@
 //! Applying a content coding to a request body.
 //!
-//! There is nothing to negotiate against first: `Accept-Encoding` travels with the request and
-//! says what the *response* may use, so a server never advertises up front what it will take on
-//! the way in. Compressing a request body therefore takes out-of-band knowledge that the server
-//! accepts one. A server that cannot decode what it receives answers 415, which
-//! [RFC 9110 §15.5.16](https://www.rfc-editor.org/rfc/rfc9110#section-15.5.16) says ought to carry
-//! an `Accept-Encoding` naming what it would have accepted — but the body has gone on the wire by
-//! then.
+//! There is no standard signal that indicates a server accepts request body encoding ahead of
+//! sending. Therefore, doing so always requires out-of-band knowledge in some way or shape.
+//! ([RFC 9110 §15.5.16](https://www.rfc-editor.org/rfc/rfc9110#section-15.5.16) does specify that
+//! servers should answer encodings they can't decode with an `Accept-Encoding` header; that would
+//! require buffering and re-sending the request, so we don't implement it automatically.)
 
 use std::{io, pin::Pin};
 
