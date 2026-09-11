@@ -40,7 +40,7 @@ pub struct ResolverReport {
 	pub source: ResolverSource,
 }
 
-/// [`ResolverConfig::max_stale`]'s default.
+/// [`ResolverConfig::serve_stale`]'s default.
 ///
 /// Long enough that a resolver outage does not stop an agent reaching hosts it knows, short enough
 /// that a host which has moved stops being served a dead address for the life of the process.
@@ -63,10 +63,10 @@ pub struct ResolverConfig {
 	pub hosts_file: Option<bool>,
 	/// Further domains to send to the system resolver, added to the ones always exempt.
 	pub exempt_domains: Vec<Name>,
-	/// Whether an expired answer is served while a refresh runs behind it.
-	pub serve_stale: bool,
-	/// How far past expiry an answer may still be served. An older entry is discarded instead.
-	pub max_stale: Duration,
+	/// Whether an expired answer may be served, and how long for.
+	///
+	/// A fresh lookup runs behind one that is; an entry older than this is discarded instead.
+	pub serve_stale: Option<Duration>,
 }
 
 impl Default for ResolverConfig {
@@ -80,8 +80,7 @@ impl Default for ResolverConfig {
 			exempt_domains: Vec::new(),
 			// Defaulted here as well as in the option parsing, so a resolver built directly (in tests,
 			// and for the global default agent) serves stale like a configured one.
-			serve_stale: true,
-			max_stale: DEFAULT_MAX_STALE,
+			serve_stale: Some(DEFAULT_MAX_STALE),
 		}
 	}
 }

@@ -9,6 +9,7 @@ const DEFAULT_DNS_QUERY_PATH: &str = "/dns-query";
 
 /// A transport to reach a nameserver over, chosen by a server URL's scheme.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Transport {
 	/// Plaintext DNS over UDP, port 53. `udp://`.
 	Udp,

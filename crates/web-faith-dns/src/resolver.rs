@@ -282,20 +282,20 @@ impl FaithResolver {
 	}
 
 	/// The addresses to serve for `host` without waiting, when its answer has expired but is still
-	/// inside [`ResolverConfig::max_stale`].
+	/// inside [`ResolverConfig::serve_stale`]'s window.
 	///
 	/// `None` for the cases that must go to the resolver: no entry, an entry still fresh, or one so
 	/// old it has stopped being evidence about the host.
 	fn stale_addrs(&self, generation: &Generation, host: &str) -> Option<Vec<IpAddr>> {
-		if !self.inner.settings.serve_stale {
+		let Some(max_stale) = self.inner.settings.serve_stale else {
 			return None;
-		}
+		};
 		let entry = generation.stale.get(host)?;
 		let now = Instant::now();
 		if now <= entry.valid_until {
 			return None;
 		}
-		if now.saturating_duration_since(entry.valid_until) > self.inner.settings.max_stale {
+		if now.saturating_duration_since(entry.valid_until) > max_stale {
 			// Dropped rather than left to sit: keeping it would let a refresh that has been failing
 			// for hours go on being consulted, and the entry can only get older from here.
 			generation.stale.invalidate(host);
@@ -312,7 +312,7 @@ impl FaithResolver {
 		addrs: &[IpAddr],
 		valid_until: Instant,
 	) {
-		if !self.inner.settings.serve_stale || addrs.is_empty() {
+		if self.inner.settings.serve_stale.is_none() || addrs.is_empty() {
 			return;
 		}
 		generation.stale.insert(
@@ -389,13 +389,12 @@ impl FaithResolver {
 	/// The same window a stale answer is served from: an older entry is resolved for
 	/// real, and counting that as stale would spend a connection attempt on a confirmed address.
 	pub fn served_stale(&self, host: &str) -> bool {
-		if !self.inner.settings.serve_stale {
+		let Some(max_stale) = self.inner.settings.serve_stale else {
 			return false;
-		}
+		};
 		self.generation().stale.get(host).is_some_and(|entry| {
 			let now = Instant::now();
-			now > entry.valid_until
-				&& now.saturating_duration_since(entry.valid_until) <= self.inner.settings.max_stale
+			now > entry.valid_until && now.saturating_duration_since(entry.valid_until) <= max_stale
 		})
 	}
 

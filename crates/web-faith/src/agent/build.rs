@@ -184,10 +184,12 @@ impl Agent {
 				exempt_domains: parse_domains(dns.exempt_domains)
 					.map_err(|message| FaithError::new(FaithErrorKind::Config, Some(message)))?
 					.unwrap_or_default(),
-				serve_stale: dns.serve_stale.unwrap_or(true),
-				max_stale: dns
-					.max_stale
-					.map_or(DEFAULT_MAX_STALE, |ms| Duration::from_millis(ms.into())),
+				// The two options stay separate on the surfaces, and meet here: `serveStale` says
+				// whether at all, `maxStale` how long for.
+				serve_stale: dns.serve_stale.unwrap_or(true).then(|| {
+					dns.max_stale
+						.map_or(DEFAULT_MAX_STALE, |ms| Duration::from_millis(ms.into()))
+				}),
 			}))
 		};
 

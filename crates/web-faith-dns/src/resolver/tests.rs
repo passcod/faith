@@ -76,7 +76,7 @@ fn with_stale_entry(settings: ResolverConfig, host: &str, ago: Duration) -> Fait
 fn only_an_expired_entry_inside_the_window_is_served_stale() {
 	// spec:DNS#serving-stale-answers
 	let settings = || ResolverConfig {
-		max_stale: Duration::from_secs(60),
+		serve_stale: Some(Duration::from_secs(60)),
 		..ResolverConfig::default()
 	};
 
@@ -122,7 +122,7 @@ fn serve_stale_off_never_serves_an_expired_entry() {
 	// address it knows to be out of date.
 	let resolver = with_stale_entry(
 		ResolverConfig {
-			serve_stale: false,
+			serve_stale: None,
 			..ResolverConfig::default()
 		},
 		"strict.test",
@@ -141,7 +141,7 @@ fn served_stale_tracks_the_window_it_serves_from() {
 	// The retry layer arms itself from this, so it must not claim an address was assumed when
 	// the lookup actually blocked on a fresh one (spec:DNS#when-a-stale-address-is-wrong).
 	let settings = || ResolverConfig {
-		max_stale: Duration::from_secs(60),
+		serve_stale: Some(Duration::from_secs(60)),
 		..ResolverConfig::default()
 	};
 

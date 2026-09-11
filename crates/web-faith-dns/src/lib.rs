@@ -106,8 +106,7 @@
 //!
 //! # async fn example() {
 //! let resolver = FaithResolver::new(ResolverConfig {
-//!     serve_stale: true,
-//!     max_stale: Duration::from_secs(3600),
+//!     serve_stale: Some(Duration::from_secs(3600)),
 //!     ..Default::default()
 //! });
 //!
@@ -132,6 +131,18 @@
 //! # }
 //! ```
 //!
+//! Domain lists are built from [`Name`], re-exported here so a caller needs no hickory dependency:
+//!
+//! ```
+//! use web_faith_dns::{Name, ResolverConfig};
+//!
+//! let config = ResolverConfig {
+//!     exempt_domains: vec![Name::from_utf8("corp.internal").expect("a valid domain")],
+//!     ..Default::default()
+//! };
+//! assert_eq!(config.exempt_domains.len(), 1);
+//! ```
+//!
 //! # Features
 //!
 //! The `reqwest` feature enables support to use this resolver with `reqwest::ClientBuilder`.
@@ -148,12 +159,16 @@ mod resolver;
 mod settings;
 mod transport;
 
+/// A domain name, re-exported from `hickory-resolver`.
+///
+/// [`ResolverConfig`]'s domain lists are built from these, so a caller needs no hickory dependency
+/// of its own.
+pub use hickory_resolver::proto::rr::Name;
+
 pub use https::{HttpsAdvertisement, HttpsSink};
 pub use resolver::FaithResolver;
 pub use settings::{DEFAULT_MAX_STALE, ResolverConfig, ResolverReport, ResolverSource};
 pub use transport::{ServerSpec, Transport};
-
-use hickory_resolver::proto::rr::Name;
 
 /// Parse a list of domain names, for the search or exempt lists, or return a message
 /// for the first entry that is not a valid domain name.
