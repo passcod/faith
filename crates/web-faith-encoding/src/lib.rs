@@ -36,11 +36,12 @@
 //! # Responses
 //!
 //! - Use [`AcceptEncoding`] to parse the advertised supported coding set from the request.
-//! - Use [`ContentEncoding`] to parse what the response says its body carries.
-//! - Ask it [`can_decode_as`](ContentEncoding::can_decode_as) which decoder to use for that body,
-//!   if any.
-//! - Use [`decode_stream`] to wrap the body in that decoder.
-//! - Use [`strip_decoded_headers`] to remove the headers that described the encoded bytes.
+//! - Use [`decode`] to take one layer off a response: it decodes the body and updates the headers
+//!   together, so the two cannot disagree about how far it has been decoded.
+//! - A body encoded more than once takes one call per layer.
+//!
+//! To drive the halves separately, [`ContentEncoding::peel_one_header`] does the headers and
+//! [`decode_stream`] does the body.
 //!
 //! ```
 //! use http::{HeaderMap, HeaderValue};
@@ -55,17 +56,20 @@
 //! let accept = AcceptEncoding::from(&request);
 //!
 //! let mut response = HeaderMap::new();
-//! response.insert("content-encoding", HeaderValue::from_static("gzip"));
-//! let encoding = ContentEncoding::from(&response);
+//! response.insert("content-encoding", HeaderValue::from_static("br, gzip"));
+//! response.insert("content-length", HeaderValue::from_static("42"));
 //!
-//! assert_eq!(encoding.can_decode_as(&accept), Some(Coding::Gzip));
+//! // The outermost layer, and the headers left describing what is still encoded under it.
+//! assert_eq!(ContentEncoding::peel_one_header(&mut response, &accept), Some(Coding::Gzip));
+//! assert_eq!(response["content-encoding"], "br");
+//! assert!(!response.contains_key("content-length"));
 //! ```
 //!
 //! [`compress_buffer`]: request::compress_buffer
 //! [`compress_stream`]: request::compress_stream
 //! [`AcceptEncoding`]: response::AcceptEncoding
+//! [`decode`]: response::decode
 //! [`decode_stream`]: response::decode_stream
-//! [`strip_decoded_headers`]: response::strip_decoded_headers
 
 #![deny(missing_docs)]
 // Lets docs.rs label each item with the feature or platform it needs.
@@ -76,7 +80,7 @@ pub mod response;
 
 use std::fmt;
 
-use http::header::{CONTENT_ENCODING, HeaderMap, HeaderValue};
+use http::header::{CONTENT_ENCODING, CONTENT_LENGTH, HeaderMap, HeaderValue};
 
 use crate::response::AcceptEncoding;
 
@@ -152,22 +156,48 @@ impl ContentEncoding {
 		HeaderValue::from_str(&self.to_string()).ok()
 	}
 
-	/// The coding to decode the body under, given what the request accepted.
+	/// The coding the next layer of the body is under, given what the request accepted.
 	///
-	/// `None` leaves the body as it arrived, which covers a response that declared no coding, one
-	/// encoded more than once (unwinding that is the caller's), one naming a coding this crate
-	/// cannot decode (`identity` among them), one the request did not accept, and one whose header
-	/// was not readable.
+	/// The last coding, being the last applied and so the first to unwind. `None` leaves the body
+	/// as it arrived, which covers a response that declared no coding, one whose outermost coding
+	/// this crate cannot decode (`identity` among them) or the request did not accept, and one
+	/// whose header was not readable.
 	pub fn can_decode_as(&self, accept: &AcceptEncoding) -> Option<Coding> {
 		if self.unreadable {
 			return None;
 		}
 
-		let [single] = &self.codings[..] else {
-			return None;
-		};
+		let outermost = self.codings.last()?;
+		(outermost.is_supported() && accept.accepts(outermost)).then(|| outermost.clone())
+	}
 
-		(single.is_supported() && accept.accepts(single)).then(|| single.clone())
+	/// These codings with the outermost removed, as the body stands once it is decoded.
+	pub fn peeled(&self) -> Self {
+		let mut peeled = self.clone();
+		peeled.codings.pop();
+		peeled
+	}
+
+	/// Take one layer off `headers`, returning the coding its body is under.
+	///
+	/// The headers are left describing the body once that coding has been decoded, which
+	/// [`response::decode`] does in the same call. Reach for this only to
+	/// drive the two halves separately.
+	///
+	/// `Content-Encoding` keeps whatever layers remain and goes when none do; `Content-Length`
+	/// goes either way, no longer describing what the caller reads. `None` leaves `headers` as
+	/// they are.
+	pub fn peel_one_header(headers: &mut HeaderMap, accept: &AcceptEncoding) -> Option<Coding> {
+		let encoding = Self::from(&*headers);
+		let coding = encoding.can_decode_as(accept)?;
+
+		match encoding.peeled().to_header_value() {
+			Some(value) => headers.insert(CONTENT_ENCODING, value),
+			None => headers.remove(CONTENT_ENCODING),
+		};
+		headers.remove(CONTENT_LENGTH);
+
+		Some(coding)
 	}
 }
 

@@ -5,10 +5,10 @@ use std::{io, pin::Pin};
 use async_compression::tokio::bufread::{BrotliDecoder, GzipDecoder, ZlibDecoder, ZstdDecoder};
 use bytes::Bytes;
 use futures::{Stream, TryStreamExt};
-use http::header::{ACCEPT_ENCODING, CONTENT_ENCODING, CONTENT_LENGTH, HeaderMap};
+use http::header::{ACCEPT_ENCODING, HeaderMap};
 use tokio_util::io::{ReaderStream, StreamReader};
 
-use crate::Coding;
+use crate::{Coding, ContentEncoding};
 
 /// A body byte-stream, as the decoders take and return one.
 pub type ByteStream = dyn Stream<Item = Result<Bytes, String>> + Send + Sync;
@@ -151,12 +151,6 @@ impl Default for AcceptEncoding {
 	}
 }
 
-/// Strip the headers that describe the encoded bytes, once a body has been decoded.
-pub fn strip_decoded_headers(headers: &mut HeaderMap) {
-	headers.remove(CONTENT_ENCODING);
-	headers.remove(CONTENT_LENGTH);
-}
-
 /// Parse an RFC 9110 quality value into thousandths (so `0.5` is `500`).
 fn parse_quality(value: &str) -> Option<u16> {
 	let value = value.trim();
@@ -180,6 +174,25 @@ fn parse_quality(value: &str) -> Option<u16> {
 		}
 	}
 	Some(quality.min(1000))
+}
+
+/// Decode one layer of a response body, and update its headers to match.
+///
+/// Takes the outermost coding off `headers` and wraps `body` in the decoder for it, so the two
+/// cannot disagree about how far the body has been decoded. A body encoded more than once takes
+/// one call per layer.
+///
+/// Leaves both alone when there is nothing to decode: no coding declared, an outermost coding this
+/// crate cannot decode or the request did not accept, or a header that could not be read.
+pub fn decode(
+	headers: &mut HeaderMap,
+	body: Pin<Box<ByteStream>>,
+	accept: &AcceptEncoding,
+) -> Pin<Box<ByteStream>> {
+	match ContentEncoding::peel_one_header(headers, accept) {
+		Some(coding) => decode_stream(body, coding),
+		None => body,
+	}
 }
 
 /// Wrap a body byte-stream in a decoder for `coding`.
@@ -212,10 +225,9 @@ where
 
 #[cfg(test)]
 mod tests {
-	use http::header::{CONTENT_ENCODING, HeaderMap, HeaderValue};
+	use http::header::{CONTENT_ENCODING, CONTENT_LENGTH, HeaderMap, HeaderValue};
 
 	use super::*;
-	use crate::ContentEncoding;
 	use crate::request::{compress_buffer, compress_stream};
 
 	fn decide(content_encoding: &str, accept: &str) -> Option<Coding> {
@@ -276,22 +288,77 @@ mod tests {
 	}
 
 	#[test]
-	fn more_than_one_coding_is_delivered_as_received() {
-		assert_eq!(decide("gzip, br", DEFAULT_ACCEPT_ENCODING), None);
-		assert_eq!(decide("br, gzip", DEFAULT_ACCEPT_ENCODING), None);
-		assert_eq!(decide("identity, gzip", DEFAULT_ACCEPT_ENCODING), None);
+	fn the_outermost_of_several_codings_is_the_one_decoded() {
+		// The last applied is the first to unwind.
+		assert_eq!(
+			decide("gzip, br", DEFAULT_ACCEPT_ENCODING),
+			Some(Coding::Brotli)
+		);
+		assert_eq!(
+			decide("br, gzip", DEFAULT_ACCEPT_ENCODING),
+			Some(Coding::Gzip)
+		);
+		assert_eq!(
+			decide("identity, gzip", DEFAULT_ACCEPT_ENCODING),
+			Some(Coding::Gzip)
+		);
+
+		// An outermost coding this crate cannot decode stops the body being touched at all,
+		// whatever sits under it.
+		assert_eq!(decide("gzip, identity", DEFAULT_ACCEPT_ENCODING), None);
+	}
+
+	#[test]
+	fn peeling_a_layer_leaves_the_headers_describing_the_rest() {
+		let mut headers = HeaderMap::new();
+		headers.insert(CONTENT_ENCODING, HeaderValue::from_static("gzip, br"));
+		headers.insert(CONTENT_LENGTH, HeaderValue::from_static("42"));
+
+		let accept = AcceptEncoding::from(DEFAULT_ACCEPT_ENCODING);
+		assert_eq!(
+			ContentEncoding::peel_one_header(&mut headers, &accept),
+			Some(Coding::Brotli)
+		);
+
+		// The body is still gzipped, and the headers say so.
+		assert_eq!(headers[CONTENT_ENCODING], "gzip");
+		// Its length no longer describes what the caller reads.
+		assert!(!headers.contains_key(CONTENT_LENGTH));
+
+		// Peeling the last layer leaves nothing to declare.
+		assert_eq!(
+			ContentEncoding::peel_one_header(&mut headers, &accept),
+			Some(Coding::Gzip)
+		);
+		assert!(!headers.contains_key(CONTENT_ENCODING));
+	}
+
+	#[test]
+	fn nothing_to_peel_leaves_the_headers_alone() {
+		let mut headers = HeaderMap::new();
+		headers.insert(CONTENT_ENCODING, HeaderValue::from_static("identity"));
+		headers.insert(CONTENT_LENGTH, HeaderValue::from_static("42"));
+
+		let accept = AcceptEncoding::from(DEFAULT_ACCEPT_ENCODING);
+		assert_eq!(
+			ContentEncoding::peel_one_header(&mut headers, &accept),
+			None
+		);
+
+		assert_eq!(headers[CONTENT_ENCODING], "identity");
+		assert_eq!(headers[CONTENT_LENGTH], "42");
 	}
 
 	#[test]
 	fn codings_split_across_header_lines_count_together() {
-		// The same list as `gzip, br` on one line, so neither coding is decoded.
+		// The same list as `gzip, br` on one line, so `br` is the outermost either way.
 		let mut headers = HeaderMap::new();
 		headers.append(CONTENT_ENCODING, HeaderValue::from_static("gzip"));
 		headers.append(CONTENT_ENCODING, HeaderValue::from_static("br"));
 		assert_eq!(
 			ContentEncoding::from(&headers)
 				.can_decode_as(&AcceptEncoding::from(DEFAULT_ACCEPT_ENCODING)),
-			None
+			Some(Coding::Brotli)
 		);
 	}
 

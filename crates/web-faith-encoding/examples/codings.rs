@@ -9,7 +9,7 @@ use http::{HeaderMap, HeaderValue};
 use web_faith_encoding::{
 	Coding, ContentEncoding,
 	request::compress_buffer,
-	response::{AcceptEncoding, DEFAULT_ACCEPT_ENCODING, decode_stream, strip_decoded_headers},
+	response::{AcceptEncoding, DEFAULT_ACCEPT_ENCODING, decode_stream},
 };
 
 #[tokio::main]
@@ -19,13 +19,11 @@ async fn main() {
 	let mut headers = HeaderMap::new();
 	headers.insert("content-encoding", HeaderValue::from_static("gzip"));
 	headers.insert("content-length", HeaderValue::from_static("42"));
-	let coding = ContentEncoding::from(&headers)
-		.can_decode_as(&accept)
+	// Just the header half, so the coding is in hand for the round trip below; `response::decode`
+	// does this and the body together.
+	let coding = ContentEncoding::peel_one_header(&mut headers, &accept)
 		.expect("gzip is in the default Accept-Encoding");
 	println!("negotiated: {coding:?}");
-
-	// A decoded body's length and coding no longer describe what the caller receives.
-	strip_decoded_headers(&mut headers);
 	println!("headers after decoding: {:?}", headers.keys().count());
 
 	// Round-trip a body through the coding that was negotiated.

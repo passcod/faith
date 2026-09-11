@@ -27,7 +27,7 @@ use reqwest::header::ACCEPT_ENCODING;
 use tokio::sync::Mutex;
 #[cfg(feature = "encoding")]
 use web_faith_encoding::{
-	Coding, ContentEncoding, request as encoding_request, response as encoding_response,
+	Coding, ContentEncoding, request as encoding_request,
 	response::{AcceptEncoding, DEFAULT_ACCEPT_ENCODING},
 };
 
@@ -459,12 +459,11 @@ pub async fn send(
 	let decode = if empty {
 		None
 	} else {
-		ContentEncoding::from(&headers).can_decode_as(&accept_encoding)
+		// The body is decoded lazily when it is read, so the header edit happens here and the
+		// stream is wrapped there; `response::decode` is the one-call form for anyone whose
+		// body is in hand.
+		ContentEncoding::peel_one_header(&mut headers, &accept_encoding)
 	};
-	#[cfg(feature = "encoding")]
-	if decode.is_some() {
-		encoding_response::strip_decoded_headers(&mut headers);
-	}
 
 	let timing = Arc::new(TimingSlot::new(started, timing));
 	// A response that cannot carry a body has nothing left to wait for.
