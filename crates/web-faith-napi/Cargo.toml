@@ -28,7 +28,7 @@ reqwest.workspace = true
 reqwest-middleware.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
-web-faith.workspace = true
+web-faith = { workspace = true, features = ["internals"] }
 web-faith-conn-tracker = { workspace = true, optional = true }
 web-faith-cookies = { workspace = true, features = ["reqwest"], optional = true }
 

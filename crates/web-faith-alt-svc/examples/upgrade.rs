@@ -5,7 +5,7 @@
 use std::time::Duration;
 
 use reqwest::Url;
-use web_faith_alt_svc::{AltSvcCache, AltSvcCacheConfig, parse_alt_svc_header};
+use web_faith_alt_svc::{AltSvcAdvertisement, AltSvcCache, AltSvcCacheConfig};
 
 fn report(cache: &AltSvcCache, url: &Url, stage: &str) {
 	println!(
@@ -19,14 +19,14 @@ fn main() {
 	let cache = AltSvcCache::new(AltSvcCacheConfig::default());
 	let origin = Url::parse("https://example.com/").expect("a valid URL");
 
-	// An advertisement is evidence worth probing, not evidence worth routing on: it says the
-	// alternative exists, not that it works.
+	// Inject an advertisement; usually this would either be a provided hint or come from the
+	// middleware.
 	let advertisement =
-		parse_alt_svc_header(r#"h3=":443"; ma=86400"#).expect("the header advertises h3");
+		r#"h3=":443"; ma=86400"#.parse::<AltSvcAdvertisement>().expect("the header advertises h3");
 	cache.record_alt_svc(&origin, &advertisement);
 	report(&cache, &origin, "advertised");
 
-	// A probe that reaches the origin over HTTP/3 is what promotes it to routable.
+	// Now that there's an advertisement, a probe against the origin has something to try.
 	let port = cache
 		.probe_candidate(&origin)
 		.expect("the advertisement is probe-worthy");

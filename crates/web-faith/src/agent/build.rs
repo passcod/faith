@@ -1,4 +1,4 @@
-//! Turning options into an agent: validating what a caller expressed, and building from it.
+//! Agent construction.
 
 // spec:AGENT
 
@@ -31,9 +31,7 @@ use web_faith_conn_tracker::ConnectionTracker;
 use web_faith_cookies::FaithJar;
 
 #[cfg(feature = "dns")]
-use web_faith_dns::{
-	DEFAULT_MAX_STALE, FaithResolver, ResolverSettings, ServerSpec, parse_domains,
-};
+use web_faith_dns::{DEFAULT_MAX_STALE, FaithResolver, ResolverConfig, ServerSpec, parse_domains};
 
 #[cfg(feature = "http3")]
 use web_faith_alt_svc::{AltSvcCache, AltSvcCacheConfig};
@@ -53,11 +51,19 @@ use crate::{client::H3UpgradeRecipe, options::Http3Congestion};
 #[cfg(all(feature = "http3", feature = "dns"))]
 use crate::client::install_https_sink;
 
+/// Building an agent from `AgentOptions` directly. Permanently unstable; [`Agent::builder`] is the
+/// supported route.
+#[cfg(feature = "internals")]
 impl Agent {
-	/// This is what both surfaces land on, so the defaults a caller gets are settled here rather
-	/// than once per surface.
-	// spec:AGENT spec:NETCHG
+	/// Build an agent straight from options.
 	pub fn from_options(options: AgentOptions) -> Result<Self, FaithError> {
+		Self::from_options_impl(options)
+	}
+}
+
+impl Agent {
+	// spec:AGENT spec:NETCHG
+	pub(crate) fn from_options_impl(options: AgentOptions) -> Result<Self, FaithError> {
 		// Destructured rather than read field by field so that a new option cannot be added
 		// without the compiler pointing here, where every option is turned into the recipe the
 		// agent's clients are built from (spec:NETCHG).
@@ -119,7 +125,7 @@ impl Agent {
 		{
 			return Err(FaithError::new(
 				FaithErrorKind::Config,
-				Some("dns.servers cannot be combined with dns.system".to_string()),
+				"dns.servers cannot be combined with dns.system".to_string(),
 			));
 		}
 		// Parsed whichever resolver is in use: overrides take effect under the system resolver
@@ -141,7 +147,7 @@ impl Agent {
 							}
 							Err(_) => Err(FaithError::new(
 								FaithErrorKind::AddressParse,
-								Some(format!("{addr:?}: {err}")),
+								format!("{addr:?}: {err}"),
 							)),
 						},
 					})
@@ -164,24 +170,26 @@ impl Agent {
 			// builds one rather than validated under the system resolver that ignores them.
 			let mut servers = Vec::new();
 			for url in dns.servers.unwrap_or_default() {
-				servers.push(ServerSpec::parse(&url).map_err(|message| {
-					FaithError::new(FaithErrorKind::AddressParse, Some(message))
+				servers.push(url.parse::<ServerSpec>().map_err(|err| {
+					FaithError::new(FaithErrorKind::AddressParse, format!("{url:?}: {err}"))
 				})?);
 			}
-			Some(FaithResolver::new(ResolverSettings {
+			Some(FaithResolver::new(ResolverConfig {
 				servers,
 				timeout: dns.timeout.map(|ms| Duration::from_millis(ms.into())),
 				ndots: dns.ndots.map(|n| n as usize),
 				search_domains: parse_domains(dns.search_domains)
-					.map_err(|message| FaithError::new(FaithErrorKind::Config, Some(message)))?,
+					.map_err(|message| FaithError::new(FaithErrorKind::Config, message))?,
 				hosts_file: dns.hosts_file,
 				exempt_domains: parse_domains(dns.exempt_domains)
-					.map_err(|message| FaithError::new(FaithErrorKind::Config, Some(message)))?
+					.map_err(|message| FaithError::new(FaithErrorKind::Config, message))?
 					.unwrap_or_default(),
-				serve_stale: dns.serve_stale.unwrap_or(true),
-				max_stale: dns
-					.max_stale
-					.map_or(DEFAULT_MAX_STALE, |ms| Duration::from_millis(ms.into())),
+				// The two options stay separate on the surfaces, and meet here: `serveStale` says
+				// whether at all, `maxStale` how long for.
+				serve_stale: dns.serve_stale.unwrap_or(true).then(|| {
+					dns.max_stale
+						.map_or(DEFAULT_MAX_STALE, |ms| Duration::from_millis(ms.into()))
+				}),
 			}))
 		};
 
@@ -302,14 +310,14 @@ impl Agent {
 				let identity = match &tls.identity {
 					None => None,
 					Some(identity) => Some(Identity::from_pem(identity).map_err(|err| {
-						FaithError::new(FaithErrorKind::PemParse, Some(err.to_string()))
+						FaithError::new(FaithErrorKind::PemParse, err.to_string())
 					})?),
 				};
 
 				let mut extra_roots = Vec::new();
 				for pem in tls.extra_roots.iter().flatten() {
 					extra_roots.extend(Certificate::from_pem_bundle(pem).map_err(|err| {
-						FaithError::new(FaithErrorKind::PemParse, Some(err.to_string()))
+						FaithError::new(FaithErrorKind::PemParse, err.to_string())
 					})?);
 				}
 
@@ -335,7 +343,7 @@ impl Agent {
 					path: cache
 						.path
 						.ok_or_else(|| {
-							FaithError::new(FaithErrorKind::Config, Some("missing cache.path"))
+							FaithError::new(FaithErrorKind::Config, "missing cache.path")
 						})?
 						.into(),
 					remove_opts: Default::default(),
@@ -522,17 +530,33 @@ impl Agent {
 
 	/// An agent with default options.
 	pub fn new() -> Result<Self, FaithError> {
-		Self::from_options(AgentOptions::default())
+		Self::from_options_impl(AgentOptions::default())
 	}
 
-	/// Build an agent a setting at a time. See [the builder module](crate::builder).
-	pub fn builder() -> crate::options::AgentOptionsBuilder {
+	/// Build an agent a setting at a time.
+	///
+	/// Each option group is reached through a closure, so a group left alone is absent from the
+	/// call rather than spelled out as absent. Durations are `Duration` whatever unit the setting
+	/// is carried in, and anything unset takes its default.
+	///
+	/// ```no_run
+	/// use std::time::Duration;
+	/// use web_faith::Agent;
+	///
+	/// let agent = Agent::builder()
+	///     .user_agent("YourApp/1.2.3")
+	///     .timeout(|timeout| timeout.connect(Duration::from_secs(2)).build())
+	///     .pool(|pool| pool.max_idle_per_host(8).build())
+	///     .build()?;
+	/// # Ok::<(), web_faith::FaithError>(())
+	/// ```
+	pub fn builder() -> crate::agent::AgentOptionsBuilder {
 		crate::options::AgentOptions::builder()
 	}
 
 	/// Build an agent from a validated recipe.
 	///
-	/// The recipe is what a client is built from, and the settings are what each request consults;
+	/// A client is built from the recipe, and each request consults the settings;
 	/// validating whatever a caller expressed them as belongs to the surface that took it.
 	pub(crate) fn build(
 		recipe: ClientRecipe,

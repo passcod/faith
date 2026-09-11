@@ -1,41 +1,40 @@
 use std::time::Duration;
 
-use super::parse_alt_svc_header;
 use crate::cache::AltSvcAdvertisement;
 
 #[test]
 fn test_parse_alt_svc_simple() {
-	let result = parse_alt_svc_header(r#"h3=":443"; ma=86400"#);
+	let result = r#"h3=":443"; ma=86400"#.parse::<AltSvcAdvertisement>().ok();
 	assert_eq!(result, Some(ad(443, Some(Duration::from_secs(86400)))));
 }
 
 #[test]
 fn test_parse_alt_svc_no_max_age() {
-	let result = parse_alt_svc_header(r#"h3=":443""#);
+	let result = r#"h3=":443""#.parse::<AltSvcAdvertisement>().ok();
 	assert_eq!(result, Some(ad(443, None)));
 }
 
 #[test]
 fn test_parse_alt_svc_different_port() {
-	let result = parse_alt_svc_header(r#"h3=":8443"; ma=3600"#);
+	let result = r#"h3=":8443"; ma=3600"#.parse::<AltSvcAdvertisement>().ok();
 	assert_eq!(result, Some(ad(8443, Some(Duration::from_secs(3600)))));
 }
 
 #[test]
 fn test_parse_alt_svc_multiple_protocols() {
-	let result = parse_alt_svc_header(r#"h2=":443", h3=":443"; ma=86400"#);
+	let result = r#"h2=":443", h3=":443"; ma=86400"#.parse::<AltSvcAdvertisement>().ok();
 	assert_eq!(result, Some(ad(443, Some(Duration::from_secs(86400)))));
 }
 
 #[test]
 fn test_parse_alt_svc_h3_variant() {
-	let result = parse_alt_svc_header(r#"h3-29=":443"; ma=86400"#);
+	let result = r#"h3-29=":443"; ma=86400"#.parse::<AltSvcAdvertisement>().ok();
 	assert_eq!(result, Some(ad(443, Some(Duration::from_secs(86400)))));
 }
 
 #[test]
 fn test_parse_alt_svc_keeps_the_host() {
-	let result = parse_alt_svc_header(r#"h3="cdn.example.net:443"; ma=3600"#);
+	let result = r#"h3="cdn.example.net:443"; ma=3600"#.parse::<AltSvcAdvertisement>().ok();
 	assert_eq!(
 		result,
 		Some(AltSvcAdvertisement {
@@ -50,7 +49,7 @@ fn test_parse_alt_svc_keeps_the_host() {
 
 #[test]
 fn test_parse_alt_svc_ipv6_host() {
-	let result = parse_alt_svc_header(r#"h3="[2001:db8::1]:8443""#);
+	let result = r#"h3="[2001:db8::1]:8443""#.parse::<AltSvcAdvertisement>().ok();
 	assert_eq!(
 		result,
 		Some(AltSvcAdvertisement {
@@ -66,13 +65,13 @@ fn test_parse_alt_svc_ipv6_host() {
 
 #[test]
 fn test_parse_alt_svc_clear() {
-	let result = parse_alt_svc_header("clear");
+	let result = "clear".parse::<AltSvcAdvertisement>().ok();
 	assert_eq!(result, None);
 }
 
 #[test]
 fn test_parse_alt_svc_no_h3() {
-	let result = parse_alt_svc_header(r#"h2=":443"; ma=86400"#);
+	let result = r#"h2=":443"; ma=86400"#.parse::<AltSvcAdvertisement>().ok();
 	assert_eq!(result, None);
 }
 

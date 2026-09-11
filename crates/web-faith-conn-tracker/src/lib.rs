@@ -1,16 +1,38 @@
 //! Live per-connection TCP statistics, read from the operating system.
 //!
-//! A connection pool can say which connections it holds, but not how any of them is actually
-//! behaving: round-trip time, retransmits, congestion window, delivery rate. The kernel knows, and
-//! this reads it.
+//! TCP connections are done via OS primitives, and reqwest's pool doesn't expose statistics and
+//! tracking information directly. But we can read the kernel tables to obtain these. Supports
+//! Linux, macOS, Windows. Other platforms return empty stats.
 //!
-//! Report traffic on a connection with [`ConnectionTracker::track`], which also answers whether that
-//! connection had been seen before, and take the current view with
-//! [`ConnectionTracker::snapshot`]. Each entry's statistics are refreshed once a second, and an
-//! entry that goes idle for longer than the configured timeout expires out of the tracker.
+//! Statistics refresh once a second, and a connection idle for longer than the tracker's timeout
+//! expires out of it.
 //!
-//! Reading the statistics is per-platform: Linux over netlink, macOS and Windows through their own
-//! interfaces. Anywhere else, connections are still tracked but carry no statistics.
+//! ```no_run
+//! use std::{net::SocketAddr, time::Duration};
+//!
+//! use web_faith_conn_tracker::ConnectionTracker;
+//!
+//! // Spawns a refresh task, so build it inside a tokio runtime.
+//! let tracker = ConnectionTracker::new(Duration::from_secs(90));
+//!
+//! let local: SocketAddr = "127.0.0.1:54321".parse().expect("a valid address");
+//! let remote: SocketAddr = "93.184.216.34:443".parse().expect("a valid address");
+//!
+//! // Returns whether this connection had been seen before, so a repeat means it was reused.
+//! println!("reused an existing connection: {}", tracker.track(local, remote));
+//!
+//! for connection in tracker.snapshot() {
+//!     let Some(stats) = connection.stats else { continue };
+//!     println!(
+//!         "{}: rtt {}us, cwnd {}, {} retransmits",
+//!         connection.remote_addr, stats.rtt_us, stats.cwnd, stats.total_retrans,
+//!     );
+//! }
+//! ```
+
+#![deny(missing_docs)]
+// Lets docs.rs label each item with the feature or platform it needs.
+#![cfg_attr(docsrs, feature(doc_cfg))]
 
 // spec:OBS
 
@@ -32,14 +54,17 @@ use moka::Expiry;
 use moka::{ops::compute::Op, sync::Cache};
 use tokio::{spawn, task::AbortHandle, time::sleep};
 
+/// The address pair identifying one connection.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ConnectionKey {
+	/// This end of the connection.
 	pub local_addr: SocketAddr,
+	/// The peer.
 	pub remote_addr: SocketAddr,
 }
 
 #[derive(Debug, Clone)]
-pub struct TrackedConnection {
+pub(crate) struct TrackedConnection {
 	pub first_seen: SystemTime,
 	pub last_seen: SystemTime,
 	pub response_count: u64,
@@ -85,35 +110,63 @@ impl Expiry<ConnectionKey, TrackedConnection> for ExpireAfterTimeout {
 	}
 }
 
+/// The kernel's view of one TCP connection.
+///
+/// Which fields are populated depends on the platform, and none is guaranteed to keep being
+/// populated across releases.
 #[derive(Debug, Clone, Copy, Default)]
+#[non_exhaustive]
 pub struct TcpStats {
+	/// Smoothed round-trip time, in microseconds.
 	pub rtt_us: u32,
+	/// Round-trip time variance, in microseconds.
 	pub rtt_var_us: u32,
+	/// Packets the kernel considers lost. Linux only.
 	pub lost: Option<u32>,
+	/// Segments retransmitted on the current send.
 	pub retrans: u32,
+	/// Segments retransmitted over the connection's life.
 	pub total_retrans: u32,
+	/// Congestion window, in segments.
 	pub cwnd: u32,
+	/// Most recent delivery rate, in bytes per second. Linux only.
 	pub delivery_rate: Option<u64>,
 }
 
-/// One tracked connection, as a caller reporting on the pool sees it.
+/// One tracked connection.
+///
+/// A snapshot, as the tracker saw things when it was taken, rather than a live view of the system:
+/// the timestamps and counts are the tracker's own accounting, and `stats` is whatever the kernel
+/// last reported, refreshed once a second.
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct ConnectionSnapshot {
-	/// The transport the connection runs over. Only TCP is tracked.
+	/// The transport this connection runs over. At the moment this is always `"tcp"`.
 	pub connection_type: &'static str,
+	/// This end of the connection.
 	pub local_addr: SocketAddr,
+	/// The peer.
 	pub remote_addr: SocketAddr,
+	/// When the tracker first saw traffic on this connection.
 	pub first_seen: SystemTime,
+	/// When the tracker last saw traffic on this connection.
 	pub last_seen: SystemTime,
-	/// When the entry falls out of the tracker, unless traffic renews it first.
+	/// When this connection falls out of the tracker, unless traffic renews it first.
 	pub expiry: Option<SystemTime>,
+	/// Responses that have arrived over this connection.
 	pub response_count: u64,
-	/// What the operating system last reported for this connection, if it has been asked yet.
+	/// The operating system's last report for this connection.
+	///
+	/// This can be `None` on a platform with no support, in the first second of a connection's
+	/// life before the refresh has run, or when the kernel's table no longer carries it.
 	pub stats: Option<TcpStats>,
 }
 
 type Conns = Cache<ConnectionKey, TrackedConnection>;
 
+/// A set of tracked TCP connections.
+///
+/// Reads the kernel's statistics for each, refreshed once a second.
 #[derive(Debug)]
 pub struct ConnectionTracker {
 	connections: Conns,
@@ -128,6 +181,7 @@ impl Drop for ConnectionTracker {
 }
 
 impl ConnectionTracker {
+	/// A tracker that drops a connection once it has been idle for `timeout`.
 	pub fn new(timeout: Duration) -> Arc<Self> {
 		let connections = Cache::builder()
 			.expire_after(ExpireAfterTimeout(timeout))
@@ -149,10 +203,10 @@ impl ConnectionTracker {
 		})
 	}
 
-	/// Record a response on a connection, returning whether that connection was already known.
+	/// Record traffic on a connection, returning whether it was already known.
 	///
-	/// A connection the tracker has seen before is one the pool handed back rather than one
-	/// dialled for this request, since a fresh connection takes a local port of its own.
+	/// A connection the tracker has seen before was reused rather than newly dialled, a fresh one
+	/// taking a local port of its own.
 	pub fn track(&self, local_addr: SocketAddr, remote_addr: SocketAddr) -> bool {
 		let now = SystemTime::now();
 		let key = ConnectionKey {
@@ -179,12 +233,10 @@ impl ConnectionTracker {
 		known
 	}
 
-	/// Register a warm-up connection that no request has yet been credited to.
+	/// Register a connection opened ahead of the traffic that will use it.
 	///
-	/// A warm-up connection is listed before any foreground request uses it, at a response count of
-	/// zero. An entry already tracked is left untouched: a warm-up to an origin that already holds a
-	/// pooled connection does no new work, and must not disturb the count or timestamps of the
-	/// connection it would reuse.
+	/// It is listed at a count of zero until traffic arrives on it. A connection already tracked is
+	/// left untouched, so this cannot disturb the count or timestamps of one already in use.
 	// spec:WARM
 	pub fn track_warmup(&self, local_addr: SocketAddr, remote_addr: SocketAddr) {
 		let now = SystemTime::now();

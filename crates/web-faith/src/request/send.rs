@@ -1,3 +1,5 @@
+//! The send path.
+
 use std::{
 	sync::{
 		Arc,
@@ -24,7 +26,10 @@ use reqwest::header::ACCEPT_ENCODING;
 
 use tokio::sync::Mutex;
 #[cfg(feature = "encoding")]
-use web_faith_encoding::{self as encoding, AcceptEncoding, Coding, DEFAULT_ACCEPT_ENCODING};
+use web_faith_encoding::{
+	Coding, ContentEncoding, request as encoding_request,
+	response::{AcceptEncoding, DEFAULT_ACCEPT_ENCODING},
+};
 
 use crate::{
 	agent::Agent,
@@ -32,16 +37,13 @@ use crate::{
 	error::{FaithError, FaithErrorKind},
 	request::{Credentials, NORMALISED_METHODS, PRIORITY, QUERY, RequestBody, RequestOptions},
 	response::{PeerInformation, Response},
-	timing::{HeadersStamp, RequestTiming, TimingSlot, alpn_protocol_id},
+	timing::{RequestTiming, TimingSlot, alpn_protocol_id},
 };
 
 /// Send a request on `agent`, and build the response it produces.
 ///
-/// `client` is the handle the caller took when the request was issued, rather than one taken here:
-/// a request counts as in flight from the moment it is issued, so one issued just before the agent
-/// closes runs to completion even though nothing had started on it yet.
-///
-/// `abort` is an optional future that, resolving first, cancels the request.
+/// `client` is the handle taken when the request was issued, so one issued just before the agent
+/// closes still runs to completion. `abort` cancels the request by resolving first.
 // spec:AGENT
 pub async fn send(
 	agent: &Agent,
@@ -77,9 +79,9 @@ pub async fn send(
 			Coding::from_option(value).ok_or_else(|| {
 				FaithError::new(
 					FaithErrorKind::InvalidCompression,
-					Some(format!(
+					format!(
 						"compress: {value:?} names no coding; expected gzip, deflate, br, or zstd"
-					)),
+					),
 				)
 			})
 		})
@@ -93,13 +95,7 @@ pub async fn send(
 	}
 
 	// The stamp rides along in the request's extensions for the middleware to fill in;
-	// this side keeps a handle on it so the one measurement taken inside the stack is
-	// the one surfaced (spec:RESP#request-timing).
-	let headers_stamp = HeadersStamp::default();
-
-	let mut request = client
-		.request(method, parsed_url.clone())
-		.with_extension(headers_stamp.clone());
+	let mut request = client.request(method, parsed_url.clone());
 	#[cfg(feature = "cache")]
 	{
 		request = request.with_extension(CacheMode::from(options.cache));
@@ -116,13 +112,13 @@ pub async fn send(
 			let header_name = HeaderName::from_bytes(key.as_bytes()).map_err(|_| {
 				FaithError::new(
 					FaithErrorKind::InvalidHeader,
-					Some(format!("invalid header name: {key}")),
+					format!("invalid header name: {key}"),
 				)
 			})?;
 			let header_value = HeaderValue::from_str(value).map_err(|_| {
 				FaithError::new(
 					FaithErrorKind::InvalidHeader,
-					Some(format!("invalid header value: {value}")),
+					format!("invalid header value: {value}"),
 				)
 			})?;
 
@@ -154,9 +150,7 @@ pub async fn send(
 		let value = HeaderValue::from_str(derived).map_err(|_| {
 			FaithError::new(
 				FaithErrorKind::InvalidHeader,
-				Some(format!(
-					"invalid Content-Type derived from the body: {derived}"
-				)),
+				format!("invalid Content-Type derived from the body: {derived}"),
 			)
 		})?;
 		request = request.header(CONTENT_TYPE, value);
@@ -171,18 +165,15 @@ pub async fn send(
 	{
 		return Err(FaithError::new(
 			FaithErrorKind::MissingContentType,
-			Some(
-				"a QUERY request carrying a body must declare a Content-Type describing it"
-					.to_owned(),
-			),
+			"a QUERY request carrying a body must declare a Content-Type describing it",
 		));
 	}
 
-	// What the caller says they handed over: their own `Content-Encoding`, else the
-	// agent's, per-request headers winning per name as they do generally (spec: REQ).
+	// The `Content-Encoding` the caller declared: their own, else the agent's, per-request
+	// headers winning per name as they do generally (spec: REQ).
 	// Several lines are the one list, so they are joined as they are read.
 	#[cfg(feature = "encoding")]
-	let declared_content_encoding = compress.and_then(|_| {
+	let declared_content_encoding = compress.as_ref().and_then(|_| {
 		let from_request = options.headers.as_ref().and_then(|headers| {
 			let declared = headers
 				.iter()
@@ -212,8 +203,8 @@ pub async fn send(
 			.map(|(_, value)| value.clone())
 	});
 	#[cfg(feature = "encoding")]
-	let accept_encoding = AcceptEncoding::parse(
-		&request_accept_encoding
+	let accept_encoding = AcceptEncoding::from(
+		&*request_accept_encoding
 			.clone()
 			.or_else(|| {
 				agent
@@ -269,10 +260,10 @@ pub async fn send(
 				if parsed_url.scheme() != "https" {
 					return Err(FaithError::new(
 						FaithErrorKind::Network,
-						Some(format!(
+						format!(
 							"a streaming request body requires HTTP/2 or HTTP/3, and {} is served over HTTP/1.1; set the agent's quirks.h1RequestStreaming to send it anyway",
 							parsed_url.as_str()
-						)),
+						),
 					));
 				}
 
@@ -283,13 +274,17 @@ pub async fn send(
 			}
 
 			#[cfg(feature = "encoding")]
-			let body = match compress {
+			let body = match compress.clone() {
 				// Compressed as the chunks arrive, and chunked on the wire either way:
 				// a stream has no length to declare up front.
 				// spec:ENC#what-a-compressed-request-sends
 				Some(coding) => {
-					applied_coding = Some(coding);
-					reqwest::Body::wrap_stream(encoding::compress_stream(byte_stream, coding))
+					applied_coding = Some(coding.clone());
+					let stream =
+						encoding_request::compress_stream(byte_stream, coding).map_err(|err| {
+							FaithError::new(FaithErrorKind::InvalidCompression, err.to_string())
+						})?;
+					reqwest::Body::wrap_stream(stream)
 				}
 				None => reqwest::Body::wrap_stream(byte_stream),
 			};
@@ -299,18 +294,18 @@ pub async fn send(
 		}
 		RequestBody::Bytes(bytes) => {
 			#[cfg(feature = "encoding")]
-			let body = match compress {
+			let body = match compress.clone() {
 				// The compressed bytes are what reqwest sizes `Content-Length` from, so the
 				// header counts what goes on the wire.
 				// spec:ENC#what-a-compressed-request-sends
 				Some(coding) => {
-					applied_coding = Some(coding);
-					encoding::compress_buffer(&bytes, coding)
+					applied_coding = Some(coding.clone());
+					encoding_request::compress_buffer(&bytes, coding)
 						.await
 						.map_err(|err| {
 							FaithError::new(
 								FaithErrorKind::Network,
-								Some(format!("could not compress the request body: {err}")),
+								format!("could not compress the request body: {err}"),
 							)
 						})?
 				}
@@ -327,11 +322,15 @@ pub async fn send(
 	// were applied (spec:ENC#what-a-compressed-request-sends).
 	#[cfg(feature = "encoding")]
 	if let Some(coding) = applied_coding {
-		let value = encoding::layer_content_encoding(declared_content_encoding.as_deref(), coding);
-		let value = HeaderValue::from_str(&value).map_err(|_| {
+		let layered = declared_content_encoding
+			.as_deref()
+			.map(ContentEncoding::from)
+			.unwrap_or_default()
+			.layer(coding);
+		let value = layered.to_header_value().ok_or_else(|| {
 			FaithError::new(
 				FaithErrorKind::InvalidHeader,
-				Some(format!("invalid header value: {value}")),
+				format!("invalid header value: {layered}"),
 			)
 		})?;
 		request = request.header(CONTENT_ENCODING, value);
@@ -426,9 +425,9 @@ pub async fn send(
 		headers.remove("set-cookie");
 	}
 
-	// A cache hit is served without ever reaching the layer that stamps, so fall back to
-	// the moment the send resolved, which for a hit is the moment the cache answered.
-	let headers_at = headers_stamp.get().unwrap_or_else(Instant::now);
+	// Taken here rather than inside the stack: the layer that used to stamp was only built with
+	// HTTP/3, and never saw a cache hit at all (spec:RESP#request-timing, Q3).
+	let headers_at = Instant::now();
 	let timing = RequestTiming {
 		headers_ms: headers_at.duration_since(started).as_secs_f64() * 1000.0,
 		body_ms: None,
@@ -452,12 +451,11 @@ pub async fn send(
 	let decode = if empty {
 		None
 	} else {
-		encoding::decision(&headers, &accept_encoding)
+		// The body is decoded lazily when it is read, so the header edit happens here and the
+		// stream is wrapped there; `response::decode` is the one-call form for anyone whose
+		// body is in hand.
+		ContentEncoding::peel_one_header(&mut headers, &accept_encoding)
 	};
-	#[cfg(feature = "encoding")]
-	if decode.is_some() {
-		encoding::strip_decoded_headers(&mut headers);
-	}
 
 	let timing = Arc::new(TimingSlot::new(started, timing));
 	// A response that cannot carry a body has nothing left to wait for.

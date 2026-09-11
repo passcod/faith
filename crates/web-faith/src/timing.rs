@@ -2,55 +2,18 @@
 
 // spec:RESP#request-timing
 
-use std::{
-	sync::{Arc, OnceLock},
-	time::Instant,
-};
+use std::time::Instant;
 
 use reqwest::{Url, Version};
 use tokio::sync::watch;
 
-/// The moment a response's headers arrived, shared between the middleware that observes it and
-/// the request that surfaces it.
+/// The timing of one request, filled in as it progresses.
 ///
-/// Carried in the request's extensions so the one stamp taken inside the stack reaches the
-/// outside, which is what keeps the surfaced timing and the path-time average reading the same
-/// measurement rather than two of their own.
+/// Timings are best-effort: internal limitations mean they are not always perfectly accurate.
 #[derive(Clone, Debug, Default)]
-pub struct HeadersStamp(Arc<OnceLock<Instant>>);
-
-impl HeadersStamp {
-	/// Record the arrival, if this is the first response to reach the outside.
-	///
-	/// An HTTP/3 attempt that fails and falls back to TCP runs the stack twice, and only the
-	/// attempt that produced the response stamps, so the recorded moment always belongs to the
-	/// response the caller receives.
-	///
-	/// The stamping lives in the Alt-Svc layer, which is only built with HTTP/3 support; without
-	/// it nothing stamps and the request falls back to timing the send itself.
-	#[cfg_attr(not(feature = "http3"), allow(dead_code))]
-	pub fn mark(&self, at: Instant) {
-		let _ = self.0.set(at);
-	}
-
-	pub fn get(&self) -> Option<Instant> {
-		self.0.get().copied()
-	}
-}
-
-/// The Alt-Svc layer is the one place a response's arrival is observed, so it marks the stamp the
-/// request carries; reading it back out is this module's business.
-#[cfg(feature = "http3")]
-impl web_faith_alt_svc::ArrivalStamp for HeadersStamp {
-	fn mark(&self, at: Instant) {
-		HeadersStamp::mark(self, at);
-	}
-}
-
-/// What Faith measures of a request, filled in as the request progresses.
-#[derive(Clone, Debug, Default)]
+#[non_exhaustive]
 pub struct RequestTiming {
-	/// Milliseconds from the start of the request to the response headers arriving.
+	/// Milliseconds from the start of the request to the response head being read.
 	pub headers_ms: f64,
 	/// Milliseconds from the start of the request to the body finishing, once it has.
 	pub body_ms: Option<f64>,
@@ -66,9 +29,8 @@ pub struct RequestTiming {
 
 /// Where the timing lands: written by whoever finishes the body, awaited by `timing()`.
 ///
-/// A watch channel for the same reason the trailers slot is one: the wait is unbounded by
-/// design, since a body that is never read never finishes, and polling would burn a core to
-/// find that out.
+/// A watch channel for the same reason the trailers slot is one: a body that is never read never
+/// finishes, so the wait is unbounded.
 #[derive(Debug)]
 pub struct TimingSlot {
 	tx: watch::Sender<RequestTiming>,
@@ -85,9 +47,9 @@ impl TimingSlot {
 
 	/// Record that the body ended, if nothing got there first.
 	///
-	/// `send_if_modified` so the read and the write are one step, and so waiters are woken only
-	/// by the call that actually settled it. Every route out of a body lands here: the stream
-	/// ending, `discard()`, and the collector draining one that was abandoned.
+	/// `send_if_modified` keeps the read and write one step, and wakes waiters only from the call
+	/// that settled it. Every route out of a body lands here: the stream ending, `discard()`, and
+	/// the collector draining an abandoned body.
 	pub fn ended(&self) {
 		let elapsed = self.started.elapsed().as_secs_f64() * 1000.0;
 		self.tx.send_if_modified(|timing| {
@@ -116,12 +78,11 @@ impl TimingSlot {
 	}
 }
 
-/// The ALPN Protocol ID (RFC 7301) naming the protocol a response travelled over.
+/// The ALPN Protocol ID (RFC 7301) for the protocol a response travelled over.
 ///
-/// Reported whether or not the connection negotiated over ALPN, which is what a browser does:
-/// cleartext HTTP/2 is `h2c` and cleartext HTTP/1.1 is still `http/1.1`, neither of which any
-/// handshake agreed on.
-pub fn alpn_protocol_id(version: Version, url: &Url) -> String {
+/// Reported whether or not ALPN negotiated it, as a browser does: cleartext HTTP/2 is `h2c` and
+/// cleartext HTTP/1.1 is `http/1.1`.
+pub(crate) fn alpn_protocol_id(version: Version, url: &Url) -> String {
 	let secure = url.scheme() == "https";
 	match version {
 		Version::HTTP_3 => "h3",

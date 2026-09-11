@@ -46,20 +46,23 @@ rustflags = ["--cfg", "reqwest_unstable"]
 ## Features
 
 | Feature | Default | What it adds |
-| --- | --- | --- |
-| `cache` | on | The HTTP cache, its store, and the per-request cache mode. |
-| `connection-tracking` | on | Per-connection kernel counters, and the agent verb that reports them. |
-| `cookies` | on | The cookie jar, and the agent option and handle that reach it. |
-| `dns` | on | Faith's own caching resolver. Without it, names resolve through the platform. |
-| `encoding` | on | Content codings: negotiating and decoding a response body, and compressing a request one. |
-| `tls-aws-lc-rs` | on | The rustls crypto provider. `tls-ring` selects ring instead. |
-| `http3` | off | Transparent HTTP/3, and the Alt-Svc machinery that upgrades an origin to it. Needs the cfg flag above. |
+| --- | :-: | --- |
+| `cache` | ✓ | The HTTP cache. |
+| `connection-tracking` | ✓ | Kernel connection counters. |
+| `cookies` | ✓ | The cookie jar. |
+| `dns` | ✓ | Faith's own caching resolver. Without it, names resolve through the platform. |
+| `encoding` | ✓ | Content codings for request and response bodies. |
+| `tls-aws-lc-rs` | ✓ | aws-lc-rs as the rustls crypto provider. |
+| `tls-ring` |  | ring as the rustls crypto provider instead. |
+| `http3` |  | Transparent HTTP/3, upgraded into via Alt-Svc. Needs the cfg flag above. |
+| `raw-client` |  | Access to the reqwest client underneath. |
+| `internals` |  | Faith's internals. Permanently unstable and exempt from semver. |
 
 ## Component crates
 
 - [`web-faith-cookies`](https://docs.rs/web-faith-cookies)
 - [`web-faith-dns`](https://docs.rs/web-faith-dns)
-- [`web-faith-conn-tracker`](https://docs.rs/web-faith-conn-tracker):
+- [`web-faith-conn-tracker`](https://docs.rs/web-faith-conn-tracker)
 - [`web-faith-alt-svc`](https://docs.rs/web-faith-alt-svc)
 - [`web-faith-encoding`](https://docs.rs/web-faith-encoding)
 

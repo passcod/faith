@@ -6,7 +6,7 @@ use napi_derive::napi;
 use tokio::sync::mpsc;
 
 use bytes::Bytes;
-use web_faith::request::{self, RequestBody};
+use web_faith::request::{RequestBody, send};
 
 use crate::{
 	async_task::faith_promise,
@@ -73,7 +73,7 @@ pub fn faith_fetch<'env>(
 		});
 
 		let client = client.ok_or(FaithErrorKind::Closed)?;
-		request::send(&agent.inner, client, &url, options, body, abort)
+		send(&agent.inner, client, &url, options, body, abort)
 			.await
 			.map(FaithResponse::from)
 	})

@@ -1,4 +1,16 @@
-//! The agent: what owns a connection pool, and the verbs that act on a live one.
+//! The agent and its builder.
+
+pub use crate::builder::AgentOptionsBuilder;
+pub use crate::stats::AgentStats;
+
+#[cfg(feature = "cache")]
+pub use crate::options::{CacheOptions, CacheStore};
+pub use crate::options::{
+	DnsOptions, DnsOverride, FlowControlOptions, Header, Http2Options, PoolOptions, QuirksOptions,
+	RedirectPolicy, TimeoutOptions, TlsOptions,
+};
+#[cfg(feature = "http3")]
+pub use crate::options::{Http3Congestion, Http3Hint, Http3Options};
 
 // spec:AGENT spec:WARM spec:NETCHG spec:OBS
 
@@ -27,11 +39,7 @@ use web_faith_dns::{FaithResolver, ResolverReport};
 #[cfg(feature = "http3")]
 use web_faith_alt_svc::{AltSvcCache, H3Prober};
 
-use crate::{
-	client::ClientRecipe,
-	stats::{AgentStats, InnerAgentStats},
-	warm_up::origin_key,
-};
+use crate::{client::ClientRecipe, stats::InnerAgentStats, warm_up::origin_key};
 
 #[cfg(all(feature = "http3", feature = "dns"))]
 use crate::client::install_https_sink;
@@ -50,12 +58,11 @@ pub(crate) struct AgentSettings {
 	pub(crate) h3_follow_advertised_port: bool,
 	/// Whether a streaming request body may go out over HTTP/1.x.
 	pub(crate) quirk_h1_request_streaming: bool,
-	/// The agent's default `Accept-Encoding`, if one sits among its default headers, which decides
-	/// which codings a response is decoded under when a request adds none of its own.
+	/// The agent's default `Accept-Encoding`. Decides which codings a response is decoded under
+	/// when a request adds none of its own.
 	#[cfg(feature = "encoding")]
 	pub(crate) default_accept_encoding: Option<HeaderValue>,
-	/// The agent's default `Content-Encoding`, if one sits among its default headers, which a
-	/// request layers its own coding on top of rather than displacing.
+	/// The agent's default `Content-Encoding`. A request layers its own coding on top of this.
 	#[cfg(feature = "encoding")]
 	pub(crate) default_content_encoding: Option<HeaderValue>,
 	/// Whether a `Priority` header sits among the agent's default headers, so that default wins
@@ -64,19 +71,15 @@ pub(crate) struct AgentSettings {
 	pub(crate) has_default_priority: bool,
 }
 
-/// What an agent holds while it is open, and gives up when it is closed.
+/// The resources an agent holds while open, and gives up when closed.
 ///
-/// Behind a shared lock because closing acts on the agent rather than on the handle it was called
-/// through: every clone names the same one, so every clone sees the result.
+/// Behind a shared lock so closing acts on the agent rather than the handle it was called through.
 #[derive(Debug)]
 pub(crate) struct Live {
-	/// The heavy resources (connection pool, DNS resolver, background tasks) live inside this
-	/// client, so dropping it is what actually releases them.
+	/// Holds the connection pool, DNS resolver and background tasks, so dropping it releases them.
 	pub(crate) client: ClientWithMiddleware,
-	/// The raw `reqwest::Client` underlying [`Self::client`], sharing its connection pool. A warm-up
-	/// sends its synthetic request here rather than through the middleware stack, which bypasses the
-	/// HTTP cache and the Alt-Svc layer, and so keeps the warm-up out of request accounting, while
-	/// still pooling the connection foreground requests reuse.
+	/// The raw client behind [`Self::client`], sharing its pool. A warm-up sends here to skip the
+	/// HTTP cache and the Alt-Svc layer while still pooling the connection.
 	// spec:WARM
 	pub(crate) raw_client: Client,
 	/// The DNS resolver, shared with the client so a prefetch warms the cache requests read. `None`
@@ -86,18 +89,19 @@ pub(crate) struct Live {
 	pub(crate) dns_resolver: Option<FaithResolver>,
 	#[cfg(feature = "http3")]
 	pub(crate) alt_svc_cache: Option<Arc<AltSvcCache>>,
-	/// Held so closing can abort in-flight background probes: each one owns a clone of the raw
-	/// client, which would otherwise keep the connection pool alive past close for up to the probe
-	/// timeout.
+	/// Held so closing can abort in-flight probes; each owns a clone of the raw client, which would
+	/// otherwise keep the pool alive past close for up to the probe timeout.
 	#[cfg(feature = "http3")]
 	pub(crate) h3_prober: Option<Arc<H3Prober>>,
 }
 
-/// An HTTP client with its own connection pool, caches, and resolver.
+/// A Faith HTTP agent: where all fetches start.
 ///
-/// Cloning one is cheap and every clone names the same underlying agent, so cloning is how a request
-/// gets an agent to run on rather than a way to get a second pool. Because clones share, closing
-/// acts on the agent itself and every handle to it sees the result.
+/// An agent holds the resources and state shared across requests — connection pool, caches, DNS
+/// resolver, cookie jar, HTTP/3 upgrade memory — and is the browser instance of this library. A
+/// typical application makes one and starts every request from it.
+///
+/// [`Agent::new`] takes the defaults; [`Agent::builder`] configures one.
 // spec:AGENT
 #[derive(Debug, Clone)]
 pub struct Agent {
@@ -112,8 +116,8 @@ pub struct Agent {
 	/// origin do not open duplicate connections.
 	// spec:WARM
 	pub(crate) warming: MokaCache<String, ()>,
-	/// Bumped by [`Self::network_changed`], so a warm-up that was in flight across the signal does
-	/// not record its origin as warm: its connection went into the pool that was just dropped.
+	/// Bumped by [`Self::network_changed`], so a warm-up in flight across the signal does not record
+	/// its origin as warm — its connection went into the pool that was just dropped.
 	// spec:NETCHG#reach-across-the-subsystems
 	pub(crate) warm_generation: Arc<AtomicU64>,
 	/// The jar outlives a close and stays readable from a closed agent.
@@ -134,12 +138,11 @@ pub struct Agent {
 	/// reserves to HTTP/2 and HTTP/3.
 	// spec:QUIRK#http-1-x-request-body-streaming
 	pub(crate) quirk_h1_request_streaming: bool,
-	/// The agent's default `Accept-Encoding`, if one sits among its default headers, which decides
-	/// the codings a response is decoded under when a request adds none of its own.
+	/// The agent's default `Accept-Encoding`. Decides the codings a response is decoded under when
+	/// a request adds none of its own.
 	#[cfg(feature = "encoding")]
 	pub(crate) default_accept_encoding: Option<HeaderValue>,
-	/// The agent's default `Content-Encoding`, if one sits among its default headers. A request
-	/// layers its own coding on top of this rather than displacing it.
+	/// The agent's default `Content-Encoding`. A request layers its own coding on top of this.
 	// spec:ENC
 	#[cfg(feature = "encoding")]
 	pub(crate) default_content_encoding: Option<HeaderValue>,
@@ -150,8 +153,7 @@ pub struct Agent {
 	/// Whether a `Priority` header sits among the agent's default headers. That default wins over
 	/// the header a request's priority would derive.
 	pub(crate) has_default_priority: bool,
-	/// How to build this agent's clients, so [`Self::network_changed`] can build them again. Shared
-	/// rather than cloned per handle: every handle builds the same client from the same recipe.
+	/// How to build this agent's clients, so [`Self::network_changed`] can build them again.
 	// spec:NETCHG
 	pub(crate) recipe: Arc<ClientRecipe>,
 }
@@ -159,32 +161,52 @@ pub struct Agent {
 impl Agent {
 	/// The agent's cookie jar, if it keeps one.
 	///
-	/// The jar itself, rather than per-cookie methods wrapped around it, so cookies go in and out
-	/// through the type `web-faith-cookies` documents. It outlives a close and stays readable from a
-	/// closed agent.
+	/// The jar itself, so cookies go in and out through the type `web-faith-cookies` documents. It
+	/// stays readable after [`Self::close`].
 	// spec:COOK
 	#[cfg(feature = "cookies")]
 	pub fn cookies(&self) -> Option<&Arc<FaithJar>> {
 		self.cookie_jar.as_ref()
 	}
 
-	/// Take a handle on the client, or `None` once the agent is closed.
+	/// The client this agent sends through, or `None` once it is closed.
 	///
-	/// A request takes its own handle at the moment it is issued, which is what lets one already in
-	/// flight finish while a later one is refused.
+	/// A request takes its handle when it is issued, which lets one already in flight
+	/// finish while a later one is refused.
 	// spec:AGENT
+	#[cfg(feature = "raw-client")]
 	pub fn client(&self) -> Option<ClientWithMiddleware> {
 		self.live().as_ref().map(|live| live.client.clone())
 	}
 
-	/// Take a handle on the raw client a warm-up sends through, or `None` once closed.
+	// spec:AGENT
+	#[cfg(not(feature = "raw-client"))]
+	pub(crate) fn client(&self) -> Option<ClientWithMiddleware> {
+		self.live().as_ref().map(|live| live.client.clone())
+	}
+
+	/// The same client without Faith's middleware.
+	///
+	/// A request on it skips the HTTP cache and the Alt-Svc layer, while sharing the connection
+	/// pool.
+	#[cfg(feature = "raw-client")]
 	pub fn raw_client(&self) -> Option<Client> {
 		self.live().as_ref().map(|live| live.raw_client.clone())
 	}
 
-	/// The DNS resolver, if the agent has one of its own and is still open.
-	#[cfg(feature = "dns")]
+	#[cfg(not(feature = "raw-client"))]
+	pub(crate) fn raw_client(&self) -> Option<Client> {
+		self.live().as_ref().map(|live| live.raw_client.clone())
+	}
+
+	/// The agent's DNS resolver, or `None` once it is closed.
+	#[cfg(all(feature = "dns", feature = "raw-client"))]
 	pub fn dns_resolver(&self) -> Option<FaithResolver> {
+		self.dns_resolver_inner()
+	}
+
+	#[cfg(feature = "dns")]
+	pub(crate) fn dns_resolver_inner(&self) -> Option<FaithResolver> {
 		self.live()
 			.as_ref()
 			.and_then(|live| live.dns_resolver.clone())
@@ -214,17 +236,12 @@ impl Agent {
 			.unwrap_or_else(|poisoned| poisoned.into_inner())
 	}
 
-	/// Build an agent from options, validating them into the recipe its clients are built from.
+	/// Close the agent, releasing its connection pool, DNS resolver, and background tasks without
+	/// waiting for the last clone to drop. Worth doing if you make many short-lived agents.
 	///
-
-	/// Close the agent, releasing its connection pool, DNS resolver, and any
-	/// background tasks it owns, rather than waiting for the garbage collector
-	/// to drop it. This is worth doing when you create many short-lived agents;
-	/// a single long-lived agent can just be left to the GC.
-	///
-	/// Requests already in flight run to completion. Any new request on a closed
-	/// agent throws a `Closed` error. Calling `close()` more than once is a
-	/// no-op. The cookie jar, if any, remains readable through [`Self::cookies`].
+	/// Requests already in flight run to completion. A request issued on a closed agent fails
+	/// with [`FaithErrorKind::Closed`](crate::error::FaithErrorKind::Closed). Calling it more
+	/// than once is a no-op, and the cookie jar, if any, stays readable through `cookies()`.
 	pub fn close(&self) {
 		// Dropping the client releases the reqwest connection pool and the
 		// Hickory resolver task; the alt-svc cache goes with it. The raw client
@@ -235,9 +252,9 @@ impl Agent {
 			return;
 		};
 
-		#[cfg(feature = "http3")]
 		// Probes hold a raw client clone; abort them so the pool doesn't outlive close by up to
 		// the probe timeout.
+		#[cfg(feature = "http3")]
 		if let Some(prober) = &live.h3_prober {
 			prober.abort_all();
 		}
@@ -245,22 +262,19 @@ impl Agent {
 		drop(live);
 	}
 
-	/// Tell the agent the network underneath it has changed, so it stops deciding from what it
-	/// learned about a network that is gone.
+	/// Tell the agent the network under it has changed, so it stops acting on what it learned
+	/// about a network that is gone.
 	///
-	/// Node has no portable signal for an interface or connectivity change, so Faith cannot
-	/// detect one; this is the reaction, and wiring it to a trigger (an OS notification, a VPN
-	/// transition, a captive-portal sign-in) is the caller's own. It drops pooled connections,
-	/// flushes the DNS cache, demotes the HTTP/3 origins that a real response confirmed back to
-	/// advertised so a background probe re-verifies them, and clears the HTTP/3 failure and slow
-	/// states, their cooldown backoff, and the path-time averages.
+	/// There is no portable signal for an interface or connectivity change, so call this yourself
+	/// on whatever trigger fits — an OS notification, a VPN transition, a captive-portal sign-in.
 	///
-	/// Configuration, `http3.hints`, `Alt-Svc` advertisements, the cookie jar, the HTTP cache and
-	/// the `stats()` counters are all kept: none of them is a claim about a network path.
+	/// Drops pooled connections, flushes the DNS cache, demotes confirmed HTTP/3 origins back to
+	/// advertised so a probe re-verifies them, and clears the HTTP/3 failure, slow and path-time
+	/// state. Configuration, `http3.hints`, `Alt-Svc` advertisements, the cookie jar, the HTTP
+	/// cache and the counters are kept — none of those is a claim about a network path.
 	///
-	/// Requests already in flight are not interrupted and run to completion on the connections
-	/// they hold; the reset shapes what requests started afterwards draw on. Calling it on a
-	/// closed agent does nothing, and calling it repeatedly is harmless.
+	/// Requests in flight run to completion on the connections they hold. Harmless to call
+	/// repeatedly, or on a closed agent.
 	// spec:NETCHG
 	pub fn network_changed(&self) {
 		{
@@ -335,46 +349,41 @@ impl Agent {
 		self.warm_generation.fetch_add(1, Ordering::Relaxed);
 	}
 
-	/// The counters this agent has gathered, as they stand.
+	/// The agent's counters, as they stand.
 	pub fn stats(&self) -> AgentStats {
 		self.stats.snapshot()
 	}
 
-	/// Returns information on current connections open by this agent.
+	/// The connections this agent currently holds open.
 	///
-	/// Only tracks TCP connections currently (upstream limitation). Stats are updated once a second:
-	/// this makes it possible to track indicators over time to find the retransmission rate, for
-	/// example. The lost-packet count and delivery rate are only available on Linux. Some other
-	/// fields might also be missing depending on platform support; and no forward guarantees are made
-	/// on field availability. If the platform isn't supported at all, this will always return empty.
+	/// TCP only; QUIC connections are not visible here. Statistics refresh once a second, so sample
+	/// over time for rates such as retransmissions. Which fields are filled depends on the platform:
+	/// the lost-packet count and delivery rate are Linux-only, an unsupported platform reports an
+	/// empty list, and no field is guaranteed to stay available.
 	#[cfg(feature = "connection-tracking")]
 	pub fn connections(&self) -> Vec<ConnectionSnapshot> {
 		self.conn_tracker.snapshot()
 	}
 
-	/// Returns the DNS servers this agent resolves through, in the order they are queried, so
-	/// "are my lookups actually encrypted" is answerable from inside the process.
+	/// The DNS servers this agent resolves through, in query order.
 	///
-	/// Each entry gives the server's address, the transport in use (`udp`, `tcp`, `tls`, `https`,
-	/// `quic`, or `h3`), and how that transport was arrived at (`configured` or `conventional`).
-	/// The list is empty until the resolver has been used, because it reads its configuration on
-	/// first use, and empty for an agent using the system resolver.
+	/// Each entry gives the nameserver's address, the transport in use, and how that was arrived
+	/// at. Empty until the resolver has been used, and empty under the system resolver.
 	// spec:OBS#resolvers
 	#[cfg(feature = "dns")]
 	pub fn resolvers(&self) -> Vec<ResolverReport> {
-		self.dns_resolver()
+		self.dns_resolver_inner()
 			.as_ref()
 			.map(FaithResolver::resolvers)
 			.unwrap_or_default()
 	}
 
-	/// Note that a request reached this origin, so it holds a connection the pool keeps idle for
-	/// the idle window and a `preconnect` for it has no new work to do.
+	/// Note that a request reached this origin, so a `preconnect` for it has no new work to do.
 	///
-	/// Called for foreground requests as well as warm-ups, because the criterion is about the
-	/// origin holding an idle pooled connection, not about how it came to hold one.
+	/// Called for foreground requests as well as warm-ups: the criterion is that the origin holds
+	/// an idle pooled connection, not how it came to.
 	// spec:WARM
-	pub fn mark_warm(&self, url: &Url) {
+	pub(crate) fn mark_warm(&self, url: &Url) {
 		self.warmed.insert(origin_key(url), ());
 	}
 

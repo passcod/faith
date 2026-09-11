@@ -1,3 +1,4 @@
+//! `HTTPS` record lookups.
 use std::time::Duration;
 
 use hickory_resolver::proto::rr::{
@@ -5,22 +6,23 @@ use hickory_resolver::proto::rr::{
 	rdata::svcb::{SvcParamKey, SvcParamValue},
 };
 
-/// What an `HTTPS` record said about an origin's HTTP/3 support.
+/// An origin's HTTP/3 support, as its `HTTPS` record advertised it.
 // spec:DNS#https-records
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct HttpsAdvertisement {
-	/// The record's `port` SvcParam, or `None` when it named none and the origin's own port
-	/// applies.
+	/// The record's `port` SvcParam, when provided. If absent, the origin's default port applies.
 	pub port: Option<u16>,
-	/// The record's own DNS TTL, which is how long the advertisement it carries lives.
+	/// The DNS record's TTL.
 	pub ttl: Duration,
 }
 
-/// Where an `HTTPS` record's advertisement goes once the resolver has read one.
+/// Where an `HTTPS` record's advertisement goes.
 ///
 /// The resolver cannot own the HTTP/3 upgrade cache directly: that cache is built after the
-/// resolver, and the background prober holds a client which holds the resolver in turn. So the
-/// caller installs this afterwards (see [`FaithResolver::set_https_sink`](crate::FaithResolver::set_https_sink)), which also keeps this
+/// resolver, and the prober holds a client which holds the resolver in turn. The caller installs
+/// this afterwards instead (see
+/// [`FaithResolver::set_https_sink`](crate::FaithResolver::set_https_sink)), which also keeps this
 /// crate free of the upgrade layer's types.
 pub trait HttpsSink: Send + Sync {
 	/// Whether an `HTTPS` record for `host` is worth querying at all right now.
@@ -33,7 +35,7 @@ pub trait HttpsSink: Send + Sync {
 	fn record(&self, host: &str, advertisement: HttpsAdvertisement);
 }
 
-/// Whether an ALPN token names a version of HTTP/3.
+/// Whether an ALPN token is a version of HTTP/3.
 ///
 /// The same family test the `Alt-Svc` reader applies, so a draft token like `h3-29` counts here
 /// exactly as it does in a header.

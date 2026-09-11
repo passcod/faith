@@ -1,4 +1,5 @@
-use std::{net::SocketAddr, time::Duration};
+//! Resolver settings.
+use std::{fmt, net::SocketAddr, time::Duration};
 
 use hickory_resolver::{
 	config::{NameServerConfig, ProtocolConfig},
@@ -7,64 +8,68 @@ use hickory_resolver::{
 
 use crate::transport::{ServerSpec, Transport};
 
-/// How a server in `resolvers()` came to be reached the way it is.
+/// How a nameserver came to be reached the way it is.
 // spec:OBS#resolvers
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum ResolverSource {
-	/// Named in `dns.servers` by the caller.
+	/// Named by the caller.
 	Configured,
 	/// Discovered from the system's resolver configuration.
 	Conventional,
 }
 
-impl ResolverSource {
-	fn label(self) -> &'static str {
-		match self {
+impl fmt::Display for ResolverSource {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		f.write_str(match self {
 			Self::Configured => "configured",
 			Self::Conventional => "conventional",
-		}
+		})
 	}
 }
 
-/// One line of `resolvers()`: a server's address, the transport in use, and how it was arrived at.
+/// One line of `resolvers()`.
 #[derive(Clone, Debug)]
+#[non_exhaustive]
 pub struct ResolverReport {
-	pub address: String,
-	pub transport: String,
-	pub source: String,
+	/// The nameserver's address.
+	pub address: SocketAddr,
+	/// The transport in use.
+	pub transport: Transport,
+	/// How that transport was arrived at.
+	pub source: ResolverSource,
 }
 
-/// `dns.maxStale`'s default: how far past expiry an answer may still be served.
+/// [`ResolverConfig::serve_stale`]'s default.
 ///
-/// An hour is long enough that a resolver outage does not stop an agent reaching hosts it already
-/// knows, and short enough that a host which really has moved stops being served a dead address for
-/// the life of a long-running process. The recovery path bounds the cost of being wrong to one
-/// re-resolve, so the window can be generous.
+/// Long enough that a resolver outage does not stop an agent reaching hosts it knows, short enough
+/// that a host which has moved stops being served a dead address for the life of the process.
 // spec:DNS#serving-stale-answers
 pub const DEFAULT_MAX_STALE: Duration = Duration::from_secs(3600);
 
-/// Everything `dns.*` configures about Faith's resolver, resolved from options at construction.
+/// Configuration for initialising a [`FaithResolver`](crate::FaithResolver).
 #[derive(Clone, Debug)]
-pub struct ResolverSettings {
-	/// The `dns.servers` list, in order. Empty means system discovery.
+pub struct ResolverConfig {
+	/// The nameservers to consult, in order. Empty takes the system's own configuration.
 	pub servers: Vec<ServerSpec>,
-	/// `dns.timeout`, bounding the whole list. `None` leaves hickory's five-second default.
+	/// How long a lookup may take across the whole server list, so exhausting several dead
+	/// servers costs one timeout rather than one each.
 	pub timeout: Option<Duration>,
-	/// `dns.ndots`.
+	/// How many dots a name must contain before it is tried as given, ahead of the search list.
 	pub ndots: Option<usize>,
-	/// `dns.searchDomains`, replacing the system's search list when set.
+	/// The domains appended to a name that is not fully qualified, replacing the system's list.
 	pub search_domains: Option<Vec<Name>>,
-	/// `dns.hostsFile`: `Some(true)`/`Some(false)` force it on/off, `None` follows the platform.
+	/// Whether to consult the hosts file. `None` follows the platform's own convention.
 	pub hosts_file: Option<bool>,
-	/// `dns.exemptDomains`, added to the always-exempt `localhost`, `.local`, and system suffix.
+	/// Further domains to send to the system resolver, added to the ones always exempt.
 	pub exempt_domains: Vec<Name>,
-	/// `dns.serveStale`: whether an expired answer is served while a refresh runs behind it.
-	pub serve_stale: bool,
-	/// `dns.maxStale`: how far past expiry an answer may still be served.
-	pub max_stale: Duration,
+	/// Whether an expired answer may be served, and how long for.
+	///
+	/// A fresh lookup runs behind one that is; an entry older than this is discarded instead.
+	pub serve_stale: Option<Duration>,
 }
 
-impl Default for ResolverSettings {
+impl Default for ResolverConfig {
 	fn default() -> Self {
 		Self {
 			servers: Vec::new(),
@@ -75,19 +80,18 @@ impl Default for ResolverSettings {
 			exempt_domains: Vec::new(),
 			// Defaulted here as well as in the option parsing, so a resolver built directly (in tests,
 			// and for the global default agent) serves stale like a configured one.
-			serve_stale: true,
-			max_stale: DEFAULT_MAX_STALE,
+			serve_stale: Some(DEFAULT_MAX_STALE),
 		}
 	}
 }
 
-/// The suffixes handed to the system resolver rather than Faith's servers: `localhost` and `local`
-/// always, plus the ones the system supplies and the caller's `dns.exemptDomains`.
+/// The suffixes handed to the system resolver rather than the configured ones: `localhost` and
+/// `local` always, plus the system's own and the caller's.
 ///
 /// The root name is never a suffix here, whichever list it arrives in. It is the parent of every
 /// name, so admitting it would exempt the lot and route every lookup to the system resolver with
-/// `dns.servers` configured and unused. It does arrive in practice: a Windows host with no DNS
-/// domain of its own reports the root as its domain, so the check is what keeps the encrypted
+/// servers configured and unused. It does arrive in practice: a Windows host with no DNS
+/// domain of its own reports the root as its domain, so the check keeps the encrypted
 /// transports working there rather than being quietly bypassed.
 // spec:DNS#exempt-names
 pub(crate) fn exempt_suffixes(system: Vec<Name>, configured: &[Name]) -> Vec<Name> {
@@ -121,9 +125,9 @@ pub(crate) fn report(
 				ProtocolConfig::H3 { .. } => Transport::H3,
 			};
 			reports.push(ResolverReport {
-				address: SocketAddr::new(server.ip, connection.port).to_string(),
-				transport: transport.label().to_owned(),
-				source: source.label().to_owned(),
+				address: SocketAddr::new(server.ip, connection.port),
+				transport,
+				source,
 			});
 		}
 	}

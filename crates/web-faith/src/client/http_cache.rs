@@ -1,4 +1,4 @@
-//! What an HTTP cache is installed from, held so a rebuilt client keeps the same store.
+//! The HTTP cache's install-time settings, held so a rebuilt client keeps the same store.
 
 use http_cache_reqwest::{CACacheManager, CacheMode, HttpCacheOptions, MokaManager};
 
@@ -6,9 +6,9 @@ use http_cache_reqwest::{CACacheManager, CacheMode, HttpCacheOptions, MokaManage
 /// options that produced it.
 ///
 /// The manager *is* the store: `MokaManager` holds the cached entries behind an `Arc`, and
-/// `CACacheManager` names the directory holding them. So cloning one shares the cache, while
-/// building a fresh one from the same options would empty an in-memory cache — which is why a
-/// client rebuilt for a network change clones this.
+/// `CACacheManager` holds the path to them. Cloning one shares the cache; building a
+/// fresh one from the same options would empty an in-memory cache, so a client rebuilt for a
+/// network change clones this.
 // spec:NETCHG#what-the-signal-keeps
 #[derive(Debug, Clone)]
 pub(crate) enum HttpCacheStore {

@@ -1,47 +1,73 @@
+//! Errors.
+
 use std::{
 	error::Error,
 	fmt::{Debug, Display},
 };
 
-use strum::{EnumIter, IntoEnumIterator};
+#[cfg(feature = "internals")]
+use strum::EnumIter;
+#[cfg(feature = "internals")]
+use strum::IntoEnumIterator;
 
-/// The kind of a [`FaithError`], which is also the stable code the error reports.
+/// The kind of a [`FaithError`].
 ///
-/// Callers match on the kind rather than on the message: the kind is the API, and the message is
-/// for humans. Every kind here is reachable, each one naming a failure some request can produce.
-///
-/// This is the one definition of the set, on either surface. The Node surface hands JavaScript the
-/// codes through [`error_codes`], which reads them from here, so the exported `ERROR_CODES` map and
-/// the errors themselves cannot drift apart.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, EnumIter)]
+/// Match on the kind; the message is for humans and may change.
+#[cfg_attr(feature = "internals", derive(EnumIter))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FaithErrorKind {
+	/// The request was aborted by its caller.
 	Aborted,
+	/// An IP address or port in the options did not parse.
 	AddressParse,
+	/// The response body stream failed partway through.
 	BodyStream,
+	/// The agent has been closed.
 	Closed,
+	/// The agent options were invalid.
 	Config,
+	/// The response body ran past the `Content-Length` it advertised.
 	ContentLengthOverrun,
+	/// The destination file already exists and overwriting was not asked for.
 	FileExists,
+	/// The destination file could not be written.
 	FileWrite,
+	/// The body did not match the `integrity` digests.
 	IntegrityMismatch,
+	/// The `compress` option did not name a coding.
 	InvalidCompression,
+	/// A header name or value was not valid.
 	InvalidHeader,
+	/// The `integrity` value did not parse.
 	InvalidIntegrity,
+	/// The method was not a valid HTTP method.
 	InvalidMethod,
+	/// The destination did not name a local path.
 	InvalidPath,
+	/// The URL did not parse.
 	InvalidUrl,
+	/// The response body was not valid JSON.
 	JsonParse,
+	/// A `QUERY` request carried a body with no `Content-Type` to describe it.
 	MissingContentType,
+	/// The request failed on the network.
 	Network,
+	/// A client certificate or key was not valid PEM.
 	PemParse,
+	/// A redirect was refused, per the `error` redirect policy.
 	Redirect,
+	/// The body has already been read, or handed out as a stream.
 	ResponseAlreadyDisturbed,
+	/// The response cannot carry a body.
 	ResponseBodyNull,
+	/// The request outlived its timeout.
 	Timeout,
 }
 
 impl FaithErrorKind {
-	/// The stable name callers match on.
+	/// The name of this kind, as the JS bindings report it in an error's `code`.
+	#[cfg(feature = "internals")]
+	#[cfg_attr(docsrs, doc(cfg(feature = "internals")))]
 	pub fn code(self) -> String {
 		format!("{self:?}")
 	}
@@ -76,25 +102,35 @@ impl FaithErrorKind {
 }
 
 /// Every error code the library reports, in declaration order.
-///
-/// The Node surface exports this as `ERROR_CODES`; generating it from the kinds themselves is what
-/// keeps the exported map and the errors from drifting.
+#[cfg(feature = "internals")]
 pub fn error_codes() -> Vec<String> {
 	FaithErrorKind::iter().map(FaithErrorKind::code).collect()
 }
 
+/// An error from any layer of the client.
+///
+/// The [`Display`] output leads with the kind and carries the detail, if any.
 #[derive(Debug, Clone)]
 pub struct FaithError {
-	pub kind: FaithErrorKind,
-	pub message: Option<String>,
+	kind: FaithErrorKind,
+	/// Detail beyond what the kind says on its own.
+	message: Option<String>,
 }
 
 impl FaithError {
-	pub fn new(kind: FaithErrorKind, message: Option<impl Into<String>>) -> Self {
+	/// An error of `kind`, carrying detail beyond its default message.
+	///
+	/// [`From<FaithErrorKind>`](FaithError::from) makes one with no detail of its own.
+	pub fn new(kind: FaithErrorKind, message: impl Into<String>) -> Self {
 		Self {
 			kind,
-			message: message.map(|m| m.into()),
+			message: Some(message.into()),
 		}
+	}
+
+	/// What went wrong.
+	pub fn kind(&self) -> FaithErrorKind {
+		self.kind
 	}
 }
 
@@ -113,12 +149,12 @@ impl From<FaithErrorKind> for FaithError {
 /// back to us wrapped in an error of reqwest's own, so the kind we chose has to be recovered from
 /// the source chain to survive as a `code`. Redirect failures reqwest raises on its own account
 /// (exhausting the hop limit, an https-only downgrade) carry no [`FaithError`] and so fall through
-/// to the generic mapping, which is what tells the two apart.
+/// to the generic mapping, which tells the two apart.
 fn faith_kind_in_chain(err: &(dyn Error + 'static)) -> Option<FaithErrorKind> {
 	let mut source = err.source();
 	while let Some(e) = source {
 		if let Some(faith) = e.downcast_ref::<FaithError>() {
-			return Some(faith.kind);
+			return Some(faith.kind());
 		}
 		source = e.source();
 	}
@@ -145,7 +181,7 @@ impl From<reqwest::Error> for FaithError {
 		}
 
 		if err.is_timeout() {
-			return FaithError::new(FaithErrorKind::Timeout, Some(msg));
+			return FaithError::new(FaithErrorKind::Timeout, msg);
 		}
 
 		// A redirect the agent's own policy refused carries the kind we handed reqwest; one reqwest
@@ -156,7 +192,7 @@ impl From<reqwest::Error> for FaithError {
 			.flatten()
 			.unwrap_or(FaithErrorKind::Network);
 
-		FaithError::new(kind, Some(msg))
+		FaithError::new(kind, msg)
 	}
 }
 
@@ -164,26 +200,14 @@ impl From<reqwest_middleware::Error> for FaithError {
 	fn from(err: reqwest_middleware::Error) -> Self {
 		match err {
 			reqwest_middleware::Error::Middleware(err) => {
-				FaithError::new(FaithErrorKind::Network, Some(err.to_string()))
+				FaithError::new(FaithErrorKind::Network, err.to_string())
 			}
 			reqwest_middleware::Error::Reqwest(err) => err.into(),
 		}
 	}
 }
 
-impl Error for FaithError {
-	fn source(&self) -> Option<&(dyn Error + 'static)> {
-		None
-	}
-
-	fn description(&self) -> &str {
-		"description() is deprecated; use Display"
-	}
-
-	fn cause(&self) -> Option<&dyn Error> {
-		self.source()
-	}
-}
+impl Error for FaithError {}
 
 impl Display for FaithError {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -198,7 +222,7 @@ impl Display for FaithError {
 	}
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "internals"))]
 mod tests {
 	use super::*;
 
@@ -227,7 +251,7 @@ mod tests {
 		let err = FaithError::from(FaithErrorKind::Closed);
 		assert_eq!(err.to_string(), "Closed: the agent has been closed");
 
-		let err = FaithError::new(FaithErrorKind::Closed, Some("gone"));
+		let err = FaithError::new(FaithErrorKind::Closed, "gone");
 		assert_eq!(err.to_string(), "Closed: gone");
 	}
 }

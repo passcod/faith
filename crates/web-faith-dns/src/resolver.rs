@@ -1,3 +1,4 @@
+//! The resolver and its caches.
 use std::{
 	collections::HashSet,
 	net::IpAddr,
@@ -7,7 +8,7 @@ use std::{
 
 use hickory_resolver::{
 	TokioResolver,
-	config::{GOOGLE, LookupIpStrategy, ResolverConfig},
+	config::{GOOGLE, LookupIpStrategy, ResolverConfig as HickoryConfig},
 	net::{DnsError, NetError, runtime::TokioRuntimeProvider},
 	proto::rr::{Name, RecordType},
 	system_conf::read_system_conf,
@@ -20,15 +21,11 @@ use std::net::SocketAddr;
 use crate::{
 	discovery::{Built, build},
 	https::{HttpsSink, read_https_answer},
-	settings::{ResolverReport, ResolverSettings, exempt_suffixes},
+	settings::{ResolverConfig, ResolverReport, exempt_suffixes},
 };
 
-/// How many names the stale cache holds before evicting the least recently used.
-///
-/// Matched to hickory's own default answer-cache size, since the two hold an entry for the same set
-/// of names: a stale entry only earns its place while hickory still plausibly holds, or recently
-/// held, the answer it came from. Evicting one early costs a blocking lookup rather than a wrong
-/// answer, so the bound is about memory rather than correctness.
+// Matched to hickory's own default answer-cache size, the two holding entries for the same names.
+// Evicting early costs a blocking lookup, not a wrong answer.
 const STALE_CACHE_SIZE: u64 = 8_192;
 
 /// A resolved answer kept past its TTL, so an expired lookup is served from it while a refresh runs
@@ -43,11 +40,8 @@ struct StaleEntry {
 	valid_until: Instant,
 }
 
-/// Everything the resolver reads off the network, held together so a network change can drop it in
-/// one go. Each field describes the network the agent was on when it was read: which
-/// servers discovery found, which suffixes are local to it, and which of its servers answered an
-/// encryption probe. The caller's [`ResolverSettings`] deliberately sit outside, being options the
-/// agent was constructed with rather than a reading of any network.
+/// Everything the resolver reads off the network, held together so a network change drops it in one
+/// go. The caller's [`ResolverConfig`] sits outside, being configuration rather than a reading.
 // spec:NETCHG
 struct Generation {
 	/// The configured (or discovered) resolver, built lazily inside a tokio runtime.
@@ -56,9 +50,8 @@ struct Generation {
 	system: OnceCell<Arc<TokioResolver>>,
 	/// The exempt suffixes, including the system's own, computed once per generation.
 	exempt: OnceCell<Arc<Vec<Name>>>,
-	/// Answers held past their TTL, keyed by the host as looked up. Sits in the generation rather
-	/// than beside the settings so a network change drops it along with the resolvers that produced
-	/// it: an address learned on the old network is exactly what must not be served on the new one.
+	/// Answers held past their TTL, keyed by the host as looked up. In the generation so a network
+	/// change drops it with the resolvers that produced it.
 	stale: moka::sync::Cache<String, StaleEntry>,
 	/// Hosts with a refresh already in flight, so a second stale hit serves the entry rather than
 	/// starting another lookup.
@@ -82,22 +75,19 @@ struct Inner {
 	/// The options the agent was constructed with. A network change does not touch these; they are
 	/// what the next generation is rebuilt from.
 	// spec:NETCHG#what-the-signal-keeps
-	settings: ResolverSettings,
-	/// Replaced wholesale by [`FaithResolver::reset`]. Read once at the start of a lookup rather
-	/// than at each step, so a lookup that spans the signal finishes against the one set of
-	/// resolvers it started on.
+	config: ResolverConfig,
+	/// Replaced wholesale by [`FaithResolver::reset`]. Read once at the start of a lookup, so one
+	/// spanning the signal finishes against the resolvers it started on.
 	// spec:NETCHG#in-flight-requests
 	generation: Mutex<Arc<Generation>>,
 	/// Where `HTTPS` records go, installed by the agent once the upgrade cache and prober exist.
 	///
-	/// Sits beside the settings rather than inside the generation deliberately: it is wiring
-	/// rather than something read off a network, so a network change leaves it in place. Its
-	/// absence is what turns the `HTTPS` query off, so an agent with HTTP/3 upgrade disabled, or
-	/// one on the system resolver, never sends one.
+	/// Beside the config rather than in the generation: it is wiring, so a network change leaves
+	/// it alone. Its absence turns the `HTTPS` query off.
 	https_sink: Mutex<Option<Arc<dyn HttpsSink>>>,
 }
 
-/// A hickory resolver Faith owns, shared between a client's request path and [`FaithResolver::prefetch`].
+/// A caching DNS resolver.
 #[derive(Clone)]
 pub struct FaithResolver {
 	inner: Arc<Inner>,
@@ -105,7 +95,7 @@ pub struct FaithResolver {
 
 impl Default for FaithResolver {
 	fn default() -> Self {
-		Self::new(ResolverSettings::default())
+		Self::new(ResolverConfig::default())
 	}
 }
 
@@ -116,10 +106,11 @@ impl std::fmt::Debug for FaithResolver {
 }
 
 impl FaithResolver {
-	pub fn new(settings: ResolverSettings) -> Self {
+	/// Create a new resolver.
+	pub fn new(config: ResolverConfig) -> Self {
 		Self {
 			inner: Arc::new(Inner {
-				settings,
+				config,
 				generation: Mutex::new(Arc::new(Generation::default())),
 				https_sink: Mutex::new(None),
 			}),
@@ -128,10 +119,11 @@ impl FaithResolver {
 
 	/// Install where `HTTPS` records go, enabling the query.
 	///
-	/// Called after the agent's HTTP/3 upgrade cache and prober are built, which cannot happen
-	/// before the resolver exists. Replaces any previous sink, which is what a network change
-	/// needs: the prober is rebuilt with the client, so the sink must be too or it would kick
-	/// probes onto a client that has been dropped.
+	/// This must be called after the agent's HTTP/3 upgrade cache and prober are built.
+	///
+	/// Calling this replaces any previously installed sink. This is useful to handle
+	/// network-change events where the client must be switched out with a new one, and `HTTPS`
+	/// records should therefore be redirected to the correct place.
 	// spec:DNS#https-records
 	pub fn set_https_sink(&self, sink: Arc<dyn HttpsSink>) {
 		*self
@@ -164,7 +156,7 @@ impl FaithResolver {
 	async fn built(&self, generation: &Generation) -> Result<Arc<Built>, NetError> {
 		generation
 			.built
-			.get_or_try_init(|| async { build(&self.inner.settings).await.map(Arc::new) })
+			.get_or_try_init(|| async { build(&self.inner.config).await.map(Arc::new) })
 			.await
 			.cloned()
 	}
@@ -177,7 +169,7 @@ impl FaithResolver {
 			.get_or_try_init(|| async {
 				let mut builder = TokioResolver::builder_tokio().unwrap_or_else(|_| {
 					TokioResolver::builder_with_config(
-						ResolverConfig::udp_and_tcp(&GOOGLE),
+						HickoryConfig::udp_and_tcp(&GOOGLE),
 						TokioRuntimeProvider::default(),
 					)
 				});
@@ -189,8 +181,8 @@ impl FaithResolver {
 	}
 
 	/// The exempt suffixes: `localhost`, `local`, the system's own domain and search suffixes, and
-	/// the caller's `dns.exemptDomains`. The system's own suffixes are a
-	/// property of the network, so they are read per generation rather than once per agent.
+	/// the caller's own. The system's are a property of the network, so they are read per
+	/// generation rather than once per agent.
 	// spec:DNS#exempt-names
 	async fn exempt(&self, generation: &Generation) -> Arc<Vec<Name>> {
 		generation
@@ -206,13 +198,13 @@ impl FaithResolver {
 							.collect::<Vec<_>>()
 					})
 					.unwrap_or_default();
-				Arc::new(exempt_suffixes(system, &self.inner.settings.exempt_domains))
+				Arc::new(exempt_suffixes(system, &self.inner.config.exempt_domains))
 			})
 			.await
 			.clone()
 	}
 
-	/// Whether `host` must go to the system resolver rather than Faith's servers.
+	/// Whether `host` must go to the system resolver rather than the configured ones.
 	async fn is_exempt(&self, generation: &Generation, host: &str) -> bool {
 		let Ok(name) = Name::from_utf8(host) else {
 			return false;
@@ -250,12 +242,10 @@ impl FaithResolver {
 	}
 
 	/// Ask for `host`'s `HTTPS` record behind the address lookup, so an origin advertising
-	/// `alpn="h3"` is known before the first connection rather than after the first TCP response.
+	/// `alpn="h3"` is known before the first connection.
 	///
-	/// Spawned rather than awaited: an absent, slow, or failed answer must leave address
-	/// resolution and connecting untouched. Its outcome belongs to the upgrade layer rather than
-	/// to the request that triggered it, so nothing here reaches a caller, exactly as a stale
-	/// refresh's outcome does not.
+	/// Spawned, not awaited: an absent, slow or failed answer must leave address resolution
+	/// untouched, and its outcome belongs to the upgrade layer rather than the request.
 	// spec:DNS#https-records
 	fn spawn_https_query(&self, generation: &Arc<Generation>, host: &str) {
 		let Some(sink) = self.https_sink() else {
@@ -290,21 +280,20 @@ impl FaithResolver {
 	}
 
 	/// The addresses to serve for `host` without waiting, when its answer has expired but is still
-	/// inside `dns.maxStale`.
+	/// inside [`ResolverConfig::serve_stale`]'s window.
 	///
-	/// `None` covers the three cases that must go to the resolver: no entry at all, an entry still
-	/// fresh (which hickory's own cache answers without a network round trip anyway), and an entry so
+	/// `None` for the cases that must go to the resolver: no entry, an entry still fresh, or one so
 	/// old it has stopped being evidence about the host.
 	fn stale_addrs(&self, generation: &Generation, host: &str) -> Option<Vec<IpAddr>> {
-		if !self.inner.settings.serve_stale {
+		let Some(max_stale) = self.inner.config.serve_stale else {
 			return None;
-		}
+		};
 		let entry = generation.stale.get(host)?;
 		let now = Instant::now();
 		if now <= entry.valid_until {
 			return None;
 		}
-		if now.saturating_duration_since(entry.valid_until) > self.inner.settings.max_stale {
+		if now.saturating_duration_since(entry.valid_until) > max_stale {
 			// Dropped rather than left to sit: keeping it would let a refresh that has been failing
 			// for hours go on being consulted, and the entry can only get older from here.
 			generation.stale.invalidate(host);
@@ -321,7 +310,7 @@ impl FaithResolver {
 		addrs: &[IpAddr],
 		valid_until: Instant,
 	) {
-		if !self.inner.settings.serve_stale || addrs.is_empty() {
+		if self.inner.config.serve_stale.is_none() || addrs.is_empty() {
 			return;
 		}
 		generation.stale.insert(
@@ -335,10 +324,8 @@ impl FaithResolver {
 
 	/// Refresh `host` behind a stale answer that has already been served.
 	///
-	/// Single-flighted per host: the claim is taken before the task is spawned, so concurrent stale
-	/// hits serve the entry rather than each starting a lookup. The task outlives the request that
-	/// triggered it, and its outcome belongs to the cache rather than that request, so nothing here
-	/// is reported to a caller.
+	/// Single-flighted per host, the claim taken before the task is spawned. The task outlives the
+	/// request that triggered it, and its outcome belongs to the cache.
 	// spec:DNS#serving-stale-answers
 	fn spawn_refresh(&self, generation: &Arc<Generation>, host: &str) {
 		{
@@ -387,39 +374,34 @@ impl FaithResolver {
 
 	/// Drop any stale answer held for `host`, so the next lookup waits for a fresh one.
 	///
-	/// Called when connecting to a served address failed, which is the one piece of evidence that the
-	/// address was wrong rather than merely old.
+	/// This should be called when connecting to an address has failed, as that indicates that the
+	/// address might be wrong.
 	// spec:DNS#when-a-stale-address-is-wrong
 	pub fn invalidate_stale(&self, host: &str) {
 		self.generation().stale.invalidate(host);
 	}
 
-	/// Whether a lookup of `host` right now would be served from an expired entry, and so would hand
-	/// out an address that is assumed rather than confirmed.
-	///
-	/// Deliberately the same window a stale answer is served from, rather than merely "an expired
-	/// entry exists": an entry past `dns.maxStale` is resolved for real, and treating that as stale
-	/// would spend a second connection attempt on an address that was already confirmed.
+	/// Whether a lookup of `host` now would be served from an expired entry.
 	pub fn served_stale(&self, host: &str) -> bool {
-		if !self.inner.settings.serve_stale {
+		let Some(max_stale) = self.inner.config.serve_stale else {
 			return false;
-		}
+		};
 		self.generation().stale.get(host).is_some_and(|entry| {
 			let now = Instant::now();
-			now > entry.valid_until
-				&& now.saturating_duration_since(entry.valid_until) <= self.inner.settings.max_stale
+			now > entry.valid_until && now.saturating_duration_since(entry.valid_until) <= max_stale
 		})
 	}
 
-	/// Resolve `host` and leave the answer in the shared cache, so a later request skips the
-	/// lookup. Any failure is swallowed: the warm-up is advisory.
+	/// Resolve `host` now, so a later lookup for it is answered from cache.
+	///
+	/// Errors are ignored silently: warming is advisory.
 	// spec:WARM
 	pub async fn prefetch(&self, host: &str) {
 		let _ = self.lookup(host).await;
 	}
 
-	/// The DNS servers the agent resolves through, in query order. Empty
-	/// until the resolver has been used, because it reads its configuration on first use.
+	/// The DNS servers the agent resolves through, in query order. Empty until the resolver has
+	/// been used.
 	// spec:OBS#resolvers
 	pub fn resolvers(&self) -> Vec<ResolverReport> {
 		self.generation()
@@ -429,21 +411,11 @@ impl FaithResolver {
 			.unwrap_or_default()
 	}
 
-	/// Drop everything read off the network, so the next lookup rebuilds against the network the
-	/// agent is on now.
+	/// Drop everything learned from the network.
 	///
-	/// Flushing cached answers alone would leave the agent resolving them again through the
-	/// previous network's servers: the discovered server list, the suffixes treated as local, and
-	/// the results of encryption probes are all readings of a network too, and the whole point of
-	/// the signal is that the network has changed. Dropping the generation takes the caches with
-	/// it, since they belong to the resolvers being dropped.
-	///
-	/// The caller's options are untouched, so a listed `dns.servers` set is rebuilt exactly as
-	/// configured; what it re-reads is what the system supplies and what the network answers.
-	///
-	/// Synchronous, unlike the rest of this type: it swaps an `Arc` rather than building anything,
-	/// which keeps it callable from a network-change signal, which is not async. Nothing is rebuilt here
-	/// either, so an agent that never resolves again pays nothing for the signal.
+	/// This clears the cached answers, the discovered servers, the local suffixes, and the
+	/// opportunistic encryption probe results; the configuration is untouched. Useful to handle
+	/// network-change events.
 	// spec:NETCHG#what-the-signal-keeps
 	// spec:NETCHG#reach-across-the-subsystems
 	pub fn reset(&self) {
@@ -473,13 +445,12 @@ impl reqwest::dns::Resolve for FaithResolver {
 	}
 }
 
-/// Whether a failed lookup was the resolver answering that the name holds nothing, rather than the
-/// resolver failing to answer.
+/// Whether a failed lookup was the resolver saying the name holds nothing, rather than failing to
+/// answer.
 ///
-/// The distinction decides what happens to a stale entry: an authoritative "nothing here" retires
-/// it, while a failure to reach an answer leaves it in place. Hickory draws the same line, producing
-/// `NoRecordsFound` only for `NXDOMAIN` and for `NOERROR` with no answer records, and reporting
-/// `SERVFAIL` and the other failure codes as `ResponseCode` instead.
+/// An authoritative "nothing here" retires a stale entry; a failure to reach an answer leaves it.
+/// Hickory produces `NoRecordsFound` only for `NXDOMAIN` and for `NOERROR` with no answers,
+/// reporting `SERVFAIL` and the rest as `ResponseCode`.
 fn is_authoritatively_empty(err: &NetError) -> bool {
 	matches!(err, NetError::Dns(DnsError::NoRecordsFound(_)))
 }

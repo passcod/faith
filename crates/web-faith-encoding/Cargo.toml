@@ -1,6 +1,6 @@
 [package]
 name = "web-faith-encoding"
-description = "HTTP content coding for request and response bodies"
+description = "HTTP content coding for request and response bodies: gzip, deflate, brotli, and zstd"
 version = "1.0.0"
 edition.workspace = true
 rust-version.workspace = true
@@ -16,3 +16,7 @@ futures.workspace = true
 http.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

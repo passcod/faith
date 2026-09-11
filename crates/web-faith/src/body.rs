@@ -1,3 +1,5 @@
+//! Response bodies.
+
 use std::{
 	fmt::Debug,
 	mem::replace,
@@ -17,26 +19,35 @@ use tokio::sync::Mutex;
 
 use crate::timing::TimingSlot;
 
+/// A body byte-stream, as a response hands one out.
 pub type DynStream = dyn Stream<Item = std::result::Result<Bytes, String>> + Send + Sync;
 
+/// A response body, in whichever state it has reached.
 pub enum Body {
+	/// As it arrived, not yet read.
 	Inner(reqwest::Body),
+	/// Read to the end, or discarded.
 	Consumed,
+	/// Handed out as a stream that a response and its clones share.
 	Stream(SharedStream<Pin<Box<DynStream>>>),
 }
 
-/// Wrapper around the body that auto-drains on drop to release the connection.
+/// A response body, drained on drop so its connection goes back to the pool.
+///
+/// An HTTP/1 connection can't be reused until its body has been read to the end.
 pub struct BodyHolder {
+	/// `None` for a response that cannot carry a body.
 	pub body: Option<Arc<Mutex<Body>>>,
-	/// Flag to prevent drain if body was properly consumed
+	/// Set once the body has been consumed, so dropping it drains nothing.
 	pub drained: Arc<AtomicBool>,
-	/// HTTP version - HTTP/2+ doesn't need draining for connection reuse
+	/// Which protocol carried the response, since only HTTP/1 needs the drain.
 	pub version: Version,
-	/// Settled when the body ends, so an abandoned body still finishes its timing
+	/// Settled when the body ends, so an abandoned body still finishes its timing.
 	pub timing: Option<Arc<TimingSlot>>,
 }
 
 impl BodyHolder {
+	/// Hold `body`, draining it on drop if `version` needs that to reuse the connection.
 	pub fn new(body: Option<Arc<Mutex<Body>>>, version: Version, timing: Arc<TimingSlot>) -> Self {
 		Self {
 			body,
@@ -46,6 +57,7 @@ impl BodyHolder {
 		}
 	}
 
+	/// A holder for a response that cannot carry a body.
 	pub fn none() -> Self {
 		Self {
 			body: None,
@@ -55,13 +67,13 @@ impl BodyHolder {
 		}
 	}
 
-	/// Returns true if this is HTTP/2 or HTTP/3 (multiplexed protocols)
-	/// where dropping a body doesn't block connection reuse.
+	/// Whether the response came over HTTP/2 or HTTP/3, where dropping a body cancels its stream
+	/// and leaves the connection alone, so there is nothing to drain.
 	pub fn is_multiplexed(&self) -> bool {
 		matches!(self.version, Version::HTTP_2 | Version::HTTP_3)
 	}
 
-	/// Mark the body as drained (called when body is fully consumed)
+	/// Note that the body has been consumed, so dropping it drains nothing.
 	pub fn mark_drained(&self) {
 		self.drained.store(true, Ordering::SeqCst);
 	}
@@ -141,8 +153,7 @@ impl Drop for BodyHolder {
 	}
 }
 
-/// Drain a body to release the connection back to the pool.
-/// This reads and discards all remaining bytes.
+/// Read and discard whatever is left of a body, so its connection goes back to the pool.
 pub async fn drain_body_inner(arc: Arc<Mutex<Body>>) {
 	let mut guard = arc.lock().await;
 	match replace(&mut *guard, Body::Consumed) {

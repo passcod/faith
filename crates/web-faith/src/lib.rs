@@ -1,20 +1,13 @@
-//! A browser-shaped HTTP client: fetch semantics over a Rust network stack.
+//! A browser-shaped HTTP client.
 //!
-//! Faith behaves like a browser wherever that translates to a server-side runtime: transparent
-//! HTTP/2 and HTTP/3, Happy Eyeballs across IPv4 and IPv6, DNS caching, an optional cookie jar, and
-//! HTTP caching. The subsystems beneath it are published on their own, and each can be left out of a
-//! build with the feature named for it.
-//!
-//! Those features are on by default apart from `http3`, which reqwest gates behind a cfg only the
-//! consuming build can set. Enabling HTTP/3 means naming the feature and setting
-//! `RUSTFLAGS="--cfg reqwest_unstable"`; without it, requests still negotiate HTTP/2.
-//!
-//! Whichever layer a request fails in, the failure arrives as one [`FaithError`] whose
-//! [`FaithErrorKind`] is the stable code to match on: a component crate names its own errors, and
-//! they are converted at the boundary as they cross into the client.
+//! Faith behaves like a browser ("faithfully") wherever that translates to a server-side runtime:
+//! transparent HTTP/2 and HTTP/3 upgrades, Happy Eyeballs across IPv4 and IPv6, DNS caching, an
+//! optional cookie jar, and HTTP caching. We also publish the reusable components as separate
+//! crates.
 //!
 //! ```no_run
-//! # use web_faith::agent::Agent;
+//! use web_faith::Agent;
+//!
 //! # async fn example() -> Result<(), web_faith::FaithError> {
 //! let agent = Agent::new()?;
 //! let body = agent.fetch("https://example.com/").await?.text().await?;
@@ -22,17 +15,54 @@
 //! # }
 //! ```
 //!
-//! An [`Agent`] owns the connection pool, resolver, cookie jar, and caches; [`Agent::builder`]
-//! configures one. Cloning an agent is cheap and every clone names the same one.
+//! # HTTP/3 is opt-in
 //!
-//! [`Agent::fetch`] returns a builder that sends when awaited, so there is no separate send step.
-//! [`Request`] prepares one without sending it, to adjust at each call site or send unchanged on
-//! more than one agent.
+//! Faith uses reqwest internally, and its HTTP/3 support is currently unstable. To enable HTTP/3
+//! support, you will need to set the `http3` feature on Faith, and use the `reqwest_unstable` rustc
+//! cfg flag:
 //!
-//! [`Agent`]: agent::Agent
-//! [`Agent::builder`]: agent::Agent::builder
-//! [`Agent::fetch`]: agent::Agent::fetch
-//! [`Request`]: request::Request
+//! ```toml
+//! [dependencies]
+//! web-faith = { version = "1.0", features = ["http3"] }
+//! ```
+//!
+//! ```toml
+//! # .cargo/config.toml
+//! [build]
+//! rustflags = ["--cfg", "reqwest_unstable"]
+//! ```
+//!
+//! # Features
+//!
+//! | Feature | Default | What it adds |
+//! | --- | :-: | --- |
+//! | `cache` | ✓ | The HTTP cache. |
+//! | `connection-tracking` | ✓ | Kernel connection counters. |
+//! | `cookies` | ✓ | The cookie jar. |
+//! | `dns` | ✓ | Faith's own caching resolver. Without it, names resolve through the platform. |
+//! | `encoding` | ✓ | Content codings for request and response bodies. |
+//! | `tls-aws-lc-rs` | ✓ | aws-lc-rs as the rustls crypto provider. |
+//! | `tls-ring` |  | ring as the rustls crypto provider instead. |
+//! | `http3` |  | Transparent HTTP/3, upgraded into via Alt-Svc. Needs the cfg flag above. |
+//! | `raw-client` |  | Access to the reqwest client underneath. |
+//! | `internals` |  | Faith's internals. Permanently unstable and exempt from semver. |
+//!
+//! # Component crates
+//!
+//! - [`web-faith-cookies`](https://docs.rs/web-faith-cookies)
+//! - [`web-faith-dns`](https://docs.rs/web-faith-dns)
+//! - [`web-faith-conn-tracker`](https://docs.rs/web-faith-conn-tracker)
+//! - [`web-faith-alt-svc`](https://docs.rs/web-faith-alt-svc)
+//! - [`web-faith-encoding`](https://docs.rs/web-faith-encoding)
+//!
+//! # Elsewhere
+//!
+//! Faith is also a Node.js module which lets you use this Rust networking stack as a `fetch`
+//! drop-in replacement: [`@passcod/faith`](https://www.npmjs.com/package/@passcod/faith).
+
+#![deny(missing_docs)]
+// Lets docs.rs label each item with the feature or platform it needs.
+#![cfg_attr(docsrs, feature(doc_cfg))]
 
 // A build with no crypto provider cannot speak TLS, and an HTTPS client that cannot is not one.
 // Selecting a provider is therefore a choice between the two rather than an option to decline.
@@ -40,18 +70,32 @@
 compile_error!("web-faith needs a TLS backend: enable either tls-aws-lc-rs or tls-ring");
 
 pub mod agent;
-pub mod body;
-pub mod builder;
-pub mod client;
 pub mod error;
-pub mod integrity;
-pub mod options;
 pub mod request;
 pub mod response;
-pub mod retry;
-pub mod stats;
-pub mod timing;
-pub mod warm_up;
+
+mod builder;
+mod client;
+mod integrity;
+mod retry;
+mod stats;
+mod timing;
+mod warm_up;
+
+// `internals` decides whether these module paths are public. The option types the ordinary
+// builder path needs are re-exported from `agent` either way; `doc(cfg(all()))` on the private
+// arm stops rustdoc labelling those re-exports as needing `not(internals)`.
+#[cfg(feature = "internals")]
+pub mod body;
+#[cfg(not(feature = "internals"))]
+#[cfg_attr(docsrs, doc(cfg(all())))]
+mod body;
+
+#[cfg(feature = "internals")]
+pub mod options;
+#[cfg(not(feature = "internals"))]
+#[cfg_attr(docsrs, doc(cfg(all())))]
+mod options;
 
 /// The `User-Agent` a request carries when nothing overrides it.
 ///
@@ -70,4 +114,10 @@ pub const USER_AGENT: &str = concat!(
 	env!("REQWEST_VERSION")
 );
 
-pub use error::{FaithError, FaithErrorKind, error_codes};
+pub use agent::Agent;
+pub use error::FaithError;
+pub use request::Request;
+pub use response::Response;
+
+#[cfg(feature = "internals")]
+pub use error::error_codes;

@@ -1,6 +1,6 @@
 [package]
 name = "web-faith"
-description = "A browser-shaped HTTP client: fetch semantics over a Rust network stack"
+description = "A browser-shaped HTTP client"
 version = "1.0.0"
 edition.workspace = true
 rust-version.workspace = true
@@ -15,8 +15,10 @@ authors.workspace = true
 # own `http3`, which refuses to compile unless the `reqwest_unstable` cfg is set; the workspace
 # supplies that through .cargo/config.toml, which is not part of the published crate, so docs.rs
 # has to be told directly.
-features = ["http3"]
+# `raw-client` is here so the escape hatch renders; `internals` deliberately is not.
+features = ["http3", "raw-client"]
 rustc-args = ["--cfg", "reqwest_unstable"]
+rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
 async-trait.workspace = true
@@ -85,3 +87,10 @@ http3 = ["reqwest/http3", "tls-aws-lc-rs", "dep:web-faith-alt-svc"]
 # reqwest's QUIC stack is tied to it.
 tls-aws-lc-rs = ["reqwest/rustls"]
 tls-ring = ["reqwest/rustls-no-provider", "dep:rustls", "rustls/ring"]
+# Exposes `Agent::client` and `Agent::raw_client`, which hand out the reqwest client under the
+# agent. A visibility switch: both are always compiled and used internally.
+raw-client = []
+# Exposes Faith's internals: the `options` and `body` modules, `Agent::from_options`, the request
+# shapes and `send`, and a response's body plumbing. Permanently unstable and exempt from semver.
+# A visibility switch: all of it is compiled and used internally regardless.
+internals = ["raw-client"]

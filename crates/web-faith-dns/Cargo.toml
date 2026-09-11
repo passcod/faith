@@ -1,6 +1,6 @@
 [package]
 name = "web-faith-dns"
-description = "A caching DNS resolver: transports, server order, HTTPS records, and Happy Eyeballs"
+description = "A caching DNS resolver for HTTP clients, with a cache you can warm"
 version = "1.0.0"
 edition.workspace = true
 rust-version.workspace = true
@@ -24,3 +24,7 @@ tokio = { workspace = true }
 [features]
 # Implement reqwest's `Resolve`, so the resolver can be installed on its client.
 reqwest = ["dep:reqwest", "reqwest/hickory-dns"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

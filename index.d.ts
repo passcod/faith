@@ -306,8 +306,6 @@ json(): Promise<any>
  *
  * The `file://` URL to path conversion and the `InvalidPath` rejection happen in the
  * wrapper, so this receives a resolved string path.
- *
- * spec:BODY#tofile
  */
 toFile(path: string, options?: ToFileOptions | undefined | null, onProgress?: ((progress: ToFileProgress) => void) | undefined | null): Promise<ToFileResult>
 /**
@@ -1325,7 +1323,7 @@ export declare const enum Redirect {
 
 export const REQWEST_VERSION: string
 
-/** One entry of `Agent.resolvers()`: a DNS server the agent resolves through (spec:OBS#resolvers). */
+/** One entry of `Agent.resolvers()`: a DNS server the agent resolves through. */
 export interface ResolverInfo {
   /** The server's address, as `ip:port`. */
   address: string

@@ -1,3 +1,5 @@
+//! A request's target.
+
 use bytes::Bytes;
 use url::Url;
 
@@ -6,13 +8,15 @@ use crate::{
 	request::{Request, RequestBody, RequestOptions},
 };
 
-/// What a request is aimed at: a URL, or another request to layer over.
+/// A request's target.
 ///
-/// Anything that converts into a `url::Url` is a target, as is a [`Request`], which is what lets a
-/// prepared request be adjusted at each call site.
+/// Anything that converts into a `url::Url`, or a [`Request`] to layer over, which lets a prepared
+/// request be adjusted at each call site.
 // spec:REQ
 pub enum Target {
+	/// A URL.
 	Url(Url),
+	/// A prepared request, to layer over.
 	Request(Box<Request>),
 }
 

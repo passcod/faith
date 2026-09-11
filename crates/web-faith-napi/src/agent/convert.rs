@@ -6,7 +6,11 @@ use std::{net::IpAddr, str::FromStr as _, time::Duration};
 
 use napi::{Either, bindgen_prelude::Buffer};
 
-use web_faith::{FaithError, FaithErrorKind, client::RedirectPolicy, options};
+use web_faith::{
+	error::{FaithError, FaithErrorKind},
+	options,
+	options::RedirectPolicy,
+};
 
 #[cfg(feature = "cookies")]
 use web_faith_cookies::CookieLimits;
@@ -42,7 +46,7 @@ impl TryFrom<AgentOptions> for options::AgentOptions {
 						IpAddr::from_str(addr).map_err(|err| {
 							FaithError::new(
 								FaithErrorKind::AddressParse,
-								Some(format!("{addr:?}: {err}")),
+								format!("{addr:?}: {err}"),
 							)
 						})
 					})
