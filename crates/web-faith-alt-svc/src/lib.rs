@@ -99,6 +99,6 @@ pub use cache::{AltSvcAdvertisement, AltSvcCache, AltSvcCacheConfig, AltSvcEntry
 pub use header::NoHttp3Alternative;
 #[cfg(feature = "dns")]
 pub use https_sink::H3HttpsSink;
-pub use middleware::{AltSvcMiddleware, ArrivalStamp};
+pub use middleware::{AltSvcMiddleware, ArrivalHook};
 
 pub use prober::H3Prober;

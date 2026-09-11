@@ -41,9 +41,6 @@ use crate::{
 	retry::DeadConnectionRetry,
 };
 
-#[cfg(feature = "http3")]
-use crate::timing::HeadersStamp;
-
 // Chrome's shape: a 6 MiB stream inside a 15 MiB connection. A larger window measured faster, but
 // a pooled server-side client multiplies per-connection memory across far more connections than a
 // browser does (spec:FLOW).
@@ -444,11 +441,12 @@ impl ClientRecipe {
 		// rewrite cannot split HTTP/3 and TCP responses across separate entries.
 		#[cfg(feature = "http3")]
 		if let Some(alt_svc_cache) = alt_svc_cache {
-			client = client.with(AltSvcMiddleware::<HeadersStamp>::new(
+			client = client.with(AltSvcMiddleware::new(
 				alt_svc_cache.clone(),
 				self.h3_upgrade.enabled,
 				self.h3_upgrade.attempt_timeout,
 				prober.clone(),
+				Some(crate::timing::arrival_hook()),
 			));
 		}
 

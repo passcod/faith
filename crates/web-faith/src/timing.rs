@@ -20,7 +20,7 @@ impl HeadersStamp {
 	///
 	/// An HTTP/3 attempt that falls back to TCP runs the stack twice, and only the attempt that
 	/// produced the response stamps. The stamping lives in the Alt-Svc layer, so without HTTP/3
-	/// nothing stamps and the request times the send itself.
+	/// nothing stamps and `send` times the response head itself.
 	#[cfg_attr(not(feature = "http3"), allow(dead_code))]
 	pub fn mark(&self, at: Instant) {
 		let _ = self.0.set(at);
@@ -31,13 +31,17 @@ impl HeadersStamp {
 	}
 }
 
-/// The Alt-Svc layer is the one place a response's arrival is observed, so it marks the stamp the
-/// request carries; reading it back out is this module's business.
+/// The hook the Alt-Svc layer reports a response's arrival through.
+///
+/// That layer is the one place an arrival is observed today, so it calls this with the request's
+/// extensions, where the stamp for that request lives.
 #[cfg(feature = "http3")]
-impl web_faith_alt_svc::ArrivalStamp for HeadersStamp {
-	fn mark(&self, at: Instant) {
-		HeadersStamp::mark(self, at);
-	}
+pub(crate) fn arrival_hook() -> web_faith_alt_svc::ArrivalHook {
+	std::sync::Arc::new(|extensions: &http::Extensions, at: Instant| {
+		if let Some(stamp) = extensions.get::<HeadersStamp>() {
+			stamp.mark(at);
+		}
+	})
 }
 
 /// The timing of one request, filled in as it progresses.
