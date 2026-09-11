@@ -351,8 +351,7 @@ impl FaithResponse {
 	///
 	/// The `file://` URL to path conversion and the `InvalidPath` rejection happen in the
 	/// wrapper, so this receives a resolved string path.
-	///
-	/// spec:BODY#tofile
+	// spec:BODY#tofile
 	#[napi(
 		ts_args_type = "path: string, options?: ToFileOptions | undefined | null, onProgress?: ((progress: ToFileProgress) => void) | undefined | null"
 	)]

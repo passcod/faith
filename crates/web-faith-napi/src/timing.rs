@@ -2,8 +2,8 @@
 //!
 //! The measuring itself is [`web_faith::response`]'s; what belongs here is the shape JavaScript
 //! receives.
-//!
-//! spec:RESP#request-timing
+
+// spec:RESP#request-timing
 
 use napi_derive::napi;
 use web_faith::response::RequestTiming;

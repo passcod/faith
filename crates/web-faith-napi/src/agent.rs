@@ -62,7 +62,8 @@ impl From<web_faith::agent::AgentStats> for AgentStats {
 	}
 }
 
-/// One entry of `Agent.resolvers()`: a DNS server the agent resolves through (spec:OBS#resolvers).
+/// One entry of `Agent.resolvers()`: a DNS server the agent resolves through.
+// spec:OBS#resolvers
 #[cfg(feature = "dns")]
 #[napi(object)]
 #[derive(Debug, Clone)]
@@ -219,7 +220,8 @@ impl Agent {
 }
 
 /// Build the JS error a warm-up throws synchronously for a caller mistake, preserving its `.code`
-/// and JS error class. Network failures never reach here — they resolve quietly (spec:WARM).
+/// and JS error class. Network failures never reach here — they resolve quietly.
+// spec:WARM
 fn caller_error(env: &Env, err: FaithError) -> napi::Error {
 	napi::Error::from(err.into_js_error(env))
 }

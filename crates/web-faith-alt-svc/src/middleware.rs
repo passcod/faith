@@ -67,7 +67,6 @@ impl Drop for H3AttemptGuard {
 /// - if QUIC connections to the origin start failing,
 /// - if the QUIC path becomes noticeably slower than the TCP path,
 /// - retries the upgrade after an exponential cooldown.
-///
 #[derive(Clone)]
 pub struct AltSvcMiddleware {
 	cache: Arc<AltSvcCache>,

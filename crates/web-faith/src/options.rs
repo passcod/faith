@@ -725,7 +725,8 @@ pub fn ipv6_wildcard_bindable() -> bool {
 }
 
 /// Reconcile one protocol's windows: its own setting wins over the common one, which wins over the
-/// default (spec:FLOW#per-protocol-windows).
+/// default.
+// spec:FLOW#per-protocol-windows
 pub(crate) fn resolve_windows(
 	common: Option<&FlowControlOptions>,
 	protocol_stream: Option<u32>,

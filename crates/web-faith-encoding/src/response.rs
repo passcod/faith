@@ -197,9 +197,9 @@ pub fn decode(
 
 /// Wrap a body byte-stream in a decoder for `coding`.
 ///
-/// Trailers are pulled off the frames before this point, so decoding sees data only. A coding this
-/// crate cannot decode leaves the stream as it is; [`can_decode_as`](crate::ContentEncoding::can_decode_as)
-/// never returns one.
+/// Trailers are pulled off the frames before this point, so decoding sees data only. A coding
+/// this crate cannot decode leaves the stream as it is;
+/// [`can_decode_as`](crate::ContentEncoding::can_decode_as) never returns one.
 pub fn decode_stream(input: Pin<Box<ByteStream>>, coding: Coding) -> Pin<Box<ByteStream>> {
 	let reader = StreamReader::new(input.map_err(io::Error::other));
 	match coding {

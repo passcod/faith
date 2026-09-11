@@ -48,8 +48,8 @@ pub(crate) fn apply_options(
 }
 
 /// Discovery: configure from the system, then let hickory's RFC 9539 opportunistic encryption
-/// upgrade those servers to DoT/DoQ where they answer a probe. A configured search list overrides the
-/// system search list when set.
+/// upgrade those servers to DoT/DoQ where they answer a probe. A configured search list overrides
+/// the system search list when set.
 // spec:DNS#discovery
 pub(crate) fn build_discovery(config: &ResolverConfig) -> Result<Built, NetError> {
 	let (mut hickory, options) = read_system_conf().unwrap_or_else(|_| {
