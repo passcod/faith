@@ -1,8 +1,7 @@
 //! The agent builder's terminal.
 //!
-//! `bon` generates the builder and its setters from `AgentOptions`, so an option is declared once,
-//! as a field, rather than once as a field and again as a setter. What it does not generate is a
-//! finisher that yields an `Agent`: its own is `into_options`, which yields the options.
+//! `bon` generates the builder and its setters from `AgentOptions`, so an option is declared once
+//! as a field. Its own finisher yields the options, so the one that yields an `Agent` is here.
 
 // spec:AGENT
 

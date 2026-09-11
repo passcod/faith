@@ -1,24 +1,23 @@
-//! An Alt-Svc store, and HTTP/3 upgrade on the strength of it.
+//! An HTTP/3 upgrade (via Alt-Svc primarily) mechanism for reqwest.
 //!
-//! An origin advertises HTTP/3 in an `Alt-Svc` header, or in an `HTTPS` DNS record. Acting on that
-//! is not as simple as believing it: the alternative may be unreachable even though it was
-//! advertised, and finding out costs the request that tries. What this does is keep the
-//! advertisements ([`AltSvcCache`]) and decide, per origin, whether HTTP/3 is worth attempting.
+//! An origin advertises HTTP/3 in an `Alt-Svc` header or an `HTTPS` DNS record. The alternative
+//! may be unreachable even so, and finding out costs the request that tries. [`AltSvcCache`] keeps
+//! the advertisements and decides, per origin, whether HTTP/3 is worth attempting.
 //!
-//! [`AltSvcMiddleware`] is the layer that acts on the decision. Two shapes are available:
+//! [`AltSvcMiddleware`] acts on that decision, in one of two shapes:
 //!
-//! - With an [`H3Prober`], an advertisement is verified in the background and foreground requests
-//!   are routed over HTTP/3 only once an origin is confirmed, so no user-visible request pays for
-//!   discovering a broken alternative.
-//! - Without one, the next foreground request is itself the verification, falling back to TCP if the
-//!   attempt does not produce headers in time.
+//! - With an [`H3Prober`], advertisements are verified in the background and foreground requests
+//!   use HTTP/3 only once an origin is confirmed, so no user-visible request pays for discovering a
+//!   broken alternative.
+//! - Without one, the next foreground request is the verification, falling back to TCP if it does
+//!   not produce headers in time.
 //!
-//! Either way an origin that starts failing, or that turns out to be slower over HTTP/3 than the
-//! path it replaced ([`PathTime`]), is demoted, and the cooldown before it is tried again lengthens
-//! with each consecutive failure.
+//! Either way, an origin that starts failing, or that proves slower over HTTP/3 than the path it
+//! replaced ([`PathTime`]), is demoted, and the cooldown before it is retried lengthens with each
+//! consecutive failure.
 //!
-//! [`parse_alt_svc_header`] reads a header on its own if all you want is the advertisement, and
-//! [`H3HttpsSink`] feeds the store from `HTTPS` record lookups.
+//! [`parse_alt_svc_header`] reads a header on its own, and [`H3HttpsSink`] feeds the store from
+//! `HTTPS` record lookups.
 //!
 //! ```
 //! use reqwest::Url;
@@ -33,7 +32,7 @@
 //! cache.record_alt_svc(&origin, &advertised);
 //! assert_eq!(cache.confirmed_port(&origin), None);
 //!
-//! // A probe that reaches the origin over HTTP/3 is what promotes it to routable.
+//! // A probe that reaches the origin over HTTP/3 promotes it to routable.
 //! let port = cache.probe_candidate(&origin).expect("worth probing");
 //! cache.confirm_h3(&origin, port);
 //! assert_eq!(cache.confirmed_port(&origin), Some(443));

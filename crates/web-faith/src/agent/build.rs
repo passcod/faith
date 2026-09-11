@@ -556,7 +556,7 @@ impl Agent {
 
 	/// Build an agent from a validated recipe.
 	///
-	/// The recipe is what a client is built from, and the settings are what each request consults;
+	/// A client is built from the recipe, and each request consults the settings;
 	/// validating whatever a caller expressed them as belongs to the surface that took it.
 	pub(crate) fn build(
 		recipe: ClientRecipe,

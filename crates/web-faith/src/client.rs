@@ -84,7 +84,7 @@ pub(crate) struct ResolvedWindows {
 ///   default and treats this variable purely as an opt-*out* switch, so leaving
 ///   it unset (or `"1"`) keeps the existing always-on behaviour.
 ///
-/// `NODE_USE_SYSTEM_CA` is deliberately not honoured: faith bundles no Mozilla
+/// `NODE_USE_SYSTEM_CA` is not honoured: faith bundles no Mozilla
 /// root set, so its only default trust source is the platform store the variable
 /// would toggle. `=0` could therefore only mean "trust almost nothing", which is
 /// never what a caller wants, so the platform store is always used.

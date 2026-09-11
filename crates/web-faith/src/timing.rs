@@ -77,9 +77,9 @@ impl TimingSlot {
 
 	/// Record that the body ended, if nothing got there first.
 	///
-	/// `send_if_modified` so the read and the write are one step, and so waiters are woken only
-	/// by the call that actually settled it. Every route out of a body lands here: the stream
-	/// ending, `discard()`, and the collector draining one that was abandoned.
+	/// `send_if_modified` keeps the read and write one step, and wakes waiters only from the call
+	/// that settled it. Every route out of a body lands here: the stream ending, `discard()`, and
+	/// the collector draining an abandoned body.
 	pub fn ended(&self) {
 		let elapsed = self.started.elapsed().as_secs_f64() * 1000.0;
 		self.tx.send_if_modified(|timing| {

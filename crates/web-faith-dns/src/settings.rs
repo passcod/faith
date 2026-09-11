@@ -90,7 +90,7 @@ impl Default for ResolverSettings {
 /// The root name is never a suffix here, whichever list it arrives in. It is the parent of every
 /// name, so admitting it would exempt the lot and route every lookup to the system resolver with
 /// `dns.servers` configured and unused. It does arrive in practice: a Windows host with no DNS
-/// domain of its own reports the root as its domain, so the check is what keeps the encrypted
+/// domain of its own reports the root as its domain, so the check keeps the encrypted
 /// transports working there rather than being quietly bypassed.
 // spec:DNS#exempt-names
 pub(crate) fn exempt_suffixes(system: Vec<Name>, configured: &[Name]) -> Vec<Name> {

@@ -378,7 +378,7 @@ pub struct Http3Options {
 	/// Response headers still arrive, so the attempt resolves and every mechanism
 	/// here counts it a success — the transfer then stalls partway through the
 	/// body, where nothing is watching. `maxIdleTimeout` or the request's own
-	/// timeout is what ends such a request, and the origin stays on HTTP/3.
+	/// timeout ends such a request, and the origin stays on HTTP/3.
 	///
 	/// Set to 0 to disable, so only real HTTP/3 errors demote an origin.
 	///
@@ -520,7 +520,7 @@ pub struct FlowControlOptions {
 	/// acknowledge them, for HTTP/2 and HTTP/3 alike.
 	///
 	/// Larger windows keep a high-latency link full, at the cost of buffering more per stream.
-	/// The default follows browser practice, and is deliberately at the conservative end of it:
+	/// The default follows browser practice, at the conservative end of it:
 	/// a pooled server-side client can hold many connections across many origins, so
 	/// per-connection memory multiplies harder here than in a browser.
 	///
@@ -558,7 +558,7 @@ pub struct PoolOptions {
 	pub max_idle_per_host: Option<u32>,
 }
 
-/// Switches that depart from standard behaviour on purpose.
+/// Switches that depart from standard behaviour.
 ///
 /// Each quirk trades a rule Faith otherwise upholds for a capability the rule forbids. All are off
 /// by default. Turning one on means requests may fail against origins that expect the standard
@@ -708,7 +708,7 @@ pub struct AgentOptions {
 	/// Settings related to the connection pool.
 	#[builder(with = |with: impl FnOnce(PoolOptionsBuilder) -> PoolOptions| with(PoolOptions::builder()))]
 	pub pool: Option<PoolOptions>,
-	/// Switches that depart from standard behaviour on purpose.
+	/// Switches that depart from standard behaviour.
 	#[builder(with = |with: impl FnOnce(QuirksOptionsBuilder) -> QuirksOptions| with(QuirksOptions::builder()))]
 	pub quirks: Option<QuirksOptions>,
 	/// Determines the behavior in case the server replies with a redirect status.

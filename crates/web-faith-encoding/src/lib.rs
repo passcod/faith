@@ -9,7 +9,7 @@
 //! request body, and [`layer_content_encoding`] names it alongside whatever the caller had already
 //! declared.
 //!
-//! `deflate` is the zlib-wrapped form of RFC 1950, which is what mainstream clients decode it as.
+//! `deflate` is the zlib-wrapped form of RFC 1950, which is how mainstream clients decode it.
 //!
 //! ```
 //! use http::{HeaderMap, HeaderValue};

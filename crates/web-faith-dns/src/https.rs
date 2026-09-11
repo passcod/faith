@@ -21,8 +21,9 @@ pub struct HttpsAdvertisement {
 /// Where an `HTTPS` record's advertisement goes once the resolver has read one.
 ///
 /// The resolver cannot own the HTTP/3 upgrade cache directly: that cache is built after the
-/// resolver, and the background prober holds a client which holds the resolver in turn. So the
-/// caller installs this afterwards (see [`FaithResolver::set_https_sink`](crate::FaithResolver::set_https_sink)), which also keeps this
+/// resolver, and the prober holds a client which holds the resolver in turn. The caller installs
+/// this afterwards instead (see
+/// [`FaithResolver::set_https_sink`](crate::FaithResolver::set_https_sink)), which also keeps this
 /// crate free of the upgrade layer's types.
 pub trait HttpsSink: Send + Sync {
 	/// Whether an `HTTPS` record for `host` is worth querying at all right now.

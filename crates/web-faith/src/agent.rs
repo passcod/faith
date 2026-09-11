@@ -58,12 +58,11 @@ pub(crate) struct AgentSettings {
 	pub(crate) h3_follow_advertised_port: bool,
 	/// Whether a streaming request body may go out over HTTP/1.x.
 	pub(crate) quirk_h1_request_streaming: bool,
-	/// The agent's default `Accept-Encoding`, if one sits among its default headers, which decides
-	/// which codings a response is decoded under when a request adds none of its own.
+	/// The agent's default `Accept-Encoding`. Decides which codings a response is decoded under
+	/// when a request adds none of its own.
 	#[cfg(feature = "encoding")]
 	pub(crate) default_accept_encoding: Option<HeaderValue>,
-	/// The agent's default `Content-Encoding`, if one sits among its default headers, which a
-	/// request layers its own coding on top of rather than displacing.
+	/// The agent's default `Content-Encoding`. A request layers its own coding on top of this.
 	#[cfg(feature = "encoding")]
 	pub(crate) default_content_encoding: Option<HeaderValue>,
 	/// Whether a `Priority` header sits among the agent's default headers, so that default wins
@@ -139,12 +138,11 @@ pub struct Agent {
 	/// reserves to HTTP/2 and HTTP/3.
 	// spec:QUIRK#http-1-x-request-body-streaming
 	pub(crate) quirk_h1_request_streaming: bool,
-	/// The agent's default `Accept-Encoding`, if one sits among its default headers, which decides
-	/// the codings a response is decoded under when a request adds none of its own.
+	/// The agent's default `Accept-Encoding`. Decides the codings a response is decoded under when
+	/// a request adds none of its own.
 	#[cfg(feature = "encoding")]
 	pub(crate) default_accept_encoding: Option<HeaderValue>,
-	/// The agent's default `Content-Encoding`, if one sits among its default headers. A request
-	/// layers its own coding on top of this rather than displacing it.
+	/// The agent's default `Content-Encoding`. A request layers its own coding on top of this.
 	// spec:ENC
 	#[cfg(feature = "encoding")]
 	pub(crate) default_content_encoding: Option<HeaderValue>,
@@ -173,7 +171,7 @@ impl Agent {
 
 	/// The client this agent sends through, or `None` once it is closed.
 	///
-	/// A request takes its handle when it is issued, which is what lets one already in flight
+	/// A request takes its handle when it is issued, which lets one already in flight
 	/// finish while a later one is refused.
 	// spec:AGENT
 	#[cfg(feature = "raw-client")]

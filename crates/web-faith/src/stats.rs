@@ -2,7 +2,7 @@
 
 use std::sync::atomic::{AtomicU64, Ordering};
 
-/// The live counters, shared with every response the agent produces: a body finishing is what
+/// The live counters, shared with every response the agent produces: a body finishing
 /// settles two of them.
 #[derive(Debug, Default)]
 pub(crate) struct InnerAgentStats {
@@ -33,7 +33,7 @@ pub struct AgentStats {
 	pub requests_sent: u64,
 	/// Responses whose headers have come back.
 	pub responses_received: u64,
-	/// Response body streams that have been started, which is what reading a body does.
+	/// Response body streams that have been started. Reading a body starts one.
 	pub bodies_started: u64,
 	/// Response body streams read to the end. The gap against `bodies_started` is how many bodies
 	/// are holding a connection open.

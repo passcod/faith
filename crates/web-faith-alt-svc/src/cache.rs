@@ -112,7 +112,7 @@ impl Default for AltSvcCacheConfig {
 }
 
 #[derive(Clone)]
-/// What each origin has advertised, proven, or failed at.
+/// Each origin's advertised, proven and failed state.
 pub struct AltSvcCache {
 	advertised: Cache<String, AltSvcEntry>,
 	confirmed: Cache<String, AltSvcEntry>,
@@ -477,7 +477,7 @@ impl AltSvcCache {
 	///
 	/// Time-to-headers includes server think-time, which varies per endpoint far more than per
 	/// transport, so only the averages are comparable — hence the minimum sample counts. The
-	/// comparison is asymmetric on purpose: HTTP/3 is preferred at parity and when moderately
+	/// comparison is asymmetric: HTTP/3 is preferred at parity and when moderately
 	/// slower, so only a large sustained gap demotes.
 	pub fn record_path_time(&self, url: &reqwest::Url, version: http::Version, elapsed: Duration) {
 		if self.slow_factor <= 0.0 {

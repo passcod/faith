@@ -649,7 +649,7 @@ impl Response {
 
 	/// Write the body to a file, reporting progress as the bytes land.
 	///
-	/// `on_progress` is called with the bytes written so far and the advertised length where one is
+	/// `on_progress` is called with the bytes written so far and the advertised length when it is
 	/// known, at most every 50ms, and once more when the last byte is written.
 	// spec:BODY#tofile
 	pub async fn write_to_file(

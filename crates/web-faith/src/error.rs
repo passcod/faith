@@ -110,7 +110,7 @@ pub fn error_codes() -> Vec<String> {
 pub struct FaithError {
 	/// The kind, which is the stable code to match on.
 	pub kind: FaithErrorKind,
-	/// A human-readable detail, where one adds anything to the kind.
+	/// A human-readable detail, when there is more to say than the kind.
 	pub message: Option<String>,
 }
 
@@ -139,7 +139,7 @@ impl From<FaithErrorKind> for FaithError {
 /// back to us wrapped in an error of reqwest's own, so the kind we chose has to be recovered from
 /// the source chain to survive as a `code`. Redirect failures reqwest raises on its own account
 /// (exhausting the hop limit, an https-only downgrade) carry no [`FaithError`] and so fall through
-/// to the generic mapping, which is what tells the two apart.
+/// to the generic mapping, which tells the two apart.
 fn faith_kind_in_chain(err: &(dyn Error + 'static)) -> Option<FaithErrorKind> {
 	let mut source = err.source();
 	while let Some(e) = source {

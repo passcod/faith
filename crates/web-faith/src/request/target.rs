@@ -10,7 +10,7 @@ use crate::{
 
 /// A request's target: a URL, or another request to layer over.
 ///
-/// Anything that converts into a `url::Url` is a target, as is a [`Request`], which is what lets a
+/// Anything that converts into a `url::Url` is a target, as is a [`Request`], which lets a
 /// prepared request be adjusted at each call site.
 // spec:REQ
 pub enum Target {

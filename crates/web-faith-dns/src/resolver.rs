@@ -120,7 +120,7 @@ impl FaithResolver {
 	/// Install where `HTTPS` records go, enabling the query.
 	///
 	/// Called after the agent's HTTP/3 upgrade cache and prober are built, which cannot happen
-	/// before the resolver exists. Replaces any previous sink, which is what a network change
+	/// before the resolver exists. Replaces any previous sink, as a network change
 	/// needs: the prober is rebuilt with the client, so the sink must be too or it would kick
 	/// probes onto a client that has been dropped.
 	// spec:DNS#https-records

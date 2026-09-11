@@ -10,7 +10,7 @@ use super::failed_to_connect;
 /// Re-resolves and attempts a request again when connecting to a stale-served address failed.
 ///
 /// Serving an expired DNS answer trades a round trip against the chance the address has moved, and
-/// this layer is what bounds the cost of being wrong to one re-resolve rather than a failed request.
+/// this layer bounds the cost of being wrong to one re-resolve, not a failed request.
 // spec:DNS#when-a-stale-address-is-wrong
 #[derive(Debug, Clone)]
 pub struct StaleAddressRetry {
