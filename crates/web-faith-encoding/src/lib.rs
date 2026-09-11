@@ -11,27 +11,34 @@
 //! # Requests
 //!
 //! - Use [`compress_buffer`] or [`compress_stream`] to apply a coding to a request body.
-//! - Use [`layer_content_encoding`] to build the `Content-Encoding` header that describes it.
+//! - Use [`ContentEncoding::layer`] to add it to whatever the caller already declared, and
+//!   [`to_header_value`](ContentEncoding::to_header_value) to build the header.
 //!
 //! ```
-//! use web_faith_encoding::{Coding, request::{compress_buffer, layer_content_encoding}};
+//! use http::{HeaderMap, HeaderValue};
+//! use web_faith_encoding::{Coding, ContentEncoding, request::compress_buffer};
 //!
 //! # async fn example() {
 //! let body = b"the quick brown fox".repeat(8);
 //! let compressed = compress_buffer(&body, Coding::Gzip).await.expect("gzip compresses");
 //! assert!(compressed.len() < body.len());
 //!
-//! // The request declared nothing, so the applied coding stands alone.
-//! assert_eq!(layer_content_encoding(None, Coding::Gzip), "gzip");
-//! // Otherwise it is added last, being applied on top of what was already there.
-//! assert_eq!(layer_content_encoding(Some("br"), Coding::Gzip), "br, gzip");
+//! let mut headers = HeaderMap::new();
+//! headers.insert("content-encoding", HeaderValue::from_static("br"));
+//!
+//! // Applied last, so declared last.
+//! let layered = ContentEncoding::from(&headers).layer(Coding::Gzip);
+//! headers.insert("content-encoding", layered.to_header_value().expect("two codings"));
+//! assert_eq!(headers["content-encoding"], "br, gzip");
 //! # }
 //! ```
 //!
 //! # Responses
 //!
 //! - Use [`AcceptEncoding`] to parse the advertised supported coding set from the request.
-//! - Use [`decision`] to compute which decoder to use for the response's body, if any.
+//! - Use [`ContentEncoding`] to parse what the response says its body carries.
+//! - Ask it [`can_decode_as`](ContentEncoding::can_decode_as) which decoder to use for that body,
+//!   if any.
 //! - Use [`decode_stream`] to wrap the body in that decoder.
 //! - Use [`strip_decoded_headers`] to remove the headers that described the encoded bytes.
 //!
@@ -39,23 +46,24 @@
 //! use http::{HeaderMap, HeaderValue};
 //! use web_faith_encoding::{
 //!     Coding,
-//!     response::{AcceptEncoding, DEFAULT_ACCEPT_ENCODING, decision},
+//!     ContentEncoding,
+//!     response::AcceptEncoding,
 //! };
 //!
-//! let accept = AcceptEncoding::from(DEFAULT_ACCEPT_ENCODING);
+//! let mut request = HeaderMap::new();
+//! request.insert("accept-encoding", HeaderValue::from_static("gzip, br;q=0.5"));
+//! let accept = AcceptEncoding::from(&request);
 //!
-//! let mut headers = HeaderMap::new();
-//! headers.insert("content-encoding", HeaderValue::from_static("gzip"));
+//! let mut response = HeaderMap::new();
+//! response.insert("content-encoding", HeaderValue::from_static("gzip"));
+//! let encoding = ContentEncoding::from(&response);
 //!
-//! // What the response declared, against what the request accepted.
-//! assert_eq!(decision(&headers, &accept), Some(Coding::Gzip));
+//! assert_eq!(encoding.can_decode_as(&accept), Some(Coding::Gzip));
 //! ```
 //!
 //! [`compress_buffer`]: request::compress_buffer
 //! [`compress_stream`]: request::compress_stream
-//! [`layer_content_encoding`]: request::layer_content_encoding
 //! [`AcceptEncoding`]: response::AcceptEncoding
-//! [`decision`]: response::decision
 //! [`decode_stream`]: response::decode_stream
 //! [`strip_decoded_headers`]: response::strip_decoded_headers
 
@@ -65,6 +73,115 @@
 
 pub mod request;
 pub mod response;
+
+use std::fmt;
+
+use http::header::{CONTENT_ENCODING, HeaderMap, HeaderValue};
+
+use crate::response::AcceptEncoding;
+
+/// The codings a response says its body carries.
+///
+/// Read from every `Content-Encoding` line together: a representation encoded more than once may
+/// arrive comma-joined on one line or split across several, and it is the same list either way.
+#[derive(Clone, Debug, Default)]
+pub struct ContentEncoding {
+	codings: Vec<Coding>,
+	/// A line that was not valid ASCII, so what the body carries is not knowable.
+	unreadable: bool,
+}
+
+impl From<&str> for ContentEncoding {
+	/// Read one `Content-Encoding` header value.
+	fn from(value: &str) -> Self {
+		let mut this = Self::default();
+		this.merge(value);
+		this
+	}
+}
+
+impl From<&HeaderMap> for ContentEncoding {
+	fn from(headers: &HeaderMap) -> Self {
+		let mut this = Self::default();
+		for value in headers.get_all(CONTENT_ENCODING) {
+			let Ok(value) = value.to_str() else {
+				this.unreadable = true;
+				continue;
+			};
+			this.merge(value);
+		}
+		this
+	}
+}
+
+impl ContentEncoding {
+	/// Fold one header value's codings into what is already here.
+	fn merge(&mut self, value: &str) {
+		self.codings.extend(
+			value
+				.split(',')
+				.map(str::trim)
+				.filter(|token| !token.is_empty())
+				.map(Coding::from_token),
+		);
+	}
+
+	/// The codings the header carried, in the order it applied them.
+	///
+	/// Empty for a response that declared none, and for one whose header could not be read.
+	pub fn codings(&self) -> &[Coding] {
+		&self.codings
+	}
+
+	/// Add a coding on top of the ones already here.
+	///
+	/// Applied last, so it is last in the header: the codings are listed in the order they were
+	/// applied, and a reader unwinds them in reverse.
+	pub fn layer(&self, coding: Coding) -> Self {
+		let mut layered = self.clone();
+		layered.codings.push(coding);
+		layered
+	}
+
+	/// The header value these codings make, or `None` when there are none to declare.
+	pub fn to_header_value(&self) -> Option<HeaderValue> {
+		if self.codings.is_empty() {
+			return None;
+		}
+
+		HeaderValue::from_str(&self.to_string()).ok()
+	}
+
+	/// The coding to decode the body under, given what the request accepted.
+	///
+	/// `None` leaves the body as it arrived, which covers a response that declared no coding, one
+	/// encoded more than once (unwinding that is the caller's), one naming a coding this crate
+	/// cannot decode (`identity` among them), one the request did not accept, and one whose header
+	/// was not readable.
+	pub fn can_decode_as(&self, accept: &AcceptEncoding) -> Option<Coding> {
+		if self.unreadable {
+			return None;
+		}
+
+		let [single] = &self.codings[..] else {
+			return None;
+		};
+
+		(single.is_supported() && accept.accepts(single)).then(|| single.clone())
+	}
+}
+
+impl fmt::Display for ContentEncoding {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		for (n, coding) in self.codings.iter().enumerate() {
+			if n > 0 {
+				f.write_str(", ")?;
+			}
+			f.write_str(coding.token())?;
+		}
+		Ok(())
+	}
+}
 
 /// A content coding.
 ///
@@ -142,6 +259,59 @@ impl Coding {
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	use http::header::HeaderValue;
+
+	fn headers(value: &str) -> HeaderMap {
+		let mut headers = HeaderMap::new();
+		headers.insert(CONTENT_ENCODING, HeaderValue::from_str(value).unwrap());
+		headers
+	}
+
+	#[test]
+	fn a_layered_coding_is_added_last() {
+		let existing = ContentEncoding::from(&headers("gzip"));
+		let layered = existing.layer(Coding::Zstd);
+		assert_eq!(layered.to_string(), "gzip, zstd");
+		assert_eq!(
+			ContentEncoding::from(&headers("gzip, br"))
+				.layer(Coding::Deflate)
+				.to_string(),
+			"gzip, br, deflate"
+		);
+
+		// Layering leaves what it was called on alone.
+		assert_eq!(existing.to_string(), "gzip");
+	}
+
+	#[test]
+	fn a_request_declaring_nothing_carries_only_the_layered_coding() {
+		assert_eq!(
+			ContentEncoding::default().layer(Coding::Brotli).to_string(),
+			"br"
+		);
+		// An empty or blank header declares nothing.
+		for value in ["", "  "] {
+			assert_eq!(
+				ContentEncoding::from(&headers(value))
+					.layer(Coding::Gzip)
+					.to_string(),
+				"gzip"
+			);
+		}
+	}
+
+	#[test]
+	fn nothing_to_declare_makes_no_header() {
+		assert!(ContentEncoding::default().to_header_value().is_none());
+		assert_eq!(
+			ContentEncoding::default()
+				.layer(Coding::Gzip)
+				.to_header_value()
+				.unwrap(),
+			"gzip"
+		);
+	}
 
 	#[test]
 	fn the_compress_option_names_a_coding_by_its_wire_token() {

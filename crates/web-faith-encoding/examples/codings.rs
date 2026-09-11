@@ -7,22 +7,21 @@ use bytes::Bytes;
 use futures::StreamExt as _;
 use http::{HeaderMap, HeaderValue};
 use web_faith_encoding::{
-	Coding,
-	request::{compress_buffer, layer_content_encoding},
-	response::{
-		AcceptEncoding, DEFAULT_ACCEPT_ENCODING, decision, decode_stream, strip_decoded_headers,
-	},
+	Coding, ContentEncoding,
+	request::compress_buffer,
+	response::{AcceptEncoding, DEFAULT_ACCEPT_ENCODING, decode_stream, strip_decoded_headers},
 };
 
 #[tokio::main]
 async fn main() {
 	let accept = AcceptEncoding::from(DEFAULT_ACCEPT_ENCODING);
 
-	// What a response's headers negotiate against what the request asked for.
 	let mut headers = HeaderMap::new();
 	headers.insert("content-encoding", HeaderValue::from_static("gzip"));
 	headers.insert("content-length", HeaderValue::from_static("42"));
-	let coding = decision(&headers, &accept).expect("gzip is in the default Accept-Encoding");
+	let coding = ContentEncoding::from(&headers)
+		.can_decode_as(&accept)
+		.expect("gzip is in the default Accept-Encoding");
 	println!("negotiated: {coding:?}");
 
 	// A decoded body's length and coding no longer describe what the caller receives.
@@ -48,9 +47,17 @@ async fn main() {
 	}
 	println!("round-tripped intact: {}", round_tripped == original);
 
-	// A request that compresses on top of a coding the caller already applied names both, in order.
+	// Compressing a request on top of a coding the caller already applied declares both, in the
+	// order they were applied.
+	let mut request = HeaderMap::new();
+	request.insert("content-encoding", HeaderValue::from_static("br"));
+
+	let layered = ContentEncoding::from(&request).layer(Coding::Gzip);
+	if let Some(value) = layered.to_header_value() {
+		request.insert("content-encoding", value);
+	}
 	println!(
 		"Content-Encoding: {}",
-		layer_content_encoding(Some("br"), Coding::Gzip)
+		request["content-encoding"].to_str().unwrap()
 	);
 }

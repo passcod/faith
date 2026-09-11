@@ -27,7 +27,7 @@ use reqwest::header::ACCEPT_ENCODING;
 use tokio::sync::Mutex;
 #[cfg(feature = "encoding")]
 use web_faith_encoding::{
-	Coding, request as encoding_request, response as encoding_response,
+	Coding, ContentEncoding, request as encoding_request, response as encoding_response,
 	response::{AcceptEncoding, DEFAULT_ACCEPT_ENCODING},
 };
 
@@ -174,8 +174,8 @@ pub async fn send(
 		));
 	}
 
-	// What the caller says they handed over: their own `Content-Encoding`, else the
-	// agent's, per-request headers winning per name as they do generally (spec: REQ).
+	// The `Content-Encoding` the caller declared: their own, else the agent's, per-request
+	// headers winning per name as they do generally (spec: REQ).
 	// Several lines are the one list, so they are joined as they are read.
 	#[cfg(feature = "encoding")]
 	let declared_content_encoding = compress.as_ref().and_then(|_| {
@@ -330,12 +330,15 @@ pub async fn send(
 	// were applied (spec:ENC#what-a-compressed-request-sends).
 	#[cfg(feature = "encoding")]
 	if let Some(coding) = applied_coding {
-		let value =
-			encoding_request::layer_content_encoding(declared_content_encoding.as_deref(), coding);
-		let value = HeaderValue::from_str(&value).map_err(|_| {
+		let layered = declared_content_encoding
+			.as_deref()
+			.map(ContentEncoding::from)
+			.unwrap_or_default()
+			.layer(coding);
+		let value = layered.to_header_value().ok_or_else(|| {
 			FaithError::new(
 				FaithErrorKind::InvalidHeader,
-				Some(format!("invalid header value: {value}")),
+				Some(format!("invalid header value: {layered}")),
 			)
 		})?;
 		request = request.header(CONTENT_ENCODING, value);
@@ -456,7 +459,7 @@ pub async fn send(
 	let decode = if empty {
 		None
 	} else {
-		encoding_response::decision(&headers, &accept_encoding)
+		ContentEncoding::from(&headers).can_decode_as(&accept_encoding)
 	};
 	#[cfg(feature = "encoding")]
 	if decode.is_some() {

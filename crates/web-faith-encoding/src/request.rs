@@ -69,38 +69,3 @@ where
 {
 	Box::pin(ReaderStream::new(reader))
 }
-
-/// Join the codings a request already declares with the one applied on top.
-///
-/// The caller's `Content-Encoding` describes the bytes they handed over, so the applied coding is
-/// named after theirs: the order the codings were applied in.
-// spec:ENC#what-a-compressed-request-sends
-pub fn layer_content_encoding(declared: Option<&str>, applied: Coding) -> String {
-	match declared.map(str::trim).filter(|value| !value.is_empty()) {
-		Some(declared) => format!("{declared}, {}", applied.token()),
-		None => applied.token().to_owned(),
-	}
-}
-
-#[cfg(test)]
-mod tests {
-	use super::*;
-
-	#[test]
-	fn faiths_coding_is_named_after_the_codings_the_caller_declared() {
-		assert_eq!(
-			layer_content_encoding(Some("gzip"), Coding::Zstd),
-			"gzip, zstd"
-		);
-		assert_eq!(
-			layer_content_encoding(Some("gzip, br"), Coding::Deflate),
-			"gzip, br, deflate"
-		);
-	}
-	#[test]
-	fn a_request_declaring_nothing_names_only_the_coding_faith_applied() {
-		assert_eq!(layer_content_encoding(None, Coding::Brotli), "br");
-		assert_eq!(layer_content_encoding(Some(""), Coding::Gzip), "gzip");
-		assert_eq!(layer_content_encoding(Some("  "), Coding::Gzip), "gzip");
-	}
-}

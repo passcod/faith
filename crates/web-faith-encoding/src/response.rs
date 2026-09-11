@@ -5,7 +5,7 @@ use std::{io, pin::Pin};
 use async_compression::tokio::bufread::{BrotliDecoder, GzipDecoder, ZlibDecoder, ZstdDecoder};
 use bytes::Bytes;
 use futures::{Stream, TryStreamExt};
-use http::header::{CONTENT_ENCODING, CONTENT_LENGTH, HeaderMap};
+use http::header::{ACCEPT_ENCODING, CONTENT_ENCODING, CONTENT_LENGTH, HeaderMap};
 use tokio_util::io::{ReaderStream, StreamReader};
 
 use crate::Coding;
@@ -37,6 +37,13 @@ impl AcceptEncoding {
 			codings: Vec::new(),
 			star: None,
 		};
+		accept.merge(value);
+		accept
+	}
+
+	/// Fold one header line's codings into what is already here, the last mention winning.
+	fn merge(&mut self, value: &str) {
+		let accept = self;
 		for element in value.split(',') {
 			let mut parts = element.split(';');
 			let Some(token) = parts.next().map(str::trim) else {
@@ -74,7 +81,6 @@ impl AcceptEncoding {
 				None => accept.codings.push((coding, quality)),
 			}
 		}
-		accept
 	}
 
 	/// Every coding the header named outright, with the quality value it carried.
@@ -115,6 +121,24 @@ impl AcceptEncoding {
 	}
 }
 
+impl From<&HeaderMap> for AcceptEncoding {
+	/// Read every `Accept-Encoding` line the request carried.
+	///
+	/// A request that carried none accepts nothing; [`Default`] is what
+	/// [`DEFAULT_ACCEPT_ENCODING`] accepts, for a caller that wants that instead.
+	fn from(headers: &HeaderMap) -> Self {
+		let mut this = Self {
+			codings: Vec::new(),
+			star: None,
+		};
+		for value in headers.get_all(ACCEPT_ENCODING) {
+			let Ok(value) = value.to_str() else { continue };
+			this.merge(value);
+		}
+		this
+	}
+}
+
 impl From<&str> for AcceptEncoding {
 	fn from(value: &str) -> Self {
 		Self::parse(value)
@@ -125,31 +149,6 @@ impl Default for AcceptEncoding {
 	fn default() -> Self {
 		Self::parse(DEFAULT_ACCEPT_ENCODING)
 	}
-}
-
-/// Decide whether and how to decode a response body.
-///
-/// The coding to decode under when the response's `Content-Encoding` carries a single coding that
-/// can be decoded and the request's `Accept-Encoding` accepted it. Otherwise `None`, and the body
-/// is delivered as received.
-pub fn decision(headers: &HeaderMap, accept: &AcceptEncoding) -> Option<Coding> {
-	// A representation encoded more than once is the caller's to unwind. The codings may
-	// arrive comma-joined on one line or split across several `Content-Encoding` lines --
-	// the same list either way, so both forms are gathered together before counting.
-	let mut codings = Vec::new();
-	for value in headers.get_all(CONTENT_ENCODING) {
-		// A line that is not valid ASCII names nothing Faith can match; deliver as received
-		// rather than decoding whatever line sits beside it.
-		let value = value.to_str().ok()?;
-		codings.extend(value.split(',').map(str::trim).filter(|c| !c.is_empty()));
-	}
-
-	let [single] = codings[..] else {
-		return None;
-	};
-	// `identity` and anything unknown land in `Other`, which is nothing to decode under.
-	let coding = Coding::from_token(single);
-	(coding.is_supported() && accept.accepts(&coding)).then_some(coding)
 }
 
 /// Strip the headers that describe the encoded bytes, once a body has been decoded.
@@ -186,7 +185,8 @@ fn parse_quality(value: &str) -> Option<u16> {
 /// Wrap a body byte-stream in a decoder for `coding`.
 ///
 /// Trailers are pulled off the frames before this point, so decoding sees data only. A coding this
-/// crate cannot decode leaves the stream as it is; [`decision`] never returns one.
+/// crate cannot decode leaves the stream as it is; [`can_decode_as`](crate::ContentEncoding::can_decode_as)
+/// never returns one.
 pub fn decode_stream(input: Pin<Box<ByteStream>>, coding: Coding) -> Pin<Box<ByteStream>> {
 	let reader = StreamReader::new(input.map_err(io::Error::other));
 	match coding {
@@ -215,6 +215,7 @@ mod tests {
 	use http::header::{CONTENT_ENCODING, HeaderMap, HeaderValue};
 
 	use super::*;
+	use crate::ContentEncoding;
 	use crate::request::{compress_buffer, compress_stream};
 
 	fn decide(content_encoding: &str, accept: &str) -> Option<Coding> {
@@ -223,7 +224,7 @@ mod tests {
 			CONTENT_ENCODING,
 			HeaderValue::from_str(content_encoding).unwrap(),
 		);
-		decision(&headers, &AcceptEncoding::from(accept))
+		ContentEncoding::from(&headers).can_decode_as(&AcceptEncoding::from(accept))
 	}
 
 	#[test]
@@ -288,7 +289,8 @@ mod tests {
 		headers.append(CONTENT_ENCODING, HeaderValue::from_static("gzip"));
 		headers.append(CONTENT_ENCODING, HeaderValue::from_static("br"));
 		assert_eq!(
-			decision(&headers, &AcceptEncoding::parse(DEFAULT_ACCEPT_ENCODING)),
+			ContentEncoding::from(&headers)
+				.can_decode_as(&AcceptEncoding::from(DEFAULT_ACCEPT_ENCODING)),
 			None
 		);
 	}
@@ -300,7 +302,8 @@ mod tests {
 		headers.append(CONTENT_ENCODING, HeaderValue::from_static("gzip"));
 		headers.append(CONTENT_ENCODING, HeaderValue::from_static(""));
 		assert_eq!(
-			decision(&headers, &AcceptEncoding::parse(DEFAULT_ACCEPT_ENCODING)),
+			ContentEncoding::from(&headers)
+				.can_decode_as(&AcceptEncoding::from(DEFAULT_ACCEPT_ENCODING)),
 			Some(Coding::Gzip)
 		);
 	}
@@ -311,7 +314,8 @@ mod tests {
 		headers.append(CONTENT_ENCODING, HeaderValue::from_static("gzip"));
 		headers.append(CONTENT_ENCODING, HeaderValue::from_bytes(b"\xff").unwrap());
 		assert_eq!(
-			decision(&headers, &AcceptEncoding::parse(DEFAULT_ACCEPT_ENCODING)),
+			ContentEncoding::from(&headers)
+				.can_decode_as(&AcceptEncoding::from(DEFAULT_ACCEPT_ENCODING)),
 			None
 		);
 	}
@@ -325,9 +329,35 @@ mod tests {
 	fn no_content_encoding_means_nothing_to_decode() {
 		let headers = HeaderMap::new();
 		assert_eq!(
-			decision(&headers, &AcceptEncoding::parse(DEFAULT_ACCEPT_ENCODING)),
+			ContentEncoding::from(&headers)
+				.can_decode_as(&AcceptEncoding::from(DEFAULT_ACCEPT_ENCODING)),
 			None
 		);
+	}
+
+	#[test]
+	fn the_codings_a_response_declared_are_readable() {
+		let mut headers = HeaderMap::new();
+		headers.append(CONTENT_ENCODING, HeaderValue::from_static("br, gzip"));
+		headers.append(CONTENT_ENCODING, HeaderValue::from_static("identity"));
+
+		// In the order applied, across lines, including one this crate cannot decode.
+		assert_eq!(
+			ContentEncoding::from(&headers).codings(),
+			[
+				Coding::Brotli,
+				Coding::Gzip,
+				Coding::Other("identity".into())
+			]
+		);
+
+		// More than one coding is the caller's to unwind.
+		assert_eq!(
+			ContentEncoding::from(&headers).can_decode_as(&AcceptEncoding::default()),
+			None
+		);
+
+		assert!(ContentEncoding::default().codings().is_empty());
 	}
 
 	#[test]
