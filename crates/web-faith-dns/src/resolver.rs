@@ -41,7 +41,7 @@ struct StaleEntry {
 }
 
 /// Everything the resolver reads off the network, held together so a network change drops it in one
-/// go. The caller's [`ResolverConfig`] sit outside, being configuration rather than a reading.
+/// go. The caller's [`ResolverConfig`] sits outside, being configuration rather than a reading.
 // spec:NETCHG
 struct Generation {
 	/// The configured (or discovered) resolver, built lazily inside a tokio runtime.
@@ -119,10 +119,11 @@ impl FaithResolver {
 
 	/// Install where `HTTPS` records go, enabling the query.
 	///
-	/// Called after the agent's HTTP/3 upgrade cache and prober are built, which cannot happen
-	/// before the resolver exists. Replaces any previous sink, as a network change
-	/// needs: the prober is rebuilt with the client, so the sink must be too or it would kick
-	/// probes onto a client that has been dropped.
+	/// This must be called after the agent's HTTP/3 upgrade cache and prober are built.
+	///
+	/// Calling this replaces any previously installed sink. This is useful to handle
+	/// network-change events where the client must be switched out with a new one, and `HTTPS`
+	/// records should therefore be redirected to the correct place.
 	// spec:DNS#https-records
 	pub fn set_https_sink(&self, sink: Arc<dyn HttpsSink>) {
 		*self
@@ -180,8 +181,8 @@ impl FaithResolver {
 	}
 
 	/// The exempt suffixes: `localhost`, `local`, the system's own domain and search suffixes, and
-	/// the caller's own. The system's suffixes are a
-	/// property of the network, so they are read per generation rather than once per agent.
+	/// the caller's own. The system's are a property of the network, so they are read per
+	/// generation rather than once per agent.
 	// spec:DNS#exempt-names
 	async fn exempt(&self, generation: &Generation) -> Arc<Vec<Name>> {
 		generation
@@ -203,7 +204,7 @@ impl FaithResolver {
 			.clone()
 	}
 
-	/// Whether `host` must go to the system resolver rather than Faith's servers.
+	/// Whether `host` must go to the system resolver rather than the configured ones.
 	async fn is_exempt(&self, generation: &Generation, host: &str) -> bool {
 		let Ok(name) = Name::from_utf8(host) else {
 			return false;
@@ -373,18 +374,14 @@ impl FaithResolver {
 
 	/// Drop any stale answer held for `host`, so the next lookup waits for a fresh one.
 	///
-	/// Called when connecting to a served address failed, which is the one piece of evidence that the
-	/// address was wrong rather than merely old.
+	/// This should be called when connecting to an address has failed, as that indicates that the
+	/// address might be wrong.
 	// spec:DNS#when-a-stale-address-is-wrong
 	pub fn invalidate_stale(&self, host: &str) {
 		self.generation().stale.invalidate(host);
 	}
 
-	/// Whether a lookup of `host` now would be served from an expired entry, and so hand out an
-	/// address that is assumed rather than confirmed.
-	///
-	/// The same window a stale answer is served from: an older entry is resolved for
-	/// real, and counting that as stale would spend a connection attempt on a confirmed address.
+	/// Whether a lookup of `host` now would be served from an expired entry.
 	pub fn served_stale(&self, host: &str) -> bool {
 		let Some(max_stale) = self.inner.config.serve_stale else {
 			return false;
@@ -397,14 +394,14 @@ impl FaithResolver {
 
 	/// Resolve `host` now, so a later lookup for it is answered from cache.
 	///
-	/// Never fails: warming is advisory.
+	/// Errors are ignored silently: warming is advisory.
 	// spec:WARM
 	pub async fn prefetch(&self, host: &str) {
 		let _ = self.lookup(host).await;
 	}
 
-	/// The DNS servers the agent resolves through, in query order. Empty
-	/// until the resolver has been used, because it reads its configuration on first use.
+	/// The DNS servers the agent resolves through, in query order. Empty until the resolver has
+	/// been used.
 	// spec:OBS#resolvers
 	pub fn resolvers(&self) -> Vec<ResolverReport> {
 		self.generation()
@@ -414,15 +411,11 @@ impl FaithResolver {
 			.unwrap_or_default()
 	}
 
-	/// Drop everything read off the network, so the next lookup rebuilds against the network the
-	/// agent is on now.
+	/// Drop everything learned from the network.
 	///
-	/// The discovered server list, the local suffixes and the encryption-probe results are all
-	/// readings of a network, so dropping the generation takes them and their caches together.
-	/// The configuration is untouched, so a named server list is rebuilt as given.
-	///
-	/// Synchronous, unlike the rest of this type: it swaps an `Arc` and builds nothing, so it is
-	/// callable from a network-change signal.
+	/// This clears the cached answers, the discovered servers, the local suffixes, and the
+	/// opportunistic encryption probe results; the configuration is untouched. Useful to handle
+	/// network-change events.
 	// spec:NETCHG#what-the-signal-keeps
 	// spec:NETCHG#reach-across-the-subsystems
 	pub fn reset(&self) {
