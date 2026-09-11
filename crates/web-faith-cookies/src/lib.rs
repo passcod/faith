@@ -1,20 +1,26 @@
-//! A cookie jar for HTTP clients, with the storage rules that hold outside a browser.
+//! A cookie jar for HTTP clients, specialised for the server-side context.
 //!
-//! Cookies were specified for browsers, and the parts of RFC 6265 that assume a browsing context
-//! do not carry over to a client making requests on its own account. This jar keeps the classic
-//! storage and matching rules, plus the RFC 6265bis additions that still mean something with no
-//! browser around them.
+//! Cookies, as specified in RFC 6265 and 6265bis, are for browsers. Not all of the standard
+//! requirements apply to a server context. This jar implements browser-like behaviour, except
+//! where it doesn't make sense. Notably:
 //!
-//! - The `__Host-` and `__Secure-` name prefixes, which bind a cookie to the exact host that set it
-//!   and to a secure transport.
-//! - A ceiling on how far ahead a cookie may expire, so a server cannot claim a decade.
-//! - Caps on the size of one cookie, and on how many are kept per host and in total.
+//! - `SameSite` is parsed but never acted on. It governs cross-site behaviour, which needs a
+//!   first-party context to be cross-site *from*.
+//! - The public suffix list is not consulted, so a `Domain` that is a public suffix is not
+//!   rejected on that ground. A server-side caller talks to origins it chose.
+//! - A secure transport is `https`, as the standard has it, rather than the wider "potentially
+//!   trustworthy" origin browsers accept. A `__Host-` cookie a browser would keep on
+//!   `http://localhost` is rejected here.
 //!
-//! Every rule applies when a cookie is stored, not when one is sent, so the caps bound real memory
-//! and a cookie inserted by hand meets the same rules as one from a `Set-Cookie` header.
+//! What it does keep is the classic storage and matching rules, plus the 6265bis additions:
 //!
-//! `SameSite` is parsed but never read: it governs cross-site behaviour that only a first-party
-//! context has.
+//! - The `__Host-` and `__Secure-` name prefixes, which bind a cookie to the exact host that set
+//!   it and to a secure transport.
+//! - A limit on how far ahead a cookie may expire, so a server cannot claim a decade.
+//! - Limits on the size of one cookie, and on how many are kept per host and in total.
+//!
+//! Every rule applies when a cookie is stored, not when one is sent, so the limits bound real
+//! memory and a cookie inserted by hand meets the same rules as one from a `Set-Cookie` header.
 //!
 //! # Example
 //!
@@ -53,17 +59,17 @@ use url::Url;
 
 /// A cookie may not persist beyond this by default. RFC 6265bis §5.5.
 pub const DEFAULT_MAX_AGE: Duration = Duration::from_secs(400 * 24 * 60 * 60);
-/// Default cap on one cookie's name plus value, in bytes.
+/// Default limit on one cookie's name plus value, in bytes.
 ///
 /// RFC 6265bis §5.6 sets this as a floor servers may rely on; browsers implement it as the
-/// ceiling, and so does this.
+/// maximum, and so does this.
 pub const DEFAULT_MAX_SIZE: usize = 4096;
-/// Default cap on cookies kept for one domain.
+/// Default limit on cookies kept for one domain.
 pub const DEFAULT_MAX_PER_HOST: usize = 180;
-/// Default cap on cookies kept across the whole jar.
+/// Default limit on cookies kept across the whole jar.
 pub const DEFAULT_MAX_TOTAL: usize = 3000;
 
-/// The caps a jar enforces.
+/// The limits a jar enforces.
 #[derive(Debug, Clone)]
 pub struct CookieLimits {
 	/// How far ahead a cookie may expire; a longer expiry is reduced to this.
@@ -110,7 +116,7 @@ fn is_secure(url: &Url) -> bool {
 
 /// A cookie jar.
 ///
-/// Every rule is applied on the way in, so the caps bound real memory and a cookie inserted by
+/// Every rule is applied on the way in, so the limits bound real memory and a cookie inserted by
 /// hand meets the same rules as one from a `Set-Cookie` header.
 #[derive(Debug)]
 pub struct FaithJar {
@@ -121,7 +127,7 @@ pub struct FaithJar {
 #[derive(Debug, Default)]
 struct Inner {
 	store: Store,
-	/// When each stored cookie arrived, so the caps can evict the oldest. `cookie_store::Cookie`
+	/// When each stored cookie arrived, so the limits can evict the oldest. `cookie_store::Cookie`
 	/// carries neither a creation nor a last-access time, so the order is tracked alongside it.
 	order: HashMap<CookieKey, u64>,
 	next_seq: u64,
@@ -158,7 +164,7 @@ impl FaithJar {
 	}
 
 	/// Apply the rules that decide whether a cookie is storable at all, and reduce an over-long
-	/// expiry to the cap. Returns `None` for a cookie that is rejected outright.
+	/// expiry to the limit. Returns `None` for a cookie that is rejected outright.
 	fn sanitise(&self, mut raw: RawCookie<'static>, url: &Url) -> Option<RawCookie<'static>> {
 		if raw.name().len() + raw.value().len() > self.limits.max_size {
 			return None;
@@ -197,20 +203,20 @@ fn prefix_allows(raw: &RawCookie<'_>, url: &Url) -> bool {
 /// `Max-Age` is checked first, the precedence the storage model reads them in. A session cookie
 /// has neither and stays one.
 fn clamp_expiry(raw: &mut RawCookie<'static>, max_age: Duration) {
-	let cap = time::Duration::try_from(max_age).unwrap_or(time::Duration::MAX);
+	let limit = time::Duration::try_from(max_age).unwrap_or(time::Duration::MAX);
 
 	if let Some(max_age) = raw.max_age() {
-		if max_age > cap {
-			raw.set_max_age(cap);
+		if max_age > limit {
+			raw.set_max_age(limit);
 		}
 
 		return;
 	}
 
 	if let Some(Expiration::DateTime(expires)) = raw.expires() {
-		let limit = OffsetDateTime::now_utc().saturating_add(cap);
-		if expires > limit {
-			raw.set_expires(limit);
+		let latest = OffsetDateTime::now_utc().saturating_add(limit);
+		if expires > latest {
+			raw.set_expires(latest);
 		}
 	}
 }
@@ -242,7 +248,7 @@ impl Inner {
 		self.enforce(&key.0, limits);
 	}
 
-	/// Bring the jar back within its caps, per domain and then overall.
+	/// Bring the jar back within its limits, per domain and then overall.
 	///
 	/// Trimmed after the insert, so oldest-first eviction never picks the incoming cookie while an
 	/// older one remains.
@@ -265,7 +271,7 @@ impl Inner {
 		}
 	}
 
-	/// Drop cookies that have expired, so a cap evicts live cookies only once dead ones are gone.
+	/// Drop cookies that have expired, so a limit evicts live cookies only once dead ones are gone.
 	fn purge_expired(&mut self) {
 		let expired: Vec<CookieKey> = self
 			.store
@@ -279,8 +285,8 @@ impl Inner {
 		}
 	}
 
-	/// Evict oldest-first until at most `cap` cookies remain in scope.
-	fn evict_oldest(&mut self, domain: Option<&str>, cap: usize) {
+	/// Evict oldest-first until at most `limit` cookies remain in scope.
+	fn evict_oldest(&mut self, domain: Option<&str>, limit: usize) {
 		let mut scoped: Vec<(u64, CookieKey)> = self
 			.order
 			.iter()
@@ -288,7 +294,7 @@ impl Inner {
 			.map(|(key, seq)| (*seq, key.clone()))
 			.collect();
 
-		let excess = scoped.len().saturating_sub(cap);
+		let excess = scoped.len().saturating_sub(limit);
 		if excess == 0 {
 			return;
 		}
@@ -495,10 +501,10 @@ mod tests {
 		assert_eq!(sent(&jar, "http://example.com/"), Some("a=1".into()));
 	}
 
-	// Expiry cap
+	// Expiry limit
 
 	#[test]
-	fn over_long_max_age_is_reduced_to_the_cap() {
+	fn over_long_max_age_is_reduced_to_the_limit() {
 		let jar = jar();
 		let over = DEFAULT_MAX_AGE.as_secs() * 2;
 		jar.add_cookie_str(
@@ -508,15 +514,15 @@ mod tests {
 
 		let inner = jar.inner.read().unwrap();
 		let cookie = inner.store.get("example.com", "/", "a").unwrap();
-		let cap = OffsetDateTime::now_utc() + time::Duration::try_from(DEFAULT_MAX_AGE).unwrap();
+		let limit = OffsetDateTime::now_utc() + time::Duration::try_from(DEFAULT_MAX_AGE).unwrap();
 		assert!(
-			cookie.expires_by(&(cap + time::Duration::minutes(1))),
-			"expiry should have been reduced to the cap"
+			cookie.expires_by(&(limit + time::Duration::minutes(1))),
+			"expiry should have been reduced to the limit"
 		);
 	}
 
 	#[test]
-	fn over_long_expires_is_reduced_to_the_cap() {
+	fn over_long_expires_is_reduced_to_the_limit() {
 		let jar = jar();
 		jar.add_cookie_str(
 			"a=1; Expires=Fri, 31 Dec 9999 23:59:59 GMT",
@@ -525,10 +531,10 @@ mod tests {
 
 		let inner = jar.inner.read().unwrap();
 		let cookie = inner.store.get("example.com", "/", "a").unwrap();
-		let cap = OffsetDateTime::now_utc() + time::Duration::try_from(DEFAULT_MAX_AGE).unwrap();
+		let limit = OffsetDateTime::now_utc() + time::Duration::try_from(DEFAULT_MAX_AGE).unwrap();
 		assert!(
-			cookie.expires_by(&(cap + time::Duration::minutes(1))),
-			"expiry should have been reduced to the cap"
+			cookie.expires_by(&(limit + time::Duration::minutes(1))),
+			"expiry should have been reduced to the limit"
 		);
 	}
 
@@ -556,7 +562,7 @@ mod tests {
 	#[test]
 	fn max_age_takes_precedence_over_expires() {
 		let jar = jar();
-		// Max-Age is within the cap, so the far-future Expires is never consulted and the cookie
+		// Max-Age is within the limit, so the far-future Expires is never consulted and the cookie
 		// keeps its one-minute life.
 		jar.add_cookie_str(
 			"a=1; Max-Age=60; Expires=Fri, 31 Dec 9999 23:59:59 GMT",
@@ -570,7 +576,7 @@ mod tests {
 
 	#[test]
 	fn expiring_a_cookie_still_works() {
-		// A server removes a cookie by resending it already expired; the cap must not get in the way.
+		// A server removes a cookie by resending it already expired; the limit must not get in the way.
 		let jar = jar();
 		jar.add_cookie_str("a=1", &url("https://example.com/"));
 		assert_eq!(sent(&jar, "https://example.com/"), Some("a=1".into()));
@@ -580,7 +586,7 @@ mod tests {
 	}
 
 	#[test]
-	fn max_age_cap_is_configurable() {
+	fn max_age_limit_is_configurable() {
 		let jar = jar_with(CookieLimits {
 			max_age: Duration::from_secs(60),
 			..Default::default()
@@ -592,7 +598,7 @@ mod tests {
 		assert!(cookie.expires_by(&(OffsetDateTime::now_utc() + time::Duration::minutes(2))));
 	}
 
-	// Size cap
+	// Size limit
 
 	#[test]
 	fn oversized_cookie_is_rejected() {
@@ -616,7 +622,7 @@ mod tests {
 			max_size: 10,
 			..Default::default()
 		});
-		// The value alone is under the cap; with the name it is over.
+		// The value alone is under the limit; with the name it is over.
 		jar.add_cookie_str("name=1234567", &url("https://example.com/"));
 		assert_eq!(sent(&jar, "https://example.com/"), None);
 
@@ -640,7 +646,7 @@ mod tests {
 		assert_eq!(stored_count(&jar), 1);
 	}
 
-	// Count caps
+	// Count limits
 
 	#[test]
 	fn per_host_cap_evicts_the_oldest() {
@@ -711,7 +717,7 @@ mod tests {
 
 		std::thread::sleep(Duration::from_millis(1100));
 
-		// Storing this exceeds the cap; the two dead cookies go and `live1` survives.
+		// Storing this exceeds the limit; the two dead cookies go and `live1` survives.
 		jar.add_cookie_str("live2=1", &url("https://example.com/"));
 
 		let sent = sent(&jar, "https://example.com/").unwrap();
@@ -744,7 +750,7 @@ mod tests {
 	fn domain_scoped_cookies_are_evictable() {
 		// A cookie carrying `Domain` is keyed differently from a host-only one, and eviction names
 		// a cookie back to the store by that key: if the two disagreed, `remove` would quietly miss
-		// and the jar would drift past its cap.
+		// and the jar would drift past its limit.
 		let jar = jar_with(CookieLimits {
 			max_per_host: 2,
 			..Default::default()
