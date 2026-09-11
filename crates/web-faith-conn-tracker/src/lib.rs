@@ -155,7 +155,10 @@ pub struct ConnectionSnapshot {
 	pub expiry: Option<SystemTime>,
 	/// Responses that have arrived over this connection.
 	pub response_count: u64,
-	/// The operating system's last report for this connection, if it has been asked yet.
+	/// The operating system's last report for this connection.
+	///
+	/// This can be `None` on a platform with no support, in the first second of a connection's
+	/// life before the refresh has run, or when the kernel's table no longer carries it.
 	pub stats: Option<TcpStats>,
 }
 
