@@ -2,16 +2,19 @@
 //!
 //! An origin advertises HTTP/3 in an `Alt-Svc` header or an `HTTPS` DNS record. The alternative
 //! service may be unreachable even when advertised, and trying would unnecessarily fail and waste
-//! a request. [`AltSvcCache`] keeps the advertisements and decides, per origin, whether HTTP/3 is
-//! worth attempting.
+//! a request.
 //!
-//! [`AltSvcMiddleware`] acts on that decision, in one of two shapes:
+//! [`AltSvcCache`] is an in-memory store which keeps track of these advertisements, and decides
+//! per origin whether HTTP/3 is worth attempting.
 //!
-//! - With an [`H3Prober`], advertisements are verified in the background and foreground requests
-//!   use HTTP/3 only once an origin is confirmed, so no user-visible request pays for discovering a
-//!   broken alternative service.
-//! - Without one, the next foreground request is the verification, falling back to TCP if it does
-//!   not produce headers in time.
+//! [`AltSvcMiddleware`] then acts on that decision. There are two flavours, depending on whether
+//! you want to do background probes (with [`H3Prober`]) or not:
+//!
+//! - With, advertisements are verified in the background, and foreground requests use HTTP/3 only
+//!   once an origin is confirmed, so no user-visible request pays for discovering a broken
+//!   alternative service.
+//! - Without, the next foreground request is itself the verification, falling back to TCP if it
+//!   does not produce headers in time.
 //!
 //! Either way, an origin that starts failing, or that proves slower over HTTP/3 than the path it
 //! replaced ([`PathTime`]), is demoted, and the cooldown before it is retried lengthens with each
