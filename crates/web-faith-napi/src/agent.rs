@@ -234,7 +234,7 @@ fn refuse_absent_capabilities(options: &AgentOptions) -> Result<(), FaithError> 
 	let absent = |group: &str| -> Result<(), FaithError> {
 		Err(FaithError::new(
 			web_faith::error::FaithErrorKind::Config,
-			Some(format!("this build has no {group} support")),
+			format!("this build has no {group} support"),
 		))
 	};
 

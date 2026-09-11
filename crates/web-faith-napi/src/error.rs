@@ -106,8 +106,8 @@ impl FaithErrorExt for FaithError {
 	}
 
 	fn into_js_error<'env>(self, env: &'env Env) -> Unknown<'env> {
-		let code = self.kind.code();
-		let unk = match js_type(self.kind) {
+		let code = self.kind().code();
+		let unk = match js_type(self.kind()) {
 			JsErrorType::TypeError => JsTypeError::from(self.into_napi()).into_unknown(*env),
 			JsErrorType::SyntaxError => JsSyntaxError::from(self.into_napi()).into_unknown(*env),
 			JsErrorType::GenericError => JsError::from(self.into_napi()).into_unknown(*env),

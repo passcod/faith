@@ -46,7 +46,7 @@ impl TryFrom<AgentOptions> for options::AgentOptions {
 						IpAddr::from_str(addr).map_err(|err| {
 							FaithError::new(
 								FaithErrorKind::AddressParse,
-								Some(format!("{addr:?}: {err}")),
+								format!("{addr:?}: {err}"),
 							)
 						})
 					})

@@ -100,7 +100,7 @@ pub(crate) async fn classify_open_error(path: &str, err: std::io::Error) -> Fait
 	} else {
 		FaithErrorKind::FileWrite
 	};
-	FaithError::new(kind, Some(err.to_string()))
+	FaithError::new(kind, err.to_string())
 }
 
 /// The trailing headers a response carried, once its body has ended.
@@ -434,7 +434,7 @@ impl Response {
 	pub async fn json<T: DeserializeOwned>(&self) -> Result<T, FaithError> {
 		let bytes = self.bytes().await?;
 		serde_json::from_slice(&bytes)
-			.map_err(|err| FaithError::new(FaithErrorKind::JsonParse, Some(err.to_string())))
+			.map_err(|err| FaithError::new(FaithErrorKind::JsonParse, err.to_string()))
 	}
 
 	/// The body as a stream of chunks, decoded under whichever coding was negotiated.
@@ -458,7 +458,7 @@ impl Response {
 		let stream = self.ensure_stream(&mut body, self.body.drained.clone())?;
 
 		Ok(Some(stream.map_err(|err| {
-			FaithError::new(FaithErrorKind::BodyStream, Some(err))
+			FaithError::new(FaithErrorKind::BodyStream, err)
 		})))
 	}
 
@@ -620,8 +620,7 @@ impl Response {
 		let mut chunks = Vec::new();
 		futures::pin_mut!(stream);
 		while let Some(result) = stream.next().await {
-			let chunk =
-				result.map_err(|err| FaithError::new(FaithErrorKind::BodyStream, Some(err)))?;
+			let chunk = result.map_err(|err| FaithError::new(FaithErrorKind::BodyStream, err))?;
 			chunks.push(chunk);
 		}
 
@@ -713,14 +712,13 @@ impl Response {
 		let mut reported_at = Instant::now();
 		futures::pin_mut!(stream);
 		while let Some(result) = stream.next().await {
-			let chunk =
-				result.map_err(|err| FaithError::new(FaithErrorKind::BodyStream, Some(err)))?;
+			let chunk = result.map_err(|err| FaithError::new(FaithErrorKind::BodyStream, err))?;
 			if let Some(checker) = checker.as_mut() {
 				checker.input(&chunk);
 			}
 			file.write_all(&chunk)
 				.await
-				.map_err(|err| FaithError::new(FaithErrorKind::FileWrite, Some(err.to_string())))?;
+				.map_err(|err| FaithError::new(FaithErrorKind::FileWrite, err.to_string()))?;
 			written += chunk.len() as u64;
 			// A server cannot send more than it promised: once the bytes off the wire exceed
 			// the advertised length, the write fails and the bytes so far stay on disk
@@ -738,7 +736,7 @@ impl Response {
 
 		file.flush()
 			.await
-			.map_err(|err| FaithError::new(FaithErrorKind::FileWrite, Some(err.to_string())))?;
+			.map_err(|err| FaithError::new(FaithErrorKind::FileWrite, err.to_string()))?;
 
 		// The last report always lands, whatever the rate limit allowed along the way, so a
 		// caller's final view of a completed write is the whole body rather than the last

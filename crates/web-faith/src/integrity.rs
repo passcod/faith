@@ -32,7 +32,7 @@ fn parse_integrity(integrity: &str) -> Result<Integrity, FaithError> {
 	normalized.parse().map_err(|e| {
 		FaithError::new(
 			FaithErrorKind::InvalidIntegrity,
-			Some(format!("failed to parse integrity value: {e}")),
+			format!("failed to parse integrity value: {e}"),
 		)
 	})
 }
@@ -108,7 +108,10 @@ mod tests {
 		let integrity = "sha256-wronghashvalue";
 		let result = verify_integrity(data, integrity);
 		assert!(result.is_err());
-		assert_eq!(result.unwrap_err().kind, FaithErrorKind::IntegrityMismatch);
+		assert_eq!(
+			result.unwrap_err().kind(),
+			FaithErrorKind::IntegrityMismatch
+		);
 	}
 
 	#[test]
@@ -124,7 +127,10 @@ mod tests {
 		let integrity = "sha256-wronghash1 sha256-wronghash2";
 		let result = verify_integrity(data, integrity);
 		assert!(result.is_err());
-		assert_eq!(result.unwrap_err().kind, FaithErrorKind::IntegrityMismatch);
+		assert_eq!(
+			result.unwrap_err().kind(),
+			FaithErrorKind::IntegrityMismatch
+		);
 	}
 
 	#[test]

@@ -125,7 +125,7 @@ impl Agent {
 		{
 			return Err(FaithError::new(
 				FaithErrorKind::Config,
-				Some("dns.servers cannot be combined with dns.system".to_string()),
+				"dns.servers cannot be combined with dns.system".to_string(),
 			));
 		}
 		// Parsed whichever resolver is in use: overrides take effect under the system resolver
@@ -147,7 +147,7 @@ impl Agent {
 							}
 							Err(_) => Err(FaithError::new(
 								FaithErrorKind::AddressParse,
-								Some(format!("{addr:?}: {err}")),
+								format!("{addr:?}: {err}"),
 							)),
 						},
 					})
@@ -171,10 +171,7 @@ impl Agent {
 			let mut servers = Vec::new();
 			for url in dns.servers.unwrap_or_default() {
 				servers.push(url.parse::<ServerSpec>().map_err(|err| {
-					FaithError::new(
-						FaithErrorKind::AddressParse,
-						Some(format!("{url:?}: {err}")),
-					)
+					FaithError::new(FaithErrorKind::AddressParse, format!("{url:?}: {err}"))
 				})?);
 			}
 			Some(FaithResolver::new(ResolverConfig {
@@ -182,10 +179,10 @@ impl Agent {
 				timeout: dns.timeout.map(|ms| Duration::from_millis(ms.into())),
 				ndots: dns.ndots.map(|n| n as usize),
 				search_domains: parse_domains(dns.search_domains)
-					.map_err(|message| FaithError::new(FaithErrorKind::Config, Some(message)))?,
+					.map_err(|message| FaithError::new(FaithErrorKind::Config, message))?,
 				hosts_file: dns.hosts_file,
 				exempt_domains: parse_domains(dns.exempt_domains)
-					.map_err(|message| FaithError::new(FaithErrorKind::Config, Some(message)))?
+					.map_err(|message| FaithError::new(FaithErrorKind::Config, message))?
 					.unwrap_or_default(),
 				// The two options stay separate on the surfaces, and meet here: `serveStale` says
 				// whether at all, `maxStale` how long for.
@@ -313,14 +310,14 @@ impl Agent {
 				let identity = match &tls.identity {
 					None => None,
 					Some(identity) => Some(Identity::from_pem(identity).map_err(|err| {
-						FaithError::new(FaithErrorKind::PemParse, Some(err.to_string()))
+						FaithError::new(FaithErrorKind::PemParse, err.to_string())
 					})?),
 				};
 
 				let mut extra_roots = Vec::new();
 				for pem in tls.extra_roots.iter().flatten() {
 					extra_roots.extend(Certificate::from_pem_bundle(pem).map_err(|err| {
-						FaithError::new(FaithErrorKind::PemParse, Some(err.to_string()))
+						FaithError::new(FaithErrorKind::PemParse, err.to_string())
 					})?);
 				}
 
@@ -346,7 +343,7 @@ impl Agent {
 					path: cache
 						.path
 						.ok_or_else(|| {
-							FaithError::new(FaithErrorKind::Config, Some("missing cache.path"))
+							FaithError::new(FaithErrorKind::Config, "missing cache.path")
 						})?
 						.into(),
 					remove_opts: Default::default(),

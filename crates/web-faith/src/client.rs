@@ -380,7 +380,7 @@ impl ClientRecipe {
 
 		let raw_client = client
 			.build()
-			.map_err(|e| FaithError::new(FaithErrorKind::Config, Some(format!("{e:?}"))))?;
+			.map_err(|e| FaithError::new(FaithErrorKind::Config, format!("{e:?}")))?;
 		let mut client = ClientBuilder::new(raw_client.clone());
 
 		#[cfg(feature = "http3")]

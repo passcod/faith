@@ -79,9 +79,9 @@ pub async fn send(
 			Coding::from_option(value).ok_or_else(|| {
 				FaithError::new(
 					FaithErrorKind::InvalidCompression,
-					Some(format!(
+					format!(
 						"compress: {value:?} names no coding; expected gzip, deflate, br, or zstd"
-					)),
+					),
 				)
 			})
 		})
@@ -112,13 +112,13 @@ pub async fn send(
 			let header_name = HeaderName::from_bytes(key.as_bytes()).map_err(|_| {
 				FaithError::new(
 					FaithErrorKind::InvalidHeader,
-					Some(format!("invalid header name: {key}")),
+					format!("invalid header name: {key}"),
 				)
 			})?;
 			let header_value = HeaderValue::from_str(value).map_err(|_| {
 				FaithError::new(
 					FaithErrorKind::InvalidHeader,
-					Some(format!("invalid header value: {value}")),
+					format!("invalid header value: {value}"),
 				)
 			})?;
 
@@ -150,9 +150,7 @@ pub async fn send(
 		let value = HeaderValue::from_str(derived).map_err(|_| {
 			FaithError::new(
 				FaithErrorKind::InvalidHeader,
-				Some(format!(
-					"invalid Content-Type derived from the body: {derived}"
-				)),
+				format!("invalid Content-Type derived from the body: {derived}"),
 			)
 		})?;
 		request = request.header(CONTENT_TYPE, value);
@@ -167,10 +165,7 @@ pub async fn send(
 	{
 		return Err(FaithError::new(
 			FaithErrorKind::MissingContentType,
-			Some(
-				"a QUERY request carrying a body must declare a Content-Type describing it"
-					.to_owned(),
-			),
+			"a QUERY request carrying a body must declare a Content-Type describing it",
 		));
 	}
 
@@ -265,10 +260,10 @@ pub async fn send(
 				if parsed_url.scheme() != "https" {
 					return Err(FaithError::new(
 						FaithErrorKind::Network,
-						Some(format!(
+						format!(
 							"a streaming request body requires HTTP/2 or HTTP/3, and {} is served over HTTP/1.1; set the agent's quirks.h1RequestStreaming to send it anyway",
 							parsed_url.as_str()
-						)),
+						),
 					));
 				}
 
@@ -287,10 +282,7 @@ pub async fn send(
 					applied_coding = Some(coding.clone());
 					let stream =
 						encoding_request::compress_stream(byte_stream, coding).map_err(|err| {
-							FaithError::new(
-								FaithErrorKind::InvalidCompression,
-								Some(err.to_string()),
-							)
+							FaithError::new(FaithErrorKind::InvalidCompression, err.to_string())
 						})?;
 					reqwest::Body::wrap_stream(stream)
 				}
@@ -313,7 +305,7 @@ pub async fn send(
 						.map_err(|err| {
 							FaithError::new(
 								FaithErrorKind::Network,
-								Some(format!("could not compress the request body: {err}")),
+								format!("could not compress the request body: {err}"),
 							)
 						})?
 				}
@@ -338,7 +330,7 @@ pub async fn send(
 		let value = layered.to_header_value().ok_or_else(|| {
 			FaithError::new(
 				FaithErrorKind::InvalidHeader,
-				Some(format!("invalid header value: {layered}")),
+				format!("invalid header value: {layered}"),
 			)
 		})?;
 		request = request.header(CONTENT_ENCODING, value);

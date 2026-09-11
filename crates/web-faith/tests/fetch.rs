@@ -106,7 +106,7 @@ async fn a_body_is_read_once_by_whichever_reader_asks() {
 
 		// A second read is refused rather than returning an empty body.
 		let err = response.text().await.expect_err("the body is spent");
-		assert_eq!(err.kind, FaithErrorKind::ResponseAlreadyDisturbed);
+		assert_eq!(err.kind(), FaithErrorKind::ResponseAlreadyDisturbed);
 	});
 }
 
@@ -200,14 +200,14 @@ async fn a_failed_conversion_surfaces_when_the_builder_resolves() {
 		.method("a method with spaces")
 		.await
 		.expect_err("the method does not convert");
-	assert_eq!(err.kind, FaithErrorKind::InvalidMethod);
+	assert_eq!(err.kind(), FaithErrorKind::InvalidMethod);
 
 	// The first failure met is the one reported, whatever follows it.
 	let err = Request::new("not a url")
 		.header("x-fine", "value")
 		.build()
 		.expect_err("the target does not parse");
-	assert_eq!(err.kind, FaithErrorKind::InvalidUrl);
+	assert_eq!(err.kind(), FaithErrorKind::InvalidUrl);
 }
 
 /// A timeout shorter than the origin's delay is a `Timeout`, not a generic network failure.
@@ -219,7 +219,7 @@ async fn a_timeout_reports_itself_as_one() {
 			.timeout(Duration::from_millis(250))
 			.await
 			.expect_err("the origin is slower than the deadline");
-		assert_eq!(err.kind, FaithErrorKind::Timeout);
+		assert_eq!(err.kind(), FaithErrorKind::Timeout);
 	});
 }
 
@@ -238,7 +238,7 @@ async fn integrity_is_checked_against_the_body() {
 			.expect("the response itself arrives");
 
 		let err = response.bytes().await.expect_err("the digest cannot match");
-		assert_eq!(err.kind, FaithErrorKind::IntegrityMismatch);
+		assert_eq!(err.kind(), FaithErrorKind::IntegrityMismatch);
 
 		// A value naming no algorithm is refused before the body is touched at all.
 		let response = agent()
@@ -247,7 +247,7 @@ async fn integrity_is_checked_against_the_body() {
 			.await
 			.expect("the response itself arrives");
 		let err = response.bytes().await.expect_err("the value does not parse");
-		assert_eq!(err.kind, FaithErrorKind::InvalidIntegrity);
+		assert_eq!(err.kind(), FaithErrorKind::InvalidIntegrity);
 	});
 }
 
@@ -270,7 +270,7 @@ async fn a_closed_agent_refuses_new_requests() {
 			.fetch(format!("{origin}/get"))
 			.await
 			.expect_err("the agent is closed");
-		assert_eq!(err.kind, FaithErrorKind::Closed);
+		assert_eq!(err.kind(), FaithErrorKind::Closed);
 	});
 }
 
@@ -330,13 +330,13 @@ async fn warming_is_advisory_but_a_closed_agent_refuses_it() {
 		let Err(err) = agent.prefetch_dns("") else {
 			panic!("there is no host in an empty string");
 		};
-		assert_eq!(err.kind, FaithErrorKind::AddressParse);
+		assert_eq!(err.kind(), FaithErrorKind::AddressParse);
 
 		agent.close();
 		let Err(err) = agent.prefetch_dns("localhost") else {
 			panic!("a closed agent has nothing to warm");
 		};
-		assert_eq!(err.kind, FaithErrorKind::Closed);
+		assert_eq!(err.kind(), FaithErrorKind::Closed);
 	});
 }
 
@@ -421,7 +421,7 @@ async fn writing_to_a_file_refuses_an_occupied_destination() {
 			.write_to_file(path, &FileDestination::default(), |_| ())
 			.await
 			.expect_err("the destination is occupied");
-		assert_eq!(err.kind, FaithErrorKind::FileExists);
+		assert_eq!(err.kind(), FaithErrorKind::FileExists);
 		assert_eq!(
 			std::fs::metadata(path).expect("the file is still there").len(),
 			4096,

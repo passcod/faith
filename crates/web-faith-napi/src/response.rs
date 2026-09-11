@@ -264,13 +264,11 @@ impl FaithResponse {
 
 		let stream = napi::bindgen_prelude::ReadableStream::create_with_stream_bytes(
 			&env,
-			stream
-				.map_err(|err| FaithError::new(FaithErrorKind::BodyStream, Some(err)).into_napi()),
+			stream.map_err(|err| FaithError::new(FaithErrorKind::BodyStream, err).into_napi()),
 		)
 		.map_err(|e| {
 			napi::Error::from(
-				FaithError::new(FaithErrorKind::BodyStream, Some(e.to_string()))
-					.into_js_error(&env),
+				FaithError::new(FaithErrorKind::BodyStream, e.to_string()).into_js_error(&env),
 			)
 		})?;
 		Ok(Some(stream))

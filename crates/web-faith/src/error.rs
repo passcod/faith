@@ -65,7 +65,9 @@ pub enum FaithErrorKind {
 }
 
 impl FaithErrorKind {
-	/// The stable name callers match on.
+	/// The name of this kind, as the JS bindings report it in an error's `code`.
+	#[cfg(feature = "internals")]
+	#[cfg_attr(docsrs, doc(cfg(feature = "internals")))]
 	pub fn code(self) -> String {
 		format!("{self:?}")
 	}
@@ -106,21 +108,29 @@ pub fn error_codes() -> Vec<String> {
 }
 
 /// An error from any layer of the client.
+///
+/// The [`Display`] output leads with the kind and carries the detail, if any.
 #[derive(Debug, Clone)]
 pub struct FaithError {
-	/// The kind, which is the stable code to match on.
-	pub kind: FaithErrorKind,
-	/// A human-readable detail, when there is more to say than the kind.
-	pub message: Option<String>,
+	kind: FaithErrorKind,
+	/// Detail beyond what the kind says on its own.
+	message: Option<String>,
 }
 
 impl FaithError {
-	/// An error of `kind`, optionally carrying detail beyond its default message.
-	pub fn new(kind: FaithErrorKind, message: Option<impl Into<String>>) -> Self {
+	/// An error of `kind`, carrying detail beyond its default message.
+	///
+	/// [`From<FaithErrorKind>`](FaithError::from) makes one with no detail of its own.
+	pub fn new(kind: FaithErrorKind, message: impl Into<String>) -> Self {
 		Self {
 			kind,
-			message: message.map(|m| m.into()),
+			message: Some(message.into()),
 		}
+	}
+
+	/// What went wrong.
+	pub fn kind(&self) -> FaithErrorKind {
+		self.kind
 	}
 }
 
@@ -144,7 +154,7 @@ fn faith_kind_in_chain(err: &(dyn Error + 'static)) -> Option<FaithErrorKind> {
 	let mut source = err.source();
 	while let Some(e) = source {
 		if let Some(faith) = e.downcast_ref::<FaithError>() {
-			return Some(faith.kind);
+			return Some(faith.kind());
 		}
 		source = e.source();
 	}
@@ -171,7 +181,7 @@ impl From<reqwest::Error> for FaithError {
 		}
 
 		if err.is_timeout() {
-			return FaithError::new(FaithErrorKind::Timeout, Some(msg));
+			return FaithError::new(FaithErrorKind::Timeout, msg);
 		}
 
 		// A redirect the agent's own policy refused carries the kind we handed reqwest; one reqwest
@@ -182,7 +192,7 @@ impl From<reqwest::Error> for FaithError {
 			.flatten()
 			.unwrap_or(FaithErrorKind::Network);
 
-		FaithError::new(kind, Some(msg))
+		FaithError::new(kind, msg)
 	}
 }
 
@@ -190,26 +200,14 @@ impl From<reqwest_middleware::Error> for FaithError {
 	fn from(err: reqwest_middleware::Error) -> Self {
 		match err {
 			reqwest_middleware::Error::Middleware(err) => {
-				FaithError::new(FaithErrorKind::Network, Some(err.to_string()))
+				FaithError::new(FaithErrorKind::Network, err.to_string())
 			}
 			reqwest_middleware::Error::Reqwest(err) => err.into(),
 		}
 	}
 }
 
-impl Error for FaithError {
-	fn source(&self) -> Option<&(dyn Error + 'static)> {
-		None
-	}
-
-	fn description(&self) -> &str {
-		"description() is deprecated; use Display"
-	}
-
-	fn cause(&self) -> Option<&dyn Error> {
-		self.source()
-	}
-}
+impl Error for FaithError {}
 
 impl Display for FaithError {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -253,7 +251,7 @@ mod tests {
 		let err = FaithError::from(FaithErrorKind::Closed);
 		assert_eq!(err.to_string(), "Closed: the agent has been closed");
 
-		let err = FaithError::new(FaithErrorKind::Closed, Some("gone"));
+		let err = FaithError::new(FaithErrorKind::Closed, "gone");
 		assert_eq!(err.to_string(), "Closed: gone");
 	}
 }
