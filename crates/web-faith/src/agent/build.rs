@@ -57,6 +57,7 @@ use crate::client::install_https_sink;
 /// supported route.
 #[cfg(feature = "internals")]
 impl Agent {
+	/// Build an agent straight from options.
 	pub fn from_options(options: AgentOptions) -> Result<Self, FaithError> {
 		Self::from_options_impl(options)
 	}

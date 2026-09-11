@@ -104,10 +104,14 @@ pub(crate) async fn classify_open_error(path: &str, err: std::io::Error) -> Fait
 }
 
 #[derive(Clone, Debug, Default)]
+/// The trailing headers a response carried, once its body has ended.
 pub enum Trailers {
 	#[default]
+	/// The body has not ended, so the question is still open.
 	NotYet,
+	/// The body ended carrying no trailers.
 	None,
+	/// The trailers that arrived.
 	Some(HeaderMap),
 }
 
@@ -356,6 +360,7 @@ impl Response {
 		self.status_code.is_success()
 	}
 
+	/// The response's headers.
 	pub fn headers(&self) -> &HeaderMap {
 		&self.headers
 	}

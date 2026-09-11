@@ -10,7 +10,27 @@
 //! declared.
 //!
 //! `deflate` is the zlib-wrapped form of RFC 1950, which is what mainstream clients decode it as.
+//!
+//! ```
+//! use http::{HeaderMap, HeaderValue};
+//! use web_faith_encoding::{AcceptEncoding, DEFAULT_ACCEPT_ENCODING, compress_buffer, decision};
+//!
+//! # async fn example() {
+//! let accept = AcceptEncoding::parse(DEFAULT_ACCEPT_ENCODING);
+//!
+//! let mut headers = HeaderMap::new();
+//! headers.insert("content-encoding", HeaderValue::from_static("gzip"));
+//!
+//! // What the response declared, against what the request accepted.
+//! let coding = decision(&headers, &accept).expect("gzip was accepted");
+//!
+//! let body = b"the quick brown fox".repeat(8);
+//! let compressed = compress_buffer(&body, coding).await.expect("gzip compresses");
+//! assert!(compressed.len() < body.len());
+//! # }
+//! ```
 
+#![deny(missing_docs)]
 // Lets docs.rs label each item with the feature or platform it needs.
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
@@ -40,9 +60,13 @@ pub const DEFAULT_ACCEPT_ENCODING: &str = "zstd,gzip,deflate,br";
 /// other mainstream client decode it as.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Coding {
+	/// `gzip`, RFC 1952.
 	Gzip,
+	/// `deflate`, in its zlib-wrapped form, RFC 1950.
 	Deflate,
+	/// `br`, RFC 7932.
 	Brotli,
+	/// `zstd`, RFC 8878.
 	Zstd,
 }
 
@@ -135,6 +159,7 @@ pub struct AcceptEncoding {
 }
 
 impl AcceptEncoding {
+	/// Read an `Accept-Encoding` header value.
 	pub fn parse(value: &str) -> Self {
 		let mut accept = Self::default();
 		for element in value.split(',') {

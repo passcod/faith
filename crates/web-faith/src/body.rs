@@ -19,11 +19,16 @@ use tokio::sync::Mutex;
 
 use crate::timing::TimingSlot;
 
+/// A body byte-stream, as a response hands one out.
 pub type DynStream = dyn Stream<Item = std::result::Result<Bytes, String>> + Send + Sync;
 
+/// A response body, in whichever state it has reached.
 pub enum Body {
+	/// As it arrived, not yet read.
 	Inner(reqwest::Body),
+	/// Read to the end, or discarded.
 	Consumed,
+	/// Handed out as a stream that a response and its clones share.
 	Stream(SharedStream<Pin<Box<DynStream>>>),
 }
 
@@ -31,6 +36,7 @@ pub enum Body {
 ///
 /// An HTTP/1 connection can't be reused until its body has been read to the end.
 pub struct BodyHolder {
+	/// `None` for a response that cannot carry a body.
 	pub body: Option<Arc<Mutex<Body>>>,
 	/// Set once the body has been consumed, so dropping it drains nothing.
 	pub drained: Arc<AtomicBool>,
@@ -41,6 +47,7 @@ pub struct BodyHolder {
 }
 
 impl BodyHolder {
+	/// Hold `body`, draining it on drop if `version` needs that to reuse the connection.
 	pub fn new(body: Option<Arc<Mutex<Body>>>, version: Version, timing: Arc<TimingSlot>) -> Self {
 		Self {
 			body,
@@ -50,6 +57,7 @@ impl BodyHolder {
 		}
 	}
 
+	/// A holder for a response that cannot carry a body.
 	pub fn none() -> Self {
 		Self {
 			body: None,

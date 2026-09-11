@@ -66,6 +66,7 @@ impl Request {
 		}
 	}
 
+	/// The URL this request is aimed at.
 	pub fn url(&self) -> &Url {
 		&self.url
 	}

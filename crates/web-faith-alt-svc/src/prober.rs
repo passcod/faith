@@ -33,6 +33,9 @@ impl std::fmt::Debug for H3Prober {
 }
 
 impl H3Prober {
+	/// A prober sending on `client`, reporting into `cache`.
+	///
+	/// `timeout` bounds one probe; `None` leaves it bounded only by the QUIC idle timeout.
 	pub fn new(
 		client: reqwest::Client,
 		cache: Arc<AltSvcCache>,
@@ -113,6 +116,7 @@ impl H3Prober {
 		self.spawn(url.clone(), port);
 	}
 
+	/// Abort every probe in flight, so none outlives the client it sends on.
 	pub fn abort_all(&self) {
 		let mut tasks = self
 			.tasks

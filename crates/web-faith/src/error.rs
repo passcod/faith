@@ -16,28 +16,51 @@ use strum::IntoEnumIterator;
 #[cfg_attr(feature = "internals", derive(EnumIter))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FaithErrorKind {
+	/// The request was aborted by its caller.
 	Aborted,
+	/// An IP address or port in the options did not parse.
 	AddressParse,
+	/// The response body stream failed partway through.
 	BodyStream,
+	/// The agent has been closed.
 	Closed,
+	/// The agent options were invalid.
 	Config,
+	/// The response body ran past the `Content-Length` it advertised.
 	ContentLengthOverrun,
+	/// The destination file already exists and overwriting was not asked for.
 	FileExists,
+	/// The destination file could not be written.
 	FileWrite,
+	/// The body did not match the `integrity` digests.
 	IntegrityMismatch,
+	/// The `compress` option did not name a coding.
 	InvalidCompression,
+	/// A header name or value was not valid.
 	InvalidHeader,
+	/// The `integrity` value did not parse.
 	InvalidIntegrity,
+	/// The method was not a valid HTTP method.
 	InvalidMethod,
+	/// The destination did not name a local path.
 	InvalidPath,
+	/// The URL did not parse.
 	InvalidUrl,
+	/// The response body was not valid JSON.
 	JsonParse,
+	/// A `QUERY` request carried a body with no `Content-Type` to describe it.
 	MissingContentType,
+	/// The request failed on the network.
 	Network,
+	/// A client certificate or key was not valid PEM.
 	PemParse,
+	/// A redirect was refused, per the `error` redirect policy.
 	Redirect,
+	/// The body has already been read, or handed out as a stream.
 	ResponseAlreadyDisturbed,
+	/// The response cannot carry a body.
 	ResponseBodyNull,
+	/// The request outlived its timeout.
 	Timeout,
 }
 
@@ -82,13 +105,17 @@ pub fn error_codes() -> Vec<String> {
 	FaithErrorKind::iter().map(FaithErrorKind::code).collect()
 }
 
+/// An error from any layer of the client.
 #[derive(Debug, Clone)]
 pub struct FaithError {
+	/// The kind, which is the stable code to match on.
 	pub kind: FaithErrorKind,
+	/// A human-readable detail, where one adds anything to the kind.
 	pub message: Option<String>,
 }
 
 impl FaithError {
+	/// An error of `kind`, optionally carrying detail beyond its default message.
 	pub fn new(kind: FaithErrorKind, message: Option<impl Into<String>>) -> Self {
 		Self {
 			kind,

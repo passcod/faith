@@ -106,6 +106,7 @@ impl std::fmt::Debug for FaithResolver {
 }
 
 impl FaithResolver {
+	/// A resolver built from `settings`, which reads its configuration on first use.
 	pub fn new(settings: ResolverSettings) -> Self {
 		Self {
 			inner: Arc::new(Inner {

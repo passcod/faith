@@ -16,6 +16,7 @@ use crate::{cache::AltSvcCache, header::parse_alt_svc_header, prober::H3Prober};
 /// The stamp belongs to the client, which puts it in the request's extensions; this layer is only
 /// the place that observes the arrival.
 pub trait ArrivalStamp: Send + Sync + 'static {
+	/// Mark the moment the response's headers arrived.
 	fn mark(&self, at: Instant);
 }
 
@@ -89,6 +90,11 @@ impl<S: ArrivalStamp> std::fmt::Debug for AltSvcMiddleware<S> {
 }
 
 impl<S: ArrivalStamp> AltSvcMiddleware<S> {
+	/// The layer, routing on `cache`.
+	///
+	/// With a prober, advertisements are verified in the background and foreground requests keep
+	/// to TCP until an origin is proven; without one, the next foreground request is itself the
+	/// verification.
 	pub fn new(
 		cache: Arc<AltSvcCache>,
 		enabled: bool,
@@ -105,6 +111,7 @@ impl<S: ArrivalStamp> AltSvcMiddleware<S> {
 	}
 
 	#[allow(dead_code)]
+	/// The store this layer routes on.
 	pub fn cache(&self) -> &Arc<AltSvcCache> {
 		&self.cache
 	}

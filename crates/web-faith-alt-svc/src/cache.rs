@@ -5,8 +5,11 @@ use moka::sync::Cache;
 
 #[derive(Debug, Clone)]
 #[non_exhaustive]
+/// One origin's entry in the store.
 pub struct AltSvcEntry {
+	/// The port HTTP/3 is advertised or proven on.
 	pub port: u16,
+	/// When the entry lapses.
 	pub expires: Instant,
 }
 
@@ -16,7 +19,9 @@ pub struct AltSvcAdvertisement {
 	/// Host the alternative is on. Empty when the header omitted it, which per
 	/// RFC 7838 means the same host as the origin.
 	pub host: String,
+	/// Port the alternative is on.
 	pub port: u16,
+	/// The `ma` parameter, if the header carried one.
 	pub max_age: Option<Duration>,
 }
 
@@ -43,6 +48,7 @@ struct FailureEntry {
 pub struct PathTime {
 	/// EWMA of time-to-response-headers, in milliseconds.
 	pub avg_ms: f64,
+	/// Samples behind the average.
 	pub count: u32,
 }
 
@@ -54,17 +60,25 @@ const EWMA_MIN_SAMPLES: u32 = 8;
 /// factor, so LAN-fast origins don't flap on sub-millisecond noise.
 pub const SLOW_FLOOR_MS: f64 = 10.0;
 
+/// How a store ages and bounds what it holds.
 pub struct AltSvcCacheConfig {
+	/// How long an unverified advertisement is kept.
 	pub advertised_ttl: Duration,
+	/// How long a proven origin stays proven.
 	pub confirmed_ttl: Duration,
 	/// Cooldown a first failure earns; each consecutive one doubles it.
 	pub failed_ttl: Duration,
 	/// Ceiling on the doubling. Clamped up to `failed_ttl`, so setting it at or
 	/// below the base gives a flat cooldown.
 	pub failed_max_ttl: Duration,
+	/// Most origins tracked before the least recently used is evicted.
 	pub capacity: u64,
+	/// Cancelled HTTP/3 attempts within `strike_window` that demote an origin. `0` disables.
 	pub cancel_strikes: u32,
+	/// How close together cancellations must land to count towards a run.
 	pub strike_window: Duration,
+	/// Whether to connect to an advertised port that differs from the origin's. Not
+	/// standards-compliant; see the `http3.upgradeFollowAdvertisedPort` option.
 	pub follow_advertised_port: bool,
 	/// Lifetime of a probe's single-flight claim. Doubles as crash recovery: a
 	/// probe task that dies without reporting frees its origin when this lapses.
@@ -98,6 +112,7 @@ impl Default for AltSvcCacheConfig {
 }
 
 #[derive(Clone)]
+/// What each origin has advertised, proven, or failed at.
 pub struct AltSvcCache {
 	advertised: Cache<String, AltSvcEntry>,
 	confirmed: Cache<String, AltSvcEntry>,
@@ -147,6 +162,7 @@ impl std::fmt::Debug for AltSvcCache {
 }
 
 impl AltSvcCache {
+	/// An empty store aged and bounded by `config`.
 	pub fn new(config: AltSvcCacheConfig) -> Self {
 		let AltSvcCacheConfig {
 			advertised_ttl,
@@ -241,6 +257,7 @@ impl AltSvcCache {
 		Some(format!("{}://{}:{}", url.scheme(), host, port))
 	}
 
+	/// Record an advertisement carried by an `Alt-Svc` header.
 	pub fn record_alt_svc(&self, url: &reqwest::Url, advertisement: &AltSvcAdvertisement) {
 		let Some(origin) = Self::origin_key(url) else {
 			return;

@@ -69,18 +69,24 @@ pub struct CacheOptions {
 
 #[cfg(feature = "cache")]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// Where the HTTP cache keeps its entries.
 pub enum CacheStore {
+	/// On disk, at `cache.path`.
 	Disk,
 
+	/// In memory, bounded by `cache.capacity`.
 	Memory,
 }
 
 #[derive(bon::Builder, Clone, Debug, Default)]
 #[non_exhaustive]
+/// A fixed set of addresses for one domain.
 pub struct DnsOverride {
 	#[builder(into)]
+	/// The domain to override.
 	pub domain: String,
 	#[builder(with = |items: impl IntoIterator<Item = impl Into<String>>| items.into_iter().map(Into::into).collect())]
+	/// The addresses to resolve it to. Empty blocks the domain.
 	pub addresses: Vec<String>,
 }
 
@@ -194,18 +200,24 @@ pub struct DnsOptions {
 #[non_exhaustive]
 pub struct Header {
 	#[builder(into)]
+	/// The header name.
 	pub name: String,
 	#[builder(into)]
+	/// The header value.
 	pub value: String,
+	/// Whether to mark the header sensitive, keeping it out of logs and HPACK's index.
 	pub sensitive: Option<bool>,
 }
 
 #[cfg(feature = "http3")]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+/// The QUIC congestion-control algorithm.
 pub enum Http3Congestion {
 	#[default]
+	/// CUBIC, as the Linux TCP stack uses. Fair, and the default.
 	Cubic,
 
+	/// BBRv1, which maximises bandwidth use and ignores packet loss. See `http3.congestion`.
 	Bbr1,
 }
 
@@ -644,6 +656,7 @@ pub struct TlsOptions {
 	state_mod(vis = "pub")
 )]
 #[non_exhaustive]
+/// Everything an agent can be configured with.
 pub struct AgentOptions {
 	/// Settings related to the HTTP cache.
 	#[cfg(feature = "cache")]

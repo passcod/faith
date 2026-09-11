@@ -27,12 +27,15 @@ impl ResolverSource {
 	}
 }
 
-/// One line of `resolvers()`: a server's address, the transport in use, and how it was arrived at.
+/// One line of `resolvers()`.
 #[derive(Clone, Debug)]
 #[non_exhaustive]
 pub struct ResolverReport {
+	/// The server's address, as `ip:port`.
 	pub address: String,
+	/// The transport in use: `udp`, `tcp`, `tls`, `https`, `quic`, or `h3`.
 	pub transport: String,
+	/// How that transport was arrived at: `configured` or `conventional`.
 	pub source: String,
 }
 

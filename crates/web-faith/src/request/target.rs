@@ -14,7 +14,9 @@ use crate::{
 /// prepared request be adjusted at each call site.
 // spec:REQ
 pub enum Target {
+	/// A URL.
 	Url(Url),
+	/// A prepared request, to layer over.
 	Request(Box<Request>),
 }
 

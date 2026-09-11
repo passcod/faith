@@ -25,7 +25,24 @@
 //! exists while leaving the resolver usable.
 //!
 //! [Exempt names]: ResolverSettings::exempt_domains
+//!
+//! ```no_run
+//! use web_faith_dns::{FaithResolver, ResolverSettings};
+//!
+//! # async fn example() {
+//! // No servers named, so it configures itself from the operating system.
+//! let resolver = FaithResolver::new(ResolverSettings::default());
+//!
+//! // Warming is advisory and never fails; a later lookup reads the same cache.
+//! resolver.prefetch("example.com").await;
+//!
+//! for report in resolver.resolvers() {
+//!     println!("{} over {} ({})", report.address, report.transport, report.source);
+//! }
+//! # }
+//! ```
 
+#![deny(missing_docs)]
 // Lets docs.rs label each item with the feature or platform it needs.
 #![cfg_attr(docsrs, feature(doc_cfg))]
 

@@ -60,6 +60,7 @@
 //! Faith is also a Node.js module which lets you use this Rust networking stack as a `fetch`
 //! drop-in replacement: [`@passcod/faith`](https://www.npmjs.com/package/@passcod/faith).
 
+#![deny(missing_docs)]
 // Lets docs.rs label each item with the feature or platform it needs.
 #![cfg_attr(docsrs, feature(doc_cfg))]
 

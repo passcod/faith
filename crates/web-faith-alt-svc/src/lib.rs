@@ -19,7 +19,27 @@
 //!
 //! [`parse_alt_svc_header`] reads a header on its own if all you want is the advertisement, and
 //! [`H3HttpsSink`] feeds the store from `HTTPS` record lookups.
+//!
+//! ```
+//! use reqwest::Url;
+//! use web_faith_alt_svc::{AltSvcCache, AltSvcCacheConfig, parse_alt_svc_header};
+//!
+//! let cache = AltSvcCache::new(AltSvcCacheConfig::default());
+//! let origin = Url::parse("https://example.com/").expect("a valid URL");
+//!
+//! // An advertisement says the alternative exists, not that it works, so it makes the origin
+//! // worth probing rather than worth routing on.
+//! let advertised = parse_alt_svc_header(r#"h3=":443"; ma=86400"#).expect("h3 is advertised");
+//! cache.record_alt_svc(&origin, &advertised);
+//! assert_eq!(cache.confirmed_port(&origin), None);
+//!
+//! // A probe that reaches the origin over HTTP/3 is what promotes it to routable.
+//! let port = cache.probe_candidate(&origin).expect("worth probing");
+//! cache.confirm_h3(&origin, port);
+//! assert_eq!(cache.confirmed_port(&origin), Some(443));
+//! ```
 
+#![deny(missing_docs)]
 // Lets docs.rs label each item with the feature or platform it needs.
 #![cfg_attr(docsrs, feature(doc_cfg))]
 

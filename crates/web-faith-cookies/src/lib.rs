@@ -37,6 +37,7 @@
 //! `reqwest` implements that client's `CookieStore` for the jar, so it can be handed to a
 //! `ClientBuilder` as a cookie provider.
 
+#![deny(missing_docs)]
 // Lets docs.rs label each item with the feature or platform it needs.
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
@@ -122,6 +123,7 @@ struct Inner {
 }
 
 impl FaithJar {
+	/// An empty jar enforcing `limits`.
 	pub fn new(limits: CookieLimits) -> Self {
 		Self {
 			limits,

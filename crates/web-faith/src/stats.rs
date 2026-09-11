@@ -29,7 +29,9 @@ impl InnerAgentStats {
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct AgentStats {
+	/// Requests that have gone out.
 	pub requests_sent: u64,
+	/// Responses whose headers have come back.
 	pub responses_received: u64,
 	/// Response body streams that have been started, which is what reading a body does.
 	pub bodies_started: u64,

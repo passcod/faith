@@ -36,6 +36,7 @@ impl std::fmt::Debug for H3HttpsSink {
 }
 
 impl H3HttpsSink {
+	/// A sink feeding `cache`, and kicking `prober` when a record makes an origin probe-worthy.
 	pub fn new(cache: Arc<AltSvcCache>, prober: Option<&Arc<H3Prober>>) -> Self {
 		Self {
 			cache,

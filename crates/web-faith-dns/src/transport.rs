@@ -10,11 +10,17 @@ const DEFAULT_DNS_QUERY_PATH: &str = "/dns-query";
 /// The transport Faith speaks to a resolver, chosen by a server URL's scheme.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Transport {
+	/// Plaintext DNS over UDP, port 53. `udp://`.
 	Udp,
+	/// Plaintext DNS over TCP, port 53. `tcp://`.
 	Tcp,
+	/// DNS over TLS, port 853. `tls://`.
 	Tls,
+	/// DNS over HTTPS, port 443. `https://`.
 	Https,
+	/// DNS over QUIC, port 853. `quic://`.
 	Quic,
+	/// DNS over HTTP/3, port 443. `h3://`.
 	H3,
 }
 
