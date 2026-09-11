@@ -13,8 +13,10 @@ use crate::{cache::AltSvcCache, header::parse_alt_svc_header, prober::H3Prober};
 
 /// The client's hook for when a response's headers arrive.
 ///
-/// The stamp belongs to the client, which puts it in the request's extensions; this layer is only
-/// the place that observes the arrival.
+/// [`AltSvcMiddleware`] is the one layer that sees a response come back, so it marks this on
+/// behalf of whatever is measuring. The stamp itself belongs to the client, which puts one in
+/// each request's extensions and reads it back out afterwards; implement this on that type to
+/// receive the instant.
 pub trait ArrivalStamp: Send + Sync + 'static {
 	/// Mark the moment the response's headers arrived.
 	fn mark(&self, at: Instant);
