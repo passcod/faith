@@ -53,15 +53,17 @@ use url::Url;
 
 /// A cookie may not persist beyond this by default. RFC 6265bis §5.5.
 pub const DEFAULT_MAX_AGE: Duration = Duration::from_secs(400 * 24 * 60 * 60);
-/// Default cap on one cookie's name plus value, in bytes. RFC 6265bis §5.6 sets this as a floor
-/// servers may rely on; browsers implement it as the ceiling, and so do we.
+/// Default cap on one cookie's name plus value, in bytes.
+///
+/// RFC 6265bis §5.6 sets this as a floor servers may rely on; browsers implement it as the
+/// ceiling, and so does this.
 pub const DEFAULT_MAX_SIZE: usize = 4096;
 /// Default cap on cookies kept for one domain.
 pub const DEFAULT_MAX_PER_HOST: usize = 180;
 /// Default cap on cookies kept across the whole jar.
 pub const DEFAULT_MAX_TOTAL: usize = 3000;
 
-/// The caps a jar enforces, from the agent's `cookies` options.
+/// The caps a jar enforces.
 #[derive(Debug, Clone)]
 pub struct CookieLimits {
 	/// How far ahead a cookie may expire; a longer expiry is reduced to this.
@@ -106,7 +108,10 @@ fn is_secure(url: &Url) -> bool {
 	url.scheme() == "https"
 }
 
-/// The agent's cookie jar.
+/// A cookie jar.
+///
+/// Every rule is applied on the way in, so the caps bound real memory and a cookie inserted by
+/// hand meets the same rules as one from a `Set-Cookie` header.
 #[derive(Debug)]
 pub struct FaithJar {
 	limits: CookieLimits,
@@ -133,8 +138,7 @@ impl FaithJar {
 
 	/// Store one cookie received from `url`, given as a `Set-Cookie` value.
 	///
-	/// A cookie that does not parse, or that any of the storage rules reject, is dropped silently,
-	/// consistent with the jar's other no-op behaviours.
+	/// A cookie that does not parse, or that a storage rule rejects, is dropped silently.
 	pub fn add_cookie_str(&self, cookie: &str, url: &Url) {
 		let Ok(raw) = RawCookie::parse(cookie.to_owned()) else {
 			return;
@@ -190,8 +194,8 @@ fn prefix_allows(raw: &RawCookie<'_>, url: &Url) -> bool {
 
 /// Reduce an expiry further ahead than `max_age` to `max_age` from now.
 ///
-/// `Max-Age` is checked first, matching the precedence the storage model reads them in: a cookie
-/// carrying both takes its expiry from `Max-Age`. A session cookie has neither and stays one.
+/// `Max-Age` is checked first, the precedence the storage model reads them in. A session cookie
+/// has neither and stays one.
 fn clamp_expiry(raw: &mut RawCookie<'static>, max_age: Duration) {
 	let cap = time::Duration::try_from(max_age).unwrap_or(time::Duration::MAX);
 

@@ -54,10 +54,10 @@ pub type ByteStream = dyn Stream<Item = Result<Bytes, String>> + Send + Sync;
 /// The `Accept-Encoding` Faith advertises when the caller advertises none.
 pub const DEFAULT_ACCEPT_ENCODING: &str = "zstd,gzip,deflate,br";
 
-/// A content coding Faith can decode. Wire tokens: `gzip`, `deflate`, `br`, `zstd`.
+/// A content coding.
 ///
-/// `deflate` is the zlib-wrapped form (RFC 1950), matching what reqwest and every
-/// other mainstream client decode it as.
+/// `deflate` is the zlib-wrapped form (RFC 1950), which is how reqwest and every other mainstream
+/// client decode it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Coding {
 	/// `gzip`, RFC 1952.
@@ -96,8 +96,9 @@ impl Coding {
 		}
 	}
 
-	/// Match a single content-coding token, case-insensitively. `None` for
-	/// `identity`, an unknown coding, or one this cannot decode.
+	/// Match a single content-coding token, case-insensitively.
+	///
+	/// `None` for `identity`, an unknown coding, or one this cannot decode.
 	pub fn from_token(token: &str) -> Option<Self> {
 		let token = token.trim();
 		if token.eq_ignore_ascii_case("gzip") || token.eq_ignore_ascii_case("x-gzip") {
@@ -116,10 +117,9 @@ impl Coding {
 
 /// Decide whether and how to decode a response body.
 ///
-/// Returns the coding to decode under when the response's `Content-Encoding` names a
-/// single coding Faith can decode and the request's `Accept-Encoding` accepted it.
-/// A `Content-Encoding` naming more than one coding, an unknown coding, or a coding the
-/// request did not accept yields `None`, and the body is delivered as received.
+/// The coding to decode under when the response's `Content-Encoding` names a single coding that
+/// can be decoded and the request's `Accept-Encoding` accepted it. Otherwise `None`, and the body
+/// is delivered as received.
 pub fn decision(headers: &HeaderMap, accept: &AcceptEncoding) -> Option<Coding> {
 	// A representation encoded more than once is the caller's to unwind. The codings may
 	// arrive comma-joined on one line or split across several `Content-Encoding` lines --
@@ -145,10 +145,9 @@ pub fn strip_decoded_headers(headers: &mut HeaderMap) {
 	headers.remove(CONTENT_LENGTH);
 }
 
-/// A parsed `Accept-Encoding`, enough to answer whether a coding was accepted.
+/// A parsed `Accept-Encoding`.
 ///
-/// Each slot holds the quality value (0..=1000) a coding was named with, if it was
-/// named outright; `star` holds the quality value of `*` if present.
+/// Each slot holds the quality value (0..=1000) a coding was named with; `star` holds `*`'s.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct AcceptEncoding {
 	gzip: Option<u16>,
@@ -198,9 +197,10 @@ impl AcceptEncoding {
 		accept
 	}
 
-	/// Whether a coding was accepted: a coding named outright settles the question
-	/// whatever `*` says, so a zero quality value on the named coding refuses it even
-	/// when `*` would accept.
+	/// Whether a coding was accepted.
+	///
+	/// A coding named outright settles it whatever `*` says, so a zero quality value on the named
+	/// coding refuses it even where `*` would accept.
 	fn accepts(&self, coding: Coding) -> bool {
 		let named = match coding {
 			Coding::Gzip => self.gzip,
@@ -242,8 +242,7 @@ fn parse_quality(value: &str) -> Option<u16> {
 
 /// Wrap a body byte-stream in a decoder for `coding`.
 ///
-/// The body stream carries decoded bytes on every read path this way (see [`Coding`]);
-/// trailers are pulled off the frames before this point, so decoding sees data only.
+/// Trailers are pulled off the frames before this point, so decoding sees data only.
 pub fn decode_stream(input: Pin<Box<ByteStream>>, coding: Coding) -> Pin<Box<ByteStream>> {
 	let reader = StreamReader::new(input.map_err(io::Error::other));
 	match coding {
@@ -271,8 +270,7 @@ pub type RequestStream = Pin<Box<dyn Stream<Item = io::Result<Bytes>> + Send>>;
 
 /// Compress a buffered request body, yielding the bytes that go on the wire.
 ///
-/// The whole body is known up front, so it compresses in one pass and its length is the
-/// `Content-Length` the request can declare.
+/// The length of the result is the `Content-Length` the request can declare.
 // spec:ENC#what-a-compressed-request-sends
 pub async fn compress_buffer(input: &[u8], coding: Coding) -> io::Result<Vec<u8>> {
 	let mut output = Vec::new();

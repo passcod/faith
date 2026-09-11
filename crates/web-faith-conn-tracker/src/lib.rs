@@ -164,7 +164,9 @@ pub struct ConnectionSnapshot {
 
 type Conns = Cache<ConnectionKey, TrackedConnection>;
 
-/// Tracks a set of TCP connections, and reads the kernel's statistics for them.
+/// A set of tracked TCP connections.
+///
+/// Reads the kernel's statistics for each, refreshed once a second.
 #[derive(Debug)]
 pub struct ConnectionTracker {
 	connections: Conns,
