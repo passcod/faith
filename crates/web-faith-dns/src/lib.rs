@@ -9,20 +9,23 @@
 //!
 //! # Transports and server order
 //!
-//! Resolvers are named by URL, and the scheme picks the transport: plaintext `udp` and `tcp`, or
-//! encrypted `tls`, `https`, `quic`, and `h3`. The list is queried in the order given rather than
-//! reordered by latency. Given no list, the resolver configures itself from the operating system and
-//! lets RFC 9539 opportunistic encryption upgrade those servers where it can.
+//! Servers are named by URL, and the scheme picks the transport: `udp` and `tcp` in plaintext,
+//! `tls`, `https`, `quic` and `h3` encrypted.
 //!
-//! [Exempt names] are sent to the system resolver whichever way the rest is configured, so names
-//! that only the host knows how to resolve keep resolving.
+//! - The list is queried in the order given, not reordered by latency.
+//! - Given no list, the resolver configures itself from the operating system, and lets
+//!   [RFC 9539](https://www.rfc-editor.org/rfc/rfc9539) opportunistic encryption upgrade those
+//!   servers where it can.
+//! - [Exempt names] go to the system resolver however the rest is configured, so names only the
+//!   host knows how to resolve keep resolving.
 //!
 //! # Beyond addresses
 //!
-//! Lookups can also read the `HTTPS` record for a name, which is how an origin advertises HTTP/3
-//! before anything has connected to it, and answers can be served stale while a fresh lookup runs.
-//! A [network change][FaithResolver::reset] discards what was learned from a network that no longer
-//! exists while leaving the resolver usable.
+//! - Lookups can also read a name's `HTTPS` record, which is how an origin advertises HTTP/3
+//!   before anything has connected to it.
+//! - An answer can be served stale while a fresh lookup runs behind it.
+//! - A [network change][FaithResolver::reset] discards what was learned from a network that no
+//!   longer exists, leaving the resolver usable.
 //!
 //! [Exempt names]: ResolverSettings::exempt_domains
 //!
