@@ -1,23 +1,33 @@
-//! A caching DNS resolver for HTTP clients, with a cache you can warm.
-//!
-//! A client's built-in resolver usually keeps its cache to itself, so the only way to populate it is
-//! to make a request. That is no good for prefetching a name ahead of time, which must not touch the
-//! origin at all. [`FaithResolver`] is the resolver instead: it can be installed on an HTTP client
-//! so every request resolves through it, while [`FaithResolver::prefetch`] is called directly. Both
-//! share one resolver and one cache, so a name warmed ahead of time is already there when a request
-//! looks it up.
+//! A caching DNS resolver for HTTP clients.
 //!
 //! # Transports and server order
 //!
-//! Servers are named by URL, and the scheme picks the transport: `udp` and `tcp` in plaintext,
-//! `tls`, `https`, `quic` and `h3` encrypted.
+//! The resolver is configured to consult a list of nameservers in order, or defaults to the system
+//! configuration. Nameservers are specified by URL:
 //!
-//! - The list is queried in the order given, not reordered by latency.
-//! - Given no list, the resolver configures itself from the operating system, and lets
-//!   [RFC 9539](https://www.rfc-editor.org/rfc/rfc9539) opportunistic encryption upgrade those
-//!   servers where it can.
-//! - [Exempt names] go to the system resolver however the rest is configured, so names only the
-//!   host knows how to resolve keep resolving.
+//! - `udp://IP:PORT` uses classic plain text DNS over UDP, port 53 by default.
+//! - `tcp://IP:PORT` the same over TCP, port 53 by default.
+//! - `tls://IP:PORT` uses DNS over TLS ([RFC 7858](https://www.rfc-editor.org/rfc/rfc7858)), port
+//!   853 by default.
+//! - `https://HOST:PORT/PATH` uses DNS over HTTPS
+//!   ([RFC 8484](https://www.rfc-editor.org/rfc/rfc8484)), port 443 and `/dns-query` by default.
+//! - `quic://IP:PORT` uses DNS over QUIC ([RFC 9250](https://www.rfc-editor.org/rfc/rfc9250)),
+//!   port 853 by default.
+//! - `h3://HOST:PORT/PATH` uses DNS over HTTP/3, port 443 and `/dns-query` by default.
+//!
+//! The encrypted transports always authenticate the nameserver. A hostname authenticates against
+//! itself, a bare IP against the address, and a URL fragment (`tls://1.1.1.1#cloudflare-dns.com`)
+//! gives the certificate to expect instead.
+//!
+//! When available, opportunistic encryption upgrade
+//! ([RFC 9539](https://www.rfc-editor.org/rfc/rfc9539)) is used to secure nameservers.
+//!
+//! Some names are exempt from DNS resolution, and are always served by the system:
+//!
+//! - `localhost` and anything under it.
+//! - `.local` and anything under it.
+//! - The system's own DNS domain and search suffixes.
+//! - Anything listed in [`exempt_domains`](ResolverSettings::exempt_domains).
 //!
 //! # Beyond addresses
 //!
@@ -26,8 +36,6 @@
 //! - An answer can be served stale while a fresh lookup runs behind it.
 //! - A [network change][FaithResolver::reset] discards what was learned from a network that no
 //!   longer exists, leaving the resolver usable.
-//!
-//! [Exempt names]: ResolverSettings::exempt_domains
 //!
 //! ```no_run
 //! use web_faith_dns::{FaithResolver, ResolverSettings};
