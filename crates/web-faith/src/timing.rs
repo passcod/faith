@@ -78,7 +78,7 @@ impl TimingSlot {
 	}
 }
 
-/// The ALPN Protocol ID (RFC 7301) naming the protocol a response travelled over.
+/// The ALPN Protocol ID (RFC 7301) for the protocol a response travelled over.
 ///
 /// Reported whether or not ALPN negotiated it, as a browser does: cleartext HTTP/2 is `h2c` and
 /// cleartext HTTP/1.1 is `http/1.1`.

@@ -23,27 +23,20 @@ pub const DEFAULT_ACCEPT_ENCODING: &str = "zstd,gzip,deflate,br";
 /// quality value reads as `q=0`, which refuses that coding.
 ///
 /// [`Default`] is what [`DEFAULT_ACCEPT_ENCODING`] accepts, not the empty set.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct AcceptEncoding {
-	gzip: Option<u16>,
-	deflate: Option<u16>,
-	brotli: Option<u16>,
-	zstd: Option<u16>,
+	/// Every coding named outright, in the order the header named them.
+	codings: Vec<(Coding, u16)>,
+	/// The quality `*` was given, if it was named.
 	star: Option<u16>,
 }
 
 impl AcceptEncoding {
-	/// Accepts nothing at all, the accumulator a parse starts from.
-	const NOTHING: Self = Self {
-		gzip: None,
-		deflate: None,
-		brotli: None,
-		zstd: None,
-		star: None,
-	};
-
 	fn parse(value: &str) -> Self {
-		let mut accept = Self::NOTHING;
+		let mut accept = Self {
+			codings: Vec::new(),
+			star: None,
+		};
 		for element in value.split(',') {
 			let mut parts = element.split(';');
 			let Some(token) = parts.next().map(str::trim) else {
@@ -64,20 +57,49 @@ impl AcceptEncoding {
 				}
 			}
 
-			let slot = if token == "*" {
-				&mut accept.star
-			} else {
-				match Coding::from_token(token) {
-					Some(Coding::Gzip) => &mut accept.gzip,
-					Some(Coding::Deflate) => &mut accept.deflate,
-					Some(Coding::Brotli) => &mut accept.brotli,
-					Some(Coding::Zstd) => &mut accept.zstd,
-					None => continue,
-				}
-			};
-			*slot = Some(quality);
+			if token == "*" {
+				accept.star = Some(quality);
+				continue;
+			}
+
+			let coding = Coding::from_token(token);
+			// A header may name a coding twice; the last wins, as the last of any repeated
+			// header field value does.
+			match accept
+				.codings
+				.iter_mut()
+				.find(|(named, _)| *named == coding)
+			{
+				Some((_, existing)) => *existing = quality,
+				None => accept.codings.push((coding, quality)),
+			}
 		}
 		accept
+	}
+
+	/// Every coding the header named outright, with the quality value it carried.
+	///
+	/// In the order the header named them, and including codings this crate cannot decode. A
+	/// coding named with `q=0` is present here and refused by [`Self::accepts`].
+	pub fn iter(&self) -> impl Iterator<Item = (&Coding, u16)> {
+		self.codings
+			.iter()
+			.map(|(coding, quality)| (coding, *quality))
+	}
+
+	/// The quality value `coding` was named with, or `None` if the header did not name it.
+	///
+	/// Does not consult `*`; see [`Self::star`].
+	pub fn quality(&self, coding: &Coding) -> Option<u16> {
+		self.codings
+			.iter()
+			.find(|(named, _)| named == coding)
+			.map(|(_, quality)| *quality)
+	}
+
+	/// The quality value `*` was named with, if the header named it.
+	pub fn star(&self) -> Option<u16> {
+		self.star
 	}
 
 	/// Whether a coding was accepted.
@@ -85,14 +107,8 @@ impl AcceptEncoding {
 	/// A coding named outright settles it whatever `*` says, so a zero quality value on the named
 	/// coding refuses it even where `*` would accept.
 	/// Whether `coding` may be used for the response body.
-	pub fn accepts(&self, coding: Coding) -> bool {
-		let named = match coding {
-			Coding::Gzip => self.gzip,
-			Coding::Deflate => self.deflate,
-			Coding::Brotli => self.brotli,
-			Coding::Zstd => self.zstd,
-		};
-		match named {
+	pub fn accepts(&self, coding: &Coding) -> bool {
+		match self.quality(coding) {
 			Some(quality) => quality > 0,
 			None => matches!(self.star, Some(quality) if quality > 0),
 		}
@@ -113,7 +129,7 @@ impl Default for AcceptEncoding {
 
 /// Decide whether and how to decode a response body.
 ///
-/// The coding to decode under when the response's `Content-Encoding` names a single coding that
+/// The coding to decode under when the response's `Content-Encoding` carries a single coding that
 /// can be decoded and the request's `Accept-Encoding` accepted it. Otherwise `None`, and the body
 /// is delivered as received.
 pub fn decision(headers: &HeaderMap, accept: &AcceptEncoding) -> Option<Coding> {
@@ -131,8 +147,9 @@ pub fn decision(headers: &HeaderMap, accept: &AcceptEncoding) -> Option<Coding> 
 	let [single] = codings[..] else {
 		return None;
 	};
-	let coding = Coding::from_token(single)?;
-	accept.accepts(coding).then_some(coding)
+	// `identity` and anything unknown land in `Other`, which is nothing to decode under.
+	let coding = Coding::from_token(single);
+	(coding.is_supported() && accept.accepts(&coding)).then_some(coding)
 }
 
 /// Strip the headers that describe the encoded bytes, once a body has been decoded.
@@ -168,7 +185,8 @@ fn parse_quality(value: &str) -> Option<u16> {
 
 /// Wrap a body byte-stream in a decoder for `coding`.
 ///
-/// Trailers are pulled off the frames before this point, so decoding sees data only.
+/// Trailers are pulled off the frames before this point, so decoding sees data only. A coding this
+/// crate cannot decode leaves the stream as it is; [`decision`] never returns one.
 pub fn decode_stream(input: Pin<Box<ByteStream>>, coding: Coding) -> Pin<Box<ByteStream>> {
 	let reader = StreamReader::new(input.map_err(io::Error::other));
 	match coding {
@@ -181,6 +199,7 @@ pub fn decode_stream(input: Pin<Box<ByteStream>>, coding: Coding) -> Pin<Box<Byt
 			decoder.multiple_members(true);
 			reader_stream(decoder)
 		}
+		_ => reader_stream(reader),
 	}
 }
 
@@ -326,14 +345,14 @@ mod tests {
 		// carried them: Faith's own decoder is the check.
 		let input = b"the quick brown fox jumps over the lazy dog".repeat(20);
 		for coding in [Coding::Gzip, Coding::Deflate, Coding::Brotli, Coding::Zstd] {
-			let compressed = compress_buffer(&input, coding).await.unwrap();
+			let compressed = compress_buffer(&input, coding.clone()).await.unwrap();
 			assert!(
 				compressed.len() < input.len(),
 				"{coding:?} did not compress repetitive input"
 			);
 
 			let source = futures::stream::once(async move { Ok(Bytes::from(compressed)) });
-			let decoded: Vec<u8> = decode_stream(Box::pin(source), coding)
+			let decoded: Vec<u8> = decode_stream(Box::pin(source), coding.clone())
 				.try_fold(Vec::new(), |mut acc, chunk| async move {
 					acc.extend_from_slice(&chunk);
 					Ok(acc)
@@ -354,6 +373,7 @@ mod tests {
 		);
 
 		let compressed: Vec<u8> = compress_stream(source, Coding::Zstd)
+			.expect("zstd compresses")
 			.try_fold(Vec::new(), |mut acc, chunk| async move {
 				acc.extend_from_slice(&chunk);
 				Ok(acc)

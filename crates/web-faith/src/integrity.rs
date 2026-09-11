@@ -1,7 +1,7 @@
 //! Subresource Integrity parsing and verification.
 //!
-//! An integrity value names one or more digests a resource is expected to match; the resource is
-//! good if it matches any one of them, and digests naming an algorithm too weak to trust are
+//! An integrity value carries one or more digests a resource is expected to match; the resource is
+//! good if it matches any one of them, and digests using an algorithm too weak to trust are
 //! ignored. [`verify_integrity`] checks a body already in memory; [`integrity_checker`] with
 //! [`finish_integrity`] checks one as it arrives.
 

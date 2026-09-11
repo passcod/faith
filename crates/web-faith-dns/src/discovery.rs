@@ -82,7 +82,7 @@ pub(crate) fn build_discovery(settings: &ResolverSettings) -> Result<Built, NetE
 
 /// The resolver that bootstraps hostname servers: the listed IP-host servers in order, so an
 /// encrypted server placed first resolves its siblings without exposing the hostname in plaintext.
-/// Where the list names no IP host, the system's own configuration bootstraps instead.
+/// Where the list has no IP host, the system's own configuration bootstraps instead.
 pub(crate) fn bootstrap_resolver(settings: &ResolverSettings) -> Result<TokioResolver, NetError> {
 	let ip_servers: Vec<NameServerConfig> = settings
 		.servers

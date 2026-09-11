@@ -24,8 +24,17 @@ pub async fn compress_buffer(input: &[u8], coding: Coding) -> io::Result<Vec<u8>
 		Coding::Deflate => ZlibEncoder::new(input).read_to_end(&mut output).await?,
 		Coding::Brotli => BrotliEncoder::new(input).read_to_end(&mut output).await?,
 		Coding::Zstd => ZstdEncoder::new(input).read_to_end(&mut output).await?,
+		other => return Err(unsupported(&other)),
 	};
 	Ok(output)
+}
+
+/// The error a coding this crate cannot apply produces.
+fn unsupported(coding: &Coding) -> io::Error {
+	io::Error::new(
+		io::ErrorKind::Unsupported,
+		format!("cannot compress in {:?}", coding.token()),
+	)
 }
 
 /// Compress a streaming request body as its chunks arrive.
@@ -34,17 +43,18 @@ pub async fn compress_buffer(input: &[u8], coding: Coding) -> io::Result<Vec<u8>
 /// chunked. The encoder buffers on its own terms, so the bytes for one chunk the caller
 /// writes need not leave with it.
 // spec:ENC#what-a-compressed-request-sends
-pub fn compress_stream<S>(input: S, coding: Coding) -> RequestStream
+pub fn compress_stream<S>(input: S, coding: Coding) -> io::Result<RequestStream>
 where
 	S: Stream<Item = io::Result<Bytes>> + Send + 'static,
 {
 	let reader = StreamReader::new(input);
-	match coding {
+	Ok(match coding {
 		Coding::Gzip => encoder_stream(GzipEncoder::new(reader)),
 		Coding::Deflate => encoder_stream(ZlibEncoder::new(reader)),
 		Coding::Brotli => encoder_stream(BrotliEncoder::new(reader)),
 		Coding::Zstd => encoder_stream(ZstdEncoder::new(reader)),
-	}
+		other => return Err(unsupported(&other)),
+	})
 }
 
 fn encoder_stream<R>(reader: R) -> RequestStream

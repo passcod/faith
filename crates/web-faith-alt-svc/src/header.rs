@@ -5,7 +5,7 @@ use crate::cache::AltSvcAdvertisement;
 
 /// The header advertised no HTTP/3 alternative service.
 ///
-/// Covers a `clear` header, one that names only other protocols, and one that does not parse:
+/// Covers a `clear` header, one advertising only other protocols, and one that does not parse:
 /// none of them gives an origin to act on, and the header is a hint, so nothing distinguishes
 /// them in use.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

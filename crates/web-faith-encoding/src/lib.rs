@@ -10,9 +10,8 @@
 //!
 //! # Requests
 //!
-//! - [`compress_buffer`](request::compress_buffer) and [`compress_stream`](request::compress_stream) apply a coding to a request body.
-//! - [`layer_content_encoding`](request::layer_content_encoding) names it in a `Content-Encoding`, alongside anything the caller had
-//!   already declared.
+//! - Use [`compress_buffer`] or [`compress_stream`] to apply a coding to a request body.
+//! - Use [`layer_content_encoding`] to build the `Content-Encoding` header that describes it.
 //!
 //! ```
 //! use web_faith_encoding::{Coding, request::{compress_buffer, layer_content_encoding}};
@@ -24,18 +23,17 @@
 //!
 //! // The request declared nothing, so the applied coding stands alone.
 //! assert_eq!(layer_content_encoding(None, Coding::Gzip), "gzip");
-//! // Otherwise it is named last, being applied on top of what was already there.
+//! // Otherwise it is added last, being applied on top of what was already there.
 //! assert_eq!(layer_content_encoding(Some("br"), Coding::Gzip), "br, gzip");
 //! # }
 //! ```
 //!
 //! # Responses
 //!
-//! - [`AcceptEncoding`](response::AcceptEncoding) is what a request advertised.
-//! - [`decision`](response::decision) reads it against a response's headers to say which coding the body should be
-//!   decoded under, if any.
-//! - [`decode_stream`](response::decode_stream) wraps the body in that decoder.
-//! - [`strip_decoded_headers`](response::strip_decoded_headers) removes the headers that described the encoded bytes.
+//! - Use [`AcceptEncoding`] to parse the advertised supported coding set from the request.
+//! - Use [`decision`] to compute which decoder to use for the response's body, if any.
+//! - Use [`decode_stream`] to wrap the body in that decoder.
+//! - Use [`strip_decoded_headers`] to remove the headers that described the encoded bytes.
 //!
 //! ```
 //! use http::{HeaderMap, HeaderValue};
@@ -52,6 +50,14 @@
 //! // What the response declared, against what the request accepted.
 //! assert_eq!(decision(&headers, &accept), Some(Coding::Gzip));
 //! ```
+//!
+//! [`compress_buffer`]: request::compress_buffer
+//! [`compress_stream`]: request::compress_stream
+//! [`layer_content_encoding`]: request::layer_content_encoding
+//! [`AcceptEncoding`]: response::AcceptEncoding
+//! [`decision`]: response::decision
+//! [`decode_stream`]: response::decode_stream
+//! [`strip_decoded_headers`]: response::strip_decoded_headers
 
 #![deny(missing_docs)]
 // Lets docs.rs label each item with the feature or platform it needs.
@@ -61,7 +67,11 @@ pub mod request;
 pub mod response;
 
 /// A content coding.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+///
+/// The four this crate decodes, and [`Other`](Self::Other) for any token it does not. Marked
+/// non-exhaustive: a coding that becomes standard should not be a breaking change here.
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Coding {
 	/// [RFC 1952](https://www.rfc-editor.org/rfc/rfc1952).
 	Gzip,
@@ -71,10 +81,14 @@ pub enum Coding {
 	Brotli,
 	/// [RFC 8878](https://www.rfc-editor.org/rfc/rfc8878).
 	Zstd,
+	/// A coding named on the wire that this crate does not decode, lowercased.
+	///
+	/// Includes `identity`, which means the absence of a coding rather than one to apply.
+	Other(String),
 }
 
 impl Coding {
-	/// Match the `compress` option's value, which names a coding by its wire token.
+	/// Match the `compress` option's value, given as a coding's wire token.
 	///
 	/// Matches the four documented tokens exactly. [`Self::from_token`] reads off the wire and so
 	/// takes a token as loosely as HTTP writes it.
@@ -89,32 +103,39 @@ impl Coding {
 		}
 	}
 
-	/// The wire token naming this coding in a `Content-Encoding`.
-	pub fn token(self) -> &'static str {
+	/// The wire token for this coding in a `Content-Encoding`.
+	pub fn token(&self) -> &str {
 		match self {
 			Self::Gzip => "gzip",
 			Self::Deflate => "deflate",
 			Self::Brotli => "br",
 			Self::Zstd => "zstd",
+			Self::Other(token) => token,
 		}
 	}
 
-	/// Match a single content-coding token, case-insensitively.
+	/// Read a content-coding token, case-insensitively.
 	///
-	/// `None` for `identity`, an unknown coding, or one this cannot decode.
-	pub fn from_token(token: &str) -> Option<Self> {
+	/// Anything this crate does not decode, `identity` included, becomes
+	/// [`Other`](Self::Other); see [`is_supported`](Self::is_supported).
+	pub fn from_token(token: &str) -> Self {
 		let token = token.trim();
 		if token.eq_ignore_ascii_case("gzip") || token.eq_ignore_ascii_case("x-gzip") {
-			Some(Self::Gzip)
+			Self::Gzip
 		} else if token.eq_ignore_ascii_case("deflate") {
-			Some(Self::Deflate)
+			Self::Deflate
 		} else if token.eq_ignore_ascii_case("br") {
-			Some(Self::Brotli)
+			Self::Brotli
 		} else if token.eq_ignore_ascii_case("zstd") {
-			Some(Self::Zstd)
+			Self::Zstd
 		} else {
-			None
+			Self::Other(token.to_ascii_lowercase())
 		}
+	}
+
+	/// Whether this crate can decode this coding.
+	pub fn is_supported(&self) -> bool {
+		!matches!(self, Self::Other(_))
 	}
 }
 
@@ -133,13 +154,25 @@ mod tests {
 	fn the_compress_option_matches_its_tokens_exactly() {
 		// Loose on the wire, exact as an API: `x-gzip` and a shouted token are read off a
 		// `Content-Encoding` but refused as option values.
-		assert_eq!(Coding::from_token("x-gzip"), Some(Coding::Gzip));
+		assert_eq!(Coding::from_token("x-gzip"), Coding::Gzip);
 		assert_eq!(Coding::from_option("x-gzip"), None);
-		assert_eq!(Coding::from_token("GZIP"), Some(Coding::Gzip));
+		assert_eq!(Coding::from_token("GZIP"), Coding::Gzip);
 		assert_eq!(Coding::from_option("GZIP"), None);
 		assert_eq!(Coding::from_option(" gzip"), None);
 		assert_eq!(Coding::from_option("brotli"), None);
 		assert_eq!(Coding::from_option("identity"), None);
 		assert_eq!(Coding::from_option(""), None);
+	}
+
+	#[test]
+	fn a_coding_this_crate_cannot_decode_is_still_named() {
+		let identity = Coding::from_token("identity");
+		assert_eq!(identity, Coding::Other("identity".into()));
+		assert!(!identity.is_supported());
+		assert_eq!(identity.token(), "identity");
+
+		// Lowercased, so two spellings of one coding are one value.
+		assert_eq!(Coding::from_token("LZMA"), Coding::from_token("lzma"));
+		assert!(Coding::Gzip.is_supported());
 	}
 }

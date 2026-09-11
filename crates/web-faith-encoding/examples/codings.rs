@@ -31,7 +31,7 @@ async fn main() {
 
 	// Round-trip a body through the coding that was negotiated.
 	let original = b"the quick brown fox jumps over the lazy dog".repeat(8);
-	let compressed = compress_buffer(&original, coding)
+	let compressed = compress_buffer(&original, coding.clone())
 		.await
 		.expect("gzip compresses");
 	println!(

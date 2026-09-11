@@ -556,8 +556,8 @@ impl Response {
 				) as Pin<Box<DynStream>>;
 
 				#[cfg(feature = "encoding")]
-				let bytes = match self.decode {
-					Some(coding) => decode_stream(bytes, coding),
+				let bytes = match &self.decode {
+					Some(coding) => decode_stream(bytes, coding.clone()),
 					None => bytes,
 				};
 

@@ -36,7 +36,7 @@ pub trait HttpsSink: Send + Sync {
 	fn record(&self, host: &str, advertisement: HttpsAdvertisement);
 }
 
-/// Whether an ALPN token names a version of HTTP/3.
+/// Whether an ALPN token is a version of HTTP/3.
 ///
 /// The same family test the `Alt-Svc` reader applies, so a draft token like `h3-29` counts here
 /// exactly as it does in a header.

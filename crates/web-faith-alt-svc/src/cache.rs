@@ -93,7 +93,7 @@ pub struct AltSvcCacheConfig {
 	pub slow_ttl: Duration,
 }
 impl Default for AltSvcCacheConfig {
-	/// The same values `web-faith` settles on when a caller names none.
+	/// The same values `web-faith` settles on when a caller gives none.
 	fn default() -> Self {
 		Self {
 			advertised_ttl: Duration::from_secs(86_400),
@@ -384,7 +384,7 @@ impl AltSvcCache {
 
 	/// Whether an entry advertising `entry_port` can be acted on for this URL.
 	///
-	/// An advertisement names an endpoint for the origin, not a claim that the origin's own port
+	/// An advertisement gives an endpoint for the origin, not a claim that the origin's own port
 	/// speaks HTTP/3, so a differing port is not acted on by default. Honouring it properly means
 	/// connecting to one port while sending the origin's authority, which reqwest cannot express
 	/// (<https://github.com/seanmonstar/reqwest/issues/1138>); `follow_advertised_port` rewrites

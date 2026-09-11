@@ -178,7 +178,7 @@ pub async fn send(
 	// agent's, per-request headers winning per name as they do generally (spec: REQ).
 	// Several lines are the one list, so they are joined as they are read.
 	#[cfg(feature = "encoding")]
-	let declared_content_encoding = compress.and_then(|_| {
+	let declared_content_encoding = compress.as_ref().and_then(|_| {
 		let from_request = options.headers.as_ref().and_then(|headers| {
 			let declared = headers
 				.iter()
@@ -279,16 +279,20 @@ pub async fn send(
 			}
 
 			#[cfg(feature = "encoding")]
-			let body = match compress {
+			let body = match compress.clone() {
 				// Compressed as the chunks arrive, and chunked on the wire either way:
 				// a stream has no length to declare up front.
 				// spec:ENC#what-a-compressed-request-sends
 				Some(coding) => {
-					applied_coding = Some(coding);
-					reqwest::Body::wrap_stream(encoding_request::compress_stream(
-						byte_stream,
-						coding,
-					))
+					applied_coding = Some(coding.clone());
+					let stream =
+						encoding_request::compress_stream(byte_stream, coding).map_err(|err| {
+							FaithError::new(
+								FaithErrorKind::InvalidCompression,
+								Some(err.to_string()),
+							)
+						})?;
+					reqwest::Body::wrap_stream(stream)
 				}
 				None => reqwest::Body::wrap_stream(byte_stream),
 			};
@@ -298,12 +302,12 @@ pub async fn send(
 		}
 		RequestBody::Bytes(bytes) => {
 			#[cfg(feature = "encoding")]
-			let body = match compress {
+			let body = match compress.clone() {
 				// The compressed bytes are what reqwest sizes `Content-Length` from, so the
 				// header counts what goes on the wire.
 				// spec:ENC#what-a-compressed-request-sends
 				Some(coding) => {
-					applied_coding = Some(coding);
+					applied_coding = Some(coding.clone());
 					encoding_request::compress_buffer(&bytes, coding)
 						.await
 						.map_err(|err| {

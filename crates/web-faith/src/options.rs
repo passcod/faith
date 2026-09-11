@@ -123,7 +123,7 @@ pub struct DnsOptions {
 	/// port 853, and `h3://` for DNS over HTTP/3 on port 443. A port in the URL overrides the
 	/// conventional one, and the HTTP transports use `/dns-query` when the URL supplies no path.
 	///
-	/// The encrypted transports always authenticate the resolver. A URL fragment names the
+	/// The encrypted transports always authenticate the resolver. A URL fragment gives the
 	/// certificate to expect (`tls://1.1.1.1#cloudflare-dns.com`); a hostname host authenticates
 	/// against the hostname; a bare-IP host authenticates against the address itself.
 	///
@@ -403,7 +403,7 @@ pub struct Http3Options {
 	/// the origin's own port. **This is not standards-compliant**; it is off by
 	/// default.
 	///
-	/// An `Alt-Svc` advertisement names a network endpoint for the origin, so
+	/// An `Alt-Svc` advertisement gives a network endpoint for the origin, so
 	/// honouring one correctly means connecting to that endpoint while still
 	/// sending the *origin's* authority. reqwest cannot express that — it derives
 	/// the HTTP/3 connect target from the request URI's authority (tracked

@@ -6,7 +6,7 @@ use http_cache_reqwest::{CACacheManager, CacheMode, HttpCacheOptions, MokaManage
 /// options that produced it.
 ///
 /// The manager *is* the store: `MokaManager` holds the cached entries behind an `Arc`, and
-/// `CACacheManager` names the directory holding them. Cloning one shares the cache; building a
+/// `CACacheManager` holds the path to them. Cloning one shares the cache; building a
 /// fresh one from the same options would empty an in-memory cache, so a client rebuilt for a
 /// network change clones this.
 // spec:NETCHG#what-the-signal-keeps

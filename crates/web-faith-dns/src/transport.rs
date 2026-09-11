@@ -37,7 +37,7 @@ impl Transport {
 		})
 	}
 
-	/// The conventional port for the transport, used when the URL names none.
+	/// The conventional port for the transport, used when the URL gives none.
 	fn default_port(self) -> u16 {
 		match self {
 			Self::Udp | Self::Tcp => 53,
