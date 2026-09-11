@@ -8,9 +8,7 @@
 //! - brotli ([RFC 7932](https://www.rfc-editor.org/rfc/rfc7932))
 //! - zstd ([RFC 8878](https://www.rfc-editor.org/rfc/rfc8878))
 //!
-//! # Common
-//!
-//! [`Coding`] names a coding, and converts to and from the token that names it on the wire.
+//! [`Coding`] names one, and converts to and from the token that names it on the wire.
 //!
 //! # Requests
 //!
