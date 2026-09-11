@@ -1,3 +1,4 @@
+//! Resolver transports.
 use std::{net::IpAddr, sync::Arc};
 
 use hickory_resolver::config::{ConnectionConfig, NameServerConfig, ProtocolConfig};

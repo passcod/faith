@@ -1,3 +1,4 @@
+//! `Alt-Svc` header parsing.
 use std::time::Duration;
 
 use crate::cache::AltSvcAdvertisement;

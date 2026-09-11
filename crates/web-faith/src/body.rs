@@ -1,3 +1,5 @@
+//! Response bodies.
+
 use std::{
 	fmt::Debug,
 	mem::replace,

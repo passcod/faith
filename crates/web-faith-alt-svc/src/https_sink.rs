@@ -1,19 +1,16 @@
+//! `HTTPS` records into the upgrade layer.
 use std::sync::{Arc, Weak};
 
 use crate::{cache::AltSvcCache, prober::H3Prober};
 
 /// Feeds `HTTPS` DNS records into the upgrade layer, so an origin advertising `alpn="h3"` is
-/// probe-worthy from its first request rather than from the first TCP response carrying an
-/// `Alt-Svc` header.
+/// probe-worthy from its first request rather than from the first `Alt-Svc` header.
 ///
 /// Installed on the resolver by the agent (see [`web_faith_dns::FaithResolver::set_https_sink`]),
-/// which is the only place that holds all three: the resolver is built before the cache, and the
-/// prober holds a client that holds the resolver, so nothing lower down can own this.
+/// the only place holding all three.
 ///
-/// The record is read at the bare name, which per RFC 9460 is the record for the origin at the
-/// default HTTPS port; the resolver sees only a hostname, so that is also the only origin it could
-/// name. Recording it there is right whichever request triggered the lookup, because what the
-/// record describes does not depend on who asked.
+/// The record is read at the bare name, which per RFC 9460 is the origin at the default HTTPS
+/// port — also the only origin a resolver seeing just a hostname could name.
 // spec:H3UP#advertisements-from-dns
 // spec:DNS#https-records
 pub struct H3HttpsSink {

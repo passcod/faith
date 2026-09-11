@@ -1,3 +1,5 @@
+//! Errors, and the stable codes they carry.
+
 use std::{
 	error::Error,
 	fmt::{Debug, Display},

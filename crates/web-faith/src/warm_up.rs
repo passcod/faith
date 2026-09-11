@@ -1,7 +1,7 @@
-//! Reading what a warm-up was asked to warm.
+//! Warm-up argument parsing.
 //!
 //! Warming a name and warming an origin take their arguments loosely, so the parsing that decides
-//! what was meant is worth keeping in one place, away from the verbs that act on it.
+//! what was meant is worth keeping in one place.
 
 use url::Url;
 

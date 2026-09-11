@@ -1,3 +1,5 @@
+//! The send path.
+
 use std::{
 	sync::{
 		Arc,

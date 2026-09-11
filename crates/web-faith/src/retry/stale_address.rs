@@ -1,3 +1,5 @@
+//! Replay for a stale-address connect failure.
+
 use http::Extensions;
 use reqwest::{Request, Response};
 use reqwest_middleware::{Middleware, Next, Result};

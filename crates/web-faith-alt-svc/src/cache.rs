@@ -1,3 +1,4 @@
+//! The Alt-Svc store.
 use std::time::{Duration, Instant};
 
 use moka::sync::Cache;
@@ -20,10 +21,8 @@ pub struct AltSvcAdvertisement {
 
 /// A run of consecutive HTTP/3 failures against one origin.
 ///
-/// Both instants are carried in the value rather than left to the cache's TTL,
-/// because they differ per origin and from each other: the entry deliberately
-/// outlives the cooldown it set, so that a count survives the block it caused and
-/// can escalate the next one. `advertised` does the same for `ma`.
+/// The instants are in the value rather than the cache's TTL: the entry outlives the cooldown it
+/// set, so a count survives the block it caused and can escalate the next one.
 // spec:H3UP#failure-backoff
 #[derive(Debug, Clone, Copy)]
 struct FailureEntry {
@@ -38,10 +37,6 @@ struct FailureEntry {
 }
 
 /// A per-origin exponentially-weighted moving average of time-to-response-headers.
-///
-/// Two `f64`s per origin and no sample storage: the average decays stale history
-/// by construction, and the count gates decisions until there is enough evidence
-/// to mean anything.
 #[derive(Debug, Clone, Copy)]
 pub struct PathTime {
 	/// EWMA of time-to-response-headers, in milliseconds.
@@ -116,13 +111,9 @@ pub struct AltSvcCache {
 	/// `failed`: the path *works*, so re-advertisements must not be discarded,
 	/// and expiry re-enters through a probe rather than treating h3 as broken.
 	slow: Cache<String, ()>,
-	/// Origins seeded from `http3.hints`, with the port hinted. A hint is the
-	/// caller's assertion rather than something observed, so it has to be
-	/// distinguishable from an entry in `confirmed` that a real HTTP/3 response
-	/// put there: [`Self::network_changed`] demotes the observed ones and
-	/// re-seeds from here. Unbounded by TTL and outside the capacity bound,
-	/// because the hints are configuration and there are as many as the caller
-	/// passed.
+	/// Origins seeded from `http3.hints`, with the port hinted. Kept apart from `confirmed` so
+	/// [`Self::network_changed`] can demote the observed ones and re-seed from here. Unbounded,
+	/// being configuration.
 	// spec:NETCHG#what-the-signal-keeps
 	hints: Cache<String, u16>,
 	/// Time-to-headers over TCP (h1 and h2 together), per origin.
@@ -462,20 +453,13 @@ impl AltSvcCache {
 			.or_else(|| self.probe_candidate(url))
 	}
 
-	/// Record a foreground request's time-to-response-headers for its protocol
-	/// family, and demote the origin to TCP if QUIC is provenly, sustainedly
-	/// slower than TCP for it.
+	/// Record a request's time-to-response-headers, and demote the origin to TCP if QUIC is
+	/// sustainedly slower.
 	///
-	/// Time-to-headers includes server think-time, which varies per endpoint far
-	/// more than per transport; only the averages across many requests are
-	/// comparable, never individual samples — hence the minimum sample counts.
-	/// Redirects followed inside the attempt inflate a sample for whichever
-	/// family carried it, which the averaging absorbs the same way.
-	///
-	/// The comparison is deliberately asymmetric: HTTP/3 is preferred at parity
-	/// and when moderately slower, because its advantages (no head-of-line
-	/// blocking, connection migration) pay off beyond the mean. Only a large
-	/// sustained gap demotes.
+	/// Time-to-headers includes server think-time, which varies per endpoint far more than per
+	/// transport, so only the averages are comparable — hence the minimum sample counts. The
+	/// comparison is asymmetric on purpose: HTTP/3 is preferred at parity and when moderately
+	/// slower, so only a large sustained gap demotes.
 	pub fn record_path_time(&self, url: &reqwest::Url, version: http::Version, elapsed: Duration) {
 		if self.slow_factor <= 0.0 {
 			return;
@@ -522,11 +506,9 @@ impl AltSvcCache {
 
 	/// Demote a working-but-slow QUIC origin back to TCP.
 	///
-	/// The confirmed entry moves back to `advertised` rather than being dropped:
-	/// when the `slow` marker expires, the advertisement is what makes the next
-	/// request trigger a re-probe — "has this path improved?" asked at zero
-	/// foreground cost. The QUIC average is cleared so the answer is judged on
-	/// fresh samples, not held hostage by the history that demoted it.
+	/// The confirmed entry moves back to `advertised` rather than being dropped, so when the `slow`
+	/// marker expires the next request triggers a re-probe. The QUIC average is cleared so the
+	/// re-probe is judged on fresh samples.
 	fn demote_slow(&self, origin: &str) {
 		let key = origin.to_string();
 		let Some(entry) = self.confirmed.get(&key) else {
@@ -630,19 +612,10 @@ impl AltSvcCache {
 		}
 	}
 
-	/// Discard everything this cache learned by observing the network, keeping
-	/// what it was told.
+	/// Discard everything this cache learned by observing the network, keeping what it was told.
 	///
-	/// Every state here except `advertised` and `hints` describes the path between
-	/// this client and an origin, and a network change is exactly the event that
-	/// invalidates such a description. So the observation-confirmed origins are
-	/// demoted rather than kept (the path that proved them is gone, and a probe
-	/// re-proves them without a foreground request paying for it), and the
-	/// failures, strikes, slow markers and averages go entirely: they are
-	/// penalties and measurements the old path earned, and carrying them over
-	/// would judge the new network by the old one's behaviour.
-	///
-	/// What the origin said about itself (`advertised`) and what the caller asserted (`hints`) are
+	/// Confirmed origins are demoted so a probe re-proves them, and the failures, strikes, slow
+	/// markers and averages go entirely — they are the old path's. `advertised` and `hints` are
 	/// not observations, so both survive.
 	// spec:NETCHG
 	pub fn network_changed(&self) {

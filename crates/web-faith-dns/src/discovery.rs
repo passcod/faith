@@ -1,3 +1,4 @@
+//! Resolver discovery from the system configuration.
 use hickory_resolver::{
 	TokioResolver,
 	config::{

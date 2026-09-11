@@ -10,24 +10,17 @@ use std::{
 use reqwest::{Url, Version};
 use tokio::sync::watch;
 
-/// The moment a response's headers arrived, shared between the middleware that observes it and
-/// the request that surfaces it.
-///
-/// Carried in the request's extensions so the one stamp taken inside the stack reaches the
-/// outside, which is what keeps the surfaced timing and the path-time average reading the same
-/// measurement rather than two of their own.
+/// The moment a response's headers arrived, carried in the request's extensions so the surfaced
+/// timing and the path-time average read the same measurement.
 #[derive(Clone, Debug, Default)]
 pub struct HeadersStamp(Arc<OnceLock<Instant>>);
 
 impl HeadersStamp {
 	/// Record the arrival, if this is the first response to reach the outside.
 	///
-	/// An HTTP/3 attempt that fails and falls back to TCP runs the stack twice, and only the
-	/// attempt that produced the response stamps, so the recorded moment always belongs to the
-	/// response the caller receives.
-	///
-	/// The stamping lives in the Alt-Svc layer, which is only built with HTTP/3 support; without
-	/// it nothing stamps and the request falls back to timing the send itself.
+	/// An HTTP/3 attempt that falls back to TCP runs the stack twice, and only the attempt that
+	/// produced the response stamps. The stamping lives in the Alt-Svc layer, so without HTTP/3
+	/// nothing stamps and the request times the send itself.
 	#[cfg_attr(not(feature = "http3"), allow(dead_code))]
 	pub fn mark(&self, at: Instant) {
 		let _ = self.0.set(at);
@@ -66,9 +59,8 @@ pub struct RequestTiming {
 
 /// Where the timing lands: written by whoever finishes the body, awaited by `timing()`.
 ///
-/// A watch channel for the same reason the trailers slot is one: the wait is unbounded by
-/// design, since a body that is never read never finishes, and polling would burn a core to
-/// find that out.
+/// A watch channel for the same reason the trailers slot is one: a body that is never read never
+/// finishes, so the wait is unbounded.
 #[derive(Debug)]
 pub struct TimingSlot {
 	tx: watch::Sender<RequestTiming>,
@@ -118,9 +110,8 @@ impl TimingSlot {
 
 /// The ALPN Protocol ID (RFC 7301) naming the protocol a response travelled over.
 ///
-/// Reported whether or not the connection negotiated over ALPN, which is what a browser does:
-/// cleartext HTTP/2 is `h2c` and cleartext HTTP/1.1 is still `http/1.1`, neither of which any
-/// handshake agreed on.
+/// Reported whether or not ALPN negotiated it, as a browser does: cleartext HTTP/2 is `h2c` and
+/// cleartext HTTP/1.1 is `http/1.1`.
 pub(crate) fn alpn_protocol_id(version: Version, url: &Url) -> String {
 	let secure = url.scheme() == "https";
 	match version {

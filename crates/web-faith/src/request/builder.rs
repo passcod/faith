@@ -1,3 +1,5 @@
+//! The request and fetch builders.
+
 use std::{
 	future::{Future, IntoFuture},
 	pin::Pin,

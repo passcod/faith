@@ -1,3 +1,5 @@
+//! A request's target.
+
 use bytes::Bytes;
 use url::Url;
 

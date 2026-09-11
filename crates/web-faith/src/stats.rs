@@ -1,4 +1,4 @@
-//! The agent's request counters.
+//! Request counters.
 
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -13,7 +13,6 @@ pub(crate) struct InnerAgentStats {
 }
 
 impl InnerAgentStats {
-	/// Read the counters as they stand.
 	pub fn snapshot(&self) -> AgentStats {
 		AgentStats {
 			requests_sent: self.requests_sent.load(Ordering::Relaxed),

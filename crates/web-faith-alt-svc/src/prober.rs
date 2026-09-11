@@ -1,21 +1,18 @@
+//! Background HTTP/3 probing.
 use std::{sync::Arc, time::Duration};
 
 use crate::cache::AltSvcCache;
 
-/// Verifies advertised HTTP/3 endpoints in the background, so no foreground
-/// request ever waits on an unverified QUIC path.
+/// Verifies advertised HTTP/3 endpoints in the background, so no foreground request waits on an
+/// unverified QUIC path.
 ///
-/// The probe is a real request — `HEAD /` sent with `Version::HTTP_3` — on the
-/// **raw** `reqwest::Client`, not the middleware stack. That is load-bearing
-/// three times over: it bypasses the HTTP cache, so a replayed cached response
-/// (rebuilt with its stored HTTP version) can never fake a confirmation; it
-/// bypasses [`AltSvcMiddleware`](crate::AltSvcMiddleware), so probing cannot recurse; and it shares the
-/// h3 connection pool with foreground requests, so a successful probe leaves
-/// behind a warm QUIC connection the next request rides. Confirmation doubles
-/// as prewarming.
+/// The probe is a real `HEAD /` at `Version::HTTP_3`, sent on the **raw** client rather than the
+/// middleware stack. That bypasses the HTTP cache, so a replayed cached response cannot fake a
+/// confirmation; bypasses [`AltSvcMiddleware`](crate::AltSvcMiddleware), so probing cannot recurse;
+/// and shares the h3 pool, so a successful probe leaves a warm connection behind.
 ///
-/// Any HTTP/3 response confirms, regardless of status: a 401 or 405 to
-/// `HEAD /` proves the transport end-to-end just as well as a 200.
+/// Any HTTP/3 response confirms whatever its status: a 401 or 405 proves the transport as well as
+/// a 200 does.
 pub struct H3Prober {
 	client: reqwest::Client,
 	cache: Arc<AltSvcCache>,

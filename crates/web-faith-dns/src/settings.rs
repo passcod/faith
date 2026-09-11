@@ -1,3 +1,4 @@
+//! Resolver settings.
 use std::{net::SocketAddr, time::Duration};
 
 use hickory_resolver::{
@@ -36,10 +37,8 @@ pub struct ResolverReport {
 
 /// `dns.maxStale`'s default: how far past expiry an answer may still be served.
 ///
-/// An hour is long enough that a resolver outage does not stop an agent reaching hosts it already
-/// knows, and short enough that a host which really has moved stops being served a dead address for
-/// the life of a long-running process. The recovery path bounds the cost of being wrong to one
-/// re-resolve, so the window can be generous.
+/// Long enough that a resolver outage does not stop an agent reaching hosts it knows, short enough
+/// that a host which has moved stops being served a dead address for the life of the process.
 // spec:DNS#serving-stale-answers
 pub const DEFAULT_MAX_STALE: Duration = Duration::from_secs(3600);
 

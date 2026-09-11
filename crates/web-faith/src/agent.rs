@@ -1,4 +1,4 @@
-//! The agent, its builder, and the counters it keeps.
+//! The agent and its builder.
 
 pub use crate::builder::AgentOptionsBuilder;
 pub use crate::stats::AgentStats;
@@ -65,17 +65,13 @@ pub(crate) struct AgentSettings {
 
 /// The resources an agent holds while open, and gives up when closed.
 ///
-/// Behind a shared lock because closing acts on the agent rather than on the handle it was called
-/// through: every clone names the same one, so every clone sees the result.
+/// Behind a shared lock so closing acts on the agent rather than the handle it was called through.
 #[derive(Debug)]
 pub(crate) struct Live {
-	/// The heavy resources (connection pool, DNS resolver, background tasks) live inside this
-	/// client, so dropping it is what actually releases them.
+	/// Holds the connection pool, DNS resolver and background tasks, so dropping it releases them.
 	pub(crate) client: ClientWithMiddleware,
-	/// The raw `reqwest::Client` underlying [`Self::client`], sharing its connection pool. A warm-up
-	/// sends its synthetic request here rather than through the middleware stack, which bypasses the
-	/// HTTP cache and the Alt-Svc layer, and so keeps the warm-up out of request accounting, while
-	/// still pooling the connection foreground requests reuse.
+	/// The raw client behind [`Self::client`], sharing its pool. A warm-up sends here to skip the
+	/// HTTP cache and the Alt-Svc layer while still pooling the connection.
 	// spec:WARM
 	pub(crate) raw_client: Client,
 	/// The DNS resolver, shared with the client so a prefetch warms the cache requests read. `None`
@@ -85,9 +81,8 @@ pub(crate) struct Live {
 	pub(crate) dns_resolver: Option<FaithResolver>,
 	#[cfg(feature = "http3")]
 	pub(crate) alt_svc_cache: Option<Arc<AltSvcCache>>,
-	/// Held so closing can abort in-flight background probes: each one owns a clone of the raw
-	/// client, which would otherwise keep the connection pool alive past close for up to the probe
-	/// timeout.
+	/// Held so closing can abort in-flight probes; each owns a clone of the raw client, which would
+	/// otherwise keep the pool alive past close for up to the probe timeout.
 	#[cfg(feature = "http3")]
 	pub(crate) h3_prober: Option<Arc<H3Prober>>,
 }
@@ -113,8 +108,8 @@ pub struct Agent {
 	/// origin do not open duplicate connections.
 	// spec:WARM
 	pub(crate) warming: MokaCache<String, ()>,
-	/// Bumped by [`Self::network_changed`], so a warm-up that was in flight across the signal does
-	/// not record its origin as warm: its connection went into the pool that was just dropped.
+	/// Bumped by [`Self::network_changed`], so a warm-up in flight across the signal does not record
+	/// its origin as warm — its connection went into the pool that was just dropped.
 	// spec:NETCHG#reach-across-the-subsystems
 	pub(crate) warm_generation: Arc<AtomicU64>,
 	/// The jar outlives a close and stays readable from a closed agent.
@@ -151,8 +146,7 @@ pub struct Agent {
 	/// Whether a `Priority` header sits among the agent's default headers. That default wins over
 	/// the header a request's priority would derive.
 	pub(crate) has_default_priority: bool,
-	/// How to build this agent's clients, so [`Self::network_changed`] can build them again. Shared
-	/// rather than cloned per handle: every handle builds the same client from the same recipe.
+	/// How to build this agent's clients, so [`Self::network_changed`] can build them again.
 	// spec:NETCHG
 	pub(crate) recipe: Arc<ClientRecipe>,
 }
@@ -372,11 +366,10 @@ impl Agent {
 			.unwrap_or_default()
 	}
 
-	/// Note that a request reached this origin, so it holds a connection the pool keeps idle for
-	/// the idle window and a `preconnect` for it has no new work to do.
+	/// Note that a request reached this origin, so a `preconnect` for it has no new work to do.
 	///
-	/// Called for foreground requests as well as warm-ups, because the criterion is about the
-	/// origin holding an idle pooled connection, not about how it came to hold one.
+	/// Called for foreground requests as well as warm-ups: the criterion is that the origin holds
+	/// an idle pooled connection, not how it came to.
 	// spec:WARM
 	pub fn mark_warm(&self, url: &Url) {
 		self.warmed.insert(origin_key(url), ());

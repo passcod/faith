@@ -1,3 +1,4 @@
+//! `HTTPS` record lookups.
 use std::time::Duration;
 
 use hickory_resolver::proto::rr::{

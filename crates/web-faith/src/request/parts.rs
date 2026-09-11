@@ -1,6 +1,6 @@
-//! The request shapes `web-faith-napi` constructs directly.
+//! The request shapes an `internals` caller constructs directly.
 //!
-//! In their own module so `internals` can decide whether they are public.
+//! In their own module so the feature can decide whether they are public.
 
 use std::{pin::Pin, time::Duration};
 

@@ -1,4 +1,4 @@
-//! Turning options into an agent: validating what a caller expressed, and building from it.
+//! Agent construction.
 
 // spec:AGENT
 

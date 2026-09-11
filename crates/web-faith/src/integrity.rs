@@ -2,12 +2,8 @@
 //!
 //! An integrity value names one or more digests a resource is expected to match; the resource is
 //! good if it matches any one of them, and digests naming an algorithm too weak to trust are
-//! ignored rather than honoured. Verification comes in two shapes: [`verify_integrity`] for a body
-//! already in memory, and [`integrity_checker`] with [`finish_integrity`] for one being read as it
-//! arrives.
-//!
-//! This is always built. It is small enough that leaving it out saves nothing worth measuring, and a
-//! caller who asks for a digest to be checked is owed the check.
+//! ignored. [`verify_integrity`] checks a body already in memory; [`integrity_checker`] with
+//! [`finish_integrity`] checks one as it arrives.
 
 // spec:SRI
 

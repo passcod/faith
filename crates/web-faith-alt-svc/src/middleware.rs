@@ -1,3 +1,4 @@
+//! The HTTP/3 upgrade layer.
 use std::{
 	marker::PhantomData,
 	sync::Arc,
@@ -12,9 +13,8 @@ use crate::{cache::AltSvcCache, header::parse_alt_svc_header, prober::H3Prober};
 
 /// Recording the moment a response's headers arrived.
 ///
-/// The stamp itself belongs to the client, which puts it in the request's extensions and reads it
-/// back out to surface the timing; this layer is only the one place that observes the arrival, so
-/// all it needs is to be able to mark what the client left there.
+/// The stamp belongs to the client, which puts it in the request's extensions; this layer is only
+/// the place that observes the arrival.
 pub trait ArrivalStamp: Send + Sync + 'static {
 	fn mark(&self, at: Instant);
 }
@@ -121,9 +121,8 @@ impl<S: ArrivalStamp> AltSvcMiddleware<S> {
 
 /// Run the rest of the stack and stamp the moment the response headers arrive.
 ///
-/// This is the one place a response's arrival is observed: the returned instant is what the
-/// path-time average measures against, and the same instant reaches the caller through the
-/// request's extensions to become the surfaced timing, so the two can never disagree.
+/// The one place a response's arrival is observed, so the path-time average and the surfaced
+/// timing read the same instant.
 // spec:RESP#request-timing
 async fn run_stamped<S: ArrivalStamp>(
 	next: Next<'_>,

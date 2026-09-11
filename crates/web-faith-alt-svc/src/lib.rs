@@ -1,4 +1,4 @@
-//! An Alt-Svc store, and the machinery that upgrades an origin to HTTP/3 on the strength of it.
+//! An Alt-Svc store, and HTTP/3 upgrade on the strength of it.
 //!
 //! An origin advertises HTTP/3 in an `Alt-Svc` header, or in an `HTTPS` DNS record. Acting on that
 //! is not as simple as believing it: the alternative may be unreachable even though it was

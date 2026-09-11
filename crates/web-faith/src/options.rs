@@ -1,10 +1,6 @@
-//! The options an agent is built from, one struct per group.
+//! Agent options.
 //!
-//! [`Agent::from_options`] validates these into the recipe an agent's clients are built from, and
-//! settles the defaults for anything left unset. Both surfaces go through it, so a default is
-//! decided once rather than once per surface.
-//!
-//! [`Agent::from_options`]: crate::agent::Agent::from_options
+//! Typically reached through [`Agent::builder`](crate::Agent::builder) rather than named directly.
 
 // spec:AGENT
 

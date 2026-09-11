@@ -1,3 +1,4 @@
+//! TCP statistics from the macOS socket interfaces.
 use std::collections::HashMap;
 use std::io;
 use std::mem::{self, MaybeUninit};

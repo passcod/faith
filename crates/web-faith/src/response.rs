@@ -1,4 +1,4 @@
-//! Responses, their bodies, and the timing of the request that produced them.
+//! Responses, bodies, and request timing.
 
 pub use crate::timing::RequestTiming;
 
@@ -58,15 +58,12 @@ pub struct FileDestination {
 	pub mode: Option<u32>,
 }
 
-/// The shortest gap between progress reports.
-///
-/// Reporting every chunk would cross a surface boundary thousands of times for a large body,
-/// which is the cost writing to a file directly exists to avoid. A caller driving a progress bar
-/// cannot use updates faster than this anyway, and the final report is always delivered regardless.
+// Reporting every chunk would cross the surface boundary thousands of times for a large body,
+// which is the cost writing to a file directly exists to avoid. The final report always lands
+// regardless.
 pub(crate) const PROGRESS_INTERVAL: Duration = Duration::from_millis(50);
 
-/// Open the destination file for a body write, mapping filesystem refusals to the errors
-/// writing a body to a file surfaces.
+/// Open the destination file for a body write, mapping filesystem refusals to Faith's errors.
 // spec:BODY#tofile
 pub(crate) async fn open_destination(
 	path: &str,
@@ -92,9 +89,8 @@ pub(crate) async fn open_destination(
 	}
 }
 
-/// Classify a failure to open the destination. An occupied destination is `FileExists`,
-/// unless what occupies it is a directory: a directory is well-formed but cannot be written
-/// to, which is a `FileWrite`. Every other refusal is a `FileWrite` carrying the OS detail.
+/// Classify a failure to open the destination: `FileExists` for an occupied path, `FileWrite` for
+/// a directory or any other refusal, carrying the OS detail.
 pub(crate) async fn classify_open_error(path: &str, err: std::io::Error) -> FaithError {
 	let kind = if err.kind() == std::io::ErrorKind::AlreadyExists {
 		match tokio::fs::symlink_metadata(path).await {
@@ -117,12 +113,9 @@ pub enum Trailers {
 
 /// Where the trailers land: written by whoever finishes the body, awaited by `trailers()`.
 ///
-/// A watch channel, rather than a lock read in a loop. Per the fetch standard's trailers
-/// proposal (<https://github.com/whatwg/fetch/pull/1940>) this promise is *meant* not to
-/// resolve until the body has been consumed, so the wait is unbounded by design -- which is
-/// precisely why polling was the wrong shape for it. Awaiting trailers without reading the
-/// body now leaves an idle pending promise rather than a pegged core, and the future can be
-/// cancelled while it waits.
+/// A watch channel, so waiting parks instead of spinning. The fetch standard's trailers proposal
+/// (<https://github.com/whatwg/fetch/pull/1940>) has this not resolving until the body is
+/// consumed, so the wait is unbounded by design.
 #[derive(Debug)]
 pub(crate) struct TrailersSlot(watch::Sender<Trailers>);
 
@@ -140,8 +133,8 @@ impl TrailersSlot {
 
 	/// Record that the body ended, if no trailers frame got there first.
 	///
-	/// `send_if_modified` so the read and the write are one step, and so waiters are woken
-	/// only by the call that actually settled it.
+	/// `send_if_modified` keeps the read and write one step, and wakes waiters only from the call
+	/// that settled it.
 	pub fn ended(&self) {
 		self.0.send_if_modified(|state| {
 			if matches!(state, Trailers::NotYet) {

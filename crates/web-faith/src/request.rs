@@ -1,4 +1,4 @@
-//! Requests: preparing one, and the builders that send it.
+//! Requests and their builders.
 
 // spec:REQ spec:ENC spec:CANCEL
 

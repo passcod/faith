@@ -1,8 +1,7 @@
 //! HTTP content coding for request and response bodies: gzip, deflate, brotli, and zstd.
 //!
-//! An HTTP stack usually decides for itself which codings to advertise and decode. This lets the
-//! caller own that decision instead, so decoding can rest on the `Accept-Encoding` of the request
-//! actually in hand rather than on whatever the layer beneath negotiated.
+//! An HTTP stack usually decides for itself which codings to advertise and decode. This hands that
+//! decision to the caller, so decoding rests on the `Accept-Encoding` of the request in hand.
 //!
 //! On the way back, [`AcceptEncoding::parse`] reads what a request advertised and [`decision`] says
 //! which coding a response should be decoded under, if any; [`decode_stream`] wraps the body in the
@@ -27,15 +26,9 @@ use tokio::io::AsyncReadExt;
 use tokio_util::io::{ReaderStream, StreamReader};
 
 /// A body byte-stream, as the decoders take and return one.
-///
-/// The client hands its own body streams straight to [`decode_stream`]: the shape is the same one
-/// its pipeline already carries, so nothing has to depend on the layer above to name it.
 pub type ByteStream = dyn Stream<Item = Result<Bytes, String>> + Send + Sync;
 
 /// The `Accept-Encoding` Faith advertises when the caller advertises none.
-///
-/// Matches the value reqwest's decompression stack sent before Faith took over the
-/// codings, so the wire is unchanged for the default request.
 pub const DEFAULT_ACCEPT_ENCODING: &str = "zstd,gzip,deflate,br";
 
 /// A content coding Faith can decode. Wire tokens: `gzip`, `deflate`, `br`, `zstd`.
@@ -53,10 +46,8 @@ pub enum Coding {
 impl Coding {
 	/// Match the `compress` option's value, which names a coding by its wire token.
 	///
-	/// Unlike [`Self::from_token`], which reads a token off the wire and so takes it as
-	/// loosely as HTTP writes it, this matches the four documented tokens exactly: the
-	/// option is an API surface, and an unrecognised value is refused rather than
-	/// guessed at.
+	/// Matches the four documented tokens exactly. [`Self::from_token`] reads off the wire and so
+	/// takes a token as loosely as HTTP writes it.
 	// spec:ENC#compressing-a-request-body
 	pub fn from_option(value: &str) -> Option<Self> {
 		match value {

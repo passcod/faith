@@ -1,18 +1,17 @@
 //! A cookie jar for HTTP clients, with the storage rules that hold outside a browser.
 //!
-//! Cookies were specified for browsers, and the parts of RFC 6265 that assume a browsing context do
-//! not carry over to a client making requests on its own account. This jar keeps the model that
-//! does: the classic storage and matching rules, and the RFC 6265bis additions that still mean
-//! something with no browser around them.
+//! Cookies were specified for browsers, and the parts of RFC 6265 that assume a browsing context
+//! do not carry over to a client making requests on its own account. This jar keeps the classic
+//! storage and matching rules, plus the RFC 6265bis additions that still mean something with no
+//! browser around them.
 //!
 //! - The `__Host-` and `__Secure-` name prefixes, which bind a cookie to the exact host that set it
 //!   and to a secure transport.
 //! - A ceiling on how far ahead a cookie may expire, so a server cannot claim a decade.
 //! - Caps on the size of one cookie, and on how many are kept per host and in total.
 //!
-//! Every rule is applied when a cookie is stored rather than when one is sent. That is what makes
-//! the caps bound real memory, and what holds a cookie inserted by hand to the same rules as one
-//! that arrived in a `Set-Cookie` header.
+//! Every rule applies when a cookie is stored, not when one is sent, so the caps bound real memory
+//! and a cookie inserted by hand meets the same rules as one from a `Set-Cookie` header.
 //!
 //! `SameSite` is parsed but never read: it governs cross-site behaviour that only a first-party
 //! context has.
@@ -96,8 +95,8 @@ fn key_of(cookie: &StoredCookie<'static>) -> CookieKey {
 
 /// Whether cookies received from this URL count as coming over a secure transport.
 ///
-/// Browsers widen this to any "potentially trustworthy" origin, which takes in `http://localhost`;
-/// the standard calls for `https`, so a `__Host-` cookie a browser would keep on a local dev
+/// The standard calls for `https`. Browsers widen this to any "potentially trustworthy" origin,
+/// which takes in `http://localhost`, so a `__Host-` cookie a browser would keep on a local dev
 /// server is rejected here.
 fn is_secure(url: &Url) -> bool {
 	url.scheme() == "https"
@@ -140,10 +139,6 @@ impl FaithJar {
 	}
 
 	/// Gate a cookie on the bis rules, then hand it to the classic storage model.
-	///
-	/// Gating on the way in rather than filtering on the way out is what makes the caps bound real
-	/// memory, and what holds a cookie inserted by hand to the same rules as one that arrived in a
-	/// `Set-Cookie` header.
 	fn store_one(&self, raw: RawCookie<'static>, url: &Url) {
 		let Some(raw) = self.sanitise(raw, url) else {
 			return;
@@ -171,8 +166,8 @@ impl FaithJar {
 
 /// Whether a `__Host-` or `__Secure-` name prefix permits this cookie to be stored.
 ///
-/// The prefixes are matched case-sensitively, as RFC 6265bis §4.1.3 defines them: the rules are what
-/// the prefix means, so a name that only differs in case carries no requirement.
+/// Matched case-sensitively, as RFC 6265bis §4.1.3 defines them, so a name differing only in case
+/// carries no requirement.
 fn prefix_allows(raw: &RawCookie<'_>, url: &Url) -> bool {
 	let secure = raw.secure().unwrap_or(false) && is_secure(url);
 
@@ -190,9 +185,8 @@ fn prefix_allows(raw: &RawCookie<'_>, url: &Url) -> bool {
 
 /// Reduce an expiry further ahead than `max_age` to `max_age` from now.
 ///
-/// `Max-Age` is checked first and returned on, because that is the precedence the storage model
-/// reads them in: a cookie carrying both takes its expiry from `Max-Age`, so clamping `Expires`
-/// there would cap an expiry nothing consults. A session cookie has neither and stays one.
+/// `Max-Age` is checked first, matching the precedence the storage model reads them in: a cookie
+/// carrying both takes its expiry from `Max-Age`. A session cookie has neither and stays one.
 fn clamp_expiry(raw: &mut RawCookie<'static>, max_age: Duration) {
 	let cap = time::Duration::try_from(max_age).unwrap_or(time::Duration::MAX);
 
@@ -241,8 +235,8 @@ impl Inner {
 
 	/// Bring the jar back within its caps, per domain and then overall.
 	///
-	/// Trimming after the insert rather than before keeps the incoming cookie the newest, so
-	/// oldest-first eviction never picks it while an older cookie remains.
+	/// Trimmed after the insert, so oldest-first eviction never picks the incoming cookie while an
+	/// older one remains.
 	fn enforce(&mut self, domain: &str, limits: &CookieLimits) {
 		if self.count(Some(domain)) > limits.max_per_host {
 			self.purge_expired();

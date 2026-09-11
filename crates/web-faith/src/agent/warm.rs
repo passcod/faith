@@ -1,4 +1,4 @@
-//! Warming an agent's caches ahead of the request that needs them.
+//! The agent's warm-up verbs.
 
 // spec:WARM
 
