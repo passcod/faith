@@ -36,7 +36,7 @@ pub enum RedirectPolicy {
 	Stop,
 }
 
-/// Settings related to the HTTP cache.
+/// HTTP cache settings.
 #[cfg(feature = "cache")]
 #[derive(bon::Builder, Clone, Debug, Default)]
 #[non_exhaustive]
@@ -90,7 +90,7 @@ pub struct DnsOverride {
 	pub addresses: Vec<String>,
 }
 
-/// Settings related to DNS.
+/// DNS settings.
 #[derive(bon::Builder, Clone, Debug, Default)]
 #[non_exhaustive]
 pub struct DnsOptions {
@@ -190,12 +190,10 @@ pub struct DnsOptions {
 	pub max_stale: Option<u32>,
 }
 
-/// Sets the default headers for every request.
+/// One header, as an agent default.
 ///
-/// If header names or values are invalid, they are silently omitted.
-/// Sensitive headers (e.g. `Authorization`) should be marked.
-///
-/// Default: none.
+/// An invalid name or value is silently omitted. Mark a sensitive header (`Authorization`, say) so
+/// it stays out of logs and HPACK's index.
 #[derive(bon::Builder, Clone, Debug, Default)]
 #[non_exhaustive]
 pub struct Header {
@@ -221,8 +219,10 @@ pub enum Http3Congestion {
 	Bbr1,
 }
 
-/// A hint that HTTP/3 is available at a specific host and port. This pre-populates the Alt-Svc
-/// cache so the first request to this host will attempt HTTP/3 immediately.
+/// An assertion that HTTP/3 is available at a host and port.
+///
+/// Seeds the Alt-Svc cache, so the first request to that host attempts HTTP/3 without waiting for
+/// an advertisement or a probe.
 #[cfg(feature = "http3")]
 #[derive(bon::Builder, Clone, Debug, Default)]
 #[non_exhaustive]
@@ -234,7 +234,7 @@ pub struct Http3Hint {
 	pub port: u16,
 }
 
-/// Settings related to HTTP/3.
+/// HTTP/3 settings.
 #[cfg(feature = "http3")]
 #[derive(bon::Builder, Clone, Debug, Default)]
 #[non_exhaustive]
@@ -269,36 +269,30 @@ pub struct Http3Options {
 	/// Whether advertised HTTP/3 endpoints are verified with a background probe
 	/// before any foreground request is routed to them.
 	///
-	/// An `Alt-Svc` advertisement says the server listens on UDP; it cannot say
-	/// there is UDP connectivity between you and it. Without probing, the next
-	/// request after an advertisement attempts HTTP/3 inline, and on a silently
-	/// broken UDP path it stalls until the QUIC idle timeout or
-	/// `upgradeAttemptTimeout` before falling back to TCP — recurring once per
-	/// failure cooldown for as long as the path stays broken.
+	/// An advertisement says the server listens on UDP, not that there is UDP connectivity
+	/// between you and it. Without probing, the next request attempts HTTP/3 inline, and on a
+	/// silently broken path it stalls until the QUIC idle timeout or `upgradeAttemptTimeout`
+	/// before falling back to TCP — once per failure cooldown, for as long as the path stays
+	/// broken.
 	///
-	/// With probing (the default), requests keep using TCP until a background
-	/// `HEAD /` over HTTP/3 has confirmed the path. The probe shares the
-	/// connection pool, so the first upgraded request rides the probe's warm
-	/// connection. A broken path costs one failed background request per
-	/// cooldown and no foreground latency at all.
+	/// With probing, requests keep to TCP until a background `HEAD /` over HTTP/3 confirms the
+	/// path. The probe shares the connection pool, so the first upgraded request rides its warm
+	/// connection, and a broken path costs one background request per cooldown and no foreground
+	/// latency.
 	///
-	/// The probe is a synthetic request the server will see in its logs. Set
-	/// this to `false` to restore the inline upgrade if that is unacceptable
-	/// (per-request billing, easily-alarmed WAFs).
+	/// The probe is a synthetic request the server will see in its logs. Set `false` to restore
+	/// the inline upgrade where that is unacceptable (per-request billing, easily-alarmed WAFs).
 	///
-	/// `hints` are exempt either way: a hint is your own assertion, so the first
-	/// request to a hinted origin speaks HTTP/3 immediately, which is also what
-	/// makes h3-only origins (no TCP listener) work.
+	/// `hints` are exempt either way, so an origin with no TCP listener stays reachable.
 	///
 	/// Default: true.
 	pub upgrade_probe: Option<bool>,
 	/// Ceiling on how long a background HTTP/3 probe may take before the origin
 	/// is treated as failed, in **milliseconds**.
 	///
-	/// This bounds background work only — no foreground request ever waits on a
-	/// probe — so it can afford to be generous: a healthy handshake plus HEAD
-	/// completes in one or two round trips. Set to 0 to leave probes bounded
-	/// only by the QUIC idle timeout.
+	/// Bounds background work only, so it can afford to be generous: a healthy handshake plus
+	/// HEAD completes in one or two round trips. Set to 0 to leave probes bounded only by the
+	/// QUIC idle timeout.
 	///
 	/// Default: 5000 (5 seconds).
 	#[builder(with = |t: std::time::Duration| millis(t))]
@@ -306,17 +300,13 @@ pub struct Http3Options {
 	/// Demote an origin off HTTP/3 when its QUIC path is provenly slower than
 	/// its TCP path by this factor. Set to 0 to disable path-time demotion.
 	///
-	/// Faith keeps a per-origin moving average of time-to-response-headers for
-	/// each protocol family. HTTP/3 is preferred at parity and when moderately
-	/// slower — its advantages (no head-of-line blocking, connection migration)
-	/// pay off beyond the average — so this factor should stay well above 1.
-	/// Only a sustained gap acts: at least 8 samples on each side, and the QUIC
-	/// average must also exceed the TCP one by an absolute 10ms so LAN-fast
+	/// Compares a per-origin moving average of time-to-response-headers per protocol family.
+	/// HTTP/3 is preferred at parity and when moderately slower, so keep this well above 1. Only
+	/// a sustained gap acts: at least 8 samples each side, and an absolute 10ms, so LAN-fast
 	/// origins don't flap on noise.
 	///
-	/// A demoted origin is not treated as broken: it re-enters through a
-	/// background probe after `upgradeSlowTtl`, asking whether the path has
-	/// improved at zero foreground cost.
+	/// A demoted origin is not treated as broken; it re-enters through a background probe after
+	/// `upgradeSlowTtl`.
 	///
 	/// Default: 2.5.
 	pub upgrade_slow_factor: Option<f64>,
@@ -361,17 +351,12 @@ pub struct Http3Options {
 	/// How many consecutive cancelled HTTP/3 attempts, within a 60-second window,
 	/// demote an origin back to TCP.
 	///
-	/// Faith normally learns that HTTP/3 is broken from a failed attempt. A request
-	/// cancelled via `AbortSignal` never produces that signal, so without this an
-	/// origin whose UDP path breaks keeps being retried over HTTP/3 for as long as
-	/// the Alt-Svc entry lives. Cancellations are treated as weak evidence: only a
-	/// sustained run of them demotes the origin, and any successful HTTP/3 response
-	/// resets the count.
+	/// A failed attempt is how a broken path is normally learned, and a cancelled request never
+	/// produces one. Cancellations are weak evidence, so only a sustained run demotes the origin,
+	/// and any successful HTTP/3 response resets the count.
 	///
-	/// Strikes must land within about a minute of each other to count towards a
-	/// run. A retry loop whose backoff exceeds that window never accumulates one,
-	/// so callers with a long backoff should set this to 1 for immediate demotion
-	/// on the first cancelled attempt.
+	/// Strikes must land within about a minute of each other to count towards a run, so a retry
+	/// loop with a longer backoff never accumulates one; set this to 1 there.
 	///
 	/// One fault neither this nor `upgradeAttemptTimeout` catches: a path that
 	/// carries small datagrams but drops full-size ones (an MTU blackhole, say).
@@ -474,7 +459,7 @@ pub struct Http3Options {
 	pub send_window: Option<u32>,
 }
 
-/// Settings related to HTTP/2.
+/// HTTP/2 settings.
 #[derive(bon::Builder, Clone, Copy, Debug, Default)]
 #[non_exhaustive]
 pub struct Http2Options {
@@ -496,15 +481,15 @@ pub struct Http2Options {
 	/// Replace HTTP/2's static windows with windows that start small and grow towards a
 	/// bandwidth-delay estimate sampled from connection pings, capped at 16 MiB.
 	///
-	/// This is off by default, and turning it on is usually the wrong move. A fresh connection
-	/// opens at 64 KiB, 96 times below the static default, and doubles only when a ping sample
-	/// reaches two thirds of the current estimate — so it takes many round trips to ramp up and
-	/// carries *less* throughput than the static window for all but the largest transfers. It
-	/// also takes over both windows, so `streamWindow` and `connectionWindow` stop applying.
+	/// Usually the wrong move. A fresh connection opens at 64 KiB, 96 times below the static
+	/// default, and doubles only when a ping sample reaches two thirds of the current estimate, so
+	/// it takes many round trips to ramp up and carries *less* throughput than the static window
+	/// for all but the largest transfers. It also takes over both windows, so `streamWindow` and
+	/// `connectionWindow` stop applying.
 	///
-	/// Its one real advantage is memory: it holds a large window open only on connections that
-	/// demonstrably need one. Since it caps at 16 MiB anyway, a static window near that ceiling
-	/// buys the same throughput from the first byte.
+	/// Its advantage is memory: a large window stays open only on connections that need one.
+	/// Since it caps at 16 MiB, a static window near that ceiling buys the same throughput from
+	/// the first byte.
 	///
 	/// HTTP/3 is unaffected either way, and keeps whichever windows apply to it.
 	///
@@ -512,7 +497,7 @@ pub struct Http2Options {
 	pub adaptive_window: Option<bool>,
 }
 
-/// Settings related to HTTP flow control, shared by HTTP/2 and HTTP/3.
+/// Flow-control settings, shared by HTTP/2 and HTTP/3.
 #[derive(bon::Builder, Clone, Copy, Debug, Default)]
 #[non_exhaustive]
 pub struct FlowControlOptions {
@@ -542,7 +527,7 @@ pub struct FlowControlOptions {
 	pub connection_window: Option<u32>,
 }
 
-/// Settings related to the connection pool.
+/// Connection pool settings.
 #[derive(bon::Builder, Clone, Copy, Debug, Default)]
 #[non_exhaustive]
 pub struct PoolOptions {
@@ -577,7 +562,7 @@ pub struct QuirksOptions {
 	pub h1_request_streaming: Option<bool>,
 }
 
-/// Timeouts for requests made with this agent.
+/// Request timeouts.
 #[derive(bon::Builder, Clone, Copy, Debug, Default)]
 #[non_exhaustive]
 pub struct TimeoutOptions {
@@ -604,7 +589,7 @@ pub struct TimeoutOptions {
 	pub total: Option<u32>,
 }
 
-/// Settings related to TLS.
+/// TLS settings.
 #[derive(bon::Builder, Clone, Debug, Default)]
 #[non_exhaustive]
 pub struct TlsOptions {
@@ -658,7 +643,7 @@ pub struct TlsOptions {
 )]
 #[non_exhaustive]
 pub struct AgentOptions {
-	/// Settings related to the HTTP cache.
+	/// HTTP cache settings.
 	#[cfg(feature = "cache")]
 	#[builder(with = |with: impl FnOnce(CacheOptionsBuilder) -> CacheOptions| with(CacheOptions::builder()))]
 	pub cache: Option<CacheOptions>,
@@ -670,7 +655,7 @@ pub struct AgentOptions {
 	/// Default: no jar.
 	#[cfg(feature = "cookies")]
 	pub cookies: Option<CookieLimits>,
-	/// Settings related to DNS.
+	/// DNS settings.
 	#[builder(with = |with: impl FnOnce(DnsOptionsBuilder) -> DnsOptions| with(DnsOptions::builder()))]
 	pub dns: Option<DnsOptions>,
 	/// Flow-control windows shared by HTTP/2 and HTTP/3.
@@ -688,10 +673,10 @@ pub struct AgentOptions {
 	/// Default: none.
 	#[builder(with = |items: impl IntoIterator<Item = Header>| items.into_iter().collect())]
 	pub headers: Option<Vec<Header>>,
-	/// Settings related to HTTP/2.
+	/// HTTP/2 settings.
 	#[builder(with = |with: impl FnOnce(Http2OptionsBuilder) -> Http2Options| with(Http2Options::builder()))]
 	pub http2: Option<Http2Options>,
-	/// Settings related to HTTP/3.
+	/// HTTP/3 settings.
 	#[cfg(feature = "http3")]
 	#[builder(with = |with: impl FnOnce(Http3OptionsBuilder) -> Http3Options| with(Http3Options::builder()))]
 	pub http3: Option<Http3Options>,
@@ -705,7 +690,7 @@ pub struct AgentOptions {
 	///
 	/// Default: unset (IPv6 wildcard for QUIC where available, else `0.0.0.0`).
 	pub local_address: Option<std::net::IpAddr>,
-	/// Settings related to the connection pool.
+	/// Connection pool settings.
 	#[builder(with = |with: impl FnOnce(PoolOptionsBuilder) -> PoolOptions| with(PoolOptions::builder()))]
 	pub pool: Option<PoolOptions>,
 	/// Switches that depart from standard behaviour.
@@ -713,10 +698,10 @@ pub struct AgentOptions {
 	pub quirks: Option<QuirksOptions>,
 	/// Determines the behavior in case the server replies with a redirect status.
 	pub redirect: Option<RedirectPolicy>,
-	/// Timeouts for requests made with this agent.
+	/// Request timeouts.
 	#[builder(with = |with: impl FnOnce(TimeoutOptionsBuilder) -> TimeoutOptions| with(TimeoutOptions::builder()))]
 	pub timeout: Option<TimeoutOptions>,
-	/// Settings related to TLS.
+	/// TLS settings.
 	#[builder(with = |with: impl FnOnce(TlsOptionsBuilder) -> TlsOptions| with(TlsOptions::builder()))]
 	pub tls: Option<TlsOptions>,
 	/// Custom user agent string.
@@ -728,11 +713,9 @@ pub struct AgentOptions {
 
 /// Whether this host can bind the IPv6 wildcard (`[::]`).
 ///
-/// This is tested using the exact operation reqwest performs when creating the QUIC
-/// endpoint with no explicit local address, so it predicts whether the default
-/// QUIC bind will succeed. The result is memoised for the life of the process; while
-/// IPv6 bindability can in principle change at runtime, this is considered an
-/// acceptable tradeoff for performance and simplicity.
+/// Tested with the same operation reqwest performs when creating a QUIC endpoint with no explicit
+/// local address, so it predicts whether the default bind will succeed. Memoised for the life of
+/// the process.
 pub fn ipv6_wildcard_bindable() -> bool {
 	use std::sync::OnceLock;
 	static BINDABLE: OnceLock<bool> = OnceLock::new();

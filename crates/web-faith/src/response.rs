@@ -48,7 +48,7 @@ pub struct PeerInformation {
 	pub certificate: Option<Vec<u8>>,
 }
 
-/// Where a response body is written, and on what terms.
+/// Where a response body is written.
 #[derive(Debug, Clone, Default)]
 pub struct FileDestination {
 	/// Truncate and replace an occupied destination. The default refuses one instead, leaving what
@@ -349,8 +349,8 @@ impl Response {
 
 	/// The canonical reason phrase for the status, or empty for a code with no well-known one.
 	///
-	/// Always the canonical phrase: HTTP/1 lets a server send its own, which is not surfaced here,
-	/// and HTTP/2 and HTTP/3 carry none at all.
+	/// Always the canonical phrase. HTTP/1 lets a server send its own, which is not surfaced here;
+	/// HTTP/2 and HTTP/3 carry none at all.
 	pub fn status_text(&self) -> &'static str {
 		self.status_code.canonical_reason().unwrap_or_default()
 	}
@@ -365,7 +365,7 @@ impl Response {
 		&self.headers
 	}
 
-	/// The URL the response came from, which is the last one after any redirects.
+	/// The URL the response came from, after any redirects.
 	pub fn url(&self) -> &Url {
 		&self.url
 	}
@@ -787,8 +787,9 @@ impl Response {
 	}
 }
 
-/// A [`Response`]'s body as an [`http_body::Body`], for handing to a tower service, a hyper
-/// client, or anything else that takes one.
+/// A [`Response`]'s body as an [`http_body::Body`].
+///
+/// For handing to a tower service, a hyper client, or anything else that takes one.
 pub struct ResponseBody {
 	chunks: Pin<Box<dyn Stream<Item = Result<Bytes, FaithError>> + Send>>,
 }

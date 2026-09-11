@@ -185,8 +185,10 @@ impl Agent {
 		self.live().as_ref().map(|live| live.client.clone())
 	}
 
-	/// The same client without Faith's middleware, so a request on it skips the HTTP cache and the
-	/// Alt-Svc layer while sharing the connection pool.
+	/// The same client without Faith's middleware.
+	///
+	/// A request on it skips the HTTP cache and the Alt-Svc layer, while sharing the connection
+	/// pool.
 	#[cfg(feature = "raw-client")]
 	pub fn raw_client(&self) -> Option<Client> {
 		self.live().as_ref().map(|live| live.raw_client.clone())

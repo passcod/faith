@@ -39,11 +39,8 @@ use crate::{
 
 /// Send a request on `agent`, and build the response it produces.
 ///
-/// `client` is the handle the caller took when the request was issued, rather than one taken here:
-/// a request counts as in flight from the moment it is issued, so one issued just before the agent
-/// closes runs to completion even though nothing had started on it yet.
-///
-/// `abort` is an optional future that, resolving first, cancels the request.
+/// `client` is the handle taken when the request was issued, so one issued just before the agent
+/// closes still runs to completion. `abort` cancels the request by resolving first.
 // spec:AGENT
 pub async fn send(
 	agent: &Agent,
