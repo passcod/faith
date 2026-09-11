@@ -42,11 +42,14 @@ struct FailureEntry {
 	counted_until: Instant,
 }
 
-/// A per-origin exponentially-weighted moving average of time-to-response-headers.
+/// An estimate of network path time to an origin.
+///
+/// Currently an exponentially-weighted moving average of time-to-response-headers, kept per origin
+/// and per protocol family, so a QUIC path can be compared against the TCP one it would replace.
 #[derive(Debug, Clone, Copy)]
 #[non_exhaustive]
 pub struct PathTime {
-	/// EWMA of time-to-response-headers, in milliseconds.
+	/// The average, in milliseconds.
 	pub avg_ms: f64,
 	/// Samples behind the average.
 	pub count: u32,
