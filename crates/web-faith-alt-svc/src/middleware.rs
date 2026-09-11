@@ -60,8 +60,9 @@ impl Drop for H3AttemptGuard {
 	}
 }
 
-/// A reqwest middleware which acts on the [`AltSvcCache`]'s decision, routing a request over
-/// HTTP/3 where its origin is worth attempting.
+/// A reqwest middleware for HTTP/3 upgrades.
+///
+/// Routes a request over HTTP/3 where the [`AltSvcCache`] says its origin is worth attempting.
 ///
 /// Comes in two flavours, depending on whether you want to do background probes (with
 /// [`H3Prober`]) or not. With, advertisements are verified in the background and foreground

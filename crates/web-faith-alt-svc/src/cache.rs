@@ -114,11 +114,11 @@ impl Default for AltSvcCacheConfig {
 	}
 }
 
-/// An in-memory store which keeps track of HTTP/3 advertisements, and decides per origin whether
-/// HTTP/3 is worth attempting.
+/// An in-memory store of HTTP/3 advertisements.
 ///
 /// Holds what each origin advertised, what a probe or a real response proved, and what failed or
-/// turned out slower over QUIC than over TCP. Bounded and aged by [`AltSvcCacheConfig`].
+/// turned out slower over QUIC than over TCP, and decides per origin whether HTTP/3 is worth
+/// attempting. Bounded and aged by [`AltSvcCacheConfig`].
 #[derive(Clone)]
 pub struct AltSvcCache {
 	advertised: Cache<String, AltSvcEntry>,
