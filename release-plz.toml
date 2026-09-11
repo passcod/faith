@@ -15,3 +15,7 @@ semver_check = true
 [[package]]
 name = "web-faith-napi"
 release = false
+# `release = false` keeps it out of the release, but release-plz still checks its own `publish`
+# against the manifest's and refuses to start when they disagree. The crate carries
+# `publish = false` in Cargo.toml, so say the same here.
+publish = false
