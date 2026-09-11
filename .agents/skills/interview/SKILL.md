@@ -1,13 +1,10 @@
 ---
 name: interview
 description: "Interview me about this card to develop the acceptance criteria"
-label: "Interview me"
-pill-order:
-  not-started: 1
-  specifying: 1
+label: "Spec interview"
+category: spec
 surface: both
-jockey-hint: "Demote sharply once an interview has already happened — if the journal contains an interview entry, or if the recent conversation shows back-and-forth Q&A style exchange. Only re-suggest if the user explicitly asks for another round."
-workhorse-version: 0.3.0
+workhorse-version: 0.4.0
 ---
 
 ## Your task: Interview me

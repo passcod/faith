@@ -2,14 +2,9 @@
 name: draft-card-breakdown
 description: "Workshop how to break this card into smaller spawned cards and capture entries in the card breakdown"
 label: "Draft card breakdown"
-pill-order:
-  not-started: 8
-  specifying: 13
-  implementing: 7
-  reviewing: 7
+category: plan
 surface: both
-jockey-hint: "Always available but low-traffic — surface as an available pill, not a top suggestion. Most cards are implemented as one PR; only suggest prominently when the conversation has already revealed the card is too large to ship in one piece."
-workhorse-version: 0.3.0
+workhorse-version: 0.4.0
 ---
 
 ## Your task: Draft card breakdown

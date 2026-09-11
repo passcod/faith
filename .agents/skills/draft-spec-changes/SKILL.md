@@ -2,11 +2,8 @@
 name: draft-spec-changes
 description: "Draft edits to existing specs (or a new spec if no existing one fits) from the card description"
 label: "Draft spec changes"
-pill-order:
-  not-started: 3
-  specifying: 2
-jockey-hint: "Demote once spec drafts have already been produced in this conversation, unless the user signals they want another pass or the scope has materially shifted."
-workhorse-version: 0.3.0
+category: spec
+workhorse-version: 0.4.0
 ---
 
 ## Your task: Draft spec changes

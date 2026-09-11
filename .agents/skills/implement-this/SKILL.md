@@ -1,21 +1,18 @@
 ---
 name: implement-this
-description: "Implement this card"
-label: "Implement this"
-pill-order:
-  not-started: 2
-  specifying: 4
-  implementing: 1
-  reviewing: 2
-jockey-hint: "Demote once implementation has begun on this card — the user typically doesn't want to restart from scratch. Leave high when the card is still in specifying phase, or when the user explicitly asks to resume or redo."
-workhorse-version: 0.3.0
+description: "Implement this card, or carry on from the changes just discussed"
+label: "Implement"
+category: build
+workhorse-version: 0.4.0
 ---
 
-## Your task: Implement this
+## Your task: Implement
 
 If you don't already have this card's context (title, identifier, description) — for instance when running outside Workhorse — establish it first by following `.agents/docs/card-context.md`.
 
 Implement the work described by this card. The starting point varies — figure out which one applies before writing code.
+
+**When code changes already exist on the branch, this is usually a continuation rather than a fresh start.** Read the recent conversation first: if the user has just discussed a change, a fix, or a next step, that discussion is what to implement. Pick up from where the branch and the conversation leave off rather than re-reading the whole card and starting again.
 
 ### Work out what you're implementing
 

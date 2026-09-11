@@ -2,11 +2,8 @@
 name: mock-this-up
 description: "Produce an HTML mockup for the UI being discussed"
 label: "Mock this up"
-pill-order:
-  not-started: 6
-  specifying: 12
-jockey-hint: "Demote once one or more mockups have been produced in this conversation, unless the user signals they want another variation or a different screen."
-workhorse-version: 0.3.0
+category: design
+workhorse-version: 0.4.0
 ---
 
 ## Your task: Mock this up
@@ -22,7 +19,6 @@ Produce an HTML mockup for the UI being discussed. Skip extended exploration —
    c. **Cross-check against `.workhorse/design/`** — the design system, component docs, and philosophy notes. The design library may have been updated more recently than the code, so if it disagrees with the implementation, the design library wins
    d. **Do not reference mockups from other cards** under `.workhorse/design/mockups/` unless the user explicitly asks — they are point-in-time artefacts, not canonical components
 3. **Preserve unchanged aspects.** Author fresh HTML and CSS only for the feature or tweak being developed. For every other region of the screen, be visually faithful to the current implementation — same layout, components, copy, spacing, styling. Do not re-imagine, re-style, or re-layout regions the card is not changing, and do not let stale styling from mockups on other cards leak in. See "Preserving unchanged aspects" in your system prompt
-4. Decide where the file goes based on the kind of card you're on:
-   - **On a product card**, write to `.workhorse/design/mockups/{card-id}/{slug}.html` with inline CSS and an HTML comment header linking to the relevant spec (if one exists). The `{card-id}` folder scopes the mockup to this card so pre-merge cleanup can strip it on merge
-   - **On a design card**, write under `.workhorse/design/` directly but outside `mockups/` — pick a meaningful path (e.g. `.workhorse/design/components/{slug}.html` or `.workhorse/design/views/{slug}.html`). The `mockups/` tree holds card scratch and is emptied on merge; a design card's mockup is its deliverable and persists to main, so file it where it belongs long-term
+4. Write to `.workhorse/design/mockups/{card-id}/{slug}.html` with inline CSS and an HTML comment header linking to the relevant spec (if one exists). The `{card-id}` folder scopes the mockup to this card, so pre-merge cleanup strips it on merge
+   - **A mockup anyone outside the card will need** — because someone else implements it, because it covers several cards' work, or because it is handed on to be picked up later — goes to `.workhorse/design/designs/` instead, where it persists. Its location alone decides whether it survives the merge, so nothing else about the file changes
 5. Briefly summarise what you produced
