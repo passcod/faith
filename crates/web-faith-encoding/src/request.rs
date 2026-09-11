@@ -1,4 +1,12 @@
 //! Applying a content coding to a request body.
+//!
+//! There is nothing to negotiate against first: `Accept-Encoding` travels with the request and
+//! says what the *response* may use, so a server never advertises up front what it will take on
+//! the way in. Compressing a request body therefore takes out-of-band knowledge that the server
+//! accepts one. A server that cannot decode what it receives answers 415, which
+//! [RFC 9110 §15.5.16](https://www.rfc-editor.org/rfc/rfc9110#section-15.5.16) says ought to carry
+//! an `Accept-Encoding` naming what it would have accepted — but the body has gone on the wire by
+//! then.
 
 use std::{io, pin::Pin};
 
