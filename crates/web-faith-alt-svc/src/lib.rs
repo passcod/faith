@@ -95,9 +95,7 @@ mod https_sink;
 mod middleware;
 mod prober;
 
-pub use cache::{
-	AltSvcAdvertisement, AltSvcCache, AltSvcCacheConfig, AltSvcEntry, PathTime, SLOW_FLOOR_MS,
-};
+pub use cache::{AltSvcAdvertisement, AltSvcCache, AltSvcCacheConfig, AltSvcEntry, PathTime};
 pub use header::parse_alt_svc_header;
 #[cfg(feature = "dns")]
 pub use https_sink::H3HttpsSink;

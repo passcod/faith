@@ -61,7 +61,7 @@ const EWMA_ALPHA: f64 = 0.2;
 const EWMA_MIN_SAMPLES: u32 = 8;
 /// Absolute gap the QUIC average must exceed the TCP one by, on top of the
 /// factor, so LAN-fast origins don't flap on sub-millisecond noise.
-pub const SLOW_FLOOR_MS: f64 = 10.0;
+const SLOW_FLOOR_MS: f64 = 10.0;
 
 /// Configuration for initialising the [`AltSvcCache`].
 pub struct AltSvcCacheConfig {
@@ -86,9 +86,8 @@ pub struct AltSvcCacheConfig {
 	/// Lifetime of a probe's single-flight claim. Doubles as crash recovery: a
 	/// probe task that dies without reporting frees its origin when this lapses.
 	pub probe_ttl: Duration,
-	/// The QUIC path is demoted when its average is worse than TCP's by this
-	/// factor (and by [`SLOW_FLOOR_MS`] absolutely). `0.0` disables path-time
-	/// demotion entirely.
+	/// The QUIC path is demoted when its average is worse than TCP's by this factor, and by 10ms
+	/// absolutely. `0.0` disables path-time demotion entirely.
 	pub slow_factor: f64,
 	/// How long a path-time demotion holds before the origin may be re-probed.
 	pub slow_ttl: Duration,
