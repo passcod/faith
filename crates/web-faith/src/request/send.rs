@@ -205,8 +205,8 @@ pub async fn send(
 			.map(|(_, value)| value.clone())
 	});
 	#[cfg(feature = "encoding")]
-	let accept_encoding = AcceptEncoding::parse(
-		&request_accept_encoding
+	let accept_encoding = AcceptEncoding::from(
+		&*request_accept_encoding
 			.clone()
 			.or_else(|| {
 				agent

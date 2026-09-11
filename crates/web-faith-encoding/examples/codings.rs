@@ -13,7 +13,7 @@ use web_faith_encoding::{
 
 #[tokio::main]
 async fn main() {
-	let accept = AcceptEncoding::parse(DEFAULT_ACCEPT_ENCODING);
+	let accept = AcceptEncoding::from(DEFAULT_ACCEPT_ENCODING);
 
 	// What a response's headers negotiate against what the request asked for.
 	let mut headers = HeaderMap::new();

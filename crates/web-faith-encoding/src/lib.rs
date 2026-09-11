@@ -1,22 +1,36 @@
-//! HTTP content coding for request and response bodies: gzip, deflate, brotli, and zstd.
+//! HTTP content coding for request and response bodies.
 //!
-//! An HTTP stack usually decides for itself which codings to advertise and decode. This hands that
-//! decision to the caller, so decoding rests on the `Accept-Encoding` of the request in hand.
+//! Currently supports:
 //!
-//! On the way back, [`AcceptEncoding::parse`] reads what a request advertised and [`decision`] says
-//! which coding a response should be decoded under, if any; [`decode_stream`] wraps the body in the
-//! decoder for it. On the way out, [`compress_buffer`] and [`compress_stream`] apply a coding to a
-//! request body, and [`layer_content_encoding`] names it alongside whatever the caller had already
-//! declared.
+//! - gzip ([RFC 1952](https://www.rfc-editor.org/rfc/rfc1952))
+//! - deflate, in its zlib-wrapped form ([RFC 1950](https://www.rfc-editor.org/rfc/rfc1950)), like
+//!   browsers
+//! - brotli ([RFC 7932](https://www.rfc-editor.org/rfc/rfc7932))
+//! - zstd ([RFC 8878](https://www.rfc-editor.org/rfc/rfc8878))
 //!
-//! `deflate` is the zlib-wrapped form of RFC 1950, which is how mainstream clients decode it.
+//! # Common
+//!
+//! [`Coding`] names a coding, and converts to and from the token that names it on the wire.
+//!
+//! # Requests
+//!
+//! [`compress_buffer`] and [`compress_stream`] apply a coding to a request body, and
+//! [`layer_content_encoding`] names it in a `Content-Encoding` alongside anything the caller had
+//! already declared.
+//!
+//! # Responses
+//!
+//! [`AcceptEncoding`] is what a request advertised, and [`decision`] reads it against a response's
+//! headers to say which coding the body should be decoded under, if any. [`decode_stream`] wraps
+//! the body in that decoder, and [`strip_decoded_headers`] removes the headers that described the
+//! encoded bytes.
 //!
 //! ```
 //! use http::{HeaderMap, HeaderValue};
 //! use web_faith_encoding::{AcceptEncoding, DEFAULT_ACCEPT_ENCODING, compress_buffer, decision};
 //!
 //! # async fn example() {
-//! let accept = AcceptEncoding::parse(DEFAULT_ACCEPT_ENCODING);
+//! let accept = AcceptEncoding::from(DEFAULT_ACCEPT_ENCODING);
 //!
 //! let mut headers = HeaderMap::new();
 //! headers.insert("content-encoding", HeaderValue::from_static("gzip"));
@@ -55,18 +69,15 @@ pub type ByteStream = dyn Stream<Item = Result<Bytes, String>> + Send + Sync;
 pub const DEFAULT_ACCEPT_ENCODING: &str = "zstd,gzip,deflate,br";
 
 /// A content coding.
-///
-/// `deflate` is the zlib-wrapped form (RFC 1950), which is how reqwest and every other mainstream
-/// client decode it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Coding {
-	/// `gzip`, RFC 1952.
+	/// [RFC 1952](https://www.rfc-editor.org/rfc/rfc1952).
 	Gzip,
-	/// `deflate`, in its zlib-wrapped form, RFC 1950.
+	/// In its zlib-wrapped form ([RFC 1950](https://www.rfc-editor.org/rfc/rfc1950)), like browsers.
 	Deflate,
-	/// `br`, RFC 7932.
+	/// [RFC 7932](https://www.rfc-editor.org/rfc/rfc7932).
 	Brotli,
-	/// `zstd`, RFC 8878.
+	/// [RFC 8878](https://www.rfc-editor.org/rfc/rfc8878).
 	Zstd,
 }
 
@@ -115,6 +126,18 @@ impl Coding {
 	}
 }
 
+impl From<&str> for AcceptEncoding {
+	fn from(value: &str) -> Self {
+		Self::parse(value)
+	}
+}
+
+impl Default for AcceptEncoding {
+	fn default() -> Self {
+		Self::parse(DEFAULT_ACCEPT_ENCODING)
+	}
+}
+
 /// Decide whether and how to decode a response body.
 ///
 /// The coding to decode under when the response's `Content-Encoding` names a single coding that
@@ -145,10 +168,14 @@ pub fn strip_decoded_headers(headers: &mut HeaderMap) {
 	headers.remove(CONTENT_LENGTH);
 }
 
-/// A parsed `Accept-Encoding`.
+/// What a request's `Accept-Encoding` accepts.
 ///
-/// Each slot holds the quality value (0..=1000) a coding was named with; `star` holds `*`'s.
-#[derive(Clone, Copy, Debug, Default)]
+/// Only the codings in [`Coding`] and `*` are kept; any other token is ignored, since a coding
+/// this crate cannot decode is not a coding it can choose. Parsing does not fail: a malformed
+/// quality value reads as `q=0`, which refuses that coding.
+///
+/// [`Default`] is what [`DEFAULT_ACCEPT_ENCODING`] accepts, not the empty set.
+#[derive(Clone, Copy, Debug)]
 pub struct AcceptEncoding {
 	gzip: Option<u16>,
 	deflate: Option<u16>,
@@ -158,9 +185,17 @@ pub struct AcceptEncoding {
 }
 
 impl AcceptEncoding {
-	/// Read an `Accept-Encoding` header value.
-	pub fn parse(value: &str) -> Self {
-		let mut accept = Self::default();
+	/// Accepts nothing at all, the accumulator a parse starts from.
+	const NOTHING: Self = Self {
+		gzip: None,
+		deflate: None,
+		brotli: None,
+		zstd: None,
+		star: None,
+	};
+
+	fn parse(value: &str) -> Self {
+		let mut accept = Self::NOTHING;
 		for element in value.split(',') {
 			let mut parts = element.split(';');
 			let Some(token) = parts.next().map(str::trim) else {
@@ -201,7 +236,8 @@ impl AcceptEncoding {
 	///
 	/// A coding named outright settles it whatever `*` says, so a zero quality value on the named
 	/// coding refuses it even where `*` would accept.
-	fn accepts(&self, coding: Coding) -> bool {
+	/// Whether `coding` may be used for the response body.
+	pub fn accepts(&self, coding: Coding) -> bool {
 		let named = match coding {
 			Coding::Gzip => self.gzip,
 			Coding::Deflate => self.deflate,
