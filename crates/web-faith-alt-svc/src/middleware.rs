@@ -55,12 +55,18 @@ impl Drop for H3AttemptGuard {
 /// Routes a request over HTTP/3 where the [`AltSvcCache`] says its origin is worth attempting.
 ///
 /// Comes in two flavours, depending on whether you want to do background probes (with
-/// [`H3Prober`]) or not. With, advertisements are verified in the background and foreground
-/// requests use HTTP/3 only once an origin is confirmed; without, the next foreground request is
-/// itself the verification, falling back to TCP if it does not produce headers in time.
+/// [`H3Prober`]) or not:
 ///
-/// It also monitors connections and demotes or promotes origins between QUIC and TCP, on failures,
-/// on the QUIC path becoming noticeably slower than the TCP one, and after an exponential cooldown.
+/// - With, advertisements are verified in the background, and foreground requests use HTTP/3 only
+///   once an origin is confirmed.
+/// - Without, the next foreground request is itself the verification, falling back to TCP if it
+///   does not produce headers in time.
+///
+/// It also monitors connections and demotes or promotes origins between QUIC and TCP:
+///
+/// - if QUIC connections to the origin start failing,
+/// - if the QUIC path becomes noticeably slower than the TCP path,
+/// - retries the upgrade after an exponential cooldown.
 ///
 #[derive(Clone)]
 pub struct AltSvcMiddleware {

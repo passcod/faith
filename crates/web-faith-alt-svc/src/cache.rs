@@ -115,9 +115,15 @@ impl Default for AltSvcCacheConfig {
 
 /// An in-memory store of HTTP/3 advertisements.
 ///
-/// Holds what each origin advertised, what a probe or a real response proved, and what failed or
-/// turned out slower over QUIC than over TCP, and decides per origin whether HTTP/3 is worth
-/// attempting. Bounded and aged by [`AltSvcCacheConfig`].
+/// Decides per origin whether HTTP/3 is worth attempting, from what it holds about each:
+///
+/// - what it advertised, in a header or an `HTTPS` record,
+/// - what a probe or a real response proved,
+/// - what failed, and how many times in a row,
+/// - what turned out slower over QUIC than over TCP,
+/// - what the caller asserted as a hint.
+///
+/// Bounded and aged by [`AltSvcCacheConfig`].
 #[derive(Clone)]
 pub struct AltSvcCache {
 	advertised: Cache<String, AltSvcEntry>,
@@ -237,8 +243,8 @@ impl AltSvcCache {
 		}
 	}
 
-	/// The cooldown the `count`-th consecutive failure earns: the base doubled
-	/// once per failure before it, capped.
+	/// The cooldown the `count`-th consecutive failure earns: the base doubled once per failure
+	/// before it, capped.
 	// spec:H3UP#failure-backoff
 	fn failure_cooldown(&self, count: u32) -> Duration {
 		let doublings = count.saturating_sub(1).min(u32::BITS - 1);
@@ -249,8 +255,8 @@ impl AltSvcCache {
 
 	/// Whether the origin is inside its failure cooldown.
 	///
-	/// Presence in `failed` is not the question: an entry outlives its cooldown
-	/// so the failure count survives to escalate the next one.
+	/// Not the same as having a `failed` entry, which outlives its cooldown so the count survives
+	/// to escalate the next one.
 	fn is_failed(&self, origin: &str) -> bool {
 		self.failed
 			.get(origin)
@@ -303,13 +309,11 @@ impl AltSvcCache {
 		self.advertised.insert(origin, entry);
 	}
 
-	/// Whether an `HTTPS` DNS record for this origin would tell us anything we do not already
-	/// know, so the resolver can skip the query rather than send one per lookup.
+	/// Whether an `HTTPS` record for this origin would say anything new, so the resolver can skip
+	/// the query.
 	///
-	/// Nothing is learnable while the origin is confirmed (already routing over HTTP/3), failed
-	/// (blocked whatever a record says), slow (demoted on measurement, which a record cannot
-	/// overturn), or already carrying a live advertisement (the probe it warrants is already
-	/// warranted). Each of those states expires, and the query resumes when it does.
+	/// Nothing is learnable while the origin is confirmed, failed, slow, or already carrying a
+	/// live advertisement. Each of those expires, and the query resumes when it does.
 	// spec:DNS#https-records
 	pub fn wants_https_record(&self, url: &reqwest::Url) -> bool {
 		let Some(origin) = Self::origin_key(url) else {
@@ -327,12 +331,8 @@ impl AltSvcCache {
 
 	/// Record an HTTP/3 advertisement carried by an `HTTPS` DNS record.
 	///
-	/// An `HTTPS` record and an `Alt-Svc` header are two ways for an origin to say the same thing,
-	/// so this lands in exactly the state a header advertisement does: the origin becomes
-	/// probe-worthy, and foreground requests keep to TCP until a probe proves the path. The port
-	/// and same-host rules are the header's too — [`Self::record_alt_svc`] applies them — because
-	/// the reasons for them are about what Faith can connect to rather than about where the
-	/// advertisement was read.
+	/// Lands in the same state a header advertisement does, under the same port and same-host
+	/// rules; see [`Self::record_alt_svc`].
 	// spec:H3UP#advertisements-from-dns
 	pub fn record_https_record(&self, url: &reqwest::Url, port: Option<u16>, ttl: Duration) {
 		// A record naming no port describes the origin's own, exactly as an `Alt-Svc` header with
@@ -355,12 +355,9 @@ impl AltSvcCache {
 		);
 	}
 
-	/// Hints seed `confirmed` directly, not `advertised`: a hint is the *user's*
-	/// assertion, and routing it through a probe would both second-guess an
-	/// explicit instruction and break h3-only origins (no TCP listener), which
-	/// only work if the very first request speaks HTTP/3. Distrust is reserved
-	/// for what servers advertise. Failure demotes a hinted origin exactly as it
-	/// does a confirmed one.
+	/// Seeds `confirmed` directly: a hint is the caller's assertion, so the first request to a
+	/// hinted origin already speaks HTTP/3, which is also what makes an origin with no TCP
+	/// listener reachable. Failure demotes it as it would any confirmed origin.
 	pub fn add_hint(&self, host: &str, port: u16) {
 		let origin = format!("https://{}:{}", host, port);
 
@@ -373,8 +370,7 @@ impl AltSvcCache {
 
 	/// Put a hinted origin into `confirmed`, unless a failure currently blocks it.
 	///
-	/// Split out of [`Self::add_hint`] so [`Self::network_changed`] can re-seed the
-	/// hints it just cleared without re-recording them.
+	/// Split out of [`Self::add_hint`] for [`Self::network_changed`] to re-seed with.
 	fn seed_hint(&self, origin: String, port: u16) {
 		if self.is_failed(&origin) {
 			return;
@@ -390,29 +386,19 @@ impl AltSvcCache {
 
 	/// Whether an entry advertising `entry_port` can be acted on for this URL.
 	///
-	/// An Alt-Svc advertisement names a network endpoint for the origin; it is not
-	/// a claim that the origin's *own* port speaks HTTP/3. So when the advertised
-	/// port differs, upgrading the request on the origin port is an inference the
-	/// advertisement does not support.
-	///
-	/// Honouring the advertised port properly means connecting to one port while
-	/// still sending the origin's authority, which reqwest cannot express: it
-	/// derives the HTTP/3 connect target from the request URI's authority (see
-	/// <https://github.com/seanmonstar/reqwest/issues/1138>). `follow_advertised_port`
-	/// opts into doing it anyway by rewriting the request's port, which is not
-	/// standards-compliant — the request then carries the alternative service's authority
-	/// rather than the origin's.
+	/// An advertisement names an endpoint for the origin, not a claim that the origin's own port
+	/// speaks HTTP/3, so a differing port is not acted on by default. Honouring it properly means
+	/// connecting to one port while sending the origin's authority, which reqwest cannot express
+	/// (<https://github.com/seanmonstar/reqwest/issues/1138>); `follow_advertised_port` rewrites
+	/// the request's port instead, which is not standards-compliant.
 	fn port_actionable(&self, url: &reqwest::Url, entry_port: u16) -> bool {
 		self.follow_advertised_port || Some(entry_port) == url.port_or_known_default()
 	}
 
 	/// The port HTTP/3 is *proven* on, or `None` to leave the request on TCP.
 	///
-	/// This is the only lookup foreground routing consults when probing is on:
-	/// an advertisement is evidence worth probing, not worth routing on.
-	///
-	/// A returned port that differs from the URL's own means the caller opted into
-	/// `follow_advertised_port` and the request must be rewritten to target it.
+	/// The only lookup foreground routing consults when probing is on. A port differing from the
+	/// URL's own means `follow_advertised_port`, and the request must be rewritten to target it.
 	pub fn confirmed_port(&self, url: &reqwest::Url) -> Option<u16> {
 		let origin = Self::origin_key(url)?;
 
@@ -428,9 +414,10 @@ impl AltSvcCache {
 		}
 	}
 
-	/// The advertised port a background probe should verify, or `None` when
-	/// there is nothing (or no need) to probe: no actionable advertisement,
-	/// already confirmed, recently failed, or demoted for being slow.
+	/// The advertised port a background probe should verify.
+	///
+	/// `None` when there is no actionable advertisement, or the origin is already confirmed,
+	/// recently failed, or demoted for being slow.
 	pub fn probe_candidate(&self, url: &reqwest::Url) -> Option<u16> {
 		let origin = Self::origin_key(url)?;
 
@@ -449,9 +436,10 @@ impl AltSvcCache {
 		}
 	}
 
-	/// Claim the origin for a probe. Returns `false` when a probe is already in
-	/// flight; the claim expires on its own (see [`AltSvcCacheConfig::probe_ttl`])
-	/// if the prober never reports back.
+	/// Claim the origin for a probe, or `false` if one is already in flight.
+	///
+	/// The claim expires on its own if the prober never reports back; see
+	/// [`AltSvcCacheConfig::probe_ttl`].
 	pub fn claim_probe(&self, url: &reqwest::Url) -> bool {
 		let Some(origin) = Self::origin_key(url) else {
 			return false;
@@ -459,8 +447,7 @@ impl AltSvcCache {
 		self.probing.entry(origin).or_insert(()).is_fresh()
 	}
 
-	/// Release the origin's probe claim, so a later advertisement can re-probe
-	/// without waiting out the claim's TTL.
+	/// Release the origin's probe claim, so a later advertisement can re-probe at once.
 	pub fn finish_probe(&self, url: &reqwest::Url) {
 		let Some(origin) = Self::origin_key(url) else {
 			return;
@@ -470,9 +457,8 @@ impl AltSvcCache {
 
 	/// The port to attempt HTTP/3 on, or `None` to leave the request on TCP.
 	///
-	/// Legacy (probe-less) routing: advertisements are acted on inline, so this
-	/// consults `advertised` as well as `confirmed`. Only used when
-	/// probing is off.
+	/// Probe-less routing only: advertisements are acted on inline, so this consults `advertised`
+	/// as well as `confirmed`.
 	pub fn should_use_h3(&self, url: &reqwest::Url) -> Option<u16> {
 		self.confirmed_port(url)
 			.or_else(|| self.probe_candidate(url))
@@ -481,10 +467,9 @@ impl AltSvcCache {
 	/// Record a request's time-to-response-headers, and demote the origin to TCP if QUIC is
 	/// sustainedly slower.
 	///
-	/// Time-to-headers includes server think-time, which varies per endpoint far more than per
-	/// transport, so only the averages are comparable — hence the minimum sample counts. The
-	/// comparison is asymmetric: HTTP/3 is preferred at parity and when moderately
-	/// slower, so only a large sustained gap demotes.
+	/// Only the averages are comparable, since time-to-headers includes server think-time — hence
+	/// the minimum sample counts. The comparison is asymmetric: HTTP/3 is preferred at parity and
+	/// when moderately slower, so only a large sustained gap demotes.
 	pub fn record_path_time(&self, url: &reqwest::Url, version: http::Version, elapsed: Duration) {
 		if self.slow_factor <= 0.0 {
 			return;
@@ -531,9 +516,8 @@ impl AltSvcCache {
 
 	/// Demote a working-but-slow QUIC origin back to TCP.
 	///
-	/// The confirmed entry moves back to `advertised` rather than being dropped, so when the `slow`
-	/// marker expires the next request triggers a re-probe. The QUIC average is cleared so the
-	/// re-probe is judged on fresh samples.
+	/// The confirmed entry moves back to `advertised`, so a re-probe follows once the `slow`
+	/// marker expires, judged on fresh samples.
 	fn demote_slow(&self, origin: &str) {
 		let key = origin.to_string();
 		let Some(entry) = self.confirmed.get(&key) else {
@@ -554,12 +538,9 @@ impl AltSvcCache {
 
 	/// Record that HTTP/3 worked for this origin, on the port it connected to.
 	///
-	/// `port` must be the port the successful attempt actually used. Recovering it
-	/// from the caches instead would be unsound: a concurrent failure that cleared
-	/// them leaves nothing to read, and falling back to the origin's own port would
-	/// confirm HTTP/3 on a port the server never advertised — for `confirmed_ttl`,
-	/// and invisibly, since the concurrent failure's `failed` entry masks it until
-	/// that expires.
+	/// `port` must be the port the attempt actually used: reading it back from the caches could
+	/// confirm HTTP/3 on a port the server never advertised, if a concurrent failure had cleared
+	/// them.
 	pub fn confirm_h3(&self, url: &reqwest::Url, port: u16) {
 		let Some(origin) = Self::origin_key(url) else {
 			return;
@@ -582,14 +563,9 @@ impl AltSvcCache {
 
 	/// Record an HTTP/3 attempt that was cancelled before producing an outcome.
 	///
-	/// This is weaker evidence than an error: the request never got to find out
-	/// whether HTTP/3 worked, so a single cancellation says nothing about the
-	/// origin. Only a sustained run of them demotes it, which keeps callers that
-	/// routinely abort healthy requests from disabling HTTP/3.
-	///
-	/// The window is a TTL measured from the *previous* strike, because moka
-	/// refreshes an entry's TTL on upsert. Strikes therefore have to arrive
-	/// within a window of each other, not within a fixed bucket.
+	/// Weaker evidence than an error, since the request never found out whether HTTP/3 worked, so
+	/// only a sustained run demotes the origin. Strikes have to arrive within a window of each
+	/// other rather than within a fixed bucket, moka refreshing an entry's TTL on upsert.
 	pub fn record_h3_cancellation(&self, url: &reqwest::Url) {
 		if self.cancel_strikes == 0 {
 			return;
@@ -616,13 +592,11 @@ impl AltSvcCache {
 		}
 	}
 
-	/// Forget the origin's run of failures, so the next one starts the backoff
-	/// from the base cooldown again.
+	/// Forget the origin's run of failures, so the next one starts the backoff from the base
+	/// cooldown again.
 	///
-	/// A cooldown still running is left alone. A confirmation racing a concurrent
-	/// failure must not unblock the origin that failure just blocked: the failure
-	/// is the more recent evidence about the path, and [`Self::confirm_h3`]
-	/// relies on its own entry being masked until the block lapses.
+	/// A cooldown still running is left alone: a confirmation racing a concurrent failure must not
+	/// unblock what that failure just blocked.
 	// spec:H3UP#failure-backoff
 	fn clear_failure_count(&self, origin: &str) {
 		let Some(entry) = self.failed.get(origin) else {
@@ -640,8 +614,7 @@ impl AltSvcCache {
 	/// Discard everything this cache learned by observing the network, keeping what it was told.
 	///
 	/// Confirmed origins are demoted so a probe re-proves them, and the failures, strikes, slow
-	/// markers and averages go entirely — they are the old path's. `advertised` and `hints` are
-	/// not observations, so both survive.
+	/// markers and averages go entirely. `advertised` and `hints` survive.
 	// spec:NETCHG
 	pub fn network_changed(&self) {
 		let now = Instant::now();
