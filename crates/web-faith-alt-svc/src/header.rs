@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use crate::cache::AltSvcAdvertisement;
 
-/// Read the first HTTP/3 alternative out of an `Alt-Svc` header value.
+/// Read the first HTTP/3 alternative service out of an `Alt-Svc` header value.
 pub fn parse_alt_svc_header(value: &str) -> Option<AltSvcAdvertisement> {
 	if value == "clear" {
 		return None;

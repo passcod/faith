@@ -1,15 +1,15 @@
 //! An HTTP/3 upgrade (via Alt-Svc primarily) mechanism for reqwest.
 //!
 //! An origin advertises HTTP/3 in an `Alt-Svc` header or an `HTTPS` DNS record. The alternative
-//! may be unreachable even so, and trying would unnecessarily fail and waste a request.
-//! [`AltSvcCache`] keeps the advertisements and decides, per origin, whether HTTP/3 is worth
-//! attempting.
+//! service may be unreachable even when advertised, and trying would unnecessarily fail and waste
+//! a request. [`AltSvcCache`] keeps the advertisements and decides, per origin, whether HTTP/3 is
+//! worth attempting.
 //!
 //! [`AltSvcMiddleware`] acts on that decision, in one of two shapes:
 //!
 //! - With an [`H3Prober`], advertisements are verified in the background and foreground requests
 //!   use HTTP/3 only once an origin is confirmed, so no user-visible request pays for discovering a
-//!   broken alternative.
+//!   broken alternative service.
 //! - Without one, the next foreground request is the verification, falling back to TCP if it does
 //!   not produce headers in time.
 //!
@@ -27,7 +27,7 @@
 //! let cache = AltSvcCache::new(AltSvcCacheConfig::default());
 //! let origin = Url::parse("https://example.com/").expect("a valid URL");
 //!
-//! // An advertisement says the alternative exists, not that it works, so it makes the origin
+//! // An advertisement says the alternative service exists, not that it works, so it makes the origin
 //! // worth probing rather than worth routing on.
 //! let advertised = parse_alt_svc_header(r#"h3=":443"; ma=86400"#).expect("h3 is advertised");
 //! cache.record_alt_svc(&origin, &advertised);

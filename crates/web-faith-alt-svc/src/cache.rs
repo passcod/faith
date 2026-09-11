@@ -13,13 +13,13 @@ pub struct AltSvcEntry {
 	pub expires: Instant,
 }
 
-/// An HTTP/3 alternative parsed out of an `Alt-Svc` header.
+/// An HTTP/3 alternative service parsed out of an `Alt-Svc` header.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AltSvcAdvertisement {
-	/// Host the alternative is on. Empty when the header omitted it, which per
+	/// Host the alternative service is on. Empty when the header omitted it, which per
 	/// RFC 7838 means the same host as the origin.
 	pub host: String,
-	/// Port the alternative is on.
+	/// Port the alternative service is on.
 	pub port: u16,
 	/// The `ma` parameter, if the header carried one.
 	pub max_age: Option<Duration>,
@@ -394,7 +394,7 @@ impl AltSvcCache {
 	/// derives the HTTP/3 connect target from the request URI's authority (see
 	/// <https://github.com/seanmonstar/reqwest/issues/1138>). `follow_advertised_port`
 	/// opts into doing it anyway by rewriting the request's port, which is not
-	/// standards-compliant — the request then carries the alternative's authority
+	/// standards-compliant — the request then carries the alternative service's authority
 	/// rather than the origin's.
 	fn port_actionable(&self, url: &reqwest::Url, entry_port: u16) -> bool {
 		self.follow_advertised_port || Some(entry_port) == url.port_or_known_default()
