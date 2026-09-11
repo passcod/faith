@@ -214,17 +214,12 @@ impl Agent {
 			.unwrap_or_else(|poisoned| poisoned.into_inner())
 	}
 
-	/// Build an agent from options, validating them into the recipe its clients are built from.
+	/// Close the agent, releasing its connection pool, DNS resolver, and background tasks without
+	/// waiting for the last clone to drop. Worth doing if you make many short-lived agents.
 	///
-
-	/// Close the agent, releasing its connection pool, DNS resolver, and any
-	/// background tasks it owns, rather than waiting for the garbage collector
-	/// to drop it. This is worth doing when you create many short-lived agents;
-	/// a single long-lived agent can just be left to the GC.
-	///
-	/// Requests already in flight run to completion. Any new request on a closed
-	/// agent throws a `Closed` error. Calling `close()` more than once is a
-	/// no-op. The cookie jar, if any, remains readable through [`Self::cookies`].
+	/// Requests already in flight run to completion. A request issued on a closed agent fails with
+	/// [`FaithErrorKind::Closed`](crate::FaithErrorKind::Closed). Calling it more than once is a
+	/// no-op, and the cookie jar, if any, stays readable through [`Self::cookies`].
 	pub fn close(&self) {
 		// Dropping the client releases the reqwest connection pool and the
 		// Hickory resolver task; the alt-svc cache goes with it. The raw client
@@ -340,13 +335,12 @@ impl Agent {
 		self.stats.snapshot()
 	}
 
-	/// Returns information on current connections open by this agent.
+	/// The connections this agent currently holds open.
 	///
-	/// Only tracks TCP connections currently (upstream limitation). Stats are updated once a second:
-	/// this makes it possible to track indicators over time to find the retransmission rate, for
-	/// example. The lost-packet count and delivery rate are only available on Linux. Some other
-	/// fields might also be missing depending on platform support; and no forward guarantees are made
-	/// on field availability. If the platform isn't supported at all, this will always return empty.
+	/// TCP only; QUIC connections are not visible here. Statistics refresh once a second, so sample
+	/// over time for rates such as retransmissions. Which fields are filled depends on the platform:
+	/// the lost-packet count and delivery rate are Linux-only, an unsupported platform reports an
+	/// empty list, and no field is guaranteed to stay available.
 	#[cfg(feature = "connection-tracking")]
 	pub fn connections(&self) -> Vec<ConnectionSnapshot> {
 		self.conn_tracker.snapshot()

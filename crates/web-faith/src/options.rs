@@ -30,7 +30,7 @@ fn secs(duration: std::time::Duration) -> u32 {
 	duration.as_secs().try_into().unwrap_or(u32::MAX)
 }
 
-/// Settings related to the HTTP cache. This is a nested object.
+/// Settings related to the HTTP cache.
 #[cfg(feature = "cache")]
 #[derive(bon::Builder, Clone, Debug, Default)]
 #[non_exhaustive]
@@ -43,10 +43,9 @@ pub struct CacheOptions {
 	///
 	/// Default: 10_000.
 	pub capacity: Option<u32>,
-	/// Default cache mode. This is the same as [`FetchOptions.cache`](#fetchoptionscache), and is used if
-	/// no cache mode is set on a request.
+	/// Default cache mode, used when a request sets none of its own.
 	///
-	/// Default: `"default"`.
+	/// Default: [`CacheMode::Default`].
 	pub mode: Option<CacheMode>,
 	/// If `cache.store: "disk"`, then this is the path at which the cache data is. Must be writeable.
 	///
@@ -79,7 +78,7 @@ pub struct DnsOverride {
 	pub addresses: Vec<String>,
 }
 
-/// Settings related to DNS. This is a nested object.
+/// Settings related to DNS.
 #[derive(bon::Builder, Clone, Debug, Default)]
 #[non_exhaustive]
 pub struct DnsOptions {
@@ -97,8 +96,8 @@ pub struct DnsOptions {
 	pub system: Option<bool>,
 	/// Override DNS resolution for specific domains. This takes effect even with `dns.system: true`.
 	///
-	/// Will throw if addresses are in invalid formats. You may provide a port number as part of the
-	/// address, it will default to port 0 otherwise, which will select the conventional port for the
+	/// Building the agent fails if an address is malformed. You may provide a port number as part of
+	/// the address, it will default to port 0 otherwise, which will select the conventional port for the
 	/// protocol in use (e.g. 80 for plaintext HTTP). If the URL passed to `fetch()` has an explicit port
 	/// number, that one will be used instead. Resolving a domain to an empty `addresses` array effectively
 	/// blocks that domain from this agent.
@@ -117,8 +116,8 @@ pub struct DnsOptions {
 	/// against the hostname; a bare-IP host authenticates against the address itself.
 	///
 	/// Servers are queried in order, a later one reached only once those before it fail. Setting
-	/// this replaces the system's servers, so no discovery runs. Throws if a URL is unparseable or
-	/// its scheme is not one of the above, and combining it with `dns.system` throws.
+	/// this replaces the system's servers, so no discovery runs. Building the agent fails if a URL is
+	/// unparseable, if its scheme is not one of the above, or if this is combined with `dns.system`.
 	///
 	/// Default: system discovery.
 	#[cfg(feature = "dns")]
@@ -217,7 +216,7 @@ pub struct Http3Hint {
 	pub port: u16,
 }
 
-/// Settings related to HTTP/3. This is a nested object.
+/// Settings related to HTTP/3.
 #[cfg(feature = "http3")]
 #[derive(bon::Builder, Clone, Debug, Default)]
 #[non_exhaustive]
@@ -457,7 +456,7 @@ pub struct Http3Options {
 	pub send_window: Option<u32>,
 }
 
-/// Settings related to HTTP/2. This is a nested object.
+/// Settings related to HTTP/2.
 #[derive(bon::Builder, Clone, Copy, Debug, Default)]
 #[non_exhaustive]
 pub struct Http2Options {
@@ -495,7 +494,7 @@ pub struct Http2Options {
 	pub adaptive_window: Option<bool>,
 }
 
-/// Settings related to HTTP flow control, shared by HTTP/2 and HTTP/3. This is a nested object.
+/// Settings related to HTTP flow control, shared by HTTP/2 and HTTP/3.
 #[derive(bon::Builder, Clone, Copy, Debug, Default)]
 #[non_exhaustive]
 pub struct FlowControlOptions {
@@ -525,7 +524,7 @@ pub struct FlowControlOptions {
 	pub connection_window: Option<u32>,
 }
 
-/// Settings related to the connection pool. This is a nested object.
+/// Settings related to the connection pool.
 #[derive(bon::Builder, Clone, Copy, Debug, Default)]
 #[non_exhaustive]
 pub struct PoolOptions {
@@ -537,11 +536,11 @@ pub struct PoolOptions {
 	/// The maximum amount of idle connections per host to allow in the pool. Connections will be closed
 	/// to keep the idle connections (per host) under that number.
 	///
-	/// Default: `null` (no limit).
+	/// Default: no limit.
 	pub max_idle_per_host: Option<u32>,
 }
 
-/// Switches that depart from standard behaviour on purpose. This is a nested object.
+/// Switches that depart from standard behaviour on purpose.
 ///
 /// Each quirk turns off a rule Faith otherwise upholds, in exchange for a capability the rule
 /// forbids. All of them are off by default, so an agent constructed with no options is
@@ -562,7 +561,7 @@ pub struct QuirksOptions {
 	pub h1_request_streaming: Option<bool>,
 }
 
-/// Timeouts for requests made with this agent. This is a nested object.
+/// Timeouts for requests made with this agent.
 #[derive(bon::Builder, Clone, Copy, Debug, Default)]
 #[non_exhaustive]
 pub struct TimeoutOptions {
@@ -589,7 +588,7 @@ pub struct TimeoutOptions {
 	pub total: Option<u32>,
 }
 
-/// Settings related to the connection pool. This is a nested object.
+/// Settings related to TLS.
 #[derive(bon::Builder, Clone, Debug, Default)]
 #[non_exhaustive]
 pub struct TlsOptions {
@@ -606,8 +605,8 @@ pub struct TlsOptions {
 	/// called mutual TLS or mTLS) authentication.
 	///
 	/// The input should contain a PEM encoded private key and at least one PEM encoded certificate. The
-	/// private key must be in RSA, SEC1 Elliptic Curve or PKCS#8 format. This is one of the few options
-	/// that will cause the `Agent` constructor to throw if the input is in the wrong format.
+	/// private key must be in RSA, SEC1 Elliptic Curve or PKCS#8 format. This is one of the few
+	/// options whose input is parsed at construction, so a malformed one fails the build.
 	#[builder(into)]
 	pub identity: Option<Vec<u8>>,
 	/// Disables plain-text HTTP.
@@ -619,8 +618,8 @@ pub struct TlsOptions {
 	///
 	/// This is mainly useful for connecting to servers with self-signed or private-CA
 	/// certificates, such as internal services or local test servers. This is one of the
-	/// few options that will cause the `Agent` constructor to throw if the input is in
-	/// the wrong format.
+	/// few options whose input is parsed at construction, so a malformed one fails the
+	/// build.
 	#[builder(with = |items: impl IntoIterator<Item = impl Into<Vec<u8>>>| items.into_iter().map(Into::into).collect())]
 	pub extra_roots: Option<Vec<Vec<u8>>>,
 }
@@ -639,26 +638,22 @@ pub struct TlsOptions {
 )]
 #[non_exhaustive]
 pub struct AgentOptions {
-	/// Settings related to the HTTP cache. This is a nested object.
+	/// Settings related to the HTTP cache.
 	#[cfg(feature = "cache")]
 	#[builder(with = |with: impl FnOnce(CacheOptionsBuilder) -> CacheOptions| with(CacheOptions::builder()))]
 	pub cache: Option<CacheOptions>,
-	/// Enable a persistent cookie store for the agent. Cookies received in responses will be preserved and
-	/// included in additional requests.
+	/// Keep a cookie jar on the agent, so cookies set by a response are sent on later requests.
 	///
-	/// `true` enables the store with the default limits; an options object enables it and tunes them,
-	/// so `{}` means the same as `true`.
+	/// [`CookieLimits::default()`] takes the default caps; its fields tune them, and
+	/// [`Agent::cookies`](crate::agent::Agent::cookies) reaches the jar itself.
 	///
-	/// Default: `false`.
-	///
-	/// You may use `agent.getCookie(url: string)` and `agent.addCookie(url: string, value: string)` to add
-	/// and retrieve cookies from the store.
+	/// Default: no jar.
 	#[cfg(feature = "cookies")]
 	pub cookies: Option<CookieLimits>,
-	/// Settings related to DNS. This is a nested object.
+	/// Settings related to DNS.
 	#[builder(with = |with: impl FnOnce(DnsOptionsBuilder) -> DnsOptions| with(DnsOptions::builder()))]
 	pub dns: Option<DnsOptions>,
-	/// Flow-control windows shared by HTTP/2 and HTTP/3. This is a nested object.
+	/// Flow-control windows shared by HTTP/2 and HTTP/3.
 	///
 	/// Setting these is the normal way to tune windows: one value applies to whichever protocol
 	/// a request negotiates, so throughput doesn't change when an origin upgrades from one to
@@ -673,10 +668,10 @@ pub struct AgentOptions {
 	/// Default: none.
 	#[builder(with = |items: impl IntoIterator<Item = Header>| items.into_iter().collect())]
 	pub headers: Option<Vec<Header>>,
-	/// Settings related to HTTP/2. This is a nested object.
+	/// Settings related to HTTP/2.
 	#[builder(with = |with: impl FnOnce(Http2OptionsBuilder) -> Http2Options| with(Http2Options::builder()))]
 	pub http2: Option<Http2Options>,
-	/// Settings related to HTTP/3. This is a nested object.
+	/// Settings related to HTTP/3.
 	#[cfg(feature = "http3")]
 	#[builder(with = |with: impl FnOnce(Http3OptionsBuilder) -> Http3Options| with(Http3Options::builder()))]
 	pub http3: Option<Http3Options>,
@@ -686,22 +681,22 @@ pub struct AgentOptions {
 	/// socket binds the IPv6 wildcard (`[::]`), which fails on hosts without usable IPv6 —
 	/// there, HTTP/3 silently falls back to TCP. Faith detects that case automatically and
 	/// binds `0.0.0.0` instead, so you normally don't need to set this; provide it only to
-	/// force a specific source address. Throws if the value does not parse as an IP address.
+	/// force a specific source address.
 	///
 	/// Default: unset (IPv6 wildcard for QUIC where available, else `0.0.0.0`).
 	pub local_address: Option<std::net::IpAddr>,
-	/// Settings related to the connection pool. This is a nested object.
+	/// Settings related to the connection pool.
 	#[builder(with = |with: impl FnOnce(PoolOptionsBuilder) -> PoolOptions| with(PoolOptions::builder()))]
 	pub pool: Option<PoolOptions>,
-	/// Switches that depart from standard behaviour on purpose. This is a nested object.
+	/// Switches that depart from standard behaviour on purpose.
 	#[builder(with = |with: impl FnOnce(QuirksOptionsBuilder) -> QuirksOptions| with(QuirksOptions::builder()))]
 	pub quirks: Option<QuirksOptions>,
 	/// Determines the behavior in case the server replies with a redirect status.
 	pub redirect: Option<RedirectPolicy>,
-	/// Timeouts for requests made with this agent. This is a nested object.
+	/// Timeouts for requests made with this agent.
 	#[builder(with = |with: impl FnOnce(TimeoutOptionsBuilder) -> TimeoutOptions| with(TimeoutOptions::builder()))]
 	pub timeout: Option<TimeoutOptions>,
-	/// Settings related to the connection pool. This is a nested object.
+	/// Settings related to TLS.
 	#[builder(with = |with: impl FnOnce(TlsOptionsBuilder) -> TlsOptions| with(TlsOptions::builder()))]
 	pub tls: Option<TlsOptions>,
 	/// Custom user agent string.

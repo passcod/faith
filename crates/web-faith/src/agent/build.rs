@@ -54,6 +54,8 @@ use crate::{client::H3UpgradeRecipe, options::Http3Congestion};
 use crate::client::install_https_sink;
 
 impl Agent {
+	/// Build an agent from options, validating them into the recipe its clients are built from.
+	///
 	/// This is what both surfaces land on, so the defaults a caller gets are settled here rather
 	/// than once per surface.
 	// spec:AGENT spec:NETCHG

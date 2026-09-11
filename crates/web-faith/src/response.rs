@@ -38,12 +38,11 @@ use crate::{
 use crate::integrity::{finish_integrity, integrity_checker, verify_integrity};
 
 /// What is known about the peer that sent a response.
-///
-/// - `address`: The IP address and port of the peer, if available.
-/// - `certificate`: When connected over HTTPS, this is the DER-encoded leaf certificate of the peer.
 #[derive(Debug)]
 pub struct PeerInformation {
+	/// The peer's address and port, where the connection could report one.
 	pub address: Option<SocketAddr>,
+	/// The peer's DER-encoded leaf certificate, for a response that arrived over HTTPS.
 	pub certificate: Option<Vec<u8>>,
 }
 
@@ -498,9 +497,9 @@ impl Response {
 		}
 	}
 
-	/// Ensures the body is converted to a SharedStream, returning a clone of it.
+	/// The body as a shared stream, converting it to one if it isn't already.
 	///
-	/// This allows multiple consumers (original + clones) to independently read the body.
+	/// Shared so a response and its clones read the same body.
 	pub fn ensure_stream(
 		&self,
 		body: &mut Body,
@@ -600,10 +599,9 @@ impl Response {
 		}
 	}
 
-	/// Underlying efficient response body fetcher.
+	/// Read the whole body as the chunks it arrived in, without copying them.
 	///
-	/// Unlike bytes() and co, this grabs all the chunks of the response but doesn't
-	/// copy them. Further processing is needed to obtain a `Vec<u8>` or whatever is wanted.
+	/// What [`Self::bytes`] and its siblings are built on.
 	pub async fn gather(&self) -> Result<Arc<[Bytes]>, FaithError> {
 		let Some(lock) = &self.body.body else {
 			return Ok(Default::default());
@@ -627,7 +625,7 @@ impl Response {
 		Ok(Arc::from(chunks.into_boxed_slice()))
 	}
 
-	/// gather() and then copy into one contiguous buffer
+	/// [`Self::gather`], then copy the chunks into one contiguous buffer.
 	pub async fn gather_contiguous(&self) -> Result<Vec<u8>, FaithError> {
 		let body = self.gather().await?;
 		let length = body.iter().map(|chunk| chunk.len()).sum();

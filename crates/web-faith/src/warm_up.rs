@@ -6,7 +6,7 @@
 use url::Url;
 
 // spec:WARM
-/// Extract the bare host from a a DNS prefetch argument, ignoring any scheme, port, or path, or
+/// Extract the bare host from a DNS prefetch argument, ignoring any scheme, port, or path, or
 /// `None` if there is no host to resolve. A DNS name carries none of those parts, so a fuller
 /// string is reduced to its host.
 pub fn extract_host(input: &str) -> Option<String> {
