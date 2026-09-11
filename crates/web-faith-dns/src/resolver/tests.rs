@@ -8,7 +8,7 @@ use super::{FaithResolver, StaleEntry};
 use crate::{settings::ResolverConfig, transport::ServerSpec};
 
 fn spec(input: &str) -> ServerSpec {
-	ServerSpec::parse(input).expect("valid server URL")
+	input.parse::<ServerSpec>().expect("valid server URL")
 }
 
 #[tokio::test]

@@ -1,5 +1,5 @@
 //! Resolver transports.
-use std::{fmt, net::IpAddr, sync::Arc};
+use std::{fmt, net::IpAddr, str::FromStr, sync::Arc};
 
 use hickory_resolver::config::{ConnectionConfig, NameServerConfig, ProtocolConfig};
 use url::{Host, Url};
@@ -76,8 +76,8 @@ pub(crate) enum ServerHost {
 
 /// One nameserver to query.
 ///
-/// Parsed from a server URL. A hostname host has no IP yet; that is resolved when the resolver is
-/// first used.
+/// Parsed from a server URL with [`FromStr`]. A hostname host has no IP yet; that is resolved when
+/// the resolver is first used.
 #[derive(Clone, Debug)]
 pub struct ServerSpec {
 	pub(crate) host: ServerHost,
@@ -90,9 +90,11 @@ pub struct ServerSpec {
 	cert_name: Option<String>,
 }
 
-impl ServerSpec {
-	/// Parse one nameserver URL, or return a message for an unparseable URL or unknown scheme.
-	pub fn parse(input: &str) -> Result<Self, String> {
+impl FromStr for ServerSpec {
+	/// A message describing what about the URL could not be parsed.
+	type Err = String;
+
+	fn from_str(input: &str) -> Result<Self, Self::Err> {
 		let url = Url::parse(input).map_err(|err| format!("{input:?}: {err}"))?;
 		let transport = Transport::from_scheme(url.scheme())
 			.ok_or_else(|| format!("{input:?}: unknown DNS transport scheme {:?}", url.scheme()))?;
@@ -122,7 +124,9 @@ impl ServerSpec {
 			cert_name,
 		})
 	}
+}
 
+impl ServerSpec {
 	/// The IP host, or `None` for a hostname host that still needs bootstrapping.
 	pub(crate) fn ip(&self) -> Option<IpAddr> {
 		match self.host {

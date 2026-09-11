@@ -34,13 +34,13 @@
 //! Consulting a named list of nameservers, in order:
 //!
 //! ```no_run
-//! use web_faith_dns::{FaithResolver, ResolverConfig, ServerSpec};
+//! use web_faith_dns::{FaithResolver, ResolverConfig};
 //!
 //! # async fn example() -> Result<(), String> {
 //! let resolver = FaithResolver::new(ResolverConfig {
 //!     servers: vec![
-//!         ServerSpec::parse("tls://1.1.1.1#cloudflare-dns.com")?,
-//!         ServerSpec::parse("udp://9.9.9.9")?,
+//!         "tls://1.1.1.1#cloudflare-dns.com".parse()?,
+//!         "udp://9.9.9.9".parse()?,
 //!     ],
 //!     ..Default::default()
 //! });
@@ -172,10 +172,6 @@ mod resolver;
 mod settings;
 mod transport;
 
-/// A domain name, re-exported from `hickory-resolver`.
-///
-/// [`ResolverConfig`]'s domain lists are built from these, so a caller needs no hickory dependency
-/// of its own.
 pub use hickory_resolver::proto::rr::Name;
 
 pub use https::{HttpsAdvertisement, HttpsSink};
