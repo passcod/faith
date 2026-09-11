@@ -12,16 +12,17 @@
 //!
 //! # Requests
 //!
-//! [`compress_buffer`] and [`compress_stream`] apply a coding to a request body, and
-//! [`layer_content_encoding`] names it in a `Content-Encoding` alongside anything the caller had
-//! already declared.
+//! - [`compress_buffer`] and [`compress_stream`] apply a coding to a request body.
+//! - [`layer_content_encoding`] names it in a `Content-Encoding`, alongside anything the caller had
+//!   already declared.
 //!
 //! # Responses
 //!
-//! [`AcceptEncoding`] is what a request advertised, and [`decision`] reads it against a response's
-//! headers to say which coding the body should be decoded under, if any. [`decode_stream`] wraps
-//! the body in that decoder, and [`strip_decoded_headers`] removes the headers that described the
-//! encoded bytes.
+//! - [`AcceptEncoding`] is what a request advertised.
+//! - [`decision`] reads it against a response's headers to say which coding the body should be
+//!   decoded under, if any.
+//! - [`decode_stream`] wraps the body in that decoder.
+//! - [`strip_decoded_headers`] removes the headers that described the encoded bytes.
 //!
 //! ```
 //! use http::{HeaderMap, HeaderValue};
