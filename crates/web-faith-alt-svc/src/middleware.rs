@@ -11,7 +11,7 @@ use reqwest_middleware::{Middleware, Next, Result};
 
 use crate::{cache::AltSvcCache, header::parse_alt_svc_header, prober::H3Prober};
 
-/// Recording the moment a response's headers arrived.
+/// The client's hook for when a response's headers arrive.
 ///
 /// The stamp belongs to the client, which puts it in the request's extensions; this layer is only
 /// the place that observes the arrival.

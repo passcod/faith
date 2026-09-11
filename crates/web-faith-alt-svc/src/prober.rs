@@ -3,7 +3,9 @@ use std::{sync::Arc, time::Duration};
 
 use crate::cache::AltSvcCache;
 
-/// Verifies advertised HTTP/3 endpoints in the background, so no foreground request waits on an
+/// HTTP probe to verify HTTP/3 service advertisements.
+///
+/// Verifies advertised endpoints in the background, so no foreground request waits on an
 /// unverified QUIC path.
 ///
 /// The probe is a real `HEAD /` at `Version::HTTP_3`, sent on the **raw** client rather than the
