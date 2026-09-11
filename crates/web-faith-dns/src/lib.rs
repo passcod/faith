@@ -29,27 +29,106 @@
 //! - The system's own DNS domain and search suffixes.
 //! - Anything listed in [`exempt_domains`](ResolverSettings::exempt_domains).
 //!
-//! # Beyond addresses
+//! # Examples
 //!
-//! - Lookups can also read a name's `HTTPS` record, which is how an origin advertises HTTP/3
-//!   before anything has connected to it.
-//! - An answer can be served stale while a fresh lookup runs behind it.
-//! - A [network change][FaithResolver::reset] discards what was learned from a network that no
-//!   longer exists, leaving the resolver usable.
+//! Consulting a named list of nameservers, in order:
+//!
+//! ```no_run
+//! use web_faith_dns::{FaithResolver, ResolverSettings, ServerSpec};
+//!
+//! # async fn example() -> Result<(), String> {
+//! let resolver = FaithResolver::new(ResolverSettings {
+//!     servers: vec![
+//!         ServerSpec::parse("tls://1.1.1.1#cloudflare-dns.com")?,
+//!         ServerSpec::parse("udp://9.9.9.9")?,
+//!     ],
+//!     ..Default::default()
+//! });
+//!
+//! resolver.prefetch("example.com").await;
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! Or from the system's own configuration:
 //!
 //! ```no_run
 //! use web_faith_dns::{FaithResolver, ResolverSettings};
 //!
 //! # async fn example() {
-//! // No servers named, so it configures itself from the operating system.
 //! let resolver = FaithResolver::new(ResolverSettings::default());
 //!
-//! // Warming is advisory and never fails; a later lookup reads the same cache.
 //! resolver.prefetch("example.com").await;
-//!
 //! for report in resolver.resolvers() {
 //!     println!("{} over {} ({})", report.address, report.transport, report.source);
 //! }
+//! # }
+//! ```
+//!
+//! # Beyond addresses
+//!
+//! Lookups can also read a queried name's `HTTPS` record. This is used to resolve an HTTP/3 server
+//! address without first needing to connect to the HTTP/1 server.
+//!
+//! ```no_run
+//! use std::sync::Arc;
+//!
+//! use web_faith_dns::{FaithResolver, HttpsAdvertisement, HttpsSink, ResolverSettings};
+//!
+//! struct Upgrades;
+//!
+//! impl HttpsSink for Upgrades {
+//!     fn wants(&self, _host: &str) -> bool {
+//!         true
+//!     }
+//!
+//!     fn record(&self, host: &str, advertisement: HttpsAdvertisement) {
+//!         println!("{host} advertises HTTP/3 on port {:?}", advertisement.port);
+//!     }
+//! }
+//!
+//! # async fn example() {
+//! let resolver = FaithResolver::new(ResolverSettings::default());
+//! resolver.set_https_sink(Arc::new(Upgrades));
+//!
+//! // Any lookup from here also asks for the `HTTPS` record.
+//! resolver.prefetch("example.com").await;
+//! # }
+//! ```
+//!
+//! To avoid delays and momentary outages, the resolver will answer a query with a stale entry from
+//! cache while looking up the updated answer in the background for future queries.
+//!
+//! ```no_run
+//! use std::time::Duration;
+//!
+//! use web_faith_dns::{FaithResolver, ResolverSettings};
+//!
+//! # async fn example() {
+//! let resolver = FaithResolver::new(ResolverSettings {
+//!     serve_stale: true,
+//!     max_stale: Duration::from_secs(3600),
+//!     ..Default::default()
+//! });
+//!
+//! resolver.prefetch("example.com").await;
+//! // Whether the next lookup would be answered from an expired entry.
+//! println!("serving stale: {}", resolver.served_stale("example.com"));
+//! # }
+//! ```
+//!
+//! The resolver can be instructed to clear its caches and other learned information at runtime,
+//! for example to handle network-change events.
+//!
+//! ```no_run
+//! use web_faith_dns::{FaithResolver, ResolverSettings};
+//!
+//! # async fn example() {
+//! let resolver = FaithResolver::new(ResolverSettings::default());
+//! resolver.prefetch("example.com").await;
+//!
+//! // The interface changed, so what was learned about the old network goes.
+//! resolver.reset();
 //! # }
 //! ```
 //!
