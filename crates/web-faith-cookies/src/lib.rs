@@ -12,16 +12,6 @@
 //!   trustworthy" origin browsers accept. A `__Host-` cookie a browser would keep on
 //!   `http://localhost` is rejected here.
 //!
-//! What it does keep is the classic storage and matching rules, plus the 6265bis additions:
-//!
-//! - The `__Host-` and `__Secure-` name prefixes, which bind a cookie to the exact host that set
-//!   it and to a secure transport.
-//! - A limit on how far ahead a cookie may expire, so a server cannot claim a decade.
-//! - Limits on the size of one cookie, and on how many are kept per host and in total.
-//!
-//! Every rule applies when a cookie is stored, not when one is sent, so the limits bound real
-//! memory and a cookie inserted by hand meets the same rules as one from a `Set-Cookie` header.
-//!
 //! # Example
 //!
 //! ```
@@ -49,7 +39,7 @@
 
 // spec:COOK
 
-use std::{collections::HashMap, sync::RwLock, time::Duration};
+use std::{collections::HashMap, fmt, sync::RwLock, time::Duration};
 
 use cookie::{Cookie as RawCookie, Expiration};
 use cookie_store::{Cookie as StoredCookie, CookieStore as Store, StoreAction};
@@ -115,9 +105,6 @@ fn is_secure(url: &Url) -> bool {
 }
 
 /// A cookie jar.
-///
-/// Every rule is applied on the way in, so the limits bound real memory and a cookie inserted by
-/// hand meets the same rules as one from a `Set-Cookie` header.
 #[derive(Debug)]
 pub struct FaithJar {
 	limits: CookieLimits,
@@ -134,7 +121,7 @@ struct Inner {
 }
 
 impl FaithJar {
-	/// An empty jar enforcing `limits`.
+	/// Create a new empty jar.
 	pub fn new(limits: CookieLimits) -> Self {
 		Self {
 			limits,
@@ -142,42 +129,63 @@ impl FaithJar {
 		}
 	}
 
-	/// Store one cookie received from `url`, given as a `Set-Cookie` value.
-	///
-	/// A cookie that does not parse, or that a storage rule rejects, is dropped silently.
-	pub fn add_cookie_str(&self, cookie: &str, url: &Url) {
-		let Ok(raw) = RawCookie::parse(cookie.to_owned()) else {
-			return;
-		};
-
-		self.store_one(raw, url);
+	/// Store one cookie against `url`, given as a `Set-Cookie` value.
+	pub fn add_cookie_str(&self, cookie: &str, url: &Url) -> Result<(), CookieRejected> {
+		let raw = RawCookie::parse(cookie.to_owned()).map_err(|_| CookieRejected::Malformed)?;
+		self.store_one(raw, url)
 	}
 
 	/// Gate a cookie on the bis rules, then hand it to the classic storage model.
-	fn store_one(&self, raw: RawCookie<'static>, url: &Url) {
-		let Some(raw) = self.sanitise(raw, url) else {
-			return;
-		};
-
+	fn store_one(&self, raw: RawCookie<'static>, url: &Url) -> Result<(), CookieRejected> {
+		let raw = self.sanitise(raw, url)?;
 		let mut inner = self.inner.write().unwrap();
 		inner.insert(&raw, url, &self.limits);
+		Ok(())
 	}
 
 	/// Apply the rules that decide whether a cookie is storable at all, and reduce an over-long
-	/// expiry to the limit. Returns `None` for a cookie that is rejected outright.
-	fn sanitise(&self, mut raw: RawCookie<'static>, url: &Url) -> Option<RawCookie<'static>> {
+	/// expiry to the limit.
+	fn sanitise(
+		&self,
+		mut raw: RawCookie<'static>,
+		url: &Url,
+	) -> Result<RawCookie<'static>, CookieRejected> {
 		if raw.name().len() + raw.value().len() > self.limits.max_size {
-			return None;
+			return Err(CookieRejected::TooLarge);
 		}
 
 		if !prefix_allows(&raw, url) {
-			return None;
+			return Err(CookieRejected::PrefixUnmet);
 		}
 
 		clamp_expiry(&mut raw, self.limits.max_age);
-		Some(raw)
+		Ok(raw)
 	}
 }
+
+/// Why a cookie was not stored.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum CookieRejected {
+	/// The value did not parse as a `Set-Cookie`.
+	Malformed,
+	/// Name plus value exceeded [`CookieLimits::max_size`].
+	TooLarge,
+	/// A `__Host-` or `__Secure-` name prefix's requirements were not met.
+	PrefixUnmet,
+}
+
+impl fmt::Display for CookieRejected {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		f.write_str(match self {
+			Self::Malformed => "the cookie did not parse",
+			Self::TooLarge => "the cookie is over the size limit",
+			Self::PrefixUnmet => "the cookie's name prefix requires more than it carries",
+		})
+	}
+}
+
+impl std::error::Error for CookieRejected {}
 
 /// Whether a `__Host-` or `__Secure-` name prefix permits this cookie to be stored.
 ///
@@ -332,7 +340,7 @@ impl FaithJar {
 				continue;
 			};
 
-			self.store_one(raw, url);
+			let _ = self.store_one(raw, url);
 		}
 	}
 
@@ -396,7 +404,8 @@ mod tests {
 	#[test]
 	fn host_prefix_accepted_when_fully_qualified() {
 		let jar = jar();
-		jar.add_cookie_str("__Host-a=1; Secure; Path=/", &url("https://example.com/"));
+		jar.add_cookie_str("__Host-a=1; Secure; Path=/", &url("https://example.com/"))
+			.expect("the cookie is stored");
 		assert_eq!(
 			sent(&jar, "https://example.com/"),
 			Some("__Host-a=1".into())
@@ -406,23 +415,32 @@ mod tests {
 	#[test]
 	fn host_prefix_rejected_without_secure_attribute() {
 		let jar = jar();
-		jar.add_cookie_str("__Host-a=1; Path=/", &url("https://example.com/"));
+		assert_eq!(
+			jar.add_cookie_str("__Host-a=1; Path=/", &url("https://example.com/")),
+			Err(CookieRejected::PrefixUnmet)
+		);
 		assert_eq!(sent(&jar, "https://example.com/"), None);
 	}
 
 	#[test]
 	fn host_prefix_rejected_over_insecure_transport() {
 		let jar = jar();
-		jar.add_cookie_str("__Host-a=1; Secure; Path=/", &url("http://example.com/"));
+		assert_eq!(
+			jar.add_cookie_str("__Host-a=1; Secure; Path=/", &url("http://example.com/")),
+			Err(CookieRejected::PrefixUnmet)
+		);
 		assert_eq!(sent(&jar, "http://example.com/"), None);
 	}
 
 	#[test]
 	fn host_prefix_rejected_with_domain_attribute() {
 		let jar = jar();
-		jar.add_cookie_str(
-			"__Host-a=1; Secure; Path=/; Domain=example.com",
-			&url("https://example.com/"),
+		assert_eq!(
+			jar.add_cookie_str(
+				"__Host-a=1; Secure; Path=/; Domain=example.com",
+				&url("https://example.com/"),
+			),
+			Err(CookieRejected::PrefixUnmet)
 		);
 		assert_eq!(sent(&jar, "https://example.com/"), None);
 	}
@@ -430,9 +448,12 @@ mod tests {
 	#[test]
 	fn host_prefix_rejected_with_non_root_path() {
 		let jar = jar();
-		jar.add_cookie_str(
-			"__Host-a=1; Secure; Path=/app",
-			&url("https://example.com/app"),
+		assert_eq!(
+			jar.add_cookie_str(
+				"__Host-a=1; Secure; Path=/app",
+				&url("https://example.com/app"),
+			),
+			Err(CookieRejected::PrefixUnmet)
 		);
 		assert_eq!(sent(&jar, "https://example.com/app"), None);
 	}
@@ -440,14 +461,18 @@ mod tests {
 	#[test]
 	fn host_prefix_rejected_without_path_attribute() {
 		let jar = jar();
-		jar.add_cookie_str("__Host-a=1; Secure", &url("https://example.com/"));
+		assert_eq!(
+			jar.add_cookie_str("__Host-a=1; Secure", &url("https://example.com/")),
+			Err(CookieRejected::PrefixUnmet)
+		);
 		assert_eq!(sent(&jar, "https://example.com/"), None);
 	}
 
 	#[test]
 	fn secure_prefix_accepted_with_secure_attribute() {
 		let jar = jar();
-		jar.add_cookie_str("__Secure-a=1; Secure", &url("https://example.com/"));
+		jar.add_cookie_str("__Secure-a=1; Secure", &url("https://example.com/"))
+			.expect("the cookie is stored");
 		assert_eq!(
 			sent(&jar, "https://example.com/"),
 			Some("__Secure-a=1".into())
@@ -460,7 +485,8 @@ mod tests {
 		jar.add_cookie_str(
 			"__Secure-a=1; Secure; Path=/app; Domain=example.com",
 			&url("https://example.com/app"),
-		);
+		)
+		.expect("the cookie is stored");
 		assert_eq!(
 			sent(&jar, "https://sub.example.com/app"),
 			Some("__Secure-a=1".into())
@@ -470,14 +496,20 @@ mod tests {
 	#[test]
 	fn secure_prefix_rejected_without_secure_attribute() {
 		let jar = jar();
-		jar.add_cookie_str("__Secure-a=1", &url("https://example.com/"));
+		assert_eq!(
+			jar.add_cookie_str("__Secure-a=1", &url("https://example.com/")),
+			Err(CookieRejected::PrefixUnmet)
+		);
 		assert_eq!(sent(&jar, "https://example.com/"), None);
 	}
 
 	#[test]
 	fn secure_prefix_rejected_over_insecure_transport() {
 		let jar = jar();
-		jar.add_cookie_str("__Secure-a=1; Secure", &url("http://example.com/"));
+		assert_eq!(
+			jar.add_cookie_str("__Secure-a=1; Secure", &url("http://example.com/")),
+			Err(CookieRejected::PrefixUnmet)
+		);
 		assert_eq!(sent(&jar, "http://example.com/"), None);
 	}
 
@@ -486,8 +518,10 @@ mod tests {
 		let jar = jar();
 		// Differing in case, these carry no prefix requirement at all, so they store as ordinary
 		// cookies over an insecure transport.
-		jar.add_cookie_str("__host-a=1", &url("http://example.com/"));
-		jar.add_cookie_str("__SECURE-b=2", &url("http://example.com/"));
+		jar.add_cookie_str("__host-a=1", &url("http://example.com/"))
+			.expect("the cookie is stored");
+		jar.add_cookie_str("__SECURE-b=2", &url("http://example.com/"))
+			.expect("the cookie is stored");
 
 		let sent = sent(&jar, "http://example.com/").unwrap();
 		assert!(sent.contains("__host-a=1"), "{sent}");
@@ -497,7 +531,8 @@ mod tests {
 	#[test]
 	fn unprefixed_cookies_are_unaffected() {
 		let jar = jar();
-		jar.add_cookie_str("a=1", &url("http://example.com/"));
+		jar.add_cookie_str("a=1", &url("http://example.com/"))
+			.expect("the cookie is stored");
 		assert_eq!(sent(&jar, "http://example.com/"), Some("a=1".into()));
 	}
 
@@ -510,7 +545,8 @@ mod tests {
 		jar.add_cookie_str(
 			&format!("a=1; Max-Age={over}"),
 			&url("https://example.com/"),
-		);
+		)
+		.expect("the cookie is stored");
 
 		let inner = jar.inner.read().unwrap();
 		let cookie = inner.store.get("example.com", "/", "a").unwrap();
@@ -527,7 +563,8 @@ mod tests {
 		jar.add_cookie_str(
 			"a=1; Expires=Fri, 31 Dec 9999 23:59:59 GMT",
 			&url("https://example.com/"),
-		);
+		)
+		.expect("the cookie is stored");
 
 		let inner = jar.inner.read().unwrap();
 		let cookie = inner.store.get("example.com", "/", "a").unwrap();
@@ -541,7 +578,8 @@ mod tests {
 	#[test]
 	fn shorter_expiry_is_left_alone() {
 		let jar = jar();
-		jar.add_cookie_str("a=1; Max-Age=60", &url("https://example.com/"));
+		jar.add_cookie_str("a=1; Max-Age=60", &url("https://example.com/"))
+			.expect("the cookie is stored");
 
 		let inner = jar.inner.read().unwrap();
 		let cookie = inner.store.get("example.com", "/", "a").unwrap();
@@ -552,7 +590,8 @@ mod tests {
 	#[test]
 	fn session_cookie_stays_a_session_cookie() {
 		let jar = jar();
-		jar.add_cookie_str("a=1", &url("https://example.com/"));
+		jar.add_cookie_str("a=1", &url("https://example.com/"))
+			.expect("the cookie is stored");
 
 		let inner = jar.inner.read().unwrap();
 		let cookie = inner.store.get("example.com", "/", "a").unwrap();
@@ -567,7 +606,8 @@ mod tests {
 		jar.add_cookie_str(
 			"a=1; Max-Age=60; Expires=Fri, 31 Dec 9999 23:59:59 GMT",
 			&url("https://example.com/"),
-		);
+		)
+		.expect("the cookie is stored");
 
 		let inner = jar.inner.read().unwrap();
 		let cookie = inner.store.get("example.com", "/", "a").unwrap();
@@ -578,10 +618,12 @@ mod tests {
 	fn expiring_a_cookie_still_works() {
 		// A server removes a cookie by resending it already expired; the limit must not get in the way.
 		let jar = jar();
-		jar.add_cookie_str("a=1", &url("https://example.com/"));
+		jar.add_cookie_str("a=1", &url("https://example.com/"))
+			.expect("the cookie is stored");
 		assert_eq!(sent(&jar, "https://example.com/"), Some("a=1".into()));
 
-		jar.add_cookie_str("a=1; Max-Age=0", &url("https://example.com/"));
+		jar.add_cookie_str("a=1; Max-Age=0", &url("https://example.com/"))
+			.expect("the cookie is stored");
 		assert_eq!(sent(&jar, "https://example.com/"), None);
 	}
 
@@ -591,7 +633,8 @@ mod tests {
 			max_age: Duration::from_secs(60),
 			..Default::default()
 		});
-		jar.add_cookie_str("a=1; Max-Age=86400", &url("https://example.com/"));
+		jar.add_cookie_str("a=1; Max-Age=86400", &url("https://example.com/"))
+			.expect("the cookie is stored");
 
 		let inner = jar.inner.read().unwrap();
 		let cookie = inner.store.get("example.com", "/", "a").unwrap();
@@ -604,7 +647,7 @@ mod tests {
 	fn oversized_cookie_is_rejected() {
 		let jar = jar();
 		let value = "x".repeat(DEFAULT_MAX_SIZE);
-		jar.add_cookie_str(&format!("a={value}"), &url("https://example.com/"));
+		let _ = jar.add_cookie_str(&format!("a={value}"), &url("https://example.com/"));
 		assert_eq!(sent(&jar, "https://example.com/"), None);
 	}
 
@@ -612,7 +655,7 @@ mod tests {
 	fn cookie_at_exactly_the_size_cap_is_stored() {
 		let jar = jar();
 		let value = "x".repeat(DEFAULT_MAX_SIZE - 1);
-		jar.add_cookie_str(&format!("a={value}"), &url("https://example.com/"));
+		let _ = jar.add_cookie_str(&format!("a={value}"), &url("https://example.com/"));
 		assert_eq!(stored_count(&jar), 1);
 	}
 
@@ -623,10 +666,14 @@ mod tests {
 			..Default::default()
 		});
 		// The value alone is under the limit; with the name it is over.
-		jar.add_cookie_str("name=1234567", &url("https://example.com/"));
+		assert_eq!(
+			jar.add_cookie_str("name=1234567", &url("https://example.com/")),
+			Err(CookieRejected::TooLarge)
+		);
 		assert_eq!(sent(&jar, "https://example.com/"), None);
 
-		jar.add_cookie_str("name=123456", &url("https://example.com/"));
+		jar.add_cookie_str("name=123456", &url("https://example.com/"))
+			.expect("the cookie is stored");
 		assert_eq!(
 			sent(&jar, "https://example.com/"),
 			Some("name=123456".into())
@@ -642,7 +689,8 @@ mod tests {
 		jar.add_cookie_str(
 			"name=12345; Path=/; Secure; HttpOnly",
 			&url("https://example.com/"),
-		);
+		)
+		.expect("the cookie is stored");
 		assert_eq!(stored_count(&jar), 1);
 	}
 
@@ -655,7 +703,8 @@ mod tests {
 			..Default::default()
 		});
 		for n in 0..5 {
-			jar.add_cookie_str(&format!("c{n}=1"), &url("https://example.com/"));
+			jar.add_cookie_str(&format!("c{n}=1"), &url("https://example.com/"))
+				.expect("the cookie is stored");
 		}
 
 		let sent = sent(&jar, "https://example.com/").unwrap();
@@ -675,8 +724,10 @@ mod tests {
 			..Default::default()
 		});
 		for n in 0..3 {
-			jar.add_cookie_str(&format!("c{n}=1"), &url("https://one.example/"));
-			jar.add_cookie_str(&format!("c{n}=1"), &url("https://two.example/"));
+			jar.add_cookie_str(&format!("c{n}=1"), &url("https://one.example/"))
+				.expect("the cookie is stored");
+			jar.add_cookie_str(&format!("c{n}=1"), &url("https://two.example/"))
+				.expect("the cookie is stored");
 		}
 
 		assert_eq!(stored_count(&jar), 4, "each domain keeps its own allowance");
@@ -688,12 +739,16 @@ mod tests {
 			max_per_host: 2,
 			..Default::default()
 		});
-		jar.add_cookie_str("a=1", &url("https://example.com/"));
-		jar.add_cookie_str("b=1", &url("https://example.com/"));
+		jar.add_cookie_str("a=1", &url("https://example.com/"))
+			.expect("the cookie is stored");
+		jar.add_cookie_str("b=1", &url("https://example.com/"))
+			.expect("the cookie is stored");
 		// Rewriting `a` must not make it younger than `b`, else a session cookie refreshed on every
 		// response would evict everything else in turn.
-		jar.add_cookie_str("a=2", &url("https://example.com/"));
-		jar.add_cookie_str("c=1", &url("https://example.com/"));
+		jar.add_cookie_str("a=2", &url("https://example.com/"))
+			.expect("the cookie is stored");
+		jar.add_cookie_str("c=1", &url("https://example.com/"))
+			.expect("the cookie is stored");
 
 		let sent = sent(&jar, "https://example.com/").unwrap();
 		assert!(
@@ -711,14 +766,18 @@ mod tests {
 			..Default::default()
 		});
 		// Two that die a second from now, then two that outlive them.
-		jar.add_cookie_str("dead1=1; Max-Age=1", &url("https://example.com/"));
-		jar.add_cookie_str("dead2=1; Max-Age=1", &url("https://example.com/"));
-		jar.add_cookie_str("live1=1", &url("https://example.com/"));
+		jar.add_cookie_str("dead1=1; Max-Age=1", &url("https://example.com/"))
+			.expect("the cookie is stored");
+		jar.add_cookie_str("dead2=1; Max-Age=1", &url("https://example.com/"))
+			.expect("the cookie is stored");
+		jar.add_cookie_str("live1=1", &url("https://example.com/"))
+			.expect("the cookie is stored");
 
 		std::thread::sleep(Duration::from_millis(1100));
 
 		// Storing this exceeds the limit; the two dead cookies go and `live1` survives.
-		jar.add_cookie_str("live2=1", &url("https://example.com/"));
+		jar.add_cookie_str("live2=1", &url("https://example.com/"))
+			.expect("the cookie is stored");
 
 		let sent = sent(&jar, "https://example.com/").unwrap();
 		assert!(sent.contains("live1=1"), "{sent}");
@@ -734,7 +793,8 @@ mod tests {
 			..Default::default()
 		});
 		for n in 0..10 {
-			jar.add_cookie_str("a=1", &url(&format!("https://host{n}.example/")));
+			jar.add_cookie_str("a=1", &url(&format!("https://host{n}.example/")))
+				.expect("the cookie is stored");
 		}
 
 		assert_eq!(stored_count(&jar), 5);
@@ -759,7 +819,8 @@ mod tests {
 			jar.add_cookie_str(
 				&format!("c{n}=1; Domain=example.com"),
 				&url("https://example.com/"),
-			);
+			)
+			.expect("the cookie is stored");
 		}
 
 		let sent = sent(&jar, "https://www.example.com/").unwrap();
@@ -774,7 +835,8 @@ mod tests {
 			max_per_host: 0,
 			..Default::default()
 		});
-		jar.add_cookie_str("a=1", &url("https://example.com/"));
+		jar.add_cookie_str("a=1", &url("https://example.com/"))
+			.expect("the cookie is stored");
 		assert_eq!(sent(&jar, "https://example.com/"), None);
 	}
 
@@ -783,7 +845,8 @@ mod tests {
 	#[test]
 	fn cookies_are_scoped_to_their_domain() {
 		let jar = jar();
-		jar.add_cookie_str("a=1", &url("https://example.com/"));
+		jar.add_cookie_str("a=1", &url("https://example.com/"))
+			.expect("the cookie is stored");
 		assert_eq!(sent(&jar, "https://elsewhere.example/"), None);
 	}
 
@@ -803,9 +866,12 @@ mod tests {
 	}
 
 	#[test]
-	fn unparseable_cookies_are_dropped_silently() {
+	fn an_unparseable_cookie_is_refused() {
 		let jar = jar();
-		jar.add_cookie_str("", &url("https://example.com/"));
+		assert_eq!(
+			jar.add_cookie_str("", &url("https://example.com/")),
+			Err(CookieRejected::Malformed)
+		);
 		assert_eq!(sent(&jar, "https://example.com/"), None);
 	}
 }

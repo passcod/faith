@@ -345,7 +345,8 @@ impl Agent {
 			return;
 		};
 
-		jar.add_cookie_str(&cookie, &url);
+		// The Node surface takes an insert as a no-op on failure (spec:COOK).
+		let _ = jar.add_cookie_str(&cookie, &url);
 	}
 
 	/// Retrieve a cookie from the store.
