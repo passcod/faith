@@ -18,7 +18,7 @@ pub struct HttpsAdvertisement {
 	pub ttl: Duration,
 }
 
-/// Where an `HTTPS` record's advertisement goes once the resolver has read one.
+/// Where an `HTTPS` record's advertisement goes.
 ///
 /// The resolver cannot own the HTTP/3 upgrade cache directly: that cache is built after the
 /// resolver, and the prober holds a client which holds the resolver in turn. The caller installs

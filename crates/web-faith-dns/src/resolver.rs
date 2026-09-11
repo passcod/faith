@@ -87,7 +87,10 @@ struct Inner {
 	https_sink: Mutex<Option<Arc<dyn HttpsSink>>>,
 }
 
-/// A hickory resolver Faith owns, shared between a client's request path and [`FaithResolver::prefetch`].
+/// A caching DNS resolver.
+///
+/// One resolver and one cache behind both the request path it is installed on and
+/// [`Self::prefetch`], so a name warmed ahead of time is already there when a request looks it up.
 #[derive(Clone)]
 pub struct FaithResolver {
 	inner: Arc<Inner>,

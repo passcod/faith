@@ -7,7 +7,7 @@ use url::{Host, Url};
 /// The default DoH/DoQ query path, used when a `https://`/`h3://` server URL supplies none.
 const DEFAULT_DNS_QUERY_PATH: &str = "/dns-query";
 
-/// The transport Faith speaks to a resolver, chosen by a server URL's scheme.
+/// A transport to reach a nameserver over, chosen by a server URL's scheme.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Transport {
 	/// Plaintext DNS over UDP, port 53. `udp://`.
