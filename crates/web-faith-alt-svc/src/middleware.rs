@@ -60,7 +60,16 @@ impl Drop for H3AttemptGuard {
 	}
 }
 
-/// The Alt-Svc layer, which upgrades an origin to HTTP/3 once it advertises one.
+/// A reqwest middleware which acts on the [`AltSvcCache`]'s decision, routing a request over
+/// HTTP/3 where its origin is worth attempting.
+///
+/// Comes in two flavours, depending on whether you want to do background probes (with
+/// [`H3Prober`]) or not. With, advertisements are verified in the background and foreground
+/// requests use HTTP/3 only once an origin is confirmed; without, the next foreground request is
+/// itself the verification, falling back to TCP if it does not produce headers in time.
+///
+/// It also monitors connections and demotes or promotes origins between QUIC and TCP, on failures,
+/// on the QUIC path becoming noticeably slower than the TCP one, and after an exponential cooldown.
 ///
 /// `S` is the client's arrival stamp, which this marks when a response's headers land; see
 /// [`ArrivalStamp`].
@@ -110,8 +119,8 @@ impl<S: ArrivalStamp> AltSvcMiddleware<S> {
 		}
 	}
 
-	#[allow(dead_code)]
 	/// The store this layer routes on.
+	#[allow(dead_code)]
 	pub fn cache(&self) -> &Arc<AltSvcCache> {
 		&self.cache
 	}

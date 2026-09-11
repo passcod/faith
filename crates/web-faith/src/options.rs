@@ -67,9 +67,9 @@ pub struct CacheOptions {
 	pub shared: Option<bool>,
 }
 
+/// Where the HTTP cache keeps its entries.
 #[cfg(feature = "cache")]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-/// Where the HTTP cache keeps its entries.
 pub enum CacheStore {
 	/// On disk, at `cache.path`.
 	Disk,
@@ -78,15 +78,15 @@ pub enum CacheStore {
 	Memory,
 }
 
+/// A fixed set of addresses for one domain.
 #[derive(bon::Builder, Clone, Debug, Default)]
 #[non_exhaustive]
-/// A fixed set of addresses for one domain.
 pub struct DnsOverride {
-	#[builder(into)]
 	/// The domain to override.
+	#[builder(into)]
 	pub domain: String,
-	#[builder(with = |items: impl IntoIterator<Item = impl Into<String>>| items.into_iter().map(Into::into).collect())]
 	/// The addresses to resolve it to. Empty blocks the domain.
+	#[builder(with = |items: impl IntoIterator<Item = impl Into<String>>| items.into_iter().map(Into::into).collect())]
 	pub addresses: Vec<String>,
 }
 
@@ -199,22 +199,22 @@ pub struct DnsOptions {
 #[derive(bon::Builder, Clone, Debug, Default)]
 #[non_exhaustive]
 pub struct Header {
-	#[builder(into)]
 	/// The header name.
-	pub name: String,
 	#[builder(into)]
+	pub name: String,
 	/// The header value.
+	#[builder(into)]
 	pub value: String,
 	/// Whether to mark the header sensitive, keeping it out of logs and HPACK's index.
 	pub sensitive: Option<bool>,
 }
 
+/// The QUIC congestion-control algorithm.
 #[cfg(feature = "http3")]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-/// The QUIC congestion-control algorithm.
 pub enum Http3Congestion {
-	#[default]
 	/// CUBIC, as the Linux TCP stack uses. Fair, and the default.
+	#[default]
 	Cubic,
 
 	/// BBRv1, which maximises bandwidth use and ignores packet loss. See `http3.congestion`.
@@ -640,6 +640,7 @@ pub struct TlsOptions {
 	pub extra_roots: Option<Vec<Vec<u8>>>,
 }
 
+/// Everything an agent can be configured with.
 #[derive(bon::Builder, Clone, Debug, Default)]
 #[builder(
 	builder_type(
@@ -656,7 +657,6 @@ pub struct TlsOptions {
 	state_mod(vis = "pub")
 )]
 #[non_exhaustive]
-/// Everything an agent can be configured with.
 pub struct AgentOptions {
 	/// Settings related to the HTTP cache.
 	#[cfg(feature = "cache")]

@@ -5,10 +5,10 @@
 
 use url::Url;
 
-// spec:WARM
 /// Extract the bare host from a DNS prefetch argument, ignoring any scheme, port, or path, or
 /// `None` if there is no host to resolve. A DNS name carries none of those parts, so a fuller
 /// string is reduced to its host.
+// spec:WARM
 pub fn extract_host(input: &str) -> Option<String> {
 	// A string that already spells a scheme is read as the URL it is; anything else is the
 	// bare-host case, where a name is not a URL on its own and giving it an authority makes it

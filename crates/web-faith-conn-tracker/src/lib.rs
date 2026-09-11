@@ -54,8 +54,8 @@ use moka::Expiry;
 use moka::{ops::compute::Op, sync::Cache};
 use tokio::{spawn, task::AbortHandle, time::sleep};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 /// The address pair identifying one connection.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ConnectionKey {
 	/// This end of the connection.
 	pub local_addr: SocketAddr,
@@ -110,12 +110,12 @@ impl Expiry<ConnectionKey, TrackedConnection> for ExpireAfterTimeout {
 	}
 }
 
-#[derive(Debug, Clone, Copy, Default)]
-#[non_exhaustive]
 /// The kernel's view of one TCP connection.
 ///
 /// Which fields are populated depends on the platform, and none is guaranteed to keep being
 /// populated across releases.
+#[derive(Debug, Clone, Copy, Default)]
+#[non_exhaustive]
 pub struct TcpStats {
 	/// Smoothed round-trip time, in microseconds.
 	pub rtt_us: u32,

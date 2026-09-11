@@ -25,8 +25,8 @@ pub enum RequestBody {
 /// The settings a request carries beyond its method, URL, and body.
 #[derive(Clone, Debug, Default)]
 pub struct RequestOptions {
-	#[cfg(feature = "cache")]
 	/// How the HTTP cache is consulted.
+	#[cfg(feature = "cache")]
 	pub cache: CacheMode,
 	/// A coding to compress the body in, named by its wire token.
 	#[cfg(feature = "encoding")]

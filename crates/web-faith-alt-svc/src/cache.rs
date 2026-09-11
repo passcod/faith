@@ -3,9 +3,9 @@ use std::time::{Duration, Instant};
 
 use moka::sync::Cache;
 
+/// One origin's entry in the store.
 #[derive(Debug, Clone)]
 #[non_exhaustive]
-/// One origin's entry in the store.
 pub struct AltSvcEntry {
 	/// The port HTTP/3 is advertised or proven on.
 	pub port: u16,
@@ -60,7 +60,7 @@ const EWMA_MIN_SAMPLES: u32 = 8;
 /// factor, so LAN-fast origins don't flap on sub-millisecond noise.
 pub const SLOW_FLOOR_MS: f64 = 10.0;
 
-/// How a store ages and bounds what it holds.
+/// Configuration for initialising the [`AltSvcCache`].
 pub struct AltSvcCacheConfig {
 	/// How long an unverified advertisement is kept.
 	pub advertised_ttl: Duration,
@@ -111,8 +111,12 @@ impl Default for AltSvcCacheConfig {
 	}
 }
 
+/// An in-memory store which keeps track of HTTP/3 advertisements, and decides per origin whether
+/// HTTP/3 is worth attempting.
+///
+/// Holds what each origin advertised, what a probe or a real response proved, and what failed or
+/// turned out slower over QUIC than over TCP. Bounded and aged by [`AltSvcCacheConfig`].
 #[derive(Clone)]
-/// Each origin's advertised, proven and failed state.
 pub struct AltSvcCache {
 	advertised: Cache<String, AltSvcEntry>,
 	confirmed: Cache<String, AltSvcEntry>,

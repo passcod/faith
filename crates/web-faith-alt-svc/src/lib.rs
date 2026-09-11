@@ -16,12 +16,14 @@
 //! - Without, the next foreground request is itself the verification, falling back to TCP if it
 //!   does not produce headers in time.
 //!
-//! Either way, an origin that starts failing, or that proves slower over HTTP/3 than the path it
-//! replaced ([`PathTime`]), is demoted, and the cooldown before it is retried lengthens with each
-//! consecutive failure.
+//! The middleware also monitors connections and intelligently demotes and promotes origins between
+//! QUIC and TCP:
 //!
-//! [`parse_alt_svc_header`] reads a header on its own, and [`H3HttpsSink`] feeds the store from
-//! `HTTPS` record lookups.
+//! - if QUIC connections to the origin start failing,
+//! - if the QUIC path becomes noticeably slower than the TCP path ([`PathTime`]),
+//! - retries the upgrade after an exponential cooldown.
+//!
+//! # Examples
 //!
 //! ```
 //! use reqwest::Url;
@@ -41,7 +43,43 @@
 //! cache.confirm_h3(&origin, port);
 //! assert_eq!(cache.confirmed_port(&origin), Some(443));
 //! ```
-
+//!
+#![cfg_attr(
+	feature = "dns",
+	doc = "Use [`H3HttpsSink`] to additionally support the DNS discovery of HTTP/3 services (using"
+)]
+#![cfg_attr(feature = "dns", doc = "the `HTTPS` record type).")]
+#![cfg_attr(feature = "dns", doc = "")]
+#![cfg_attr(feature = "dns", doc = "```no_run")]
+#![cfg_attr(feature = "dns", doc = "use std::sync::Arc;")]
+#![cfg_attr(feature = "dns", doc = "")]
+#![cfg_attr(
+	feature = "dns",
+	doc = "use web_faith_alt_svc::{AltSvcCache, AltSvcCacheConfig, H3HttpsSink};"
+)]
+#![cfg_attr(
+	feature = "dns",
+	doc = "use web_faith_dns::{FaithResolver, ResolverSettings};"
+)]
+#![cfg_attr(feature = "dns", doc = "")]
+#![cfg_attr(
+	feature = "dns",
+	doc = "let cache = Arc::new(AltSvcCache::new(AltSvcCacheConfig::default()));"
+)]
+#![cfg_attr(
+	feature = "dns",
+	doc = "let resolver = FaithResolver::new(ResolverSettings::default());"
+)]
+#![cfg_attr(feature = "dns", doc = "")]
+#![cfg_attr(
+	feature = "dns",
+	doc = "// An `HTTPS` record now makes an origin probe-worthy before anything has connected."
+)]
+#![cfg_attr(
+	feature = "dns",
+	doc = "resolver.set_https_sink(Arc::new(H3HttpsSink::new(cache, None)));"
+)]
+#![cfg_attr(feature = "dns", doc = "```")]
 #![deny(missing_docs)]
 // Lets docs.rs label each item with the feature or platform it needs.
 #![cfg_attr(docsrs, feature(doc_cfg))]

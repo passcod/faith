@@ -103,11 +103,11 @@ pub(crate) async fn classify_open_error(path: &str, err: std::io::Error) -> Fait
 	FaithError::new(kind, Some(err.to_string()))
 }
 
-#[derive(Clone, Debug, Default)]
 /// The trailing headers a response carried, once its body has ended.
+#[derive(Clone, Debug, Default)]
 pub enum Trailers {
-	#[default]
 	/// The body has not ended, so the question is still open.
+	#[default]
 	NotYet,
 	/// The body ended carrying no trailers.
 	None,
@@ -324,9 +324,9 @@ pub struct FileWritten {
 pub struct Response {
 	pub(crate) body: BodyHolder,
 	/// The coding to decode the body under, or `None` to deliver it as received.
-	#[cfg(feature = "encoding")]
 	/// Set once when the response is built, from the request's `Accept-Encoding` and the
 	/// response's `Content-Encoding` (see [`web_faith_encoding`]).
+	#[cfg(feature = "encoding")]
 	pub(crate) decode: Option<Coding>,
 	pub(crate) disturbed: Arc<AtomicBool>,
 	pub(crate) headers: HeaderMap,

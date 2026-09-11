@@ -3,6 +3,8 @@ use std::sync::{Arc, Weak};
 
 use crate::{cache::AltSvcCache, prober::H3Prober};
 
+/// DNS discovery of HTTP/3 services via the `HTTPS` record type.
+///
 /// Feeds `HTTPS` DNS records into the upgrade layer, so an origin advertising `alpn="h3"` is
 /// probe-worthy from its first request rather than from the first `Alt-Svc` header.
 ///

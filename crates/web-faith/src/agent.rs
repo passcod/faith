@@ -250,9 +250,9 @@ impl Agent {
 			return;
 		};
 
-		#[cfg(feature = "http3")]
 		// Probes hold a raw client clone; abort them so the pool doesn't outlive close by up to
 		// the probe timeout.
+		#[cfg(feature = "http3")]
 		if let Some(prober) = &live.h3_prober {
 			prober.abort_all();
 		}
