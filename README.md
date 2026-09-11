@@ -60,6 +60,17 @@ whatever servers emit, Faith must correctly handle. So far, everything we've tes
 npm install @passcod/faith
 ```
 
+The Rust networking stack underneath is published on its own, as the
+[`web-faith`](https://crates.io/crates/web-faith) crate:
+
+```bash
+cargo add web-faith
+```
+
+It is the same implementation with a Rust API rather than a `fetch` one, and its five subsystems
+(cookie jar, resolver, connection statistics, Alt-Svc store, content coding) are published as
+crates of their own too. See [its README](./crates/web-faith/README.md).
+
 ## Usage
 
 ### Basic fetch
