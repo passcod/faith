@@ -60,8 +60,8 @@ async fn reset_replaces_the_generation_and_what_it_holds() {
 }
 
 /// A resolver with a stale entry for `host` whose freshness ended `ago`.
-fn with_stale_entry(settings: ResolverConfig, host: &str, ago: Duration) -> FaithResolver {
-	let resolver = FaithResolver::new(settings);
+fn with_stale_entry(config: ResolverConfig, host: &str, ago: Duration) -> FaithResolver {
+	let resolver = FaithResolver::new(config);
 	resolver.generation().stale.insert(
 		host.to_owned(),
 		StaleEntry {
@@ -75,13 +75,13 @@ fn with_stale_entry(settings: ResolverConfig, host: &str, ago: Duration) -> Fait
 #[test]
 fn only_an_expired_entry_inside_the_window_is_served_stale() {
 	// spec:DNS#serving-stale-answers
-	let settings = || ResolverConfig {
+	let config = || ResolverConfig {
 		serve_stale: Some(Duration::from_secs(60)),
 		..ResolverConfig::default()
 	};
 
 	// Still fresh: the lookup goes through hickory, which answers from its own cache.
-	let fresh = FaithResolver::new(settings());
+	let fresh = FaithResolver::new(config());
 	fresh.generation().stale.insert(
 		"fresh.test".to_owned(),
 		StaleEntry {
@@ -96,7 +96,7 @@ fn only_an_expired_entry_inside_the_window_is_served_stale() {
 	);
 
 	// Expired but inside `dns.maxStale`: served immediately.
-	let stale = with_stale_entry(settings(), "stale.test", Duration::from_secs(5));
+	let stale = with_stale_entry(config(), "stale.test", Duration::from_secs(5));
 	let generation = stale.generation();
 	assert!(
 		stale.stale_addrs(&generation, "stale.test").is_some(),
@@ -104,7 +104,7 @@ fn only_an_expired_entry_inside_the_window_is_served_stale() {
 	);
 
 	// Past the window: no longer evidence about the host, so the lookup blocks.
-	let old = with_stale_entry(settings(), "old.test", Duration::from_secs(120));
+	let old = with_stale_entry(config(), "old.test", Duration::from_secs(120));
 	let generation = old.generation();
 	assert!(
 		old.stale_addrs(&generation, "old.test").is_none(),
@@ -140,21 +140,21 @@ fn serve_stale_off_never_serves_an_expired_entry() {
 fn served_stale_tracks_the_window_it_serves_from() {
 	// The retry layer arms itself from this, so it must not claim an address was assumed when
 	// the lookup actually blocked on a fresh one (spec:DNS#when-a-stale-address-is-wrong).
-	let settings = || ResolverConfig {
+	let config = || ResolverConfig {
 		serve_stale: Some(Duration::from_secs(60)),
 		..ResolverConfig::default()
 	};
 
-	let inside = with_stale_entry(settings(), "inside.test", Duration::from_secs(5));
+	let inside = with_stale_entry(config(), "inside.test", Duration::from_secs(5));
 	assert!(inside.served_stale("inside.test"));
 
-	let outside = with_stale_entry(settings(), "outside.test", Duration::from_secs(120));
+	let outside = with_stale_entry(config(), "outside.test", Duration::from_secs(120));
 	assert!(
 		!outside.served_stale("outside.test"),
 		"an entry past the window is resolved for real, so its address is confirmed"
 	);
 
-	let absent = FaithResolver::new(settings());
+	let absent = FaithResolver::new(config());
 	assert!(!absent.served_stale("absent.test"));
 }
 

@@ -75,14 +75,14 @@ struct Inner {
 	/// The options the agent was constructed with. A network change does not touch these; they are
 	/// what the next generation is rebuilt from.
 	// spec:NETCHG#what-the-signal-keeps
-	settings: ResolverConfig,
+	config: ResolverConfig,
 	/// Replaced wholesale by [`FaithResolver::reset`]. Read once at the start of a lookup, so one
 	/// spanning the signal finishes against the resolvers it started on.
 	// spec:NETCHG#in-flight-requests
 	generation: Mutex<Arc<Generation>>,
 	/// Where `HTTPS` records go, installed by the agent once the upgrade cache and prober exist.
 	///
-	/// Beside the settings rather than in the generation: it is wiring, so a network change leaves
+	/// Beside the config rather than in the generation: it is wiring, so a network change leaves
 	/// it alone. Its absence turns the `HTTPS` query off.
 	https_sink: Mutex<Option<Arc<dyn HttpsSink>>>,
 }
@@ -106,11 +106,11 @@ impl std::fmt::Debug for FaithResolver {
 }
 
 impl FaithResolver {
-	/// A resolver built from `settings`, which reads its configuration on first use.
-	pub fn new(settings: ResolverConfig) -> Self {
+	/// Create a new resolver.
+	pub fn new(config: ResolverConfig) -> Self {
 		Self {
 			inner: Arc::new(Inner {
-				settings,
+				config,
 				generation: Mutex::new(Arc::new(Generation::default())),
 				https_sink: Mutex::new(None),
 			}),
@@ -155,7 +155,7 @@ impl FaithResolver {
 	async fn built(&self, generation: &Generation) -> Result<Arc<Built>, NetError> {
 		generation
 			.built
-			.get_or_try_init(|| async { build(&self.inner.settings).await.map(Arc::new) })
+			.get_or_try_init(|| async { build(&self.inner.config).await.map(Arc::new) })
 			.await
 			.cloned()
 	}
@@ -197,7 +197,7 @@ impl FaithResolver {
 							.collect::<Vec<_>>()
 					})
 					.unwrap_or_default();
-				Arc::new(exempt_suffixes(system, &self.inner.settings.exempt_domains))
+				Arc::new(exempt_suffixes(system, &self.inner.config.exempt_domains))
 			})
 			.await
 			.clone()
@@ -284,7 +284,7 @@ impl FaithResolver {
 	/// `None` for the cases that must go to the resolver: no entry, an entry still fresh, or one so
 	/// old it has stopped being evidence about the host.
 	fn stale_addrs(&self, generation: &Generation, host: &str) -> Option<Vec<IpAddr>> {
-		let Some(max_stale) = self.inner.settings.serve_stale else {
+		let Some(max_stale) = self.inner.config.serve_stale else {
 			return None;
 		};
 		let entry = generation.stale.get(host)?;
@@ -309,7 +309,7 @@ impl FaithResolver {
 		addrs: &[IpAddr],
 		valid_until: Instant,
 	) {
-		if self.inner.settings.serve_stale.is_none() || addrs.is_empty() {
+		if self.inner.config.serve_stale.is_none() || addrs.is_empty() {
 			return;
 		}
 		generation.stale.insert(
@@ -386,7 +386,7 @@ impl FaithResolver {
 	/// The same window a stale answer is served from: an older entry is resolved for
 	/// real, and counting that as stale would spend a connection attempt on a confirmed address.
 	pub fn served_stale(&self, host: &str) -> bool {
-		let Some(max_stale) = self.inner.settings.serve_stale else {
+		let Some(max_stale) = self.inner.config.serve_stale else {
 			return false;
 		};
 		self.generation().stale.get(host).is_some_and(|entry| {
