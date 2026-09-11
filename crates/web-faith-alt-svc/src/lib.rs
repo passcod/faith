@@ -27,14 +27,14 @@
 //!
 //! ```
 //! use reqwest::Url;
-//! use web_faith_alt_svc::{AltSvcCache, AltSvcCacheConfig, parse_alt_svc_header};
+//! use web_faith_alt_svc::{AltSvcAdvertisement, AltSvcCache, AltSvcCacheConfig};
 //!
 //! let cache = AltSvcCache::new(AltSvcCacheConfig::default());
 //! let origin = Url::parse("https://example.com/").expect("a valid URL");
 //!
 //! // An advertisement says the alternative service exists, not that it works, so it makes the origin
 //! // worth probing rather than worth routing on.
-//! let advertised = parse_alt_svc_header(r#"h3=":443"; ma=86400"#).expect("h3 is advertised");
+//! let advertised: AltSvcAdvertisement = r#"h3=":443"; ma=86400"#.parse().expect("h3 is advertised");
 //! cache.record_alt_svc(&origin, &advertised);
 //! assert_eq!(cache.confirmed_port(&origin), None);
 //!
@@ -96,7 +96,7 @@ mod middleware;
 mod prober;
 
 pub use cache::{AltSvcAdvertisement, AltSvcCache, AltSvcCacheConfig, AltSvcEntry, PathTime};
-pub use header::parse_alt_svc_header;
+pub use header::NoHttp3Alternative;
 #[cfg(feature = "dns")]
 pub use https_sink::H3HttpsSink;
 pub use middleware::{AltSvcMiddleware, ArrivalStamp};

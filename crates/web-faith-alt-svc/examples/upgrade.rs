@@ -5,7 +5,7 @@
 use std::time::Duration;
 
 use reqwest::Url;
-use web_faith_alt_svc::{AltSvcCache, AltSvcCacheConfig, parse_alt_svc_header};
+use web_faith_alt_svc::{AltSvcAdvertisement, AltSvcCache, AltSvcCacheConfig};
 
 fn report(cache: &AltSvcCache, url: &Url, stage: &str) {
 	println!(
@@ -22,7 +22,7 @@ fn main() {
 	// An advertisement is evidence worth probing, not evidence worth routing on: it says the
 	// alternative exists, not that it works.
 	let advertisement =
-		parse_alt_svc_header(r#"h3=":443"; ma=86400"#).expect("the header advertises h3");
+		r#"h3=":443"; ma=86400"#.parse::<AltSvcAdvertisement>().expect("the header advertises h3");
 	cache.record_alt_svc(&origin, &advertisement);
 	report(&cache, &origin, "advertised");
 

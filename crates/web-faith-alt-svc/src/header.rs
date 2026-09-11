@@ -1,10 +1,34 @@
 //! `Alt-Svc` header parsing.
-use std::time::Duration;
+use std::{fmt, str::FromStr, time::Duration};
 
 use crate::cache::AltSvcAdvertisement;
 
-/// Read the first HTTP/3 alternative service out of an `Alt-Svc` header value.
-pub fn parse_alt_svc_header(value: &str) -> Option<AltSvcAdvertisement> {
+/// The header advertised no HTTP/3 alternative service.
+///
+/// Covers a `clear` header, one that names only other protocols, and one that does not parse:
+/// none of them gives an origin to act on, and the header is a hint, so nothing distinguishes
+/// them in use.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct NoHttp3Alternative;
+
+impl fmt::Display for NoHttp3Alternative {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		f.write_str("no HTTP/3 alternative service advertised")
+	}
+}
+
+impl std::error::Error for NoHttp3Alternative {}
+
+impl FromStr for AltSvcAdvertisement {
+	type Err = NoHttp3Alternative;
+
+	/// Read the first HTTP/3 alternative service out of an `Alt-Svc` header value.
+	fn from_str(value: &str) -> Result<Self, Self::Err> {
+		parse(value).ok_or(NoHttp3Alternative)
+	}
+}
+
+fn parse(value: &str) -> Option<AltSvcAdvertisement> {
 	if value == "clear" {
 		return None;
 	}

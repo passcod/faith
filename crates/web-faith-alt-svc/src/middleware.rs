@@ -9,7 +9,7 @@ use http::Extensions;
 use reqwest::{Request, Response};
 use reqwest_middleware::{Middleware, Next, Result};
 
-use crate::{cache::AltSvcCache, header::parse_alt_svc_header, prober::H3Prober};
+use crate::{cache::AltSvcAdvertisement, cache::AltSvcCache, prober::H3Prober};
 
 /// The client's hook for when a response's headers arrive.
 ///
@@ -232,7 +232,7 @@ impl<S: ArrivalStamp> Middleware for AltSvcMiddleware<S> {
 
 						if let Some(alt_svc) = response.headers().get("alt-svc") {
 							if let Ok(value) = alt_svc.to_str() {
-								if let Some(advertisement) = parse_alt_svc_header(value) {
+								if let Ok(advertisement) = value.parse::<AltSvcAdvertisement>() {
 									self.cache.record_alt_svc(&url, &advertisement);
 								}
 							}
@@ -280,7 +280,7 @@ impl<S: ArrivalStamp> Middleware for AltSvcMiddleware<S> {
 
 				if let Some(alt_svc) = response.headers().get("alt-svc") {
 					if let Ok(value) = alt_svc.to_str() {
-						if let Some(advertisement) = parse_alt_svc_header(value) {
+						if let Ok(advertisement) = value.parse::<AltSvcAdvertisement>() {
 							self.cache.record_alt_svc(&url, &advertisement);
 							// Probe as soon as the advertisement lands, racing
 							// the gap before the caller's next request.

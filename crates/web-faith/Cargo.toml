@@ -1,6 +1,6 @@
 [package]
 name = "web-faith"
-description = "A browser-shaped HTTP client: fetch semantics over a Rust network stack"
+description = "A browser-shaped HTTP client"
 version = "1.0.0"
 edition.workspace = true
 rust-version.workspace = true
