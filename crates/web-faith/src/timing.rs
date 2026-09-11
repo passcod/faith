@@ -2,52 +2,18 @@
 
 // spec:RESP#request-timing
 
-use std::{
-	sync::{Arc, OnceLock},
-	time::Instant,
-};
+use std::time::Instant;
 
 use reqwest::{Url, Version};
 use tokio::sync::watch;
 
-/// The moment a response's headers arrived, carried in the request's extensions so the surfaced
-/// timing and the path-time average read the same measurement.
-#[derive(Clone, Debug, Default)]
-pub struct HeadersStamp(Arc<OnceLock<Instant>>);
-
-impl HeadersStamp {
-	/// Record the arrival, if this is the first response to reach the outside.
-	///
-	/// An HTTP/3 attempt that falls back to TCP runs the stack twice, and only the attempt that
-	/// produced the response stamps. The stamping lives in the Alt-Svc layer, so without HTTP/3
-	/// nothing stamps and `send` times the response head itself.
-	#[cfg_attr(not(feature = "http3"), allow(dead_code))]
-	pub fn mark(&self, at: Instant) {
-		let _ = self.0.set(at);
-	}
-
-	pub fn get(&self) -> Option<Instant> {
-		self.0.get().copied()
-	}
-}
-
-/// The hook the Alt-Svc layer reports a response's arrival through.
-///
-/// That layer is the one place an arrival is observed today, so it calls this with the request's
-/// extensions, where the stamp for that request lives.
-#[cfg(feature = "http3")]
-pub(crate) fn arrival_hook() -> web_faith_alt_svc::ArrivalHook {
-	std::sync::Arc::new(|extensions: &http::Extensions, at: Instant| {
-		if let Some(stamp) = extensions.get::<HeadersStamp>() {
-			stamp.mark(at);
-		}
-	})
-}
-
 /// The timing of one request, filled in as it progresses.
 #[derive(Clone, Debug, Default)]
 pub struct RequestTiming {
-	/// Milliseconds from the start of the request to the response headers arriving.
+	/// Milliseconds from the start of the request to the response head being read.
+	///
+	/// Taken once the response's head has come back through the whole middleware stack, so it
+	/// carries a little of Faith's own processing. See Q3.
 	pub headers_ms: f64,
 	/// Milliseconds from the start of the request to the body finishing, once it has.
 	pub body_ms: Option<f64>,

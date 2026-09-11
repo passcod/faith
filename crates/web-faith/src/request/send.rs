@@ -34,7 +34,7 @@ use crate::{
 	error::{FaithError, FaithErrorKind},
 	request::{Credentials, NORMALISED_METHODS, PRIORITY, QUERY, RequestBody, RequestOptions},
 	response::{PeerInformation, Response},
-	timing::{HeadersStamp, RequestTiming, TimingSlot, alpn_protocol_id},
+	timing::{RequestTiming, TimingSlot, alpn_protocol_id},
 };
 
 /// Send a request on `agent`, and build the response it produces.
@@ -95,13 +95,7 @@ pub async fn send(
 	}
 
 	// The stamp rides along in the request's extensions for the middleware to fill in;
-	// this side keeps a handle on it so the one measurement taken inside the stack is
-	// the one surfaced (spec:RESP#request-timing).
-	let headers_stamp = HeadersStamp::default();
-
-	let mut request = client
-		.request(method, parsed_url.clone())
-		.with_extension(headers_stamp.clone());
+	let mut request = client.request(method, parsed_url.clone());
 	#[cfg(feature = "cache")]
 	{
 		request = request.with_extension(CacheMode::from(options.cache));
@@ -428,9 +422,9 @@ pub async fn send(
 		headers.remove("set-cookie");
 	}
 
-	// A cache hit is served without ever reaching the layer that stamps, so fall back to
-	// the moment the send resolved, which for a hit is the moment the cache answered.
-	let headers_at = headers_stamp.get().unwrap_or_else(Instant::now);
+	// Taken here rather than inside the stack: the layer that used to stamp was only built with
+	// HTTP/3, and never saw a cache hit at all (spec:RESP#request-timing, Q3).
+	let headers_at = Instant::now();
 	let timing = RequestTiming {
 		headers_ms: headers_at.duration_since(started).as_secs_f64() * 1000.0,
 		body_ms: None,

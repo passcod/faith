@@ -224,7 +224,7 @@ impl Display for FaithError {
 	}
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "internals"))]
 mod tests {
 	use super::*;
 

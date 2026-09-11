@@ -446,7 +446,6 @@ impl ClientRecipe {
 				self.h3_upgrade.enabled,
 				self.h3_upgrade.attempt_timeout,
 				prober.clone(),
-				Some(crate::timing::arrival_hook()),
 			));
 		}
 
