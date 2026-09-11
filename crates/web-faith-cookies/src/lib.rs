@@ -61,13 +61,18 @@ pub const DEFAULT_MAX_TOTAL: usize = 3000;
 /// The limits a jar enforces.
 #[derive(Debug, Clone)]
 pub struct CookieLimits {
-	/// How far ahead a cookie may expire; a longer expiry is reduced to this.
+	/// Maximum expiry of a cookie. Larger values are clamped on insert.
 	pub max_age: Duration,
-	/// Largest name-plus-value, in bytes, that will be stored.
+	/// Maximum length of a cookie's name plus value, in bytes. A larger cookie is refused.
 	pub max_size: usize,
-	/// Most cookies kept for any one domain.
+	/// Maximum cookies kept for any one domain.
+	///
+	/// On exceeding it the jar drops that domain's expired cookies, then evicts its oldest until
+	/// the count fits, so the incoming cookie is always the one kept.
 	pub max_per_host: usize,
-	/// Most cookies kept across the jar.
+	/// Maximum cookies kept across the jar.
+	///
+	/// Enforced after `max_per_host` and the same way, over the whole jar rather than one domain.
 	pub max_total: usize,
 }
 
