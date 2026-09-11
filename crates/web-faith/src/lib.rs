@@ -1,17 +1,9 @@
-//! A browser-shaped HTTP client: fetch semantics over a Rust network stack.
+//! A browser-shaped HTTP client.
 //!
-//! Faith behaves like a browser wherever that translates to a server-side runtime: transparent
-//! HTTP/2 and HTTP/3, Happy Eyeballs across IPv4 and IPv6, DNS caching, an optional cookie jar, and
-//! HTTP caching. The subsystems beneath it are published on their own, and each can be left out of a
-//! build with the feature named for it.
-//!
-//! Those features are on by default apart from `http3`, which reqwest gates behind a cfg only the
-//! consuming build can set. Enabling HTTP/3 means naming the feature and setting
-//! `RUSTFLAGS="--cfg reqwest_unstable"`; without it, requests still negotiate HTTP/2.
-//!
-//! Whichever layer a request fails in, the failure arrives as one [`FaithError`] whose
-//! [`FaithErrorKind`] is the stable code to match on: a component crate names its own errors, and
-//! they are converted at the boundary as they cross into the client.
+//! Faith behaves like a browser ("faithfully") wherever that translates to a server-side runtime:
+//! transparent HTTP/2 and HTTP/3 upgrades, Happy Eyeballs across IPv4 and IPv6, DNS caching, an
+//! optional cookie jar, and HTTP caching. We also publish the reusable components as separate
+//! crates.
 //!
 //! ```no_run
 //! # use web_faith::agent::Agent;
@@ -22,17 +14,47 @@
 //! # }
 //! ```
 //!
-//! An [`Agent`] owns the connection pool, resolver, cookie jar, and caches; [`Agent::builder`]
-//! configures one. Cloning an agent is cheap and every clone names the same one.
+//! # HTTP/3 is opt-in
 //!
-//! [`Agent::fetch`] returns a builder that sends when awaited, so there is no separate send step.
-//! [`Request`] prepares one without sending it, to adjust at each call site or send unchanged on
-//! more than one agent.
+//! Faith uses reqwest internally, and its HTTP/3 support is currently unstable. To enable HTTP/3
+//! support, you will need to set the `http3` feature on Faith, and use the `reqwest_unstable` rustc
+//! cfg flag:
 //!
-//! [`Agent`]: agent::Agent
-//! [`Agent::builder`]: agent::Agent::builder
-//! [`Agent::fetch`]: agent::Agent::fetch
-//! [`Request`]: request::Request
+//! ```toml
+//! [dependencies]
+//! web-faith = { version = "1.0", features = ["http3"] }
+//! ```
+//!
+//! ```toml
+//! # .cargo/config.toml
+//! [build]
+//! rustflags = ["--cfg", "reqwest_unstable"]
+//! ```
+//!
+//! # Features
+//!
+//! | Feature | Default | What it adds |
+//! | --- | --- | --- |
+//! | `cache` | on | The HTTP cache, its store, and the per-request cache mode. |
+//! | `connection-tracking` | on | Per-connection kernel counters, and the agent verb that reports them. |
+//! | `cookies` | on | The cookie jar, and the agent option and handle that reach it. |
+//! | `dns` | on | Faith's own caching resolver. Without it, names resolve through the platform. |
+//! | `encoding` | on | Content codings: negotiating and decoding a response body, and compressing a request one. |
+//! | `tls-aws-lc-rs` | on | The rustls crypto provider. `tls-ring` selects ring instead. |
+//! | `http3` | off | Transparent HTTP/3, and the Alt-Svc machinery that upgrades an origin to it. Needs the cfg flag above. |
+//!
+//! # Component crates
+//!
+//! - [`web-faith-cookies`](https://docs.rs/web-faith-cookies)
+//! - [`web-faith-dns`](https://docs.rs/web-faith-dns)
+//! - [`web-faith-conn-tracker`](https://docs.rs/web-faith-conn-tracker)
+//! - [`web-faith-alt-svc`](https://docs.rs/web-faith-alt-svc)
+//! - [`web-faith-encoding`](https://docs.rs/web-faith-encoding)
+//!
+//! # Elsewhere
+//!
+//! Faith is also a Node.js module which lets you use this Rust networking stack as a `fetch`
+//! drop-in replacement: [`@passcod/faith`](https://www.npmjs.com/package/@passcod/faith).
 
 // A build with no crypto provider cannot speak TLS, and an HTTPS client that cannot is not one.
 // Selecting a provider is therefore a choice between the two rather than an option to decline.

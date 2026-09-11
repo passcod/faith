@@ -59,7 +59,7 @@ rustflags = ["--cfg", "reqwest_unstable"]
 
 - [`web-faith-cookies`](https://docs.rs/web-faith-cookies)
 - [`web-faith-dns`](https://docs.rs/web-faith-dns)
-- [`web-faith-conn-tracker`](https://docs.rs/web-faith-conn-tracker):
+- [`web-faith-conn-tracker`](https://docs.rs/web-faith-conn-tracker)
 - [`web-faith-alt-svc`](https://docs.rs/web-faith-alt-svc)
 - [`web-faith-encoding`](https://docs.rs/web-faith-encoding)
 
