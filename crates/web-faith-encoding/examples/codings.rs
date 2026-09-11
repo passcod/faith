@@ -7,8 +7,11 @@ use bytes::Bytes;
 use futures::StreamExt as _;
 use http::{HeaderMap, HeaderValue};
 use web_faith_encoding::{
-	AcceptEncoding, Coding, DEFAULT_ACCEPT_ENCODING, compress_buffer, decision, decode_stream,
-	layer_content_encoding, strip_decoded_headers,
+	Coding,
+	request::{compress_buffer, layer_content_encoding},
+	response::{
+		AcceptEncoding, DEFAULT_ACCEPT_ENCODING, decision, decode_stream, strip_decoded_headers,
+	},
 };
 
 #[tokio::main]

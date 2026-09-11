@@ -26,7 +26,10 @@ use reqwest::header::ACCEPT_ENCODING;
 
 use tokio::sync::Mutex;
 #[cfg(feature = "encoding")]
-use web_faith_encoding::{self as encoding, AcceptEncoding, Coding, DEFAULT_ACCEPT_ENCODING};
+use web_faith_encoding::{
+	Coding, request as encoding_request, response as encoding_response,
+	response::{AcceptEncoding, DEFAULT_ACCEPT_ENCODING},
+};
 
 use crate::{
 	agent::Agent,
@@ -282,7 +285,10 @@ pub async fn send(
 				// spec:ENC#what-a-compressed-request-sends
 				Some(coding) => {
 					applied_coding = Some(coding);
-					reqwest::Body::wrap_stream(encoding::compress_stream(byte_stream, coding))
+					reqwest::Body::wrap_stream(encoding_request::compress_stream(
+						byte_stream,
+						coding,
+					))
 				}
 				None => reqwest::Body::wrap_stream(byte_stream),
 			};
@@ -298,7 +304,7 @@ pub async fn send(
 				// spec:ENC#what-a-compressed-request-sends
 				Some(coding) => {
 					applied_coding = Some(coding);
-					encoding::compress_buffer(&bytes, coding)
+					encoding_request::compress_buffer(&bytes, coding)
 						.await
 						.map_err(|err| {
 							FaithError::new(
@@ -320,7 +326,8 @@ pub async fn send(
 	// were applied (spec:ENC#what-a-compressed-request-sends).
 	#[cfg(feature = "encoding")]
 	if let Some(coding) = applied_coding {
-		let value = encoding::layer_content_encoding(declared_content_encoding.as_deref(), coding);
+		let value =
+			encoding_request::layer_content_encoding(declared_content_encoding.as_deref(), coding);
 		let value = HeaderValue::from_str(&value).map_err(|_| {
 			FaithError::new(
 				FaithErrorKind::InvalidHeader,
@@ -445,11 +452,11 @@ pub async fn send(
 	let decode = if empty {
 		None
 	} else {
-		encoding::decision(&headers, &accept_encoding)
+		encoding_response::decision(&headers, &accept_encoding)
 	};
 	#[cfg(feature = "encoding")]
 	if decode.is_some() {
-		encoding::strip_decoded_headers(&mut headers);
+		encoding_response::strip_decoded_headers(&mut headers);
 	}
 
 	let timing = Arc::new(TimingSlot::new(started, timing));

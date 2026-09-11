@@ -28,7 +28,7 @@ use stream_shared::SharedStream;
 use tokio::{io::AsyncWriteExt, sync::watch};
 
 #[cfg(feature = "encoding")]
-use web_faith_encoding::{Coding, decode_stream};
+use web_faith_encoding::{Coding, response::decode_stream};
 
 use crate::{
 	body::{Body, BodyHolder, DynStream, drain_body_inner},
