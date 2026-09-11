@@ -367,10 +367,9 @@ impl Agent {
 
 	/// The DNS servers this agent resolves through, in query order.
 	///
-	/// Each entry gives the server's address, its transport (`udp`, `tcp`, `tls`, `https`, `quic`,
-	/// or `h3`), and whether that was `configured` or `conventional`. Empty until the resolver has
-	/// been used, since it reads its configuration on first use, and empty under the system
-	/// resolver.
+	/// Each entry gives the nameserver's address, the transport in use, and how that was arrived
+	/// at. Empty until the resolver has been used, since it reads its configuration on first use,
+	/// and empty under the system resolver.
 	// spec:OBS#resolvers
 	#[cfg(feature = "dns")]
 	pub fn resolvers(&self) -> Vec<ResolverReport> {

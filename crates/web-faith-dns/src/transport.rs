@@ -1,5 +1,5 @@
 //! Resolver transports.
-use std::{net::IpAddr, sync::Arc};
+use std::{fmt, net::IpAddr, sync::Arc};
 
 use hickory_resolver::config::{ConnectionConfig, NameServerConfig, ProtocolConfig};
 use url::{Host, Url};
@@ -47,7 +47,8 @@ impl Transport {
 	}
 
 	/// The lowercase label reported by `resolvers()`.
-	pub(crate) fn label(self) -> &'static str {
+	/// The URL scheme this transport is named by.
+	pub fn scheme(self) -> &'static str {
 		match self {
 			Self::Udp => "udp",
 			Self::Tcp => "tcp",
@@ -56,6 +57,12 @@ impl Transport {
 			Self::Quic => "quic",
 			Self::H3 => "h3",
 		}
+	}
+}
+
+impl fmt::Display for Transport {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		f.write_str(self.scheme())
 	}
 }
 

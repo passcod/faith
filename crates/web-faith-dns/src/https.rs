@@ -11,10 +11,9 @@ use hickory_resolver::proto::rr::{
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct HttpsAdvertisement {
-	/// The record's `port` SvcParam, or `None` when it named none and the origin's own port
-	/// applies.
+	/// The record's `port` SvcParam, when provided. If absent, the origin's default port applies.
 	pub port: Option<u16>,
-	/// The record's own DNS TTL, which is how long the advertisement it carries lives.
+	/// The DNS record's TTL.
 	pub ttl: Duration,
 }
 

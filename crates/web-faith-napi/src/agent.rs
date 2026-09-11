@@ -308,9 +308,9 @@ impl Agent {
 			.resolvers()
 			.into_iter()
 			.map(|report| ResolverInfo {
-				address: report.address,
-				transport: report.transport,
-				source: report.source,
+				address: report.address.to_string(),
+				transport: report.transport.to_string(),
+				source: report.source.to_string(),
 			})
 			.collect()
 	}

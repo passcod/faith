@@ -1,5 +1,5 @@
 //! Resolver settings.
-use std::{net::SocketAddr, time::Duration};
+use std::{fmt, net::SocketAddr, time::Duration};
 
 use hickory_resolver::{
 	config::{NameServerConfig, ProtocolConfig},
@@ -8,9 +8,10 @@ use hickory_resolver::{
 
 use crate::transport::{ServerSpec, Transport};
 
-/// How a server in `resolvers()` came to be reached the way it is.
+/// How a nameserver came to be reached the way it is.
 // spec:OBS#resolvers
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum ResolverSource {
 	/// Named by the caller.
 	Configured,
@@ -18,12 +19,12 @@ pub enum ResolverSource {
 	Conventional,
 }
 
-impl ResolverSource {
-	fn label(self) -> &'static str {
-		match self {
+impl fmt::Display for ResolverSource {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		f.write_str(match self {
 			Self::Configured => "configured",
 			Self::Conventional => "conventional",
-		}
+		})
 	}
 }
 
@@ -31,12 +32,12 @@ impl ResolverSource {
 #[derive(Clone, Debug)]
 #[non_exhaustive]
 pub struct ResolverReport {
-	/// The server's address, as `ip:port`.
-	pub address: String,
-	/// The transport in use: `udp`, `tcp`, `tls`, `https`, `quic`, or `h3`.
-	pub transport: String,
-	/// How that transport was arrived at: `configured` or `conventional`.
-	pub source: String,
+	/// The nameserver's address.
+	pub address: SocketAddr,
+	/// The transport in use.
+	pub transport: Transport,
+	/// How that transport was arrived at.
+	pub source: ResolverSource,
 }
 
 /// [`ResolverConfig::max_stale`]'s default.
@@ -125,9 +126,9 @@ pub(crate) fn report(
 				ProtocolConfig::H3 { .. } => Transport::H3,
 			};
 			reports.push(ResolverReport {
-				address: SocketAddr::new(server.ip, connection.port).to_string(),
-				transport: transport.label().to_owned(),
-				source: source.label().to_owned(),
+				address: SocketAddr::new(server.ip, connection.port),
+				transport,
+				source,
 			});
 		}
 	}
