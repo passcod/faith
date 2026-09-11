@@ -332,6 +332,27 @@ mod tests {
 	}
 
 	#[test]
+	fn a_coding_this_crate_cannot_apply_is_still_declarable() {
+		// The caller compressed in a coding of their own and declared it; Faith layers gzip over
+		// the top, and the header names both in the order they were applied.
+		let layered = ContentEncoding::from(&headers("custom-thing")).layer(Coding::Gzip);
+		assert_eq!(layered.to_string(), "custom-thing, gzip");
+		assert_eq!(
+			layered.codings(),
+			[Coding::Other("custom-thing".into()), Coding::Gzip]
+		);
+
+		// Applying it is another matter: this crate has no encoder for it.
+		assert!(
+			futures::executor::block_on(crate::request::compress_buffer(
+				b"x",
+				Coding::Other("custom-thing".into())
+			))
+			.is_err()
+		);
+	}
+
+	#[test]
 	fn nothing_to_declare_makes_no_header() {
 		assert!(ContentEncoding::default().to_header_value().is_none());
 		assert_eq!(

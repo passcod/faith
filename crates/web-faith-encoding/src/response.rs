@@ -334,6 +334,52 @@ mod tests {
 	}
 
 	#[test]
+	fn a_coding_this_crate_cannot_decode_survives_under_one_it_can() {
+		// The caller advertised a coding of their own; the server layered gzip over it.
+		let accept = AcceptEncoding::from("gzip, custom-thing");
+		let mut headers = HeaderMap::new();
+		headers.insert(
+			CONTENT_ENCODING,
+			HeaderValue::from_static("custom-thing, gzip"),
+		);
+		headers.insert(CONTENT_LENGTH, HeaderValue::from_static("42"));
+
+		// gzip is outermost, so gzip comes off.
+		assert_eq!(
+			ContentEncoding::peel_one_header(&mut headers, &accept),
+			Some(Coding::Gzip)
+		);
+		// And the body is left as the caller's own coding, declared as such.
+		assert_eq!(headers[CONTENT_ENCODING], "custom-thing");
+		assert!(!headers.contains_key(CONTENT_LENGTH));
+
+		// Nothing more can come off: the crate cannot decode what is left.
+		assert_eq!(
+			ContentEncoding::peel_one_header(&mut headers, &accept),
+			None
+		);
+		assert_eq!(headers[CONTENT_ENCODING], "custom-thing");
+	}
+
+	#[test]
+	fn a_coding_this_crate_cannot_decode_hides_one_it_can() {
+		// The other order: the caller's own coding is outermost, so the gzip beneath is
+		// unreachable and the body is handed over whole.
+		let accept = AcceptEncoding::from("gzip, custom-thing");
+		let mut headers = HeaderMap::new();
+		headers.insert(
+			CONTENT_ENCODING,
+			HeaderValue::from_static("gzip, custom-thing"),
+		);
+
+		assert_eq!(
+			ContentEncoding::peel_one_header(&mut headers, &accept),
+			None
+		);
+		assert_eq!(headers[CONTENT_ENCODING], "gzip, custom-thing");
+	}
+
+	#[test]
 	fn nothing_to_peel_leaves_the_headers_alone() {
 		let mut headers = HeaderMap::new();
 		headers.insert(CONTENT_ENCODING, HeaderValue::from_static("identity"));
