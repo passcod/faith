@@ -23,11 +23,11 @@ pub trait ArrivalStamp: Send + Sync + 'static {
 /// producing an outcome.
 ///
 /// [`AltSvcMiddleware`] can only learn that HTTP/3 is broken from the attempt's
-/// return value, and a cancelled request never produces one: `faith_fetch`
-/// races `send()` against the abort signal in a `select!`, which drops the
-/// losing future. Without this guard nothing ever demotes the origin, so a
-/// caller whose deadline is shorter than the network's own failure detection
-/// re-attempts HTTP/3 over a dead path on every retry, indefinitely.
+/// return value, and a cancelled request never produces one: a caller racing
+/// the request against a deadline or an abort signal drops the losing future.
+/// Without this guard nothing ever demotes the origin, so a caller whose
+/// deadline is shorter than the network's own failure detection re-attempts
+/// HTTP/3 over a dead path on every retry, indefinitely.
 struct H3AttemptGuard {
 	cache: Arc<AltSvcCache>,
 	url: reqwest::Url,
