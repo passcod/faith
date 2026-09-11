@@ -32,13 +32,13 @@
 //! let cache = AltSvcCache::new(AltSvcCacheConfig::default());
 //! let origin = Url::parse("https://example.com/").expect("a valid URL");
 //!
-//! // An advertisement says the alternative service exists, not that it works, so it makes the origin
-//! // worth probing rather than worth routing on.
+//! // Inject an advertisement; usually this would either be a provided hint or come from the
+//! // middleware.
 //! let advertised: AltSvcAdvertisement = r#"h3=":443"; ma=86400"#.parse().expect("h3 is advertised");
 //! cache.record_alt_svc(&origin, &advertised);
 //! assert_eq!(cache.confirmed_port(&origin), None);
 //!
-//! // A probe that reaches the origin over HTTP/3 promotes it to routable.
+//! // Now that there's an advertisement, a probe against the origin has something to try.
 //! let port = cache.probe_candidate(&origin).expect("worth probing");
 //! cache.confirm_h3(&origin, port);
 //! assert_eq!(cache.confirmed_port(&origin), Some(443));
@@ -73,7 +73,11 @@
 #![cfg_attr(feature = "dns", doc = "")]
 #![cfg_attr(
 	feature = "dns",
-	doc = "// An `HTTPS` record now makes an origin probe-worthy before anything has connected."
+	doc = "// The resolver will now query for `HTTPS` records, and if any exist, populate the"
+)]
+#![cfg_attr(
+	feature = "dns",
+	doc = "// Alt-Svc cache even before we start connecting."
 )]
 #![cfg_attr(
 	feature = "dns",
