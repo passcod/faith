@@ -49,8 +49,8 @@ whatever servers emit, Faith must correctly handle. So far, everything we've tes
 | **HTTP/3** | · | · | ● | ● | · | · | · | · | ● |
 | **HTTP/3 upgrade** | · | · | ● | ● | · | · | · | · | · |
 
-● covered  
-· not applicable to this server  
+● covered
+· not applicable to this server
 
 <!-- conformance:end -->
 
@@ -60,16 +60,18 @@ whatever servers emit, Faith must correctly handle. So far, everything we've tes
 npm install @passcod/faith
 ```
 
-The Rust networking stack underneath is published on its own, as the
-[`web-faith`](https://crates.io/crates/web-faith) crate:
+### Rust crate
+
+You can also use Faith directly from Rust, see [the docs](https://docs.rs/web-faith) for more.
 
 ```bash
 cargo add web-faith
 ```
 
-It is the same implementation with a Rust API rather than a `fetch` one, and its five subsystems
-(cookie jar, resolver, connection statistics, Alt-Svc store, content coding) are published as
-crates of their own too. See [its README](./crates/web-faith/README.md).
+```rust
+let agent = web_faith::Agent::new()?;
+let body = agent.fetch("https://example.com/").await?.text().await?;
+```
 
 ## Usage
 
