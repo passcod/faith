@@ -11,9 +11,8 @@ caching. We also publish the reusable components as separate crates.
 
 ## Usage
 
-```toml
-[dependencies]
-web-faith = "1.0"
+```bash
+cargo add web-faith
 ```
 
 ```rust
@@ -32,9 +31,8 @@ async fn main() -> Result<(), FaithError> {
 
 Faith uses reqwest internally, and its HTTP/3 support is currently unstable. To enable HTTP/3 support, you will need to set the `http3` feature on Faith, and use the `reqwest_unstable` rustc cfg flag:
 
-```toml
-[dependencies]
-web-faith = { version = "1.0", features = ["http3"] }
+```bash
+cargo add web-faith -F http3
 ```
 
 ```toml

@@ -21,9 +21,8 @@
 //! support, you will need to set the `http3` feature on Faith, and use the `reqwest_unstable` rustc
 //! cfg flag:
 //!
-//! ```toml
-//! [dependencies]
-//! web-faith = { version = "1.0", features = ["http3"] }
+//! ```bash
+//! cargo add web-faith -F http3
 //! ```
 //!
 //! ```toml
