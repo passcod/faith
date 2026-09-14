@@ -18,12 +18,10 @@ url.workspace = true
 reqwest = { workspace = true, optional = true }
 
 [dev-dependencies]
-# Doctests and examples link as their own crate, so the types the API speaks have to be named there too.
 http.workspace = true
 url.workspace = true
 
 [features]
-# Implement reqwest's `CookieStore`, so the jar can serve as its cookie provider.
 reqwest = ["dep:reqwest", "reqwest/cookies"]
 
 [package.metadata.docs.rs]

@@ -6,8 +6,6 @@ exclude = ["bench/h3-server"]
 resolver = "3"
 
 [workspace.package]
-# No version here: every member carries its own. The six crates.io members move
-# independently, and web-faith-napi follows package.json.
 edition = "2024"
 rust-version = "1.96"
 license = "Apache-2.0 OR MIT"
