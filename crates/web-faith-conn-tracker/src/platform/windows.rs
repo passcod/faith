@@ -1,3 +1,4 @@
+//! TCP statistics from the Windows IP Helper interfaces.
 use std::collections::HashMap;
 use std::io;
 use std::mem;

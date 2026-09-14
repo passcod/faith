@@ -154,7 +154,7 @@ fn an_invalid_header_surfaces_at_build() {
 		.build()
 		.expect_err("the name is not a header name");
 
-	assert_eq!(err.kind, FaithErrorKind::InvalidHeader);
+	assert_eq!(err.kind(), FaithErrorKind::InvalidHeader);
 }
 
 /// The first failure met is the one reported, not the last.
@@ -165,7 +165,7 @@ fn the_first_failure_is_the_one_reported() {
 		.build()
 		.expect_err("both are wrong");
 
-	assert_eq!(err.kind, FaithErrorKind::InvalidUrl);
+	assert_eq!(err.kind(), FaithErrorKind::InvalidUrl);
 }
 
 /// An unparseable target is reported where the request is resolved, not by the call that took it.
@@ -174,7 +174,7 @@ fn an_unparseable_target_surfaces_at_build() {
 	let builder = Request::new("not a url");
 	let err = builder.build().expect_err("the target does not parse");
 
-	assert_eq!(err.kind, FaithErrorKind::InvalidUrl);
+	assert_eq!(err.kind(), FaithErrorKind::InvalidUrl);
 }
 
 /// A request copies when its body allows it, and reports that it cannot when it does not.

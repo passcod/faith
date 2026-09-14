@@ -1,3 +1,4 @@
+//! TCP statistics from netlink.
 use std::io;
 use std::net::SocketAddr;
 

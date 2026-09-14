@@ -15,21 +15,23 @@ An `Accept-Encoding` from the caller, whether set on the request or as an agent 
 
 ## Decoding
 
-A response is decoded when its `Content-Encoding` is zstd, gzip, deflate, or brotli, and the request's `Accept-Encoding` accepted that coding: named outright or matched by `*`, without a zero quality value.
+A response is decoded when the outermost coding of its `Content-Encoding` is zstd, gzip, deflate, or brotli, and the request's `Accept-Encoding` accepted that coding: named outright or matched by `*`, without a zero quality value.
 A coding the header names outright settles the question whatever `*` says, so `gzip;q=0, *` refuses gzip while accepting the other three.
 So a caller asking for gzip alone receives a gzip response decoded, while a server that compresses in the face of `Accept-Encoding: identity` hands the caller the compressed bytes.
 Whether to decode follows from the `Accept-Encoding` the request carried, one inherited from an agent default header included, and not from any separate decoding setting.
-`Content-Encoding` and `Content-Length` are removed from the response headers on decoding, so the headers the caller reads describe the bytes the caller receives.
-Removing them is a knowing divergence from the fetch standard, which decodes the body and leaves the header list as it was (see [FAITH](../overview.md)).
+On decoding, the coding that was decoded comes off `Content-Encoding`, which is removed when no coding remains under it, and `Content-Length` is removed outright: the headers the caller reads describe the bytes the caller receives.
+Editing them is a knowing divergence from the fetch standard, which decodes the body and leaves the header list as it was (see [FAITH](../overview.md)).
 A response that cannot carry a body keeps both headers, nothing having been decoded, so a `HEAD` response still describes the representation a `GET` would return.
 Decoding applies to every way of reading the body, the `body` stream included (see [BODY](../response/reading-the-body.md)).
+
+Faith decodes a single coding, so a representation encoded more than once comes back one layer lighter, with `Content-Encoding` naming the codings still under it.
+Unwinding those is the caller's, a layer at a time.
+The codings a response names are read across every `Content-Encoding` it carries, whether they arrive comma-joined on one line or split across several, those being the same list.
 
 ## Bodies delivered as received
 
 Every other response is delivered as received, with `Content-Encoding` and `Content-Length` intact, leaving the caller to decode the bytes.
-That covers a response in a coding Faith cannot decode, and a response in a coding the request's `Accept-Encoding` did not accept.
-It also covers a `Content-Encoding` naming more than one coding: Faith decodes a single coding, and a representation encoded repeatedly is the caller's to unwind.
-The codings a response names are counted across every `Content-Encoding` it carries, whether they arrive comma-joined on one line or split across several, those being the same list.
+That covers a response whose outermost coding Faith cannot decode, and one whose outermost coding the request's `Accept-Encoding` did not accept, whatever sits under either.
 
 ## Compressing a request body
 

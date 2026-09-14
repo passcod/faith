@@ -1,7 +1,7 @@
 [package]
 name = "web-faith-alt-svc"
-description = "An Alt-Svc store and the HTTP/3 upgrade machinery above it"
-version = "1.0.0"
+description = "An HTTP/3 upgrade (via Alt-Svc primarily) mechanism for reqwest"
+version = "1.0.1"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -20,12 +20,14 @@ url.workspace = true
 web-faith-dns = { workspace = true, optional = true }
 
 [dev-dependencies]
-# Examples link as their own crate, so the types the API speaks have to be named there too.
 http.workspace = true
 reqwest.workspace = true
 tokio = { workspace = true }
 
 [features]
 default = ["dns"]
-# Feed `HTTPS` DNS records into the store, so an origin is probe-worthy before anything connects.
 dns = ["dep:web-faith-dns"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

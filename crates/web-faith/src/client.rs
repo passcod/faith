@@ -1,8 +1,4 @@
-//! Building the agent's reqwest clients from validated options.
-//!
-//! The recipe here is what lets a client be rebuilt: `network_changed` has to drop the connection
-//! pool, and reqwest offers no way to do that short of dropping the client, so building one is a
-//! pure function of settings that were validated once.
+//! The agent's reqwest clients.
 
 // spec:NETCHG
 
@@ -41,38 +37,15 @@ use web_faith_alt_svc::{AltSvcCache, AltSvcMiddleware, H3Prober};
 
 use crate::{
 	error::{FaithError, FaithErrorKind},
+	options::RedirectPolicy,
 	retry::DeadConnectionRetry,
 };
 
-#[cfg(feature = "http3")]
-use crate::timing::HeadersStamp;
-
-/// What to do with a redirect response.
-///
-/// The Node surface spells these as fetch's own `redirect` values; this is the same choice in the
-/// client's own terms.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub enum RedirectPolicy {
-	/// Follow redirects, up to the standard's limit.
-	#[default]
-	Follow,
-	/// Refuse a redirect, reporting it as an error.
-	Error,
-	/// Return the redirect response itself rather than following it.
-	Stop,
-}
-
-/// Per-stream receive window applied to both protocols when nothing overrides it.
-///
-/// Chrome's shape: 6 MiB stream inside a 15 MiB connection. Picked over a larger window that
-/// measured faster because it is what browsers have proven at scale, and because a pooled
-/// server-side client multiplies per-connection memory across far more connections.
-// spec:FLOW
-pub const DEFAULT_STREAM_WINDOW: u32 = 6 * 1024 * 1024;
-
-/// Whole-connection receive window applied to both protocols when nothing overrides it.
-// spec:FLOW
-pub const DEFAULT_CONNECTION_WINDOW: u32 = 15 * 1024 * 1024;
+// Chrome's shape: a 6 MiB stream inside a 15 MiB connection. A larger window measured faster, but
+// a pooled server-side client multiplies per-connection memory across far more connections than a
+// browser does (spec:FLOW).
+pub(crate) const DEFAULT_STREAM_WINDOW: u32 = 6 * 1024 * 1024;
+pub(crate) const DEFAULT_CONNECTION_WINDOW: u32 = 15 * 1024 * 1024;
 
 // Concurrent streams share the connection's headroom, so the asymmetry is the point of the
 // defaults rather than an accident of the numbers (spec:FLOW#common-windows).
@@ -87,9 +60,9 @@ pub(crate) struct ResolvedWindows {
 	pub(crate) connection: u32,
 }
 
-/// What the Node.js networking environment variables asked for, to apply to a reqwest client
-/// builder as Node.js honours them for its own clients. This is read for every agent, so
-/// `fetch()` behaves like Node's built-in fetch out of the box.
+/// The Node.js networking environment variables, applied to a reqwest client builder as Node
+/// honours them for its own. Read for every agent, so `fetch()` behaves like Node's built-in
+/// fetch out of the box.
 ///
 /// - `NODE_EXTRA_CA_CERTS`: a path to a PEM file whose certificates are added to
 ///   the trust store on top of the platform roots. As in Node.js, a value that
@@ -108,7 +81,7 @@ pub(crate) struct ResolvedWindows {
 ///   default and treats this variable purely as an opt-*out* switch, so leaving
 ///   it unset (or `"1"`) keeps the existing always-on behaviour.
 ///
-/// `NODE_USE_SYSTEM_CA` is deliberately not honoured: faith bundles no Mozilla
+/// `NODE_USE_SYSTEM_CA` is not honoured: faith bundles no Mozilla
 /// root set, so its only default trust source is the platform store the variable
 /// would toggle. `=0` could therefore only mean "trust almost nothing", which is
 /// never what a caller wants, so the platform store is always used.
@@ -173,11 +146,6 @@ pub(crate) struct H3UpgradeRecipe {
 }
 
 /// Everything needed to build the agent's clients, validated once up front.
-///
-/// A client has to be buildable more than once: dropping the connection pool means dropping the
-/// client, which is what a network change asks for, so what the client is built from has to outlive
-/// any one of them. Options are validated once into these fields, and building a client is then a
-/// pure function of them and the agent's shared state.
 // spec:NETCHG
 #[derive(Debug, Clone)]
 pub(crate) struct ClientRecipe {
@@ -227,10 +195,8 @@ pub(crate) struct ClientRecipe {
 /// Point the resolver's `HTTPS` record reading at the upgrade layer, so a record advertising
 /// `alpn="h3"` makes an origin probe-worthy before anything has connected to it.
 ///
-/// A no-op without all the parts: the system resolver is not Faith's to add a query to, and with
-/// HTTP/3 upgrade off there is nothing an advertisement could feed, so neither sends one.
-///
-/// Re-called on a network change, where the prober is rebuilt with the client it sends on.
+/// A no-op under the system resolver or with HTTP/3 upgrade off. Re-called on a network change,
+/// where the prober is rebuilt with the client it sends on.
 // spec:DNS#https-records
 #[cfg(all(feature = "http3", feature = "dns"))]
 pub fn install_https_sink(
@@ -251,7 +217,7 @@ pub fn install_https_sink(
 	)));
 }
 
-/// The clients [`ClientRecipe::build`] produces, and the prober that sends on them.
+/// The clients and prober [`ClientRecipe::build`] produces.
 pub(crate) struct BuiltClients {
 	pub(crate) client: ClientWithMiddleware,
 	pub(crate) raw_client: Client,
@@ -261,10 +227,10 @@ pub(crate) struct BuiltClients {
 
 /// Install ring as the process's rustls crypto provider.
 ///
-/// reqwest reads the process default when it builds a client and panics if there is none, so this
-/// runs before the first one is built. Only where ring is the chosen backend: with `tls-aws-lc-rs`
-/// also on, reqwest supplies aws-lc-rs itself, which is also what an HTTP/3 build needs. Installing
-/// is process-wide and once-only, so a provider the embedding program put in place is left alone.
+/// reqwest reads the process default when it builds a client and panics if there is none. Only
+/// where ring is the chosen backend; with `tls-aws-lc-rs` also on, reqwest supplies aws-lc-rs
+/// itself. Once-only and process-wide, so a provider the embedding program installed is left
+/// alone.
 #[cfg(all(feature = "tls-ring", not(feature = "tls-aws-lc-rs")))]
 fn install_crypto_provider() {
 	use std::sync::Once;
@@ -414,7 +380,7 @@ impl ClientRecipe {
 
 		let raw_client = client
 			.build()
-			.map_err(|e| FaithError::new(FaithErrorKind::Config, Some(format!("{e:?}"))))?;
+			.map_err(|e| FaithError::new(FaithErrorKind::Config, format!("{e:?}")))?;
 		let mut client = ClientBuilder::new(raw_client.clone());
 
 		#[cfg(feature = "http3")]
@@ -475,7 +441,7 @@ impl ClientRecipe {
 		// rewrite cannot split HTTP/3 and TCP responses across separate entries.
 		#[cfg(feature = "http3")]
 		if let Some(alt_svc_cache) = alt_svc_cache {
-			client = client.with(AltSvcMiddleware::<HeadersStamp>::new(
+			client = client.with(AltSvcMiddleware::new(
 				alt_svc_cache.clone(),
 				self.h3_upgrade.enabled,
 				self.h3_upgrade.attempt_timeout,

@@ -1,8 +1,10 @@
-//! Handing the connection tracker's view to JavaScript. (spec:OBS)
+//! Handing the connection tracker's view to JavaScript.
 //!
 //! The tracking itself, and reading the operating system's statistics, is
 //! [`web_faith_conn_tracker`]'s; what belongs here is turning a snapshot into an object V8 can
 //! carry, which means JavaScript `Date`s for the timestamps and `i64` for every count.
+
+// spec:OBS
 
 use std::time::{SystemTime, UNIX_EPOCH};
 

@@ -1,4 +1,6 @@
-//! Reading a response: where trailers land, what is known of the peer, and writing a body out.
+//! Responses, bodies, and request timing.
+
+pub use crate::timing::RequestTiming;
 
 // spec:RESP spec:TRL spec:BODY
 
@@ -7,6 +9,7 @@ use std::{
 	hint::unreachable_unchecked,
 	mem::replace,
 	net::SocketAddr,
+	path::{Path, PathBuf},
 	pin::Pin,
 	sync::{
 		Arc,
@@ -26,7 +29,7 @@ use stream_shared::SharedStream;
 use tokio::{io::AsyncWriteExt, sync::watch};
 
 #[cfg(feature = "encoding")]
-use web_faith_encoding::{Coding, decode_stream};
+use web_faith_encoding::{Coding, response::decode_stream};
 
 use crate::{
 	body::{Body, BodyHolder, DynStream, drain_body_inner},
@@ -37,17 +40,16 @@ use crate::{
 
 use crate::integrity::{finish_integrity, integrity_checker, verify_integrity};
 
-/// What is known about the peer that sent a response.
-///
-/// - `address`: The IP address and port of the peer, if available.
-/// - `certificate`: When connected over HTTPS, this is the DER-encoded leaf certificate of the peer.
+/// The peer that sent a response.
 #[derive(Debug)]
 pub struct PeerInformation {
+	/// The peer's address and port, where the connection could report one.
 	pub address: Option<SocketAddr>,
+	/// The peer's DER-encoded leaf certificate, for a response that arrived over HTTPS.
 	pub certificate: Option<Vec<u8>>,
 }
 
-/// Where a response body is written, and on what terms.
+/// Where a response body is written.
 #[derive(Debug, Clone, Default)]
 pub struct FileDestination {
 	/// Truncate and replace an occupied destination. The default refuses one instead, leaving what
@@ -57,18 +59,15 @@ pub struct FileDestination {
 	pub mode: Option<u32>,
 }
 
-/// The shortest gap between progress reports.
-///
-/// Reporting every chunk would cross a surface boundary thousands of times for a large body,
-/// which is the cost writing to a file directly exists to avoid. A caller driving a progress bar
-/// cannot use updates faster than this anyway, and the final report is always delivered regardless.
-pub const PROGRESS_INTERVAL: Duration = Duration::from_millis(50);
+// Reporting every chunk would cross the surface boundary thousands of times for a large body,
+// which is the cost writing to a file directly exists to avoid. The final report always lands
+// regardless.
+pub(crate) const PROGRESS_INTERVAL: Duration = Duration::from_millis(50);
 
-/// Open the destination file for a body write, mapping filesystem refusals to the errors
-/// writing a body to a file surfaces.
+/// Open the destination file for a body write, mapping filesystem refusals to Faith's errors.
 // spec:BODY#tofile
-pub async fn open_destination(
-	path: &str,
+pub(crate) async fn open_destination(
+	path: &Path,
 	options: &FileDestination,
 ) -> Result<tokio::fs::File, FaithError> {
 	let mut open = tokio::fs::OpenOptions::new();
@@ -91,10 +90,9 @@ pub async fn open_destination(
 	}
 }
 
-/// Classify a failure to open the destination. An occupied destination is `FileExists`,
-/// unless what occupies it is a directory: a directory is well-formed but cannot be written
-/// to, which is a `FileWrite`. Every other refusal is a `FileWrite` carrying the OS detail.
-pub async fn classify_open_error(path: &str, err: std::io::Error) -> FaithError {
+/// Classify a failure to open the destination: `FileExists` for an occupied path, `FileWrite` for
+/// a directory or any other refusal, carrying the OS detail.
+pub(crate) async fn classify_open_error(path: &Path, err: std::io::Error) -> FaithError {
 	let kind = if err.kind() == std::io::ErrorKind::AlreadyExists {
 		match tokio::fs::symlink_metadata(path).await {
 			Ok(meta) if meta.is_dir() => FaithErrorKind::FileWrite,
@@ -103,27 +101,28 @@ pub async fn classify_open_error(path: &str, err: std::io::Error) -> FaithError 
 	} else {
 		FaithErrorKind::FileWrite
 	};
-	FaithError::new(kind, Some(err.to_string()))
+	FaithError::new(kind, err.to_string())
 }
 
+/// The trailing headers a response carried, once its body has ended.
 #[derive(Clone, Debug, Default)]
 pub enum Trailers {
+	/// The body has not ended, so the question is still open.
 	#[default]
 	NotYet,
+	/// The body ended carrying no trailers.
 	None,
+	/// The trailers that arrived.
 	Some(HeaderMap),
 }
 
 /// Where the trailers land: written by whoever finishes the body, awaited by `trailers()`.
 ///
-/// A watch channel, rather than a lock read in a loop. Per the fetch standard's trailers
-/// proposal (<https://github.com/whatwg/fetch/pull/1940>) this promise is *meant* not to
-/// resolve until the body has been consumed, so the wait is unbounded by design -- which is
-/// precisely why polling was the wrong shape for it. Awaiting trailers without reading the
-/// body now leaves an idle pending promise rather than a pegged core, and the future can be
-/// cancelled while it waits.
+/// A watch channel, so waiting parks instead of spinning. The fetch standard's trailers proposal
+/// (<https://github.com/whatwg/fetch/pull/1940>) has this not resolving until the body is
+/// consumed, so the wait is unbounded by design.
 #[derive(Debug)]
-pub struct TrailersSlot(watch::Sender<Trailers>);
+pub(crate) struct TrailersSlot(watch::Sender<Trailers>);
 
 impl Default for TrailersSlot {
 	fn default() -> Self {
@@ -139,8 +138,8 @@ impl TrailersSlot {
 
 	/// Record that the body ended, if no trailers frame got there first.
 	///
-	/// `send_if_modified` so the read and the write are one step, and so waiters are woken
-	/// only by the call that actually settled it.
+	/// `send_if_modified` keeps the read and write one step, and wakes waiters only from the call
+	/// that settled it.
 	pub fn ended(&self) {
 		self.0.send_if_modified(|state| {
 			if matches!(state, Trailers::NotYet) {
@@ -300,48 +299,48 @@ mod tests {
 
 /// A progress report from a body write in flight.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct FileProgress {
 	/// Bytes written to the file so far.
 	pub bytes_written: u64,
-	/// What the response advertised in `Content-Length`, when it sent one and the body is not
-	/// being decoded. Absent when the total is not known ahead of time, which is the case for a
-	/// chunked response and for one being decoded.
+	/// The `Content-Length` the response advertised. Absent for a chunked response, and for one
+	/// being decoded, where the final size is not known ahead of time.
 	pub content_length: Option<u64>,
 }
 
-/// What a completed body write reports.
+/// The result of writing a body to a file.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct FileWritten {
 	/// The absolute filesystem path written to.
-	pub path: String,
+	pub path: PathBuf,
 	/// The number of bytes that landed at the destination.
 	pub bytes_written: u64,
 }
 
 /// A response to a request.
 ///
-/// A response is not constructed by a caller; it arrives from a request. Reading its body consumes
-/// it, following the fetch standard rather than the owned-response model of other Rust clients, so a
-/// second read fails.
+/// Arrives from a request; it is not constructed directly. Reading the body consumes it, so a
+/// second read fails. [`Self::try_clone`] gets a copy that can be read separately.
 #[derive(Debug, Clone)]
 pub struct Response {
-	pub body: BodyHolder,
+	pub(crate) body: BodyHolder,
 	/// The coding to decode the body under, or `None` to deliver it as received.
-	#[cfg(feature = "encoding")]
 	/// Set once when the response is built, from the request's `Accept-Encoding` and the
 	/// response's `Content-Encoding` (see [`web_faith_encoding`]).
-	pub decode: Option<Coding>,
-	pub disturbed: Arc<AtomicBool>,
-	pub headers: HeaderMap,
-	pub integrity: Option<String>,
-	pub peer: Arc<PeerInformation>,
-	pub redirected: bool,
-	pub stats: Arc<InnerAgentStats>,
-	pub status_code: StatusCode,
-	pub timing: Arc<TimingSlot>,
-	pub trailers: Arc<TrailersSlot>,
-	pub url: Url,
-	pub version: Version,
+	#[cfg(feature = "encoding")]
+	pub(crate) decode: Option<Coding>,
+	pub(crate) disturbed: Arc<AtomicBool>,
+	pub(crate) headers: HeaderMap,
+	pub(crate) integrity: Option<String>,
+	pub(crate) peer: Arc<PeerInformation>,
+	pub(crate) redirected: bool,
+	pub(crate) stats: Arc<InnerAgentStats>,
+	pub(crate) status_code: StatusCode,
+	pub(crate) timing: Arc<TimingSlot>,
+	pub(crate) trailers: Arc<TrailersSlot>,
+	pub(crate) url: Url,
+	pub(crate) version: Version,
 }
 
 impl Response {
@@ -352,8 +351,8 @@ impl Response {
 
 	/// The canonical reason phrase for the status, or empty for a code with no well-known one.
 	///
-	/// Always the canonical phrase: HTTP/1 lets a server send its own, which is not surfaced here,
-	/// and HTTP/2 and HTTP/3 carry none at all.
+	/// Always the canonical phrase. HTTP/1 lets a server send its own, which is not surfaced here;
+	/// HTTP/2 and HTTP/3 carry none at all.
 	pub fn status_text(&self) -> &'static str {
 		self.status_code.canonical_reason().unwrap_or_default()
 	}
@@ -363,11 +362,12 @@ impl Response {
 		self.status_code.is_success()
 	}
 
+	/// The response's headers.
 	pub fn headers(&self) -> &HeaderMap {
 		&self.headers
 	}
 
-	/// The URL the response came from, which is the last one after any redirects.
+	/// The URL the response came from, after any redirects.
 	pub fn url(&self) -> &Url {
 		&self.url
 	}
@@ -382,9 +382,26 @@ impl Response {
 		self.version
 	}
 
-	/// What is known of the peer that sent the response.
+	/// The peer that sent the response.
 	pub fn peer(&self) -> &PeerInformation {
 		&self.peer
+	}
+
+	/// Copy the response, so the body can be read twice.
+	///
+	/// Both copies read the same underlying body, and neither is disturbed by the other having
+	/// been cloned. Fails if the body has already been read.
+	pub fn try_clone(&self) -> Result<Self, FaithError> {
+		// A read, not `check_stream_disturbed`: that one swaps the flag, which would disturb the
+		// response being cloned and leave neither copy readable.
+		if self.body_used() {
+			return Err(FaithErrorKind::ResponseAlreadyDisturbed.into());
+		}
+
+		Ok(Self {
+			disturbed: Arc::new(AtomicBool::new(false)),
+			..Clone::clone(self)
+		})
 	}
 
 	/// Whether the body has been read, or handed out as a stream.
@@ -394,9 +411,8 @@ impl Response {
 
 	/// Read the whole body.
 	///
-	/// Reading consumes the body, so a second read fails with the already-disturbed error, as the
-	/// fetch standard has it rather than the owned-response model other Rust clients use. An
-	/// `integrity` value on the request is verified here, once the whole body is in hand.
+	/// Consumes it, so a second read fails. A request's `integrity` is verified here, once the
+	/// whole body is in hand.
 	// spec:BODY
 	pub async fn bytes(&self) -> Result<Vec<u8>, FaithError> {
 		self.check_stream_disturbed()?;
@@ -405,8 +421,7 @@ impl Response {
 
 	/// Read the whole body as text.
 	///
-	/// Always decoded as UTF-8, with invalid sequences replaced by U+FFFD rather than failing, which
-	/// is what the fetch standard calls for.
+	/// Decoded as UTF-8, with invalid sequences replaced by U+FFFD.
 	pub async fn text(&self) -> Result<String, FaithError> {
 		let bytes = self.bytes().await?;
 		Ok(String::from_utf8(bytes)
@@ -415,20 +430,18 @@ impl Response {
 
 	/// Read the whole body and deserialise it from JSON.
 	///
-	/// The body is read into memory before it is parsed, which can cost twice its size; read
-	/// [`Self::body_stream`] instead where that matters.
+	/// Reads into memory before parsing, which can cost twice the body's size; [`Self::body_stream`]
+	/// avoids that.
 	pub async fn json<T: DeserializeOwned>(&self) -> Result<T, FaithError> {
 		let bytes = self.bytes().await?;
 		serde_json::from_slice(&bytes)
-			.map_err(|err| FaithError::new(FaithErrorKind::JsonParse, Some(err.to_string())))
+			.map_err(|err| FaithError::new(FaithErrorKind::JsonParse, err.to_string()))
 	}
 
-	/// Take the body as a stream of chunks, decoded under whichever coding was negotiated.
+	/// The body as a stream of chunks, decoded under whichever coding was negotiated.
 	///
-	/// `None` for a response that cannot carry a body. Unlike the collecting reads, this can be
-	/// called more than once: each call hands back the same shared stream rather than a second one.
-	/// A body already being consumed elsewhere reports the already-disturbed error rather than
-	/// waiting for the other reader to finish.
+	/// `None` for a response that cannot carry a body. Callable more than once — each call hands
+	/// back the same shared stream. Fails if the body is already being consumed elsewhere.
 	// spec:BODY
 	pub fn body_stream(
 		&self,
@@ -446,21 +459,14 @@ impl Response {
 		let stream = self.ensure_stream(&mut body, self.body.drained.clone())?;
 
 		Ok(Some(stream.map_err(|err| {
-			FaithError::new(FaithErrorKind::BodyStream, Some(err))
+			FaithError::new(FaithErrorKind::BodyStream, err)
 		})))
 	}
 
 	/// Give up on the body, releasing the connection back to the pool.
 	///
-	/// Worth doing when the body is not wanted: left unread, the connection may be held open until
-	/// the response is dropped. An HTTP/1 body is read and thrown away so the connection can be
-	/// reused; a multiplexed one is dropped instead, cancelling the stream without touching the
-	/// connection it shared.
-	///
-	/// This settles the trailers as none rather than leaving them pending: on a multiplexed
-	/// connection the stream was cancelled before any could arrive, and draining an HTTP/1 body
-	/// here bypasses the stream that would have collected them. A caller who discards the body and
-	/// then awaits trailers would otherwise wait for something that can no longer come.
+	/// Worth doing when the body is not wanted: left unread, the connection is held until the
+	/// response drops. Trailers settle as `None`, since none can arrive after this.
 	// spec:BODY spec:TRL spec:RESP#request-timing
 	pub async fn discard(&self) {
 		if let Some(arc) = self.body.body.clone() {
@@ -484,13 +490,13 @@ impl Response {
 
 	/// The trailers, once the body has ended.
 	///
-	/// A body that is never read never ends, so this waits indefinitely by design; see [`Trailers`].
+	/// A body that is never read never ends, so this waits indefinitely; see [`Trailers`].
 	// spec:TRL
 	pub async fn trailers(&self) -> Trailers {
 		self.trailers.settled().await
 	}
 
-	pub fn check_stream_disturbed(&self) -> Result<(), FaithError> {
+	pub(crate) fn check_stream_disturbed(&self) -> Result<(), FaithError> {
 		if self.disturbed.swap(true, Ordering::SeqCst) {
 			Err(FaithErrorKind::ResponseAlreadyDisturbed.into())
 		} else {
@@ -498,10 +504,10 @@ impl Response {
 		}
 	}
 
-	/// Ensures the body is converted to a SharedStream, returning a clone of it.
+	/// The body as a shared stream, converting it to one if it isn't already.
 	///
-	/// This allows multiple consumers (original + clones) to independently read the body.
-	pub fn ensure_stream(
+	/// Shared so a response and its clones read the same body.
+	pub(crate) fn ensure_stream(
 		&self,
 		body: &mut Body,
 		drained_flag: Arc<AtomicBool>,
@@ -551,8 +557,8 @@ impl Response {
 				) as Pin<Box<DynStream>>;
 
 				#[cfg(feature = "encoding")]
-				let bytes = match self.decode {
-					Some(coding) => decode_stream(bytes, coding),
+				let bytes = match &self.decode {
+					Some(coding) => decode_stream(bytes, coding.clone()),
 					None => bytes,
 				};
 
@@ -600,11 +606,10 @@ impl Response {
 		}
 	}
 
-	/// Underlying efficient response body fetcher.
+	/// Read the whole body as the chunks it arrived in, without copying them.
 	///
-	/// Unlike bytes() and co, this grabs all the chunks of the response but doesn't
-	/// copy them. Further processing is needed to obtain a `Vec<u8>` or whatever is wanted.
-	pub async fn gather(&self) -> Result<Arc<[Bytes]>, FaithError> {
+	/// [`Self::bytes`] and its siblings are built on this.
+	pub(crate) async fn gather(&self) -> Result<Arc<[Bytes]>, FaithError> {
 		let Some(lock) = &self.body.body else {
 			return Ok(Default::default());
 		};
@@ -616,8 +621,7 @@ impl Response {
 		let mut chunks = Vec::new();
 		futures::pin_mut!(stream);
 		while let Some(result) = stream.next().await {
-			let chunk =
-				result.map_err(|err| FaithError::new(FaithErrorKind::BodyStream, Some(err)))?;
+			let chunk = result.map_err(|err| FaithError::new(FaithErrorKind::BodyStream, err))?;
 			chunks.push(chunk);
 		}
 
@@ -627,8 +631,8 @@ impl Response {
 		Ok(Arc::from(chunks.into_boxed_slice()))
 	}
 
-	/// gather() and then copy into one contiguous buffer
-	pub async fn gather_contiguous(&self) -> Result<Vec<u8>, FaithError> {
+	/// [`Self::gather`], then copy the chunks into one contiguous buffer.
+	pub(crate) async fn gather_contiguous(&self) -> Result<Vec<u8>, FaithError> {
 		let body = self.gather().await?;
 		let length = body.iter().map(|chunk| chunk.len()).sum();
 		let mut bytes = Vec::with_capacity(length);
@@ -643,17 +647,18 @@ impl Response {
 		Ok(bytes)
 	}
 
-	/// Write the body out to a file, reporting progress as the bytes land.
+	/// Write the body to a file, reporting progress as the bytes land.
 	///
-	/// `on_progress` is called with the bytes written so far and the advertised length where one is
-	/// known, no more often than [`PROGRESS_INTERVAL`], and once more when the last byte is written.
+	/// `on_progress` is called with the bytes written so far and the advertised length when it is
+	/// known, at most every 50ms, and once more when the last byte is written.
 	// spec:BODY#tofile
 	pub async fn write_to_file(
 		&self,
-		path: &str,
+		path: impl AsRef<Path>,
 		options: &FileDestination,
 		mut on_progress: impl FnMut(FileProgress),
 	) -> Result<FileWritten, FaithError> {
+		let path = path.as_ref();
 		// A response that cannot carry a body has nothing to write, and this is settled
 		// before any file is created (spec:BODY#tofile).
 		let Some(lock) = self.body.body.clone() else {
@@ -709,14 +714,13 @@ impl Response {
 		let mut reported_at = Instant::now();
 		futures::pin_mut!(stream);
 		while let Some(result) = stream.next().await {
-			let chunk =
-				result.map_err(|err| FaithError::new(FaithErrorKind::BodyStream, Some(err)))?;
+			let chunk = result.map_err(|err| FaithError::new(FaithErrorKind::BodyStream, err))?;
 			if let Some(checker) = checker.as_mut() {
 				checker.input(&chunk);
 			}
 			file.write_all(&chunk)
 				.await
-				.map_err(|err| FaithError::new(FaithErrorKind::FileWrite, Some(err.to_string())))?;
+				.map_err(|err| FaithError::new(FaithErrorKind::FileWrite, err.to_string()))?;
 			written += chunk.len() as u64;
 			// A server cannot send more than it promised: once the bytes off the wire exceed
 			// the advertised length, the write fails and the bytes so far stay on disk
@@ -734,7 +738,7 @@ impl Response {
 
 		file.flush()
 			.await
-			.map_err(|err| FaithError::new(FaithErrorKind::FileWrite, Some(err.to_string())))?;
+			.map_err(|err| FaithError::new(FaithErrorKind::FileWrite, err.to_string()))?;
 
 		// The last report always lands, whatever the rate limit allowed along the way, so a
 		// caller's final view of a completed write is the whole body rather than the last
@@ -752,18 +756,38 @@ impl Response {
 		Ok(FileWritten {
 			// A relative path resolves against the process's working directory; the caller
 			// is handed the absolute path the bytes landed at.
-			path: std::path::absolute(path)
-				.map(|abs| abs.to_string_lossy().into_owned())
-				.unwrap_or_else(|_| path.to_owned()),
+			path: std::path::absolute(path).unwrap_or_else(|_| path.to_path_buf()),
 			bytes_written: written,
 		})
 	}
 }
 
-/// A [`Response`]'s body, as an [`http_body::Body`].
+/// A response's body plumbing, for driving the stream directly. Permanently unstable.
+#[cfg(feature = "internals")]
+impl Response {
+	/// The body as Faith holds it, for a caller driving the stream itself.
+	pub fn body_holder(&self) -> &BodyHolder {
+		&self.body
+	}
+
+	/// Whether the body has already been read or handed out.
+	pub fn check_disturbed(&self) -> Result<(), FaithError> {
+		self.check_stream_disturbed()
+	}
+
+	/// The body as a shared stream, converting it to one if it isn't already.
+	pub fn shared_stream(
+		&self,
+		body: &mut Body,
+		drained: Arc<AtomicBool>,
+	) -> Result<SharedStream<Pin<Box<DynStream>>>, FaithError> {
+		self.ensure_stream(body, drained)
+	}
+}
+
+/// A [`Response`]'s body as an [`http_body::Body`].
 ///
-/// This is what a response hands to code written against the wider ecosystem: a tower service, a
-/// hyper client, anything that takes a body rather than Faith's own reads.
+/// For handing to a tower service, a hyper client, or anything else that takes one.
 pub struct ResponseBody {
 	chunks: Pin<Box<dyn Stream<Item = Result<Bytes, FaithError>> + Send>>,
 }
@@ -790,11 +814,10 @@ impl http_body::Body for ResponseBody {
 }
 
 impl Response {
-	/// Take the response as an [`http::Response`], so it feeds code written against the ecosystem
-	/// rather than against Faith.
+	/// Convert into an [`http::Response`], for code written against the wider ecosystem.
 	///
-	/// Fails where taking the body would: a body already being consumed elsewhere reports the
-	/// already-disturbed error. A response that cannot carry a body yields an empty one.
+	/// Fails if the body is already being consumed elsewhere. A response that cannot carry a body
+	/// yields an empty one.
 	pub fn into_http(self) -> Result<http::Response<ResponseBody>, FaithError> {
 		let chunks: Pin<Box<dyn Stream<Item = Result<Bytes, FaithError>> + Send>> =
 			match self.body_stream()? {

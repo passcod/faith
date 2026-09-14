@@ -272,7 +272,7 @@ test("encoding: an agent whose defaults do not name Accept-Encoding still sends 
 	});
 });
 
-test("encoding: layered codings on one header line are delivered as received", async (t) => {
+test("encoding: the outermost of layered codings on one header line is decoded", async (t) => {
 	await withOrigin(t, async ({ origin }) => {
 		// gzip applied first, then brotli over the top: `Content-Encoding: gzip, br`.
 		const res = await fetch(origin.url("/layered/gzip/br"), { timeout: 10000 });
@@ -283,50 +283,51 @@ test("encoding: layered codings on one header line are delivered as received", a
 
 		t.equal(
 			res.headers.get("content-encoding"),
-			"gzip, br",
-			"Faith decodes a single coding, so both survive on the header",
+			"gzip",
+			"brotli came off, and the header names the gzip still under it",
 		);
-		t.ok(res.headers.get("content-length"), "and Content-Length survives with them");
+		t.notOk(
+			res.headers.get("content-length"),
+			"and Content-Length goes, no longer describing what is read",
+		);
 
 		const bytes = await res.bytes();
-		t.notDeepEqual(
+		t.deepEqual(
 			[bytes[0], bytes[1]],
 			GZIP_MAGIC,
-			"the body is the outermost coding, brotli, not the gzip beneath it",
+			"the body is the gzip that was beneath the brotli",
 		);
-		// The caller unwinds it, outermost first.
-		const once = zlib.brotliDecompressSync(bytes);
-		t.deepEqual([once[0], once[1]], GZIP_MAGIC, "under which is the gzip stream");
+		// The caller unwinds what the header still names.
 		t.equal(
-			zlib.gunzipSync(once).toString("utf8"),
+			zlib.gunzipSync(bytes).toString("utf8"),
 			PAYLOAD,
 			"and under that the representation",
 		);
 	});
 });
 
-test("encoding: layered codings split across header lines are delivered as received", async (t) => {
+test("encoding: layered codings split across header lines unwind the same way", async (t) => {
 	await withOrigin(t, async ({ origin }) => {
 		// One `Content-Encoding` line per coding: the same list as the comma-joined form, so
-		// neither coding is decoded. Reading only the first line here would decode gzip and
-		// hand back bytes that are still brotli underneath.
+		// brotli is the outermost either way. Reading only the first line here would decode
+		// gzip and hand back bytes that are still brotli underneath.
 		const res = await fetch(origin.url("/layered-lines/gzip/br"), { timeout: 10000 });
 		if (res.status === 501) {
 			t.skip("this Node cannot produce one of the codings");
 			return;
 		}
 
-		t.ok(
-			res.headers.get("content-encoding").includes("gzip") &&
-				res.headers.get("content-encoding").includes("br"),
-			"both codings survive on the header",
+		t.equal(
+			res.headers.get("content-encoding"),
+			"gzip",
+			"brotli came off, and the one line left names the gzip under it",
 		);
 
 		const bytes = await res.bytes();
 		t.equal(
-			zlib.gunzipSync(zlib.brotliDecompressSync(bytes)).toString("utf8"),
+			zlib.gunzipSync(bytes).toString("utf8"),
 			PAYLOAD,
-			"and the body is doubly encoded, for the caller to unwind",
+			"and the body is the gzip, for the caller to unwind",
 		);
 	});
 });

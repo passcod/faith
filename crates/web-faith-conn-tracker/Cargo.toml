@@ -1,7 +1,7 @@
 [package]
 name = "web-faith-conn-tracker"
 description = "Live per-connection TCP statistics, read from the operating system"
-version = "1.0.0"
+version = "1.0.1"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -23,3 +23,7 @@ libc.workspace = true
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows.workspace = true
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

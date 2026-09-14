@@ -19,7 +19,8 @@ fn main() {
 	jar.store_response_cookies(set_cookie.iter(), &origin);
 
 	// A cookie can also be added by hand, the way a caller seeds a jar.
-	jar.add_cookie_str("theme=dark; Path=/", &origin);
+	jar.add_cookie_str("theme=dark; Path=/", &origin)
+		.expect("a well-formed cookie over https");
 
 	match jar.request_cookie_header(&origin) {
 		Some(header) => println!("Cookie: {}", header.to_str().expect("ASCII cookie values")),

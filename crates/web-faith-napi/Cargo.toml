@@ -1,14 +1,13 @@
 [package]
 name = "web-faith-napi"
 description = "Faith: a Rust-powered JS fetch (Node.js binding)"
-version.workspace = true
+# Written by `npm run version` from package.json.
+version = "1.0.0"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 authors.workspace = true
-# Ships as the `@passcod/faith` npm package rather than to crates.io: it is a cdylib whose product
-# is the built `.node` binary, which a crates.io consumer has no use for.
 publish = false
 
 [lib]
@@ -28,7 +27,7 @@ reqwest.workspace = true
 reqwest-middleware.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
-web-faith.workspace = true
+web-faith = { workspace = true, features = ["internals"] }
 web-faith-conn-tracker = { workspace = true, optional = true }
 web-faith-cookies = { workspace = true, features = ["reqwest"], optional = true }
 

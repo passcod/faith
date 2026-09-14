@@ -50,8 +50,8 @@ pub struct AgentStats {
 	pub bodies_finished: i64,
 }
 
-impl From<web_faith::stats::AgentStats> for AgentStats {
-	fn from(stats: web_faith::stats::AgentStats) -> Self {
+impl From<web_faith::agent::AgentStats> for AgentStats {
+	fn from(stats: web_faith::agent::AgentStats) -> Self {
 		let count = |value: u64| i64::try_from(value).unwrap_or(i64::MAX);
 		Self {
 			requests_sent: count(stats.requests_sent),
@@ -62,7 +62,8 @@ impl From<web_faith::stats::AgentStats> for AgentStats {
 	}
 }
 
-/// One entry of `Agent.resolvers()`: a DNS server the agent resolves through (spec:OBS#resolvers).
+/// One entry of `Agent.resolvers()`: a DNS server the agent resolves through.
+// spec:OBS#resolvers
 #[cfg(feature = "dns")]
 #[napi(object)]
 #[derive(Debug, Clone)]
@@ -107,7 +108,7 @@ impl Agent {
 		let options = web_faith::options::AgentOptions::try_from(options)?;
 		// A napi callback can run outside the runtime, and building the HTTP/3 endpoint needs to be
 		// inside one, so the client is constructed within whichever runtime is to hand.
-		within_runtime_if_available(|| web_faith::agent::Agent::from_options(options))
+		within_runtime_if_available(|| web_faith::Agent::from_options(options))
 			.map(|inner| Self { inner })
 	}
 
@@ -219,7 +220,8 @@ impl Agent {
 }
 
 /// Build the JS error a warm-up throws synchronously for a caller mistake, preserving its `.code`
-/// and JS error class. Network failures never reach here — they resolve quietly (spec:WARM).
+/// and JS error class. Network failures never reach here — they resolve quietly.
+// spec:WARM
 fn caller_error(env: &Env, err: FaithError) -> napi::Error {
 	napi::Error::from(err.into_js_error(env))
 }
@@ -233,8 +235,8 @@ fn caller_error(env: &Env, err: FaithError) -> napi::Error {
 fn refuse_absent_capabilities(options: &AgentOptions) -> Result<(), FaithError> {
 	let absent = |group: &str| -> Result<(), FaithError> {
 		Err(FaithError::new(
-			web_faith::FaithErrorKind::Config,
-			Some(format!("this build has no {group} support")),
+			web_faith::error::FaithErrorKind::Config,
+			format!("this build has no {group} support"),
 		))
 	};
 
@@ -308,9 +310,9 @@ impl Agent {
 			.resolvers()
 			.into_iter()
 			.map(|report| ResolverInfo {
-				address: report.address,
-				transport: report.transport,
-				source: report.source,
+				address: report.address.to_string(),
+				transport: report.transport.to_string(),
+				source: report.source.to_string(),
 			})
 			.collect()
 	}
@@ -345,7 +347,8 @@ impl Agent {
 			return;
 		};
 
-		jar.add_cookie_str(&cookie, &url);
+		// The Node surface takes an insert as a no-op on failure (spec:COOK).
+		let _ = jar.add_cookie_str(&cookie, &url);
 	}
 
 	/// Retrieve a cookie from the store.

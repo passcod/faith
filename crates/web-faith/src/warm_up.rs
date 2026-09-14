@@ -1,14 +1,14 @@
-//! Reading what a warm-up was asked to warm.
+//! Warm-up argument parsing.
 //!
 //! Warming a name and warming an origin take their arguments loosely, so the parsing that decides
-//! what was meant is worth keeping in one place, away from the verbs that act on it.
+//! what was meant is worth keeping in one place.
 
 use url::Url;
 
-// spec:WARM
-/// Extract the bare host from a a DNS prefetch argument, ignoring any scheme, port, or path, or
+/// Extract the bare host from a DNS prefetch argument, ignoring any scheme, port, or path, or
 /// `None` if there is no host to resolve. A DNS name carries none of those parts, so a fuller
 /// string is reduced to its host.
+// spec:WARM
 pub fn extract_host(input: &str) -> Option<String> {
 	// A string that already spells a scheme is read as the URL it is; anything else is the
 	// bare-host case, where a name is not a URL on its own and giving it an authority makes it

@@ -1,7 +1,7 @@
 [package]
 name = "web-faith-cookies"
-description = "A cookie jar with the RFC 6265bis rules that hold outside a browser"
-version = "1.0.0"
+description = "A cookie jar for HTTP clients, specialised for the server-side context"
+version = "1.0.1"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -18,10 +18,12 @@ url.workspace = true
 reqwest = { workspace = true, optional = true }
 
 [dev-dependencies]
-# Doctests and examples link as their own crate, so the types the API speaks have to be named there too.
 http.workspace = true
 url.workspace = true
 
 [features]
-# Implement reqwest's `CookieStore`, so the jar can serve as its cookie provider.
 reqwest = ["dep:reqwest", "reqwest/cookies"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

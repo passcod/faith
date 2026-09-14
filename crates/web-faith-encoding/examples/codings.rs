@@ -7,28 +7,28 @@ use bytes::Bytes;
 use futures::StreamExt as _;
 use http::{HeaderMap, HeaderValue};
 use web_faith_encoding::{
-	AcceptEncoding, Coding, DEFAULT_ACCEPT_ENCODING, compress_buffer, decision, decode_stream,
-	layer_content_encoding, strip_decoded_headers,
+	Coding, ContentEncoding,
+	request::compress_buffer,
+	response::{AcceptEncoding, DEFAULT_ACCEPT_ENCODING, decode_stream},
 };
 
 #[tokio::main]
 async fn main() {
-	let accept = AcceptEncoding::parse(DEFAULT_ACCEPT_ENCODING);
+	let accept = AcceptEncoding::from(DEFAULT_ACCEPT_ENCODING);
 
-	// What a response's headers negotiate against what the request asked for.
 	let mut headers = HeaderMap::new();
 	headers.insert("content-encoding", HeaderValue::from_static("gzip"));
 	headers.insert("content-length", HeaderValue::from_static("42"));
-	let coding = decision(&headers, &accept).expect("gzip is in the default Accept-Encoding");
+	// Just the header half, so the coding is in hand for the round trip below; `response::decode`
+	// does this and the body together.
+	let coding = ContentEncoding::peel_one_header(&mut headers, &accept)
+		.expect("gzip is in the default Accept-Encoding");
 	println!("negotiated: {coding:?}");
-
-	// A decoded body's length and coding no longer describe what the caller receives.
-	strip_decoded_headers(&mut headers);
 	println!("headers after decoding: {:?}", headers.keys().count());
 
 	// Round-trip a body through the coding that was negotiated.
 	let original = b"the quick brown fox jumps over the lazy dog".repeat(8);
-	let compressed = compress_buffer(&original, coding)
+	let compressed = compress_buffer(&original, coding.clone())
 		.await
 		.expect("gzip compresses");
 	println!(
@@ -45,9 +45,17 @@ async fn main() {
 	}
 	println!("round-tripped intact: {}", round_tripped == original);
 
-	// A request that compresses on top of a coding the caller already applied names both, in order.
+	// Compressing a request on top of a coding the caller already applied declares both, in the
+	// order they were applied.
+	let mut request = HeaderMap::new();
+	request.insert("content-encoding", HeaderValue::from_static("br"));
+
+	let layered = ContentEncoding::from(&request).layer(Coding::Gzip);
+	if let Some(value) = layered.to_header_value() {
+		request.insert("content-encoding", value);
+	}
 	println!(
 		"Content-Encoding: {}",
-		layer_content_encoding(Some("br"), Coding::Gzip)
+		request["content-encoding"].to_str().unwrap()
 	);
 }

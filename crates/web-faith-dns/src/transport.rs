@@ -1,19 +1,27 @@
-use std::{net::IpAddr, sync::Arc};
+//! Resolver transports.
+use std::{fmt, net::IpAddr, str::FromStr, sync::Arc};
 
 use hickory_resolver::config::{ConnectionConfig, NameServerConfig, ProtocolConfig};
-use url::{Host, Url};
+use url::{Host, ParseError, Url};
 
 /// The default DoH/DoQ query path, used when a `https://`/`h3://` server URL supplies none.
 const DEFAULT_DNS_QUERY_PATH: &str = "/dns-query";
 
-/// The transport Faith speaks to a resolver, chosen by a server URL's scheme.
+/// A transport to reach a nameserver over, chosen by a server URL's scheme.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Transport {
+	/// Plaintext DNS over UDP, port 53. `udp://`.
 	Udp,
+	/// Plaintext DNS over TCP, port 53. `tcp://`.
 	Tcp,
+	/// DNS over TLS, port 853. `tls://`.
 	Tls,
+	/// DNS over HTTPS, port 443. `https://`.
 	Https,
+	/// DNS over QUIC, port 853. `quic://`.
 	Quic,
+	/// DNS over HTTP/3, port 443. `h3://`.
 	H3,
 }
 
@@ -30,7 +38,7 @@ impl Transport {
 		})
 	}
 
-	/// The conventional port for the transport, used when the URL names none.
+	/// The conventional port for the transport, used when the URL gives none.
 	fn default_port(self) -> u16 {
 		match self {
 			Self::Udp | Self::Tcp => 53,
@@ -40,7 +48,8 @@ impl Transport {
 	}
 
 	/// The lowercase label reported by `resolvers()`.
-	pub(crate) fn label(self) -> &'static str {
+	/// The URL scheme this transport is named by.
+	pub fn scheme(self) -> &'static str {
 		match self {
 			Self::Udp => "udp",
 			Self::Tcp => "tcp",
@@ -52,6 +61,52 @@ impl Transport {
 	}
 }
 
+impl fmt::Display for Transport {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		f.write_str(self.scheme())
+	}
+}
+
+/// Why a nameserver URL is not a [`ServerSpec`].
+///
+/// The [`Url`](Self::Url) variant carries [`url::ParseError`], so `url` is a public dependency of
+/// this crate.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ServerSpecError {
+	/// The input is not a URL.
+	Url(ParseError),
+	/// The URL's scheme names no DNS transport.
+	UnknownScheme,
+	/// The URL carries no host to send queries to.
+	NoHost,
+}
+
+impl fmt::Display for ServerSpecError {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		match self {
+			Self::Url(err) => write!(f, "not a URL: {err}"),
+			Self::UnknownScheme => f.write_str("unknown DNS transport scheme"),
+			Self::NoHost => f.write_str("no host to query"),
+		}
+	}
+}
+
+impl std::error::Error for ServerSpecError {
+	fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+		match self {
+			Self::Url(err) => Some(err),
+			_ => None,
+		}
+	}
+}
+
+impl From<ParseError> for ServerSpecError {
+	fn from(err: ParseError) -> Self {
+		Self::Url(err)
+	}
+}
+
 /// A resolver Faith reaches by IP or by a hostname it bootstraps.
 #[derive(Clone, Debug)]
 pub(crate) enum ServerHost {
@@ -59,8 +114,10 @@ pub(crate) enum ServerHost {
 	Name(String),
 }
 
-/// One entry of `dns.servers`, parsed at agent construction. The IP is not known yet for a
-/// hostname host: that is resolved when the resolver is first used (see [`ResolverSettings`](crate::ResolverSettings)).
+/// One nameserver to query.
+///
+/// Parsed from a server URL with [`FromStr`]. A hostname host has no IP yet; that is resolved when
+/// the resolver is first used.
 #[derive(Clone, Debug)]
 pub struct ServerSpec {
 	pub(crate) host: ServerHost,
@@ -73,18 +130,19 @@ pub struct ServerSpec {
 	cert_name: Option<String>,
 }
 
-impl ServerSpec {
-	/// Parse one `dns.servers` URL, or return a message for an unparseable URL or unknown scheme.
-	pub fn parse(input: &str) -> Result<Self, String> {
-		let url = Url::parse(input).map_err(|err| format!("{input:?}: {err}"))?;
-		let transport = Transport::from_scheme(url.scheme())
-			.ok_or_else(|| format!("{input:?}: unknown DNS transport scheme {:?}", url.scheme()))?;
+impl FromStr for ServerSpec {
+	type Err = ServerSpecError;
+
+	fn from_str(input: &str) -> Result<Self, Self::Err> {
+		let url = Url::parse(input)?;
+		let transport =
+			Transport::from_scheme(url.scheme()).ok_or(ServerSpecError::UnknownScheme)?;
 
 		let host = match url.host() {
 			Some(Host::Ipv4(ip)) => ServerHost::Ip(IpAddr::V4(ip)),
 			Some(Host::Ipv6(ip)) => ServerHost::Ip(IpAddr::V6(ip)),
 			Some(Host::Domain(name)) => ServerHost::Name(name.to_owned()),
-			None => return Err(format!("{input:?}: no host to resolve")),
+			None => return Err(ServerSpecError::NoHost),
 		};
 
 		let port = url.port().unwrap_or_else(|| transport.default_port());
@@ -105,7 +163,9 @@ impl ServerSpec {
 			cert_name,
 		})
 	}
+}
 
+impl ServerSpec {
 	/// The IP host, or `None` for a hostname host that still needs bootstrapping.
 	pub(crate) fn ip(&self) -> Option<IpAddr> {
 		match self.host {

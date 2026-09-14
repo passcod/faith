@@ -1,5 +1,5 @@
+//! The HTTP/3 upgrade layer.
 use std::{
-	marker::PhantomData,
 	sync::Arc,
 	time::{Duration, Instant},
 };
@@ -8,26 +8,17 @@ use http::Extensions;
 use reqwest::{Request, Response};
 use reqwest_middleware::{Middleware, Next, Result};
 
-use crate::{cache::AltSvcCache, header::parse_alt_svc_header, prober::H3Prober};
-
-/// Recording the moment a response's headers arrived.
-///
-/// The stamp itself belongs to the client, which puts it in the request's extensions and reads it
-/// back out to surface the timing; this layer is only the one place that observes the arrival, so
-/// all it needs is to be able to mark what the client left there.
-pub trait ArrivalStamp: Send + Sync + 'static {
-	fn mark(&self, at: Instant);
-}
+use crate::{cache::AltSvcAdvertisement, cache::AltSvcCache, prober::H3Prober};
 
 /// Records a cancellation if the HTTP/3 attempt it guards is dropped before
 /// producing an outcome.
 ///
 /// [`AltSvcMiddleware`] can only learn that HTTP/3 is broken from the attempt's
-/// return value, and a cancelled request never produces one: `faith_fetch`
-/// races `send()` against the abort signal in a `select!`, which drops the
-/// losing future. Without this guard nothing ever demotes the origin, so a
-/// caller whose deadline is shorter than the network's own failure detection
-/// re-attempts HTTP/3 over a dead path on every retry, indefinitely.
+/// return value, and a cancelled request never produces one: a caller racing
+/// the request against a deadline or an abort signal drops the losing future.
+/// Without this guard nothing ever demotes the origin, so a caller whose
+/// deadline is shorter than the network's own failure detection re-attempts
+/// HTTP/3 over a dead path on every retry, indefinitely.
 struct H3AttemptGuard {
 	cache: Arc<AltSvcCache>,
 	url: reqwest::Url,
@@ -59,12 +50,25 @@ impl Drop for H3AttemptGuard {
 	}
 }
 
-/// The Alt-Svc layer, which upgrades an origin to HTTP/3 once it advertises one.
+/// A reqwest middleware for HTTP/3 upgrades.
 ///
-/// `S` is the client's arrival stamp, which this marks when a response's headers land; see
-/// [`ArrivalStamp`].
+/// Routes a request over HTTP/3 where the [`AltSvcCache`] says its origin is worth attempting.
+///
+/// Comes in two flavours, depending on whether you want to do background probes (with
+/// [`H3Prober`]) or not:
+///
+/// - With, advertisements are verified in the background, and foreground requests use HTTP/3 only
+///   once an origin is confirmed.
+/// - Without, the next foreground request is itself the verification, falling back to TCP if it
+///   does not produce headers in time.
+///
+/// It also monitors connections and demotes or promotes origins between QUIC and TCP:
+///
+/// - if QUIC connections to the origin start failing,
+/// - if the QUIC path becomes noticeably slower than the TCP path,
+/// - retries the upgrade after an exponential cooldown.
 #[derive(Clone)]
-pub struct AltSvcMiddleware<S: ArrivalStamp> {
+pub struct AltSvcMiddleware {
 	cache: Arc<AltSvcCache>,
 	enabled: bool,
 	/// Ceiling on how long an HTTP/3 attempt may take to produce response
@@ -74,10 +78,9 @@ pub struct AltSvcMiddleware<S: ArrivalStamp> {
 	/// advertisements in the background. `None` restores the inline upgrade,
 	/// where the next foreground request is the verification.
 	prober: Option<Arc<H3Prober>>,
-	stamp: PhantomData<fn(S)>,
 }
 
-impl<S: ArrivalStamp> std::fmt::Debug for AltSvcMiddleware<S> {
+impl std::fmt::Debug for AltSvcMiddleware {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		f.debug_struct("AltSvcMiddleware")
 			.field("enabled", &self.enabled)
@@ -88,7 +91,12 @@ impl<S: ArrivalStamp> std::fmt::Debug for AltSvcMiddleware<S> {
 	}
 }
 
-impl<S: ArrivalStamp> AltSvcMiddleware<S> {
+impl AltSvcMiddleware {
+	/// The layer, routing on `cache`.
+	///
+	/// With a prober, advertisements are verified in the background and foreground requests keep
+	/// to TCP until an origin is proven; without one, the next foreground request is itself the
+	/// verification.
 	pub fn new(
 		cache: Arc<AltSvcCache>,
 		enabled: bool,
@@ -100,10 +108,10 @@ impl<S: ArrivalStamp> AltSvcMiddleware<S> {
 			enabled,
 			attempt_timeout,
 			prober,
-			stamp: PhantomData,
 		}
 	}
 
+	/// The store this layer routes on.
 	#[allow(dead_code)]
 	pub fn cache(&self) -> &Arc<AltSvcCache> {
 		&self.cache
@@ -119,29 +127,21 @@ impl<S: ArrivalStamp> AltSvcMiddleware<S> {
 	}
 }
 
-/// Run the rest of the stack and stamp the moment the response headers arrive.
+/// Run the rest of the stack, and note when the response came back.
 ///
-/// This is the one place a response's arrival is observed: the returned instant is what the
-/// path-time average measures against, and the same instant reaches the caller through the
-/// request's extensions to become the surfaced timing, so the two can never disagree.
-// spec:RESP#request-timing
-async fn run_stamped<S: ArrivalStamp>(
+/// The instant feeds this layer's own path-time averages; nothing outside reads it.
+async fn run_timed(
 	next: Next<'_>,
 	req: Request,
 	extensions: &mut Extensions,
 ) -> (Result<Response>, Instant) {
 	let result = next.run(req, extensions).await;
 	let at = Instant::now();
-	if result.is_ok()
-		&& let Some(stamp) = extensions.get::<S>()
-	{
-		stamp.mark(at);
-	}
 	(result, at)
 }
 
 #[async_trait::async_trait]
-impl<S: ArrivalStamp> Middleware for AltSvcMiddleware<S> {
+impl Middleware for AltSvcMiddleware {
 	async fn handle(
 		&self,
 		mut req: Request,
@@ -149,7 +149,7 @@ impl<S: ArrivalStamp> Middleware for AltSvcMiddleware<S> {
 		next: Next<'_>,
 	) -> Result<Response> {
 		if !self.enabled {
-			return run_stamped::<S>(next, req, extensions).await.0;
+			return run_timed(next, req, extensions).await.0;
 		}
 
 		let url = req.url().clone();
@@ -191,11 +191,11 @@ impl<S: ArrivalStamp> Middleware for AltSvcMiddleware<S> {
 				// leaving the fallback below free to use it.
 				let outcome = match self.attempt_timeout {
 					Some(limit) => {
-						tokio::time::timeout(limit, run_stamped::<S>(next.clone(), req, extensions))
+						tokio::time::timeout(limit, run_timed(next.clone(), req, extensions))
 							.await
 							.ok()
 					}
-					None => Some(run_stamped::<S>(next.clone(), req, extensions).await),
+					None => Some(run_timed(next.clone(), req, extensions).await),
 				};
 				// Reached on success, error and expiry alike; only a mid-flight
 				// drop skips it and leaves the guard armed.
@@ -214,7 +214,7 @@ impl<S: ArrivalStamp> Middleware for AltSvcMiddleware<S> {
 
 						if let Some(alt_svc) = response.headers().get("alt-svc") {
 							if let Ok(value) = alt_svc.to_str() {
-								if let Some(advertisement) = parse_alt_svc_header(value) {
+								if let Ok(advertisement) = value.parse::<AltSvcAdvertisement>() {
 									self.cache.record_alt_svc(&url, &advertisement);
 								}
 							}
@@ -231,7 +231,7 @@ impl<S: ArrivalStamp> Middleware for AltSvcMiddleware<S> {
 
 						// Use the cloned request (which still has default HTTP version)
 						let started = Instant::now();
-						let (result, at) = run_stamped::<S>(next, req_clone, extensions).await;
+						let (result, at) = run_timed(next, req_clone, extensions).await;
 						if let Ok(ref response) = result {
 							self.cache.record_path_time(
 								&url,
@@ -244,7 +244,7 @@ impl<S: ArrivalStamp> Middleware for AltSvcMiddleware<S> {
 				}
 			} else {
 				// Can't clone request (streaming body), just proceed without HTTP/3
-				run_stamped::<S>(next, req, extensions).await.0
+				run_timed(next, req, extensions).await.0
 			}
 		} else {
 			// An advertisement from an earlier response may still be waiting on
@@ -253,7 +253,7 @@ impl<S: ArrivalStamp> Middleware for AltSvcMiddleware<S> {
 			self.maybe_probe(&url);
 
 			let started = Instant::now();
-			let (result, at) = run_stamped::<S>(next, req, extensions).await;
+			let (result, at) = run_timed(next, req, extensions).await;
 
 			// Check for Alt-Svc header in non-HTTP/3 responses
 			if let Ok(ref response) = result {
@@ -262,7 +262,7 @@ impl<S: ArrivalStamp> Middleware for AltSvcMiddleware<S> {
 
 				if let Some(alt_svc) = response.headers().get("alt-svc") {
 					if let Ok(value) = alt_svc.to_str() {
-						if let Some(advertisement) = parse_alt_svc_header(value) {
+						if let Ok(advertisement) = value.parse::<AltSvcAdvertisement>() {
 							self.cache.record_alt_svc(&url, &advertisement);
 							// Probe as soon as the advertisement lands, racing
 							// the gap before the caller's next request.

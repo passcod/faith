@@ -24,6 +24,7 @@ The agent captures what a request needs at the moment the request is issued, whi
 `cookies()` reaches the agent's jar, returning the `web-faith-cookies` jar itself rather than wrapping it in per-cookie methods, so a caller inserts and reads cookies through the same type that crate documents (see [COOK](../agent/cookies.md)).
 An agent with no jar has nothing to hand back and says so in the return type, which is where the Node surface's null-returning reads land in Rust.
 The jar outlives `close()` and stays readable from a closed agent, as [AGENT](../agent/overview.md) requires.
+Inserting a cookie reports which rule refused it, rather than being the no-op the Node surface takes it for: a Rust caller inserting one by hand has asked for exactly that cookie and can act on the answer (see [COOK](../agent/cookies.md)).
 
 `USER_AGENT` is exported so a caller can prepend its own product token to Faith's default.
 The versions it embeds are not exported alongside it, a Rust caller already having its own package metadata to read them from.

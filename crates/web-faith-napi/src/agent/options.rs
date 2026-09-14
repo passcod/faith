@@ -7,7 +7,7 @@ use napi_derive::napi;
 
 #[cfg(feature = "cookies")]
 use std::time::Duration;
-use web_faith::client::RedirectPolicy;
+use web_faith::options::RedirectPolicy;
 
 #[cfg(feature = "cookies")]
 use web_faith_cookies::{

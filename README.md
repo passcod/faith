@@ -49,8 +49,10 @@ whatever servers emit, Faith must correctly handle. So far, everything we've tes
 | **HTTP/3** | · | · | ● | ● | · | · | · | · | ● |
 | **HTTP/3 upgrade** | · | · | ● | ● | · | · | · | · | · |
 
-● covered  
-· not applicable to this server  
+```
+● covered
+· not applicable to this server
+```
 
 <!-- conformance:end -->
 
@@ -58,6 +60,19 @@ whatever servers emit, Faith must correctly handle. So far, everything we've tes
 
 ```bash
 npm install @passcod/faith
+```
+
+### Rust crate
+
+You can also use Faith directly from Rust, see [the docs](https://docs.rs/web-faith) for more.
+
+```bash
+cargo add web-faith
+```
+
+```rust
+let agent = web_faith::Agent::new()?;
+let body = agent.fetch("https://example.com/").await?.text().await?;
 ```
 
 ## Usage

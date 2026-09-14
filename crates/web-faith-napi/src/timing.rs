@@ -1,12 +1,12 @@
 //! Surfacing a request's timing as a `PerformanceResourceTiming` for the wrapper.
 //!
-//! The measuring itself is [`web_faith::timing`]'s; what belongs here is the shape JavaScript
+//! The measuring itself is [`web_faith::response`]'s; what belongs here is the shape JavaScript
 //! receives.
-//!
-//! spec:RESP#request-timing
+
+// spec:RESP#request-timing
 
 use napi_derive::napi;
-use web_faith::timing::RequestTiming;
+use web_faith::response::RequestTiming;
 
 /// The measurements behind a response's timing breakdown.
 ///
