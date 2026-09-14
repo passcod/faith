@@ -57,7 +57,7 @@
 		"conformance:render": "node test/conformance/render.js",
 		"conformance:readme": "node test/conformance/render.js --readme",
 		"prepublishOnly": "napi prepublish -t npm",
-		"version": "node -e \"const fs=require('fs');const pkg=require('./package.json');let cargo=fs.readFileSync('Cargo.toml','utf8');cargo=cargo.replace(/^version = \\\".*\\\"/m,'version = \\\"'+pkg.version+'\\\"');fs.writeFileSync('Cargo.toml',cargo)\" && npm run build && git add index.js Cargo.toml Cargo.lock"
+		"version": "node -e \"const fs=require('fs');const pkg=require('./package.json');const manifest='crates/web-faith-napi/Cargo.toml';let cargo=fs.readFileSync(manifest,'utf8');cargo=cargo.replace(/^version = \\\".*\\\"/m,'version = \\\"'+pkg.version+'\\\"');fs.writeFileSync(manifest,cargo)\" && npm run build && git add index.js crates/web-faith-napi/Cargo.toml Cargo.lock"
 	},
 	"keywords": [
 		"fetch",

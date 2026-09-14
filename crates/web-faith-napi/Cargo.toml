@@ -1,7 +1,9 @@
 [package]
 name = "web-faith-napi"
 description = "Faith: a Rust-powered JS fetch (Node.js binding)"
-version.workspace = true
+# The npm package's version: `npm run version` writes package.json's here. Unrelated to the
+# versions of the crates.io members, which move on their own.
+version = "1.0.0"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
