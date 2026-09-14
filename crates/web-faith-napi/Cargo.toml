@@ -2,7 +2,7 @@
 name = "web-faith-napi"
 description = "Faith: a Rust-powered JS fetch (Node.js binding)"
 # Written by `npm run version` from package.json.
-version = "1.0.0"
+version = "1.0.1"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
