@@ -12,8 +12,22 @@ It defaults to 90 seconds, and the same window bounds how long an idle connectio
 The per-host idle cap limits idle connections kept per origin: scheme, host, and port together, so `https://example.com`, `https://example.com:8443`, and `http://example.com` are capped separately, the origin being scheme-host-port rather than host alone.
 Once an origin sits at the cap, a connection that would otherwise return to the pool is closed instead, so the connections already idle are the ones that survive.
 The default is no limit.
-HTTP/1 connections return to the pool once their response body has been fully read or discarded; an unconsumed body holds its connection (see [BODY](../response/reading-the-body.md)).
+HTTP/1 connections return to the pool once their response body has been read to the end; an unconsumed body holds its connection (see [BODY](../response/reading-the-body.md)).
 HTTP/2 and HTTP/3 connections multiplex, so reuse does not depend on body consumption.
+
+## Draining abandoned HTTP/1 bodies
+
+A body given up before its end leaves its HTTP/1 connection unusable until the rest has been read, so Faith either reads the remainder out or closes the connection (see [BODY](../response/reading-the-body.md#giving-up-the-body)).
+Reading it out saves a handshake when little is left, and costs more than a new connection when a lot is, so two pool settings bound the drain.
+`pool.drainLimit` is the most of the remainder, in bytes, Faith reads to save the connection, counted off the wire before any decoding, the same measure as `Content-Length`.
+It defaults to 128 KiB, and `0` closes the connection every time without reading any of the remainder.
+A response whose `Content-Length` shows more than the limit left has its connection closed at once, without reading up to the limit first.
+One of unknown length is read up to the limit and its connection closed if the body has not ended by then.
+`pool.drainTimeout`, in milliseconds, bounds how long the whole drain may take, and defaults to 1 second.
+The agent's read timeout applies to each read of the drain as well, and whichever limit is reached first closes the connection (see [CANCEL](../fetch/cancellation-and-timeouts.md)).
+Together the two bound what an abandoned body can cost: a server that stalls part way through a small remainder, or sends without end, loses its connection rather than holding it.
+A drain that ends in closing the connection surfaces nothing to the caller, since the body had already been given up.
+A connection that drains within the limits returns to the pool subject to the per-host idle cap like any other.
 The connection established by a successful HTTP/3 probe lands in the same pool, so the first upgraded request starts on a warm connection (see [PROBE](../http3/probing.md)).
 A connection opened by `preconnect(origin)` lands in the pool the same way, so the first request to that origin starts warm (see [WARM](warm-up.md)).
 

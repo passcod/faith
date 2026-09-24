@@ -13,7 +13,8 @@ Each of the three methods carries the same name on both surfaces; the fields it 
 `stats()` returns cumulative counters: requests sent, responses received, bodies started, bodies finished, and background requests.
 The first four count requests made through the agent rather than exchanges on the wire, so a request served from the HTTP cache counts like any other (see [CACHE](../cache/http-cache.md)).
 The bodies-started counter counts bodies opened for reading, which a discarded body is not.
-A persistent gap between bodies started and bodies finished is the designed leak indicator for response bodies that were opened but never consumed or discarded.
+The bodies-finished counter counts opened bodies that have ended, whether by being read to the end or by being given up through cancelling, `discard()`, or an abort (see [BODY](../response/reading-the-body.md#giving-up-the-body)).
+A persistent gap between bodies started and bodies finished is the designed leak indicator for response bodies that were opened but never consumed or given up.
 
 The background-requests counter counts the requests the agent made on its own initiative rather than ones the caller asked for, which is why they are absent from the other four counters.
 It covers the synthetic `HEAD` a `preconnect` sends (see [WARM](warm-up.md)), an eager HTTP/3 probe (see [PROBE](../http3/probing.md)), and a background cache revalidation (see [CACHE](../cache/http-cache.md)).

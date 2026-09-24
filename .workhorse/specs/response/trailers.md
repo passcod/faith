@@ -14,7 +14,8 @@ Reading the body to completion (via `text()`, `bytes()`, `json()`, `blob()`, `ar
 Awaiting the trailers without anything consuming the body never resolves, as the proposal specifies.
 Holding the pending promise while something else reads the body is supported and costs nothing.
 Waiting for trailers consumes no CPU while pending: the wait parks on body completion rather than polling.
-`discard()` counts as consuming the body but throws the trailers away with it: the promise then resolves to `null` rather than waiting for trailers that can no longer arrive.
+A body whose transfer is stopped before its end, because every response holding a claim gave it up or the signal was aborted, resolves the promise to `null` rather than waiting for trailers that can no longer arrive (see [BODY](reading-the-body.md#giving-up-the-body)).
+`discard()` is one of the ways to give the body up, so it throws the trailers away with it unless a clone goes on to read the body to the end.
 A response without trailers resolves to `null` once the body ends.
 
 ## Shape

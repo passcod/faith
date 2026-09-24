@@ -56,7 +56,7 @@ Background revalidation is single-flighted per cache identity: while one is in f
 Cache identity here is the same method, URL, and `Vary` match that governs [what a stored response answers](#what-a-stored-response-answers).
 
 The background revalidation outlives the foreground request that triggered it: the caller's response settles as soon as the stale body is served, and the revalidation continues on the runtime afterwards.
-It carries the agent's configuration like any request and is bounded by the agent's own connect and request timeouts rather than the foreground request's signal, which has already done its job (see [CANCEL](../fetch/cancellation-and-timeouts.md)).
+It carries the agent's configuration like any request and is bounded by the agent's own connect and request timeouts rather than the foreground request's signal, which governs only the response the caller was given (see [CANCEL](../fetch/cancellation-and-timeouts.md)).
 Its outcome belongs to the cache rather than the caller: a network failure, a `5xx`, or an agent closed while it is in flight all pass without surfacing to the caller, as an advisory warm-up's failure does (see [WARM](../agent/warm-up.md)).
 Being a real network exchange, it reaches the origin and counts as origin contact for HTTP/3 knowledge, unlike the stale cache hit it accompanies (see [H3UP](../http3/upgrade.md)).
 The stale hit the caller receives counts as a response served from the cache like any other; the background revalidation stays out of the caller-request counters and moves the background-requests counter instead, since it is a request the agent made rather than one the caller asked for (see [OBS](../agent/observability.md)).

@@ -67,7 +67,8 @@ This is the backstop for blackholed paths; real refusals arrive much faster.
 
 ## Cancellation strikes
 
-An HTTP/3 attempt cut short from outside (abort via `signal`) is indistinguishable from a hung path, so each mid-flight cancellation counts a strike against the origin.
+An HTTP/3 attempt cut short from outside (abort via `signal`) before its response headers arrive is indistinguishable from a hung path, so each such cancellation counts a strike against the origin.
+Once the headers have arrived the path has proved itself, so aborting or giving up the body after that counts as the success the headers already were.
 Reaching the cancellation-strike limit (default 3) demotes the origin to failed; any successful confirmation resets the count.
 Strikes only accumulate when they land within about a minute of each other; a retry loop with a longer backoff never accumulates a run, so such callers set the option to 1 for immediate demotion.
 Setting 0 disables strike demotion.
