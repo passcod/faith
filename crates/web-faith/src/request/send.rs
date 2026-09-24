@@ -24,7 +24,6 @@ use http_cache_reqwest::CacheMode;
 #[cfg(feature = "encoding")]
 use reqwest::header::ACCEPT_ENCODING;
 
-use tokio::sync::Mutex;
 #[cfg(feature = "encoding")]
 use web_faith_encoding::{
 	Coding, ContentEncoding, request as encoding_request,
@@ -33,10 +32,10 @@ use web_faith_encoding::{
 
 use crate::{
 	agent::Agent,
-	body::{Body, BodyHolder},
+	body::{BodyParts, BodyShared},
 	error::{FaithError, FaithErrorKind},
 	request::{Credentials, NORMALISED_METHODS, PRIORITY, QUERY, RequestBody, RequestOptions},
-	response::{PeerInformation, Response},
+	response::{PeerInformation, Response, TrailersSlot},
 	timing::{RequestTiming, TimingSlot, alpn_protocol_id},
 };
 
@@ -463,28 +462,31 @@ pub async fn send(
 		timing.ended();
 	}
 
+	let trailers = Arc::new(TrailersSlot::default());
+	let claim = (!empty).then(|| {
+		let http_response: http::Response<_> = response.into();
+		BodyShared::new(BodyParts {
+			body: http_response.into_body(),
+			version,
+			drain: agent.drain,
+			#[cfg(feature = "encoding")]
+			decode,
+			trailers: trailers.clone(),
+			timing: timing.clone(),
+			stats: agent.stats.clone(),
+		})
+	});
+
 	Ok(Response {
-		body: if empty {
-			BodyHolder::none()
-		} else {
-			let http_response: http::Response<_> = response.into();
-			BodyHolder::new(
-				Some(Arc::new(Mutex::new(Body::Inner(http_response.into_body())))),
-				version,
-				timing.clone(),
-			)
-		},
-		#[cfg(feature = "encoding")]
-		decode,
+		claim,
 		disturbed: Arc::new(AtomicBool::new(false)),
 		headers,
 		integrity: options.integrity,
 		peer: Arc::new(peer),
 		redirected,
-		stats: agent.stats.clone(),
 		status_code,
 		timing,
-		trailers: Default::default(),
+		trailers,
 		url: response_url,
 		version,
 	})

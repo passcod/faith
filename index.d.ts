@@ -142,6 +142,22 @@ export declare class AgentStats {
 }
 
 /**
+ * A reader over a response body, which the wrapper builds the body `ReadableStream` on.
+ *
+ * Reading and cancelling are separate so a cancel reaches the transfer while a read is waiting
+ * on the network.
+ */
+export declare class FaithBodyReader {
+  /** The next chunk of the body, or `null` once it has ended. */
+  read(): Promise<Buffer | undefined | null>
+  /**
+   * Give up the response's claim on the body, stopping the transfer once no clone still
+   * wants it.
+   */
+  cancel(): void
+}
+
+/**
  * The `Response` interface of the Fetch API represents the response to a request.
  *
  * Faith does not allow its `Response` object to be constructed. If you need to, you may use the
@@ -231,33 +247,35 @@ get version(): string
  */
 get bodyUsed(): boolean
 /**
- * The `body` read-only property of the `Response` interface is a `ReadableStream` of the body
- * contents, or `null` for any actual HTTP response that has no body, such as `HEAD` requests and
- * `204 No Content` responses.
+ * A reader over the response body, or `null` for any actual HTTP response that has no
+ * body, such as `HEAD` requests and `204 No Content` responses.
  *
- * Note that browsers currently do not return `null` for those responses, but the standard
- * requires it. Faith chooses to respect the standard rather than the browsers in this case.
+ * The wrapper builds the `body` `ReadableStream` over this, which is how cancelling the
+ * stream reaches the transfer. Taking a reader marks the body disturbed; every reader a
+ * response hands out reads from its one position in the body.
  *
- * An important consideration exists in conjunction with the connection pool: if you start the
- * body stream, this will hold the connection until the stream is fully consumed. If another
- * request is started during that time, and you don't have an available connection in the pool
- * for the host already, the new request will open one.
- *
- * Note that this is a function as an implementation detail; the wrapper makes it a property.
+ * Note that this is a function as an implementation detail; the wrapper makes `body` a property.
  */
-body(): ReadableStream<Buffer> | null
+bodyReader(): FaithBodyReader | null
+/**
+ * Stop the body's transfer because the request's signal was aborted after the response
+ * arrived. Reads of this response and its clones then fail with `Aborted`.
+ *
+ * Called by the wrapper, which holds on to the request's signal.
+ */
+abortBody(): void
 /**
  * Discard the response body, releasing the connection back to the pool.
  *
- * This is useful when you don't need the body but want to ensure the connection
- * can be reused for subsequent requests. If you don't call this and don't consume
- * the body, the connection may be held open until the response is garbage collected.
+ * This gives up this response's claim on the body. A clone still reading carries on;
+ * once no clone wants the body, the transfer stops. For HTTP/2 and HTTP/3 the stream is
+ * reset (RST_STREAM / STOP_SENDING) without affecting the multiplexed connection. For
+ * HTTP/1, a remainder within the agent's `pool.drainLimit` and `pool.drainTimeout` is
+ * read out so the connection can go back to the pool; past either, the connection is
+ * closed.
  *
- * For HTTP/1, the remaining body is read and thrown away so the connection can go back
- * to the pool. For HTTP/2 and HTTP/3, the body is dropped instead, which cancels the
- * stream (RST_STREAM / STOP_SENDING) without affecting the multiplexed connection.
- *
- * Returns a promise that resolves when the body has been fully discarded.
+ * Returns a promise that resolves once this response's claim is given up and, when it was
+ * the last one, the transfer has stopped. It always settles.
  */
 discard(): Promise<undefined>
 /**
@@ -985,6 +1003,22 @@ export interface AgentPoolOptions {
    * Default: `null` (no limit).
    */
   maxIdlePerHost?: number
+  /**
+   * The most of an abandoned HTTP/1 response body, in bytes, that is read out to save its
+   * connection for the pool. A body is abandoned when every response holding it has cancelled
+   * its stream, been discarded, or been garbage collected before reading to the end. A
+   * larger remainder closes the connection instead, and `0` always closes it.
+   *
+   * Default: 131072 (128 KiB).
+   */
+  drainLimit?: number
+  /**
+   * How long, in milliseconds, reading out an abandoned HTTP/1 response body may take before
+   * its connection is closed instead of saved for the pool.
+   *
+   * Default: 1000 (1 second).
+   */
+  drainTimeout?: number
 }
 
 /**

@@ -541,6 +541,18 @@ pub struct PoolOptions {
 	///
 	/// Default: no limit.
 	pub max_idle_per_host: Option<u32>,
+	/// The most of an abandoned HTTP/1 body, in bytes off the wire, read out to save its
+	/// connection for the pool. A larger remainder closes the connection instead; `0` always
+	/// closes it.
+	///
+	/// Default: 128 KiB.
+	pub drain_limit: Option<u32>,
+	/// How long reading out an abandoned HTTP/1 body may take, in milliseconds, before its
+	/// connection is closed instead of saved for the pool.
+	///
+	/// Default: 1 second.
+	#[builder(with = |t: std::time::Duration| millis(t))]
+	pub drain_timeout: Option<u32>,
 }
 
 /// Switches that depart from standard behaviour.

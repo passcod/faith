@@ -91,6 +91,10 @@ impl TryFrom<AgentOptions> for options::AgentOptions {
 							pool.idle_timeout.map(|s| Duration::from_secs(s.into())),
 						)
 						.maybe_max_idle_per_host(pool.max_idle_per_host)
+						.maybe_drain_limit(pool.drain_limit)
+						.maybe_drain_timeout(
+							pool.drain_timeout.map(|ms| Duration::from_millis(ms.into())),
+						)
 						.build()
 				}
 			}))

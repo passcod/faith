@@ -104,3 +104,27 @@ Implementation shape:
   `clone()` is a tee there, so cancelling one branch leaves the other reading.
 - undici's lower-level `request()` API has `body.dump({ limit })`: it discards up to `limit` bytes (default 128 KiB) keeping the socket, and destroys the socket past that.
   This is the closest counterpart to Faith's `discard()`, and it is bounded.
+
+## Implementation design
+
+- **A claim is per logical response, not per Rust clone.** `Response` is `Clone` and the napi layer clones it for every async call, so the claim is an `Arc<Claim>` shared by those clones; `try_clone` mints a new one. The claim gives itself up on drop, so garbage collection of the JS response (and dropping in Rust) needs nothing extra.
+- **Each claim has its own cursor** into the shared chunk chain (a `SharedStream` clone) rather than there being one replay anchor for the body. Every stream handle a response hands out reads through its claim's cursor, so there is one position per response and chunks are held only by cursors that have not read past them.
+- **The upstream sits below the `SharedStream`**, in a lockable slot the frame stream polls through. Stopping takes the raw body out of the slot: dropped on HTTP/2 and HTTP/3, drained within the pool limits or dropped on HTTP/1. The runtime handle is captured when the response is built, since the last claim can go from a JS finaliser outside any runtime.
+- **napi-rs's `ReadableStream` cannot carry this.** Its cancel callback only drops the Rust stream when no pull is in flight (`try_lock`), so a cancel during a pending read reaches nothing, and it cannot error a stream with a JS value. The wrapper builds the body `ReadableStream` itself over a native reader (`read()` / `cancel()`), which also lets a signal abort error the stream with the signal's own reason.
+- **The wrapper keeps the signal after headers** and listens through a `WeakRef`, removed by a `FinalizationRegistry`, so a long-lived signal does not keep responses alive past their use.
+
+## Checklist
+
+- [ ] Core: `BodyShared` (upstream slot, claims count, aborted flag, once-only finish of trailers/timing/stats) replacing `BodyHolder`/`Body`
+- [ ] Core: `Claim` with cursor, give-up on drop, waker so a pending read wakes on give-up
+- [ ] Core: `BodyReader` stream over a claim, erroring `Aborted` after an abort and `ResponseAlreadyDisturbed` after the claim is given up
+- [ ] Core: upstream stop with HTTP/1 drain bounded by `drainLimit` (using the body's remaining size hint) and `drainTimeout`
+- [ ] Core: `discard()`, `try_clone`, `gather`, `write_to_file`, `body_stream`, `into_http` on claims
+- [ ] Core: abort after headers (internals), used by napi
+- [ ] Options: `pool.drainLimit` / `pool.drainTimeout` in core options, Rust builder, napi options and convert, agent settings
+- [ ] napi: `FaithBodyReader` (`read`, `cancel`), `bodyReader()`, `abortBody()`; drop the napi-rs `ReadableStream`
+- [ ] Wrapper: body `ReadableStream` over the native reader; signal kept past headers for the response and its clones
+- [ ] Typings and README: pool options, signal through the body, discard, body cancel
+- [ ] Rust tests: claims, cancel stops upstream, drain limits, clone keeps transfer, abort errors
+- [ ] JS tests: cancel/for-await/GC/discard on HTTP/1 endless body close the socket; clone keeps reading; signal after headers; drain returns the connection; drainLimit 0 closes
+- [ ] HTTP/2 check of RST_STREAM on cancel
