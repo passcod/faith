@@ -80,7 +80,22 @@ Implementation shape:
 - Count claims explicitly rather than relying on `SharedStream` clone counts: the holder's own `Body::Stream` clone and napi-rs's clone inside the JS stream are both clones but only the latter is a consumer, and a response whose stream has not been built yet still holds a claim.
 - `BodyHolder::drop` becomes "give up this claim", replacing the unbounded HTTP/1 drain.
 
-Open: how the HTTP/1 drain limit is set (fixed internal, agent option, or agent option plus a per-call `discard()` override).
+## Decision: the HTTP/1 drain limit is an agent option
+
+- It sits with the other pool settings as `pool.drainLimit`, a byte count, since it decides whether a connection is worth returning to the pool.
+- Default 128 KiB, matching undici's `dump()` default; `0` closes the connection every time without reading any of the remainder.
+- It is counted in encoded bytes off the wire, the same measure as `Content-Length`.
+  Where a `Content-Length` says the remainder is already over the limit, the connection is closed straight away rather than read up to the limit first.
+  Where the remaining length is unknown (chunked), Faith reads up to the limit and closes the connection if the body has not ended by then.
+- It applies wherever the last claim is given up on HTTP/1: stream cancel, `discard()`, and garbage collection.
+
+## Decision: the drain has its own timeout, also an agent option
+
+- `pool.drainTimeout`, in milliseconds like the `timeout.*` options, bounds the whole drain from start to the body's end.
+  Default 1 second; `drainLimit` and `drainTimeout` together bound what an abandoned body can cost.
+- Past it the connection is closed rather than returned, so a server that stalls part way through a small remainder does not hold the connection, and `discard()` always settles.
+- The agent's `timeout.read` still applies to each read of the drain, and whichever expires first ends it.
+- Running out of time or bytes during a drain is not an error for the caller: the connection is closed and `discard()` resolves as usual.
 
 ## How other clients do it
 
