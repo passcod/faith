@@ -434,14 +434,17 @@ However, Faith does set the `Referer` header when redirecting automatically.
 *An `AbortSignal`. If this option is set, the request can be canceled by calling `abort()` on the
 corresponding `AbortController`.*
 
+As in the standard, the signal covers the whole request, the body included. Aborting it after the
+response has arrived stops the transfer and errors the body of the response and of every clone: a
+body stream errors with the signal's reason, and a whole-body read or `toFile()` under way rejects
+with an `AbortError` coded `Aborted`. A body already read to the end is left as it is.
+
 ### `FetchOptions.timeout: number`
 
 Custom to Faith. Cancels the request after this many milliseconds.
 
 This will give a different error to using `signal` with a timeout, which might be preferable in
-some cases. It also has a slightly different internal behaviour: `signal` may abort the request
-only until the response headers have been received, while `timeout` will apply through the entire
-response receipt.
+some cases. Like `signal`, it applies through the entire response receipt.
 
 ## `Response`
 
@@ -462,6 +465,13 @@ Faith chooses to respect the standard rather than the browsers in this case.
 A response has one body stream: it is built on first access and the same stream is returned
 thereafter, so reading through it advances a single position. Use `clone()` to get a second full
 read of the body.
+
+Cancelling the stream, whether with `cancel()` on it or its reader or by leaving a `for await` loop
+early, gives up this response's claim on the body. Once neither the response nor any of its clones
+still wants the body, the transfer stops, as the standard specifies: the HTTP/2 or HTTP/3 stream is
+reset and its connection stays in the pool, and an HTTP/1 connection is read out back to the pool
+when little is left or closed otherwise (see [`AgentOptions.pool.drainLimit`](#agentoptionspooldrainlimit-number)).
+A response that is garbage collected with its claim still held gives it up the same way.
 
 ### `Response.bodyUsed: boolean`
 
@@ -549,8 +559,10 @@ to end the body and produce them. That is the behaviour the current proposal des
 ([whatwg/fetch#1940](https://github.com/whatwg/fetch/pull/1940)), not a quirk of Faith. Holding the
 promise while something else reads the body is fine, and costs nothing while it is pending.
 
-`discard()` counts as consuming the body, but discards its trailers along with it: the promise then
-resolves to `null` rather than waiting for trailers that can no longer arrive.
+A body whose transfer stops before its end resolves the promise to `null` rather than waiting for
+trailers that can no longer arrive. That happens when the response and every clone have given the
+body up (by `discard()`, cancelling the stream, or being collected), or when the signal is
+aborted.
 
 Custom to Faith. This was once in the standard but was removed as no browser implemented it;
 the proposal above is the current effort to bring it back.
@@ -606,11 +618,17 @@ Discard the response body, releasing the connection back to the pool.
 
 This is useful when you don't need the body but want to ensure the connection can be reused for
 subsequent requests. If you don't call this and don't consume the body, the connection may be held
-open until the response is garbage collected. When the connection is HTTP/2 or /3, calling this is
-not necessary as the connection can be reused regardless, but it's still good practice to make it
-explicit and won't do unnecessary work in those cases.
+open until the response is garbage collected.
 
-The returned promise resolves when the body has been fully discarded.
+It gives up this response's claim on the body, so a clone still reading carries on. Once no clone
+wants the body, the transfer stops: over HTTP/2 or /3 the stream is reset, leaving the connection
+in the pool; over HTTP/1 the rest of the body is read out so the connection can go back to the
+pool, within the agent's [`pool.drainLimit`](#agentoptionspooldrainlimit-number) and
+[`pool.drainTimeout`](#agentoptionspooldraintimeout-number), and the connection is closed past
+either. A body stream of this response that is still being read errors.
+
+The returned promise resolves once the claim is given up and, when it was the last one, the
+transfer has stopped. It always settles, even for a body that never ends.
 
 This is custom to Faith.
 
@@ -1136,6 +1154,30 @@ The maximum amount of idle connections per host to allow in the pool. Connection
 to keep the idle connections (per host) under that number.
 
 Default: `null` (no limit).
+
+#### `AgentOptions.pool.drainLimit: number`
+
+The most of an abandoned HTTP/1 response body, in bytes, that is read out to save its connection
+for the pool. A body is abandoned when the response and every clone have cancelled its stream,
+been discarded, or been garbage collected before reading to the end; an HTTP/1 connection can only
+be reused once its body has been read to the end.
+
+The bytes are counted off the wire, before any decoding, the same measure as `Content-Length`. A
+response whose `Content-Length` shows more than the limit left has its connection closed at once;
+one of unknown length is read up to the limit, and its connection closed if the body has not ended
+by then. `0` closes the connection every time.
+
+Default: 131072 (128 KiB).
+
+#### `AgentOptions.pool.drainTimeout: number`
+
+How long, in milliseconds, reading out an abandoned HTTP/1 response body may take before its
+connection is closed instead. With `drainLimit`, this bounds what an abandoned body can cost: a
+server that stalls part way through a small remainder, or sends without end, loses its connection
+rather than holding it. `timeout.read` also applies to each read of the drain, and whichever is
+reached first closes the connection.
+
+Default: 1000 (1 second).
 
 ### `AgentOptions.quirks: object`
 

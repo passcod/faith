@@ -574,6 +574,7 @@ if (!nativeBinding) {
 module.exports = nativeBinding
 module.exports.Agent = nativeBinding.Agent
 module.exports.AgentStats = nativeBinding.AgentStats
+module.exports.FaithBodyReader = nativeBinding.FaithBodyReader
 module.exports.FaithResponse = nativeBinding.FaithResponse
 module.exports.StreamBody = nativeBinding.StreamBody
 module.exports.StreamBodySender = nativeBinding.StreamBodySender

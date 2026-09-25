@@ -1,17 +1,20 @@
-use std::{fmt::Debug, result::Result};
+use std::{fmt::Debug, result::Result, sync::Arc};
 
-use futures::TryStreamExt;
+use futures::StreamExt;
 use napi::{
 	bindgen_prelude::*,
 	threadsafe_function::{ThreadsafeFunction, ThreadsafeFunctionCallMode},
 };
 use napi_derive::napi;
 
-use web_faith::response::{FileDestination, FileProgress, FileWritten, Response, Trailers};
+use web_faith::{
+	body::BodyCanceller,
+	response::{BodyReader, FileDestination, FileProgress, FileWritten, Response, Trailers},
+};
 
 use crate::{
 	async_task::{Value, faith_promise},
-	error::{FaithError, FaithErrorExt, FaithErrorKind},
+	error::FaithErrorExt,
 	timing::TimingBreakdown,
 };
 
@@ -226,65 +229,48 @@ impl FaithResponse {
 		self.inner.body_used()
 	}
 
-	/// The `body` read-only property of the `Response` interface is a `ReadableStream` of the body
-	/// contents, or `null` for any actual HTTP response that has no body, such as `HEAD` requests and
-	/// `204 No Content` responses.
+	/// A reader over the response body, or `null` for any actual HTTP response that has no
+	/// body, such as `HEAD` requests and `204 No Content` responses.
 	///
-	/// Note that browsers currently do not return `null` for those responses, but the standard
-	/// requires it. Faith chooses to respect the standard rather than the browsers in this case.
+	/// The wrapper builds the `body` `ReadableStream` over this, which is how cancelling the
+	/// stream reaches the transfer. Taking a reader marks the body disturbed; every reader a
+	/// response hands out reads from its one position in the body.
 	///
-	/// An important consideration exists in conjunction with the connection pool: if you start the
-	/// body stream, this will hold the connection until the stream is fully consumed. If another
-	/// request is started during that time, and you don't have an available connection in the pool
-	/// for the host already, the new request will open one.
-	///
-	/// Note that this is a function as an implementation detail; the wrapper makes it a property.
+	/// Note that this is a function as an implementation detail; the wrapper makes `body` a property.
+	// spec:BODY#the-body-stream
 	#[napi]
-	pub fn body(
-		&self,
-		env: Env,
-	) -> Result<Option<napi::bindgen_prelude::ReadableStream<'_, BufferSlice<'_>>>, napi::Error> {
-		// we mark the body as disturbed, but we still allow reading it through here
-		// as essentially, the body() can be accessed many times as the same stream
-		let _ = self.inner.check_disturbed();
+	pub fn body_reader(&self) -> Result<Option<FaithBodyReader>, napi::Error> {
+		match self.inner.body_stream() {
+			Ok(None) => Ok(None),
+			Ok(Some(reader)) => Ok(Some(FaithBodyReader {
+				canceller: reader.canceller(),
+				reader: Arc::new(tokio::sync::Mutex::new(reader)),
+			})),
+			Err(err) => Err(err.into_napi()),
+		}
+	}
 
-		let Some(lock) = &self.inner.body_holder().body else {
-			return Ok(None);
-		};
-
-		// if the lock is taken then we're consuming the body somehow
-		let mut body = lock
-			.try_lock()
-			.map_err(|_| FaithError::from(FaithErrorKind::ResponseAlreadyDisturbed).into_napi())?;
-
-		let stream = self
-			.inner
-			.shared_stream(&mut body, self.inner.body_holder().drained.clone())
-			.map_err(|e| e.into_napi())?;
-
-		let stream = napi::bindgen_prelude::ReadableStream::create_with_stream_bytes(
-			&env,
-			stream.map_err(|err| FaithError::new(FaithErrorKind::BodyStream, err).into_napi()),
-		)
-		.map_err(|e| {
-			napi::Error::from(
-				FaithError::new(FaithErrorKind::BodyStream, e.to_string()).into_js_error(&env),
-			)
-		})?;
-		Ok(Some(stream))
+	/// Stop the body's transfer because the request's signal was aborted after the response
+	/// arrived. Reads of this response and its clones then fail with `Aborted`.
+	///
+	/// Called by the wrapper, which holds on to the request's signal.
+	// spec:CANCEL#abortsignal
+	#[napi]
+	pub fn abort_body(&self) {
+		self.inner.abort_body();
 	}
 
 	/// Discard the response body, releasing the connection back to the pool.
 	///
-	/// This is useful when you don't need the body but want to ensure the connection
-	/// can be reused for subsequent requests. If you don't call this and don't consume
-	/// the body, the connection may be held open until the response is garbage collected.
+	/// This gives up this response's claim on the body. A clone still reading carries on;
+	/// once no clone wants the body, the transfer stops. For HTTP/2 and HTTP/3 the stream is
+	/// reset (RST_STREAM / STOP_SENDING) without affecting the multiplexed connection. For
+	/// HTTP/1, a remainder within the agent's `pool.drainLimit` and `pool.drainTimeout` is
+	/// read out so the connection can go back to the pool; past either, the connection is
+	/// closed.
 	///
-	/// For HTTP/1, the remaining body is read and thrown away so the connection can go back
-	/// to the pool. For HTTP/2 and HTTP/3, the body is dropped instead, which cancels the
-	/// stream (RST_STREAM / STOP_SENDING) without affecting the multiplexed connection.
-	///
-	/// Returns a promise that resolves when the body has been fully discarded.
+	/// Returns a promise that resolves once this response's claim is given up and, when it was
+	/// the last one, the transfer has stopped. It always settles.
 	#[napi]
 	pub fn discard<'env>(&self, env: &'env Env) -> Result<PromiseRaw<'env, ()>, napi::Error> {
 		let this = Clone::clone(self);
@@ -453,5 +439,43 @@ impl FaithResponse {
 			.try_clone()
 			.map(Self::from)
 			.map_err(|err| err.into_js_error(&env).into())
+	}
+}
+
+/// A reader over a response body, which the wrapper builds the body `ReadableStream` on.
+///
+/// Reading and cancelling are separate so a cancel reaches the transfer while a read is waiting
+/// on the network.
+// spec:BODY#giving-up-the-body
+#[napi]
+pub struct FaithBodyReader {
+	reader: Arc<tokio::sync::Mutex<BodyReader>>,
+	canceller: BodyCanceller,
+}
+
+#[napi]
+impl FaithBodyReader {
+	/// The next chunk of the body, or `null` once it has ended.
+	#[napi]
+	pub fn read<'env>(
+		&self,
+		env: &'env Env,
+	) -> Result<PromiseRaw<'env, Option<Buffer>>, napi::Error> {
+		let reader = self.reader.clone();
+		faith_promise(env, async move {
+			let mut reader = reader.lock().await;
+			match reader.next().await {
+				None => Ok(None),
+				Some(Ok(chunk)) => Ok(Some(Buffer::from(chunk.to_vec()))),
+				Some(Err(err)) => Err(err),
+			}
+		})
+	}
+
+	/// Give up the response's claim on the body, stopping the transfer once no clone still
+	/// wants it.
+	#[napi]
+	pub fn cancel(&self) {
+		self.canceller.cancel();
 	}
 }

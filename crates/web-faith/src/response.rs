@@ -6,8 +6,6 @@ pub use crate::timing::RequestTiming;
 
 use std::{
 	fmt::Debug,
-	hint::unreachable_unchecked,
-	mem::replace,
 	net::SocketAddr,
 	path::{Path, PathBuf},
 	pin::Pin,
@@ -20,21 +18,16 @@ use std::{
 };
 
 use bytes::Bytes;
-use futures::{Stream, StreamExt, TryStreamExt, stream};
+use futures::{Stream, StreamExt, stream};
 use http::header::{CONTENT_LENGTH, HeaderMap};
-use http_body_util::BodyStream;
 use reqwest::{StatusCode, Url, Version};
 use serde::de::DeserializeOwned;
-use stream_shared::SharedStream;
 use tokio::{io::AsyncWriteExt, sync::watch};
 
-#[cfg(feature = "encoding")]
-use web_faith_encoding::{Coding, response::decode_stream};
-
+pub use crate::body::BodyReader;
 use crate::{
-	body::{Body, BodyHolder, DynStream, drain_body_inner},
+	body::Claim,
 	error::{FaithError, FaithErrorKind},
-	stats::InnerAgentStats,
 	timing::TimingSlot,
 };
 
@@ -206,9 +199,7 @@ mod tests {
 		headers.insert("x-test", "yes".parse().expect("a valid header value"));
 
 		let response = Response {
-			body: BodyHolder::none(),
-			#[cfg(feature = "encoding")]
-			decode: None,
+			claim: None,
 			disturbed: Arc::new(AtomicBool::new(false)),
 			headers,
 			integrity: None,
@@ -217,7 +208,6 @@ mod tests {
 				certificate: None,
 			}),
 			redirected: false,
-			stats: Arc::new(InnerAgentStats::default()),
 			status_code: StatusCode::NO_CONTENT,
 			timing: Arc::new(TimingSlot::new(
 				Instant::now(),
@@ -324,18 +314,15 @@ pub struct FileWritten {
 /// second read fails. [`Self::try_clone`] gets a copy that can be read separately.
 #[derive(Debug, Clone)]
 pub struct Response {
-	pub(crate) body: BodyHolder,
-	/// The coding to decode the body under, or `None` to deliver it as received.
-	/// Set once when the response is built, from the request's `Accept-Encoding` and the
-	/// response's `Content-Encoding` (see [`web_faith_encoding`]).
-	#[cfg(feature = "encoding")]
-	pub(crate) decode: Option<Coding>,
+	/// This response's claim on the body, shared by its in-process copies and given up when the
+	/// last of them goes. `None` for a response that cannot carry a body.
+	// spec:BODY#giving-up-the-body
+	pub(crate) claim: Option<Arc<Claim>>,
 	pub(crate) disturbed: Arc<AtomicBool>,
 	pub(crate) headers: HeaderMap,
 	pub(crate) integrity: Option<String>,
 	pub(crate) peer: Arc<PeerInformation>,
 	pub(crate) redirected: bool,
-	pub(crate) stats: Arc<InnerAgentStats>,
 	pub(crate) status_code: StatusCode,
 	pub(crate) timing: Arc<TimingSlot>,
 	pub(crate) trailers: Arc<TrailersSlot>,
@@ -398,7 +385,19 @@ impl Response {
 			return Err(FaithErrorKind::ResponseAlreadyDisturbed.into());
 		}
 
+		// The copy holds a claim of its own, so it keeps the transfer going after this one
+		// gives up. A discarded body has no claim left to copy.
+		let claim = match &self.claim {
+			None => None,
+			Some(claim) => Some(
+				claim
+					.duplicate()
+					.ok_or(FaithErrorKind::ResponseAlreadyDisturbed)?,
+			),
+		};
+
 		Ok(Self {
+			claim,
 			disturbed: Arc::new(AtomicBool::new(false)),
 			..Clone::clone(self)
 		})
@@ -440,46 +439,37 @@ impl Response {
 
 	/// The body as a stream of chunks, decoded under whichever coding was negotiated.
 	///
-	/// `None` for a response that cannot carry a body. Callable more than once — each call hands
-	/// back the same shared stream. Fails if the body is already being consumed elsewhere.
+	/// `None` for a response that cannot carry a body. Callable more than once: every stream a
+	/// response hands out reads from its one position in the body, so one taken after part of
+	/// the body was read continues from there. Dropping a stream gives the response's claim on
+	/// the body up, stopping the transfer once no clone still wants it. Fails if the body has
+	/// already been read to the end or discarded.
 	// spec:BODY
-	pub fn body_stream(
-		&self,
-	) -> Result<Option<impl Stream<Item = Result<Bytes, FaithError>> + use<>>, FaithError> {
+	pub fn body_stream(&self) -> Result<Option<BodyReader>, FaithError> {
 		// The body counts as disturbed from here, though the stream itself stays re-readable.
 		let _ = self.check_stream_disturbed();
 
-		let Some(lock) = &self.body.body else {
-			return Ok(None);
-		};
-
-		let mut body = lock
-			.try_lock()
-			.map_err(|_| FaithError::from(FaithErrorKind::ResponseAlreadyDisturbed))?;
-		let stream = self.ensure_stream(&mut body, self.body.drained.clone())?;
-
-		Ok(Some(stream.map_err(|err| {
-			FaithError::new(FaithErrorKind::BodyStream, err)
-		})))
+		match &self.claim {
+			None => Ok(None),
+			Some(claim) => claim.reader().map(Some),
+		}
 	}
 
 	/// Give up on the body, releasing the connection back to the pool.
 	///
-	/// Worth doing when the body is not wanted: left unread, the connection is held until the
-	/// response drops. Trailers settle as `None`, since none can arrive after this.
-	// spec:BODY spec:TRL spec:RESP#request-timing
+	/// Worth doing when the body is not wanted: left unread, the claim on it is held until the
+	/// response drops. Gives up this response's claim only, so a clone still reading carries on;
+	/// when it was the last claim, resolves once the transfer has been stopped: the stream reset
+	/// on HTTP/2 and HTTP/3, the connection drained back to the pool or closed on HTTP/1.
+	// spec:BODY#discard spec:BODY#giving-up-the-body
 	pub async fn discard(&self) {
-		if let Some(arc) = self.body.body.clone() {
-			if self.body.is_multiplexed() {
-				*arc.lock().await = Body::Consumed;
-			} else {
-				drain_body_inner(arc).await;
-			}
+		let Some(claim) = &self.claim else {
+			return;
+		};
+		claim.give_up();
+		if claim.body().claims_left() == 0 {
+			claim.body().settled().await;
 		}
-		self.body.drained.store(true, Ordering::SeqCst);
-		self.trailers.ended();
-		// Discarding is one of the ways a body finishes.
-		self.timing.ended();
 	}
 
 	/// The timing of the request that produced this response, once its body has ended.
@@ -504,129 +494,19 @@ impl Response {
 		}
 	}
 
-	/// The body as a shared stream, converting it to one if it isn't already.
-	///
-	/// Shared so a response and its clones read the same body.
-	pub(crate) fn ensure_stream(
-		&self,
-		body: &mut Body,
-		drained_flag: Arc<AtomicBool>,
-	) -> Result<SharedStream<Pin<Box<DynStream>>>, FaithError> {
-		match body {
-			Body::Consumed => Err(FaithErrorKind::ResponseAlreadyDisturbed.into()),
-			Body::Stream(stream) => Ok(stream.clone()),
-			lock @ Body::Inner(_) => {
-				// temporarily replace with Consumed until we can put in the Stream
-				let Body::Inner(inner) = replace(lock, Body::Consumed) else {
-					// SAFETY: we're inside the match checking for this exact thing
-					unsafe { unreachable_unchecked() }
-				};
-
-				// Track that we've started consuming a body
-				self.stats.bodies_started.fetch_add(1, Ordering::Relaxed);
-
-				let trailers_stream = self.trailers.clone();
-				let trailers_finish = self.trailers.clone();
-				let stats_finish = self.stats.clone();
-				let timing_finish = self.timing.clone();
-				let drained_finish = drained_flag.clone();
-				// The frame stream pulls trailers off to the side (via `arrived`) and yields
-				// data bytes only, so decoding sees no trailer frames.
-				let bytes = Box::pin(
-					BodyStream::new(inner)
-						.then(move |frame| {
-							let trailers_lock = trailers_stream.clone();
-							async move {
-								match frame {
-									Err(err) => Some(Err(err.to_string())),
-									Ok(frame) => match frame.into_trailers() {
-										Ok(trailers) => {
-											trailers_lock.arrived(trailers);
-											None
-										}
-										Err(frame) => Some(
-											frame
-												.into_data()
-												.map_err(|_| "unknown frame kind".to_string()),
-										),
-									},
-								}
-							}
-						})
-						.filter_map(async |item| item),
-				) as Pin<Box<DynStream>>;
-
-				#[cfg(feature = "encoding")]
-				let bytes = match &self.decode {
-					Some(coding) => decode_stream(bytes, coding.clone()),
-					None => bytes,
-				};
-
-				// A zero-length chunk carries no bytes, but the body's byte-oriented
-				// ReadableStream cannot take one: `ReadableByteStreamController.enqueue`
-				// rejects an empty buffer outright (`ERR_INVALID_STATE`). Some origins end a
-				// response with an empty DATA frame carrying END_STREAM, so drop empty chunks
-				// here, before the stream is built, letting it close cleanly. The byte count
-				// delivered is unchanged, and the collecting paths (`text()`, `bytes()`) never
-				// noticed the empties anyway.
-				let bytes = Box::pin(bytes.filter(|item| {
-					let empty = matches!(item, Ok(chunk) if chunk.is_empty());
-					async move { !empty }
-				})) as Pin<Box<DynStream>>;
-
-				// Chained onto the stream that is actually delivered, above any decoder: a
-				// decoder reaches the end of its own framing without necessarily polling the
-				// bytes underneath to completion, so bookkeeping chained below it would never
-				// run for a decoded body, leaving the trailers promise and the timing pending
-				// for good.
-				let bytes = Box::pin(
-					bytes.chain(
-						stream::once(async move {
-							trailers_finish.ended();
-							// The last byte of the body: every read path ends here, so
-							// this is where the timing settles
-							// (spec:RESP#request-timing).
-							timing_finish.ended();
-							// Track that we've finished consuming a body
-							stats_finish.bodies_finished.fetch_add(1, Ordering::Relaxed);
-							// Mark body as drained so Drop doesn't try to drain again
-							drained_finish.store(true, Ordering::SeqCst);
-						})
-						.filter_map(async |()| None),
-					),
-				) as Pin<Box<DynStream>>;
-
-				let stream = SharedStream::new(bytes);
-
-				// the _ is the Consumed we put in there earlier
-				let _ = replace(lock, Body::Stream(stream.clone()));
-
-				Ok(stream)
-			}
-		}
-	}
-
 	/// Read the whole body as the chunks it arrived in, without copying them.
 	///
 	/// [`Self::bytes`] and its siblings are built on this.
 	pub(crate) async fn gather(&self) -> Result<Arc<[Bytes]>, FaithError> {
-		let Some(lock) = &self.body.body else {
+		let Some(claim) = &self.claim else {
 			return Ok(Default::default());
 		};
 
-		let mut body = lock.lock().await;
-		let stream = self.ensure_stream(&mut body, self.body.drained.clone())?;
-		drop(body); // release lock before consuming stream
-
+		let mut stream = claim.reader()?;
 		let mut chunks = Vec::new();
-		futures::pin_mut!(stream);
-		while let Some(result) = stream.next().await {
-			let chunk = result.map_err(|err| FaithError::new(FaithErrorKind::BodyStream, err))?;
-			chunks.push(chunk);
+		while let Some(chunk) = stream.next().await {
+			chunks.push(chunk?);
 		}
-
-		// Mark as drained since we consumed everything
-		self.body.mark_drained();
 
 		Ok(Arc::from(chunks.into_boxed_slice()))
 	}
@@ -661,14 +541,14 @@ impl Response {
 		let path = path.as_ref();
 		// A response that cannot carry a body has nothing to write, and this is settled
 		// before any file is created (spec:BODY#tofile).
-		let Some(lock) = self.body.body.clone() else {
+		let Some(claim) = self.claim.clone() else {
 			return Err(FaithErrorKind::ResponseBodyNull.into());
 		};
 
-		// A body already read, or whose stream was handed out, has no second read to give.
-		// Checked without committing so an open failure below still leaves the body
+		// A body already read, discarded, or whose stream was handed out, has no second read to
+		// give. Checked without committing so an open failure below still leaves the body
 		// undisturbed and the caller free to retry to another path.
-		if self.disturbed.load(Ordering::SeqCst) {
+		if self.disturbed.load(Ordering::SeqCst) || claim.is_given_up() {
 			return Err(FaithErrorKind::ResponseAlreadyDisturbed.into());
 		}
 
@@ -693,12 +573,7 @@ impl Response {
 		// since the load above wins, and this one finds the body already spent.
 		self.check_stream_disturbed()?;
 
-		let stream = {
-			let mut body = lock.lock().await;
-			let stream = self.ensure_stream(&mut body, self.body.drained.clone())?;
-			drop(body); // release lock before consuming stream
-			stream
-		};
+		let stream = claim.reader()?;
 
 		// Reporting is rate limited rather than per chunk, so a large body does not cross a
 		// surface boundary thousands of times.
@@ -714,7 +589,7 @@ impl Response {
 		let mut reported_at = Instant::now();
 		futures::pin_mut!(stream);
 		while let Some(result) = stream.next().await {
-			let chunk = result.map_err(|err| FaithError::new(FaithErrorKind::BodyStream, err))?;
+			let chunk = result?;
 			if let Some(checker) = checker.as_mut() {
 				checker.input(&chunk);
 			}
@@ -751,8 +626,6 @@ impl Response {
 			finish_integrity(checker)?;
 		}
 
-		self.body.mark_drained();
-
 		Ok(FileWritten {
 			// A relative path resolves against the process's working directory; the caller
 			// is handed the absolute path the bytes landed at.
@@ -762,26 +635,21 @@ impl Response {
 	}
 }
 
-/// A response's body plumbing, for driving the stream directly. Permanently unstable.
+/// A response's body plumbing, for a surface that drives it directly. Permanently unstable.
 #[cfg(feature = "internals")]
 impl Response {
-	/// The body as Faith holds it, for a caller driving the stream itself.
-	pub fn body_holder(&self) -> &BodyHolder {
-		&self.body
-	}
-
-	/// Whether the body has already been read or handed out.
+	/// Whether the body has already been read or handed out, marking it disturbed either way.
 	pub fn check_disturbed(&self) -> Result<(), FaithError> {
 		self.check_stream_disturbed()
 	}
 
-	/// The body as a shared stream, converting it to one if it isn't already.
-	pub fn shared_stream(
-		&self,
-		body: &mut Body,
-		drained: Arc<AtomicBool>,
-	) -> Result<SharedStream<Pin<Box<DynStream>>>, FaithError> {
-		self.ensure_stream(body, drained)
+	/// Stop the body's transfer because the request's signal was aborted after its headers
+	/// arrived. Every reader of the response and its clones errors with `Aborted`.
+	// spec:CANCEL#abortsignal
+	pub fn abort_body(&self) {
+		if let Some(claim) = &self.claim {
+			claim.body().abort();
+		}
 	}
 }
 

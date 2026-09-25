@@ -43,6 +43,59 @@ function disturbedResponseError(cause) {
 }
 
 /**
+ * An `AbortError` for a request whose signal was aborted, shaped like the native one.
+ * @param {string} message
+ * @returns {Error}
+ */
+function abortedError(message) {
+	const error = new Error(message);
+	error.name = "AbortError";
+	error.code = ERROR_CODES.Aborted;
+	return error;
+}
+
+/**
+ * The response body as a `ReadableStream`, built over the native reader.
+ *
+ * Built here rather than natively so that cancelling the stream always reaches the transfer,
+ * including while a read is waiting on the network, and so an abort can error the stream with
+ * the signal's own reason.
+ * @param {import('./index').FaithBodyReader} reader
+ * @param {(controller: ReadableByteStreamController) => void} onStart
+ * @returns {ReadableStream<Uint8Array>}
+ */
+// spec:BODY#the-body-stream spec:BODY#giving-up-the-body
+function bodyStream(reader, onStart) {
+	return new ReadableStream({
+		type: "bytes",
+		start(controller) {
+			onStart(controller);
+		},
+		async pull(controller) {
+			const chunk = await reader.read();
+			if (chunk === null) {
+				controller.close();
+				// A BYOB read waiting when the body ends is answered with nothing.
+				controller.byobRequest?.respond(0);
+				return;
+			}
+			controller.enqueue(chunk);
+		},
+		cancel() {
+			reader.cancel();
+		},
+	});
+}
+
+/**
+ * Removes a response's abort listener once the response is collected, so a long-lived signal
+ * does not keep every response it ever covered alive.
+ */
+const signalListeners = new FinalizationRegistry(({ signal, listener }) => {
+	signal.removeEventListener("abort", listener);
+});
+
+/**
  * Resolve a `toFile()` destination to a string path. A `file://` URL is converted here, by
  * the platform's own conversion, before the request reaches the native layer; a URL that
  * does not name a local path throws `InvalidPath`. A plain string is taken as a path.
@@ -465,10 +518,49 @@ class Response {
 	 * @type {{ fetchStart: number, entry: Promise<PerformanceResourceTiming> | undefined }}
 	 */
 	#timing;
+	/**
+	 * The request's signal, which covers the body as well as the request, and so this
+	 * response and its clones alike.
+	 * @type {AbortSignal | undefined}
+	 */
+	#signal;
+	/** @type {ReadableByteStreamController | undefined} */
+	#bodyController;
 
-	constructor(nativeResponse, timing) {
+	constructor(nativeResponse, timing, signal) {
 		this.#nativeResponse = nativeResponse;
 		this.#timing = timing;
+		this.#signal = signal;
+		if (signal) {
+			this.#watchSignal(signal);
+		}
+	}
+
+	/**
+	 * Keep the signal reaching the body after the response has arrived. The listener holds
+	 * this response weakly and is removed when it is collected.
+	 * @param {AbortSignal} signal
+	 */
+	// spec:CANCEL#abortsignal
+	#watchSignal(signal) {
+		const response = new WeakRef(this);
+		const listener = () => response.deref()?.#abortBody(signal.reason);
+		signal.addEventListener("abort", listener, { once: true });
+		signalListeners.register(this, { signal, listener });
+	}
+
+	/**
+	 * Stop the transfer and error the body stream with the signal's reason, as the standard
+	 * errors a readable body when its request is aborted.
+	 * @param {unknown} reason
+	 */
+	#abortBody(reason) {
+		this.#nativeResponse.abortBody();
+		try {
+			this.#bodyController?.error(reason);
+		} catch {
+			// Already closed or errored: a body read to the end is past the signal's reach.
+		}
 	}
 
 	// Mirror the native class's getters onto this prototype, once at class
@@ -531,12 +623,20 @@ class Response {
 
 	// spec:BODY#the-body-stream
 	get body() {
-		// The native binding mints a fresh stream on every call, and each one
-		// replays the body from the start. A response has one body stream, so
-		// build it once and hand out the same object thereafter. `undefined`
-		// means not built yet; `null` is a response that cannot carry a body.
+		// A response has one body stream, so build it once and hand out the same object
+		// thereafter. `undefined` means not built yet; `null` is a response that cannot carry
+		// a body.
 		if (this.#body === undefined) {
-			this.#body = this.#nativeResponse.body() ?? null;
+			const reader = this.#nativeResponse.bodyReader();
+			this.#body = reader
+				? bodyStream(reader, (controller) => {
+						this.#bodyController = controller;
+					})
+				: null;
+			// A body taken after the signal fired is already errored, with the signal's reason.
+			if (this.#body && this.#signal?.aborted) {
+				this.#abortBody(this.#signal.reason);
+			}
 		}
 		return this.#body;
 	}
@@ -643,7 +743,12 @@ class Response {
 	clone() {
 		// The clone reads the same body over the same connection, so it shares the
 		// original's timing rather than publishing a second entry for the one request.
-		return new Response(this.#nativeResponse.clone(), this.#timing);
+		// It shares the request's signal too, which errors every clone's body.
+		return new Response(
+			this.#nativeResponse.clone(),
+			this.#timing,
+			this.#signal,
+		);
 	}
 
 	/**
@@ -872,12 +977,9 @@ async function fetch(resource, options = {}) {
 			// Check if signal is already aborted
 			if (signal && signal.aborted) {
 				sender.close();
-				const error = new Error(
+				throw abortedError(
 					"Aborted: the request was aborted before it could start",
 				);
-				error.name = "AbortError";
-				error.code = ERROR_CODES.Aborted;
-				throw error;
 			}
 
 			// Start the fetch with the StreamBody
@@ -915,7 +1017,7 @@ async function fetch(resource, options = {}) {
 			})();
 
 			const nativeResponse = await responsePromise;
-			return new Response(nativeResponse, timing);
+			return responseFor(nativeResponse, timing, signal);
 		} else if (nativeOptions.body instanceof ArrayBuffer) {
 			nativeOptions.body = Buffer.from(nativeOptions.body);
 		} else if (Array.isArray(nativeOptions.body)) {
@@ -943,16 +1045,29 @@ async function fetch(resource, options = {}) {
 
 	// Check if signal is already aborted
 	if (signal && signal.aborted) {
-		const error = new Error(
-			"Aborted: the request was aborted before it could start",
-		);
-		error.name = "AbortError";
-		error.code = ERROR_CODES.Aborted;
-		throw error;
+		throw abortedError("Aborted: the request was aborted before it could start");
 	}
 
 	const nativeResponse = await faithFetch(url, nativeOptions, signal, null);
-	return new Response(nativeResponse, timing);
+	return responseFor(nativeResponse, timing, signal);
+}
+
+/**
+ * Wrap a native response, keeping the request's signal on it so it covers the body too.
+ * @param {import('./index').FaithResponse} nativeResponse
+ * @param {{ fetchStart: number, entry: Promise<PerformanceResourceTiming> | undefined }} timing
+ * @param {AbortSignal | undefined} signal
+ * @returns {Response}
+ */
+// spec:CANCEL#abortsignal
+function responseFor(nativeResponse, timing, signal) {
+	// A signal that fired while the response was on its way back rejects the fetch, as it
+	// would have a moment earlier, and the body it would have had is stopped.
+	if (signal?.aborted) {
+		nativeResponse.abortBody();
+		throw abortedError("Aborted: the request was aborted");
+	}
+	return new Response(nativeResponse, timing, signal);
 }
 
 module.exports = {

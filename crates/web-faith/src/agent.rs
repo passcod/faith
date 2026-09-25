@@ -39,7 +39,7 @@ use web_faith_dns::{FaithResolver, ResolverReport};
 #[cfg(feature = "http3")]
 use web_faith_alt_svc::{AltSvcCache, H3Prober};
 
-use crate::{client::ClientRecipe, stats::InnerAgentStats, warm_up::origin_key};
+use crate::{body::DrainPolicy, client::ClientRecipe, stats::InnerAgentStats, warm_up::origin_key};
 
 #[cfg(all(feature = "http3", feature = "dns"))]
 use crate::client::install_https_sink;
@@ -58,6 +58,8 @@ pub(crate) struct AgentSettings {
 	pub(crate) h3_follow_advertised_port: bool,
 	/// Whether a streaming request body may go out over HTTP/1.x.
 	pub(crate) quirk_h1_request_streaming: bool,
+	/// How much of an abandoned HTTP/1 body is read out to save its connection.
+	pub(crate) drain: DrainPolicy,
 	/// The agent's default `Accept-Encoding`. Decides which codings a response is decoded under
 	/// when a request adds none of its own.
 	#[cfg(feature = "encoding")]
@@ -138,6 +140,9 @@ pub struct Agent {
 	/// reserves to HTTP/2 and HTTP/3.
 	// spec:QUIRK#http-1-x-request-body-streaming
 	pub(crate) quirk_h1_request_streaming: bool,
+	/// How much of an abandoned HTTP/1 body is read out to save its connection.
+	// spec:POOL#draining-abandoned-http-1-bodies
+	pub(crate) drain: DrainPolicy,
 	/// The agent's default `Accept-Encoding`. Decides the codings a response is decoded under when
 	/// a request adds none of its own.
 	#[cfg(feature = "encoding")]

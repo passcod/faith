@@ -542,6 +542,18 @@ pub struct AgentPoolOptions {
 	///
 	/// Default: `null` (no limit).
 	pub max_idle_per_host: Option<u32>,
+	/// The most of an abandoned HTTP/1 response body, in bytes, that is read out to save its
+	/// connection for the pool. A body is abandoned when every response holding it has cancelled
+	/// its stream, been discarded, or been garbage collected before reading to the end. A
+	/// larger remainder closes the connection instead, and `0` always closes it.
+	///
+	/// Default: 131072 (128 KiB).
+	pub drain_limit: Option<u32>,
+	/// How long, in milliseconds, reading out an abandoned HTTP/1 response body may take before
+	/// its connection is closed instead of saved for the pool.
+	///
+	/// Default: 1000 (1 second).
+	pub drain_timeout: Option<u32>,
 }
 
 /// Switches that depart from standard behaviour on purpose. This is a nested object.

@@ -472,10 +472,11 @@ async fn into_http_hands_over_the_undisturbed_body() {
 	});
 }
 
-/// The body stream is shared rather than moved, so handing over as an `http::Response` leaves an
-/// earlier stream still readable, and both see the whole body.
+/// Every stream a response hands out reads from its one position in the body, so handing over as
+/// an `http::Response` is not refused by a stream already taken, and whichever reads first moves
+/// both along (spec:BODY#the-body-stream).
 #[tokio::test]
-async fn the_body_stream_is_shared_between_its_consumers() {
+async fn the_body_streams_of_a_response_share_one_position() {
 	against_origin!(origin => {
 		let response = agent()
 			.fetch(format!("{origin}/bytes/64"))
@@ -487,8 +488,7 @@ async fn the_body_stream_is_shared_between_its_consumers() {
 			.expect("the body is available")
 			.expect("a body");
 
-		// Handing over is not refused by the stream already having been taken: both hand out the
-		// same shared stream rather than one moving it away from the other.
+		// Handing over is not refused by the stream already having been taken.
 		let handed_over = response.into_http().expect("the body is shared, not moved");
 		let collected = http_body_util::BodyExt::collect(handed_over.into_body())
 			.await
@@ -496,11 +496,11 @@ async fn the_body_stream_is_shared_between_its_consumers() {
 			.to_bytes();
 		assert_eq!(collected.len(), 64);
 
+		// The handed-over body read to the end, so the earlier stream is at the end too.
 		let mut taken = std::pin::pin!(taken);
-		let mut bytes = 0;
-		while let Some(chunk) = futures::StreamExt::next(&mut taken).await {
-			bytes += chunk.expect("the chunk arrives").len();
-		}
-		assert_eq!(bytes, 64, "the earlier stream still sees the whole body");
+		assert!(
+			futures::StreamExt::next(&mut taken).await.is_none(),
+			"the earlier stream carries on from where the body was read to"
+		);
 	});
 }

@@ -13,7 +13,8 @@ Every error Faith throws carries a `code` set to a stable name for its kind.
 `ERROR_CODES` is exported and enumerates the library's error codes; it is generated from the same source as the errors themselves, so the two cannot drift.
 Every code in `ERROR_CODES` is reachable: each one names a kind that some failure surfaces to the caller, so a branch written for any code in the map can fire.
 Error messages are prefixed with the kind name and may embed underlying detail; the message is for humans, the code is the API.
-Errors surfaced through reading the response `body` stream carry no `code`.
+Reading the response `body` stream is no exception: a failed read errors the stream with a coded error.
+The one error the stream carries that Faith did not make is an aborted signal's reason, which the standard has the stream error with as given (see [CANCEL](../fetch/cancellation-and-timeouts.md)).
 
 ## Mapping
 

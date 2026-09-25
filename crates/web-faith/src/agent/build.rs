@@ -39,6 +39,7 @@ use web_faith_alt_svc::{AltSvcCache, AltSvcCacheConfig};
 use crate::{
 	USER_AGENT,
 	agent::{Agent, AgentSettings, Live},
+	body::DrainPolicy,
 	client::{ClientRecipe, NodeEnvRecipe},
 	error::{FaithError, FaithErrorKind},
 	options::{AgentOptions, DnsOverride, Header, ipv6_wildcard_bindable, resolve_windows},
@@ -289,6 +290,23 @@ impl Agent {
 				.unwrap_or(usize::MAX)
 		});
 
+		// Unset limits take the defaults (spec:POOL#draining-abandoned-http-1-bodies).
+		let drain = {
+			let default = DrainPolicy::default();
+			DrainPolicy {
+				limit: pool
+					.as_ref()
+					.and_then(|pool| pool.drain_limit)
+					.map_or(default.limit, u64::from),
+				timeout: pool
+					.as_ref()
+					.and_then(|pool| pool.drain_timeout)
+					.map_or(default.timeout, |millis| {
+						Duration::from_millis(millis.into())
+					}),
+			}
+		};
+
 		let connect_timeout = timeout
 			.and_then(|t| t.connect)
 			.map(|millis| Duration::from_millis(millis.into()));
@@ -508,6 +526,7 @@ impl Agent {
 		let settings = AgentSettings {
 			h3_follow_advertised_port,
 			quirk_h1_request_streaming,
+			drain,
 			#[cfg(feature = "encoding")]
 			default_accept_encoding,
 			#[cfg(feature = "encoding")]
@@ -615,6 +634,7 @@ impl Agent {
 			#[cfg(feature = "http3")]
 			h3_upgrade_enabled: recipe.h3_upgrade.enabled,
 			quirk_h1_request_streaming: settings.quirk_h1_request_streaming,
+			drain: settings.drain,
 			#[cfg(feature = "encoding")]
 			default_accept_encoding: settings.default_accept_encoding,
 			#[cfg(feature = "encoding")]

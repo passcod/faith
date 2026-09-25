@@ -16,7 +16,8 @@ Browsers return a stream there anyway; Faith follows the standard.
 Accessing `body` marks the response disturbed (the body-used flag becomes true), even before any bytes are consumed.
 A response has one body stream: `body` builds it on first access and returns that same `ReadableStream` object thereafter.
 Consumption therefore advances a single position, and a handle taken after part of the body has been read continues from where the earlier one left off.
-Errors surfaced through the body stream carry no `code` property (see [ERR](../errors/errors.md)).
+Errors surfaced through the body stream carry a `code` like any other Faith error, apart from an aborted signal's, which is the signal's own reason (see [ERR](../errors/errors.md)).
+Cancelling the stream, whether by `cancel()` on it or its reader or by leaving a `for await` loop early, gives up the response's claim on the body (see [Giving up the body](#giving-up-the-body)).
 
 ## Whole-body methods
 
@@ -65,7 +66,8 @@ Reports are rate limited rather than one per chunk, because a body large enough 
 The last report is always delivered, so a caller's final view of a completed write is the whole body rather than wherever the rate limit last landed, and a write with nothing to report still reports once.
 Progress is observational: it does not pace, pause, or fail the write, and a write with no callback behaves the same in every other respect.
 
-`signal` does not reach a file write, the same as it does not reach any other body read; the per-request `timeout` and the agent's read and total timeouts bound it (see [CANCEL](../fetch/cancellation-and-timeouts.md)).
+`signal` reaches a file write as it reaches any other body read: aborting it fails the write with `Aborted`, leaving what was written so far on disk like any other failure part way through.
+The per-request `timeout` and the agent's read and total timeouts bound the write too (see [CANCEL](../fetch/cancellation-and-timeouts.md)).
 `clone()` gives a second entitlement to the body, so an original and its clone each write their own file.
 `discard()` on a body already written to a file is accepted, as it is after any other read.
 
@@ -75,14 +77,33 @@ Progress is observational: it does not pace, pause, or fail the write, and a wri
 Original and clone are separate response objects, each entitled to one full read of the body, sequentially or concurrently, receiving identical content.
 Cloning does not tee the body: there is still exactly one underlying transfer, whose chunks are shared in memory between the consumers rather than duplicated into independent branches.
 Trailers settle once, for original and clones alike.
+A chunk stays in memory until every response still holding a claim has read past it, so a clone that is never read keeps everything the others have read until it gives its claim up.
+
+## Giving up the body
+
+The original response and each of its clones hold one claim on the body, and the transfer continues for as long as any claim does.
+A claim is spent by reading the body to the end, and given up early by cancelling the body stream, by `discard()`, or by the response being garbage collected.
+On the Rust surface, dropping a body stream or a response gives its claim up the same way (see [RSAPI](../rust/client-api.md)).
+Giving up a claim releases that response's hold on the chunks already received, so the ones no remaining claim needs are freed.
+A clone still reading when another gives up carries on unaffected, as a branch of the standard's tee does.
+
+When the last claim is given up before the body has ended, Faith stops the transfer, as the fetch standard does when a body stream is cancelled.
+On HTTP/2 the stream is reset (`RST_STREAM`) and on HTTP/3 the response side of the stream is stopped (`STOP_SENDING`), leaving the multiplexed connection in the pool.
+On HTTP/1 the connection can only be reused once the body has been read to its end, so Faith reads out a small remainder and returns the connection to the pool, and closes the connection when the remainder is larger.
+The agent's drain limit and drain timeout decide which, and a drain that reaches either closes the connection (see [POOL](../agent/connection-pool.md)).
+Stopping the transfer happens as soon as the last claim goes, without waiting for anything to read from the body again, so an endless body costs nothing once no one wants it.
+The trailers promise then resolves to `null` and the request's timing settles (see [TRL](trailers.md) and [RESP](response.md)).
 
 ## discard()
 
-`discard()` disposes of the body so the connection can be reused, resolving when disposal is done: on HTTP/1 the body is drained; on HTTP/2 and HTTP/3 the stream is cancelled outright, since the connection is reusable regardless.
+`discard()` gives up the response's claim on the body and resolves once it has been given up (see [Giving up the body](#giving-up-the-body)).
+When it is the last claim, that includes stopping the transfer, so the promise settles after the HTTP/2 or HTTP/3 stream is reset or the HTTP/1 connection has been drained back to the pool or closed.
+The drain limit and drain timeout bound that, so `discard()` settles whatever the server does, and a drain that ends in closing the connection is not an error.
+A clone still reading keeps the transfer going, and `discard()` on the original does not interrupt it.
 It is idempotent, and calling it on a body that has already been read is accepted rather than an error.
-A discarded body cannot be read afterwards: the whole-body methods and `clone()` reject with the already-disturbed error, while the body-used flag stays false because disposing of a body is not reading it.
-After `discard()`, the trailers promise resolves to `null` (see [TRL](trailers.md)).
-An unread, undiscarded HTTP/1 response holds its connection until the response is garbage collected, at which point the body is drained and the connection returned to the pool on a best-effort basis, or closed when that is not possible.
+A discarded body cannot be read afterwards: the whole-body methods and `clone()` reject with the already-disturbed error, a body stream of this response still being read errors, and the body-used flag stays false because disposing of a body is not reading it.
+After `discard()`, the trailers promise resolves to `null` unless a clone goes on to read the body to the end (see [TRL](trailers.md)).
+An unread, undiscarded response holds its claim until it is garbage collected, which on HTTP/1 holds its connection that long.
 `discard()` is the deterministic path; the collector is only the safety net.
 
 ## webResponse()
