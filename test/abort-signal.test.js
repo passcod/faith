@@ -170,22 +170,37 @@ test("signal: abort with timeout option", async (t) => {
   }
 });
 
-test("signal: abort does not prevent reading completed response", async (t) => {
-  t.plan(2);
+test("signal: abort after headers reaches the unread body", async (t) => {
+  t.plan(3);
 
+  const controller = new AbortController();
+  const response = await fetch(url("/get"), {
+    signal: controller.signal,
+  });
+
+  t.equal(response.status, 200, "request should complete");
+
+  controller.abort();
+
+  // The signal covers the body as well as the request (spec: CANCEL#abortsignal).
   try {
-    const controller = new AbortController();
-    const response = await fetch(url("/get"), {
-      signal: controller.signal,
-    });
-
-    t.equal(response.status, 200, "request should complete");
-
-    controller.abort();
-
-    const data = await response.json();
-    t.ok(data, "should be able to read response after aborting controller");
+    await response.json();
+    t.fail("reading the body after the abort should reject");
   } catch (error) {
-    t.fail(`Unexpected error: ${error.message}`);
+    t.equal(error.name, "AbortError", "the read rejects with an AbortError");
+    t.equal(error.code, "Aborted", "coded Aborted");
   }
+});
+
+test("signal: abort after the body was read leaves it read", async (t) => {
+  t.plan(1);
+
+  const controller = new AbortController();
+  const response = await fetch(url("/get"), {
+    signal: controller.signal,
+  });
+  const data = await response.json();
+  controller.abort();
+
+  t.ok(data, "the body read before the abort stands");
 });

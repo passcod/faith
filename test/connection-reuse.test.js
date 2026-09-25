@@ -628,8 +628,8 @@ test("discard() works after accessing body property", async (t) => {
 	}
 });
 
-test("discard() on clone allows connection reuse", async (t) => {
-	t.plan(2);
+test("discard() on clone allows connection reuse once every clone lets go", async (t) => {
+	t.plan(3);
 
 	const tracker = createConnectionTracker();
 	await tracker.listen();
@@ -640,9 +640,20 @@ test("discard() on clone allows connection reuse", async (t) => {
 		const r1 = await fetch(tracker.url("/get"), { agent });
 		const r1Clone = r1.clone();
 
-		// Discard original, don't touch clone
+		// Discarding the original leaves the clone's claim holding the connection
+		// (spec: BODY#giving-up-the-body).
 		await r1.discard();
+		await settlePool();
+		const held = await fetch(tracker.url("/get"), { agent });
+		await held.text();
+		t.equal(
+			tracker.stats().totalConnections,
+			2,
+			"the untouched clone keeps its connection",
+		);
 
+		// Discarding the clone too releases it.
+		await r1Clone.discard();
 		await settlePool();
 		const r2 = await fetch(tracker.url("/get"), { agent });
 		await r2.text();
@@ -650,10 +661,10 @@ test("discard() on clone allows connection reuse", async (t) => {
 		const stats = tracker.stats();
 		t.equal(
 			stats.totalConnections,
-			1,
-			"should reuse connection after clone discard",
+			2,
+			"should reuse a pooled connection once every clone is discarded",
 		);
-		t.equal(stats.totalRequests, 2, "should have made 2 requests");
+		t.equal(stats.totalRequests, 3, "should have made 3 requests");
 	} finally {
 		await tracker.close();
 	}

@@ -16,7 +16,7 @@ Browsers return a stream there anyway; Faith follows the standard.
 Accessing `body` marks the response disturbed (the body-used flag becomes true), even before any bytes are consumed.
 A response has one body stream: `body` builds it on first access and returns that same `ReadableStream` object thereafter.
 Consumption therefore advances a single position, and a handle taken after part of the body has been read continues from where the earlier one left off.
-Errors surfaced through the body stream carry no `code` property (see [ERR](../errors/errors.md)).
+Errors surfaced through the body stream carry a `code` like any other Faith error, apart from an aborted signal's, which is the signal's own reason (see [ERR](../errors/errors.md)).
 Cancelling the stream, whether by `cancel()` on it or its reader or by leaving a `for await` loop early, gives up the response's claim on the body (see [Giving up the body](#giving-up-the-body)).
 
 ## Whole-body methods

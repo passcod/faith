@@ -457,7 +457,10 @@ pub struct FaithBodyReader {
 impl FaithBodyReader {
 	/// The next chunk of the body, or `null` once it has ended.
 	#[napi]
-	pub fn read<'env>(&self, env: &'env Env) -> Result<PromiseRaw<'env, Option<Buffer>>, napi::Error> {
+	pub fn read<'env>(
+		&self,
+		env: &'env Env,
+	) -> Result<PromiseRaw<'env, Option<Buffer>>, napi::Error> {
 		let reader = self.reader.clone();
 		faith_promise(env, async move {
 			let mut reader = reader.lock().await;

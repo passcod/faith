@@ -465,7 +465,7 @@ pub async fn send(
 	let trailers = Arc::new(TrailersSlot::default());
 	let claim = (!empty).then(|| {
 		let http_response: http::Response<_> = response.into();
-		BodyShared::new(BodyParts {
+		BodyShared::first_claim(BodyParts {
 			body: http_response.into_body(),
 			version,
 			drain: agent.drain,

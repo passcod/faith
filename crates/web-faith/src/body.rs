@@ -126,8 +126,8 @@ pub(crate) struct BodyParts {
 }
 
 impl BodyShared {
-	/// Build a body and the first claim on it, which belongs to the response being built.
-	pub(crate) fn new(parts: BodyParts) -> Arc<Claim> {
+	/// Build a body and return the first claim on it, which belongs to the response being built.
+	pub(crate) fn first_claim(parts: BodyParts) -> Arc<Claim> {
 		let shared = Arc::new(Self {
 			upstream: Mutex::new(Upstream::Live(parts.body)),
 			upstream_waker: AtomicWaker::new(),
@@ -154,6 +154,7 @@ impl BodyShared {
 			body: shared,
 			cursor: Mutex::new(Some(chain)),
 			given_up: AtomicBool::new(false),
+			ended: AtomicBool::new(false),
 			waker: AtomicWaker::new(),
 		})
 	}
@@ -391,6 +392,9 @@ pub struct Claim {
 	/// This response's position in the chain. `None` once given up.
 	cursor: Mutex<Option<Chain>>,
 	given_up: AtomicBool,
+	/// Whether a reader on this claim reached the end of the body, which spends the claim rather
+	/// than giving it up: a reader polled afterwards sees the end again, not a refusal.
+	ended: AtomicBool,
 	/// A reader waiting on the chain, woken when the claim is given up.
 	waker: AtomicWaker,
 }
@@ -420,6 +424,7 @@ impl Claim {
 			body: self.body.clone(),
 			cursor: Mutex::new(Some(chain)),
 			given_up: AtomicBool::new(false),
+			ended: AtomicBool::new(false),
 			waker: AtomicWaker::new(),
 		}))
 	}
@@ -524,19 +529,24 @@ impl Stream for BodyReader {
 			return self.fail(FaithErrorKind::Aborted);
 		}
 
-		let polled = {
-			let mut cursor = self.claim.cursor();
-			match cursor.as_mut() {
-				// Given up, by `discard()` or a cancel, while this reader was open.
-				None => None,
-				Some(chain) => Some(Pin::new(chain).poll_next(cx)),
-			}
-		};
+		// `None` when the claim was given up, by `discard()` or a cancel, while this reader was
+		// open.
+		let polled = self
+			.claim
+			.cursor()
+			.as_mut()
+			.map(|chain| Pin::new(chain).poll_next(cx));
 
 		match polled {
+			// A body read to its end and then let go has nothing more to give, which is an end.
+			None if self.claim.ended.load(Ordering::SeqCst) => {
+				self.done = true;
+				Poll::Ready(None)
+			}
 			None => self.fail(FaithErrorKind::ResponseAlreadyDisturbed),
 			Some(Poll::Pending) => Poll::Pending,
 			Some(Poll::Ready(None)) => {
+				self.claim.ended.store(true, Ordering::SeqCst);
 				self.done = true;
 				Poll::Ready(None)
 			}
@@ -569,5 +579,320 @@ impl BodyCanceller {
 	/// Give the claim up, as dropping the reader would.
 	pub fn cancel(&self) {
 		self.0.give_up();
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use std::{sync::atomic::AtomicU64, time::Instant};
+
+	use http_body::SizeHint;
+
+	use super::*;
+	use crate::timing::RequestTiming;
+
+	/// What a test body reports about how it was used.
+	#[derive(Clone, Default)]
+	struct Probe {
+		read: Arc<AtomicU64>,
+		dropped: Arc<AtomicBool>,
+	}
+
+	impl Probe {
+		fn read(&self) -> u64 {
+			self.read.load(Ordering::SeqCst)
+		}
+
+		fn dropped(&self) -> bool {
+			self.dropped.load(Ordering::SeqCst)
+		}
+	}
+
+	/// A body that yields 1 KiB chunks: `length` of them in all, or without end for `None`, and
+	/// stalls for good once `stall_after` chunks have gone.
+	struct TestBody {
+		probe: Probe,
+		length: Option<u64>,
+		stall_after: Option<u64>,
+		sent: u64,
+	}
+
+	const CHUNK: u64 = 1024;
+
+	impl http_body::Body for TestBody {
+		type Data = Bytes;
+		type Error = std::io::Error;
+
+		fn poll_frame(
+			mut self: Pin<&mut Self>,
+			_cx: &mut Context<'_>,
+		) -> Poll<Option<Result<Frame<Bytes>, Self::Error>>> {
+			if self.length.is_some_and(|length| self.sent >= length) {
+				return Poll::Ready(None);
+			}
+			if self.stall_after.is_some_and(|stall| self.sent >= stall) {
+				return Poll::Pending;
+			}
+			self.sent += 1;
+			self.probe.read.fetch_add(CHUNK, Ordering::SeqCst);
+			Poll::Ready(Some(Ok(Frame::data(Bytes::from(vec![7; CHUNK as usize])))))
+		}
+
+		fn size_hint(&self) -> SizeHint {
+			match self.length {
+				Some(length) => SizeHint::with_exact((length - self.sent) * CHUNK),
+				None => SizeHint::default(),
+			}
+		}
+	}
+
+	impl Drop for TestBody {
+		fn drop(&mut self) {
+			self.probe.dropped.store(true, Ordering::SeqCst);
+		}
+	}
+
+	struct Built {
+		claim: Arc<Claim>,
+		probe: Probe,
+		stats: Arc<InnerAgentStats>,
+		trailers: Arc<TrailersSlot>,
+	}
+
+	fn build(version: Version, length: Option<u64>, stall_after: Option<u64>) -> Built {
+		build_with(version, length, stall_after, DrainPolicy::default())
+	}
+
+	fn build_with(
+		version: Version,
+		length: Option<u64>,
+		stall_after: Option<u64>,
+		drain: DrainPolicy,
+	) -> Built {
+		let probe = Probe::default();
+		let stats = Arc::new(InnerAgentStats::default());
+		let trailers = Arc::new(TrailersSlot::default());
+		let claim = BodyShared::first_claim(BodyParts {
+			body: reqwest::Body::wrap(TestBody {
+				probe: probe.clone(),
+				length,
+				stall_after,
+				sent: 0,
+			}),
+			version,
+			drain,
+			#[cfg(feature = "encoding")]
+			decode: None,
+			trailers: trailers.clone(),
+			timing: Arc::new(TimingSlot::new(Instant::now(), RequestTiming::default())),
+			stats: stats.clone(),
+		});
+		Built {
+			claim,
+			probe,
+			stats,
+			trailers,
+		}
+	}
+
+	/// Giving up the only claim on an HTTP/2 body drops it at once, which resets its stream,
+	/// without reading any more of it.
+	#[tokio::test]
+	async fn the_last_claim_going_drops_a_multiplexed_body() {
+		let built = build(Version::HTTP_2, None, None);
+		assert!(built.claim.give_up(), "the only claim is the last");
+		assert!(built.probe.dropped(), "the body is dropped");
+		assert_eq!(built.probe.read(), 0, "without reading any of it");
+		built.claim.body().settled().await;
+	}
+
+	/// A clone's claim keeps the transfer going after the original gives up, and the transfer
+	/// stops when the clone lets go too.
+	#[tokio::test]
+	async fn a_clone_keeps_the_transfer_going() {
+		let built = build(Version::HTTP_2, None, None);
+		let clone = built.claim.duplicate().expect("an unread claim duplicates");
+
+		assert!(!built.claim.give_up(), "the original is not the last claim");
+		assert!(!built.probe.dropped(), "the body stays for the clone");
+
+		let mut reader = clone.reader().expect("the clone reads");
+		assert!(
+			reader.next().await.is_some_and(|chunk| chunk.is_ok()),
+			"the clone reads on"
+		);
+
+		drop(reader);
+		assert!(
+			built.probe.dropped(),
+			"dropping the clone's reader stops the transfer"
+		);
+	}
+
+	/// A given-up claim cannot be copied or read.
+	#[tokio::test]
+	async fn a_given_up_claim_has_nothing_to_give() {
+		let built = build(Version::HTTP_2, None, None);
+		let _clone = built.claim.duplicate().expect("an unread claim duplicates");
+		built.claim.give_up();
+
+		assert!(
+			built.claim.duplicate().is_none(),
+			"no copy of a given-up claim"
+		);
+		assert!(
+			matches!(
+				built.claim.reader().map(|_| ()).map_err(|err| err.kind()),
+				Err(FaithErrorKind::ResponseAlreadyDisturbed)
+			),
+			"and no reader either"
+		);
+	}
+
+	/// A small HTTP/1 remainder is read out, so the connection can go back to the pool.
+	#[tokio::test]
+	async fn a_small_http1_remainder_is_drained() {
+		let built = build(Version::HTTP_11, Some(10), None);
+		built.claim.give_up();
+		built.claim.body().settled().await;
+		assert_eq!(
+			built.probe.read(),
+			10 * CHUNK,
+			"the whole remainder is read"
+		);
+	}
+
+	/// An HTTP/1 remainder its length shows to be over the limit is not started on.
+	#[tokio::test]
+	async fn an_http1_remainder_over_the_limit_closes_at_once() {
+		let built = build(Version::HTTP_11, Some(1024), None);
+		built.claim.give_up();
+		built.claim.body().settled().await;
+		assert_eq!(built.probe.read(), 0, "none of it is read");
+		assert!(
+			built.probe.dropped(),
+			"the body is dropped, closing the connection"
+		);
+	}
+
+	/// An HTTP/1 remainder of unknown length is read up to the limit and dropped past it.
+	#[tokio::test]
+	async fn an_endless_http1_body_is_read_to_the_limit_then_dropped() {
+		let built = build(Version::HTTP_11, None, None);
+		built.claim.give_up();
+		built.claim.body().settled().await;
+		let limit = DrainPolicy::default().limit;
+		assert!(built.probe.read() > limit, "the drain reads past the limit");
+		assert!(
+			built.probe.read() <= limit + CHUNK,
+			"by no more than a chunk"
+		);
+		assert!(built.probe.dropped(), "then drops the body");
+	}
+
+	/// A drain limit of zero drops the body without reading anything.
+	#[tokio::test]
+	async fn a_zero_drain_limit_always_closes() {
+		let built = build_with(
+			Version::HTTP_11,
+			Some(1),
+			None,
+			DrainPolicy {
+				limit: 0,
+				..Default::default()
+			},
+		);
+		built.claim.give_up();
+		built.claim.body().settled().await;
+		assert_eq!(built.probe.read(), 0, "nothing is read");
+		assert!(built.probe.dropped(), "the body is dropped");
+	}
+
+	/// A drain that stalls is bounded by the drain timeout.
+	#[tokio::test]
+	async fn a_stalled_drain_is_bounded_by_its_timeout() {
+		let built = build_with(
+			Version::HTTP_11,
+			Some(20),
+			Some(5),
+			DrainPolicy {
+				timeout: Duration::from_millis(50),
+				..Default::default()
+			},
+		);
+		built.claim.give_up();
+		tokio::time::timeout(Duration::from_secs(5), built.claim.body().settled())
+			.await
+			.expect("the drain settles");
+		assert!(built.probe.dropped(), "the stalled body is dropped");
+	}
+
+	/// An abort errors every reader at once, ahead of chunks it has not read yet.
+	#[tokio::test]
+	async fn an_abort_errors_readers_ahead_of_buffered_chunks() {
+		let built = build(Version::HTTP_2, None, None);
+		let clone = built.claim.duplicate().expect("an unread claim duplicates");
+
+		// The original reads ahead, leaving chunks buffered for the clone.
+		let mut ahead = built.claim.reader().expect("a reader");
+		for _ in 0..3 {
+			ahead.next().await.expect("a chunk").expect("that reads");
+		}
+
+		built.claim.body().abort();
+		assert!(built.probe.dropped(), "the abort drops the body");
+
+		let mut behind = clone.reader().expect("a reader");
+		let first = behind.next().await.expect("an item");
+		assert!(
+			matches!(
+				first.map_err(|err| err.kind()),
+				Err(FaithErrorKind::Aborted)
+			),
+			"the clone's first read is the abort, not a buffered chunk"
+		);
+		assert!(behind.next().await.is_none(), "and nothing after it");
+	}
+
+	/// A body read to its end counts as finished once, and a reader polled after the claim was
+	/// spent sees the end rather than a refusal.
+	#[tokio::test]
+	async fn a_body_read_to_its_end_finishes_once() {
+		let built = build(Version::HTTP_2, Some(3), None);
+
+		let mut reader = built.claim.reader().expect("a reader");
+		let mut second = built.claim.reader().expect("a second reader");
+		let mut bytes = 0;
+		while let Some(chunk) = reader.next().await {
+			bytes += chunk.expect("the chunk reads").len() as u64;
+		}
+		assert_eq!(bytes, 3 * CHUNK);
+		drop(reader);
+
+		assert!(
+			second.next().await.is_none(),
+			"the second reader sees the end"
+		);
+		assert_eq!(built.stats.bodies_started.load(Ordering::SeqCst), 1);
+		assert_eq!(built.stats.bodies_finished.load(Ordering::SeqCst), 1);
+		assert!(matches!(
+			built.trailers.settled().await,
+			crate::response::Trailers::None
+		));
+	}
+
+	/// A body given up before its end settles its trailers as none and counts as finished.
+	#[tokio::test]
+	async fn a_body_given_up_early_settles_its_bookkeeping() {
+		let built = build(Version::HTTP_2, None, None);
+		let mut reader = built.claim.reader().expect("a reader");
+		reader.next().await.expect("a chunk").expect("that reads");
+		drop(reader);
+
+		assert!(matches!(
+			built.trailers.settled().await,
+			crate::response::Trailers::None
+		));
+		assert_eq!(built.stats.bodies_finished.load(Ordering::SeqCst), 1);
 	}
 }

@@ -243,15 +243,18 @@ export interface FetchOptions {
 	/**
 	 * An `AbortSignal`. If this option is set, the request can be canceled by calling `abort()` on the
 	 * corresponding `AbortController`.
+	 *
+	 * The signal covers the whole request, the body included. Aborting it after the response has
+	 * arrived stops the transfer and errors the body of the response and of every clone: a body
+	 * stream errors with the signal's reason, and a whole-body read or `toFile()` under way rejects
+	 * with an `AbortError` (code `Aborted`). A body already read to the end is left as it is.
 	 */
 	signal?: AbortSignal;
 	/**
 	 * Custom to Faith. Cancels the request after this many milliseconds.
 	 *
 	 * This will give a different error to using `signal` with a timeout, which might be preferable in
-	 * some cases. It also has a slightly different internal behaviour: `signal` may abort the request
-	 * only until the response headers have been received, while `timeout` will apply through the entire
-	 * response receipt.
+	 * some cases. Like `signal`, it applies through the entire response receipt.
 	 */
 	timeout?: number;
 }
@@ -353,10 +356,15 @@ export class Response {
 	 * returned thereafter, so reading through it advances a single position. Use `clone()` to
 	 * obtain a second full read of the body.
 	 *
-	 * An important consideration exists in conjunction with the connection pool: if you start the
-	 * body stream, this will hold the connection until the stream is fully consumed. If another
-	 * request is started during that time, and you don't have an available connection in the pool
-	 * for the host already, the new request will open one.
+	 * Cancelling the stream (`cancel()` on it or its reader, or leaving a `for await` loop early)
+	 * gives up this response's claim on the body. Once neither the response nor any of its clones
+	 * still wants it, the transfer stops: the HTTP/2 or HTTP/3 stream is reset, and an HTTP/1
+	 * connection is read out back to the pool when little is left (see `pool.drainLimit` and
+	 * `pool.drainTimeout` on the agent) or closed otherwise.
+	 *
+	 * Until then, an HTTP/1 body holds its connection. If another request is started during that
+	 * time, and you don't have an available connection in the pool for the host already, the new
+	 * request will open one.
 	 */
 	readonly body: ReadableStream<Uint8Array> | null;
 
@@ -374,8 +382,9 @@ export class Response {
 	 * the proposal above describes. Holding the promise while something else reads the body is
 	 * fine, and costs nothing while it is pending.
 	 *
-	 * `discard()` counts as consuming the body but discards its trailers with it: this then
-	 * resolves to `null`.
+	 * A body whose transfer stops before its end, because the response and every clone gave it up
+	 * (by `discard()`, cancelling the stream, or being collected) or the signal was aborted,
+	 * resolves this to `null`.
 	 */
 	readonly trailers: Promise<Headers | null>;
 
@@ -386,8 +395,8 @@ export class Response {
 	 * timing breakdown, as a `PerformanceResourceTiming`.
 	 *
 	 * A resource timing entry describes a finished request, so this does not resolve until the
-	 * body has ended: by being read, by `discard()`, or by the collector draining one that was
-	 * abandoned. A response that cannot carry a body has ended already.
+	 * body has ended: by being read, or by being given up through `discard()`, cancelling the
+	 * stream, an abort, or the collector. A response that cannot carry a body has ended already.
 	 *
 	 * Taking the breakdown also contributes the entry to the process's resource timeline, where
 	 * a `PerformanceObserver` watching `resource` entries receives it. The entry is minted once
@@ -404,9 +413,16 @@ export class Response {
 	 * can be reused for subsequent requests. If you don't call this and don't consume
 	 * the body, the connection may be held open until the response is garbage collected.
 	 *
+	 * It gives up this response's claim on the body, so a clone still reading carries on. Once no
+	 * clone wants the body, the transfer stops: the HTTP/2 or HTTP/3 stream is reset, and an HTTP/1
+	 * connection is read out back to the pool within the agent's `pool.drainLimit` and
+	 * `pool.drainTimeout`, or closed past them. A body stream of this response still being read
+	 * errors with `ResponseAlreadyDisturbed`.
+	 *
 	 * This is custom to Faith.
 	 *
-	 * @returns {Promise<void>} Resolves when the body has been fully discarded
+	 * @returns {Promise<void>} Resolves once the claim is given up and, when it was the last, the
+	 * transfer has stopped. It always settles.
 	 */
 	discard(): Promise<void>;
 
