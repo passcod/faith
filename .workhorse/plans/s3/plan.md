@@ -26,11 +26,14 @@ R3 added the `drain_limit` and `drain_timeout` pool options, which is new public
 
 ## Steps
 
-- [ ] Rename the feature in `crates/web-faith/Cargo.toml` (`unstable-internals = ["raw-client"]`)
-- [ ] Update every `cfg(feature = "internals")` / `cfg_attr(... "internals" ...)` in `crates/web-faith/src` (lib.rs, body.rs, builder.rs, error.rs, request.rs, response.rs, agent/build.rs) and the comments that name it (lib.rs, request.rs, request/parts.rs)
-- [ ] Update the features table in `crates/web-faith/src/lib.rs` and `crates/web-faith/README.md`
-- [ ] Switch `crates/web-faith-napi/Cargo.toml` to `features = ["unstable-internals"]`
-- [ ] Set web-faith to 1.1.0 in `crates/web-faith/Cargo.toml` and the root `Cargo.toml` workspace dependency, and refresh `Cargo.lock`
-- [ ] `cargo build` / `cargo test` with and without the feature, and `npm run build` for the napi crate
-- [ ] Run `cargo semver-checks -p web-faith` locally to confirm that, apart from the one-off `feature_missing` for `internals`, only internals items are flagged
+- [x] Rename the feature in `crates/web-faith/Cargo.toml` (`unstable-internals = ["raw-client"]`)
+- [x] Update every `cfg(feature = "internals")` / `cfg_attr(... "internals" ...)` in `crates/web-faith/src` (lib.rs, body.rs, builder.rs, error.rs, request.rs, response.rs, agent/build.rs) and the comments that name it (lib.rs, request.rs, request/parts.rs)
+- [x] Update the features table in `crates/web-faith/src/lib.rs` and `crates/web-faith/README.md`
+- [x] Switch `crates/web-faith-napi/Cargo.toml` to `features = ["unstable-internals"]`
+- [x] Set web-faith to 1.1.0 in `crates/web-faith/Cargo.toml` and the root `Cargo.toml` workspace dependency, and refresh `Cargo.lock`
+- [x] `cargo build` / `cargo test` with and without the feature, and `npm run build` for the napi crate
+- [x] Run `cargo semver-checks -p web-faith` locally to confirm that, apart from the one-off `feature_missing` for `internals`, only internals items are flagged
+  - The default run (what release-plz runs) flags every path that only `internals` exposed, since the baseline enables `internals` and the current crate has no feature by that name
+  - `--default-features`: only `feature_missing` for `internals`
+  - Baseline `default,internals` against current `default,unstable-internals`: `feature_missing` plus R3's `body::Body`, `body::BodyHolder`, `body::drain_body_inner`, `Response::body_holder` and `Response::shared_stream`
 - [ ] After merge, check that the regenerated release PR proposes 1.1.0
