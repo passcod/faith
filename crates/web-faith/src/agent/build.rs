@@ -54,7 +54,7 @@ use crate::client::install_https_sink;
 
 /// Building an agent from `AgentOptions` directly. Permanently unstable; [`Agent::builder`] is the
 /// supported route.
-#[cfg(feature = "internals")]
+#[cfg(feature = "unstable-internals")]
 impl Agent {
 	/// Build an agent straight from options.
 	pub fn from_options(options: AgentOptions) -> Result<Self, FaithError> {

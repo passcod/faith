@@ -44,7 +44,7 @@
 //! | `tls-ring` |  | ring as the rustls crypto provider instead. |
 //! | `http3` |  | Transparent HTTP/3, upgraded into via Alt-Svc. Needs the cfg flag above. |
 //! | `raw-client` |  | Access to the reqwest client underneath. |
-//! | `internals` |  | Faith's internals. Permanently unstable and exempt from semver. |
+//! | `unstable-internals` |  | Faith's internals. Permanently unstable and exempt from semver. |
 //!
 //! # Component crates
 //!
@@ -81,18 +81,18 @@ mod stats;
 mod timing;
 mod warm_up;
 
-// `internals` decides whether these module paths are public. The option types the ordinary
-// builder path needs are re-exported from `agent` either way; `doc(cfg(all()))` on the private
-// arm stops rustdoc labelling those re-exports as needing `not(internals)`.
-#[cfg(feature = "internals")]
+// `unstable-internals` decides whether these module paths are public. The option types the
+// ordinary builder path needs are re-exported from `agent` either way; `doc(cfg(all()))` on the
+// private arm stops rustdoc labelling those re-exports as needing `not(unstable-internals)`.
+#[cfg(feature = "unstable-internals")]
 pub mod body;
-#[cfg(not(feature = "internals"))]
+#[cfg(not(feature = "unstable-internals"))]
 #[cfg_attr(docsrs, doc(cfg(all())))]
 mod body;
 
-#[cfg(feature = "internals")]
+#[cfg(feature = "unstable-internals")]
 pub mod options;
-#[cfg(not(feature = "internals"))]
+#[cfg(not(feature = "unstable-internals"))]
 #[cfg_attr(docsrs, doc(cfg(all())))]
 mod options;
 
@@ -118,5 +118,5 @@ pub use error::FaithError;
 pub use request::Request;
 pub use response::Response;
 
-#[cfg(feature = "internals")]
+#[cfg(feature = "unstable-internals")]
 pub use error::error_codes;

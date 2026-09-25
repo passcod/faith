@@ -10,10 +10,11 @@ mod target;
 pub use builder::{FetchBuilder, Priority, Request, RequestBuilder};
 pub use target::Target;
 
-// Compiled and used internally either way; `internals` decides whether they are nameable outside.
-#[cfg(not(feature = "internals"))]
+// Compiled and used internally either way; `unstable-internals` decides whether they are nameable
+// outside.
+#[cfg(not(feature = "unstable-internals"))]
 pub(crate) use parts::{RequestBody, RequestOptions};
-#[cfg(feature = "internals")]
+#[cfg(feature = "unstable-internals")]
 pub use {
 	parts::{RequestBody, RequestOptions},
 	send::send,
