@@ -64,6 +64,8 @@ Features are the whole of the swapping mechanism: a caller chooses among the imp
 
 Every published crate follows semantic versioning from `1.0.0`, and the crates version independently, so a change confined to one component moves that crate alone.
 Releases are prepared by release-plz, and a release runs `cargo-semver-checks` against the previous version of each crate, so a breaking change reaches a major bump rather than a patch.
+The `unstable-internals` feature of `web-faith` exposes Faith's internals to the Node module and to callers who accept that they are permanently unstable, and it sits outside semantic versioning.
+Its name carries the `unstable-` prefix because `cargo-semver-checks` leaves features named that way out of its comparison, so a change to the internals cannot force a major bump.
 
 The minimum supported Rust version is 1.96, it is declared as `rust-version` in every published crate, and CI builds and tests against it as well as against stable, so the declaration is verified rather than asserted.
 

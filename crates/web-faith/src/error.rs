@@ -5,15 +5,15 @@ use std::{
 	fmt::{Debug, Display},
 };
 
-#[cfg(feature = "internals")]
+#[cfg(feature = "unstable-internals")]
 use strum::EnumIter;
-#[cfg(feature = "internals")]
+#[cfg(feature = "unstable-internals")]
 use strum::IntoEnumIterator;
 
 /// The kind of a [`FaithError`].
 ///
 /// Match on the kind; the message is for humans and may change.
-#[cfg_attr(feature = "internals", derive(EnumIter))]
+#[cfg_attr(feature = "unstable-internals", derive(EnumIter))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FaithErrorKind {
 	/// The request was aborted by its caller.
@@ -66,8 +66,8 @@ pub enum FaithErrorKind {
 
 impl FaithErrorKind {
 	/// The name of this kind, as the JS bindings report it in an error's `code`.
-	#[cfg(feature = "internals")]
-	#[cfg_attr(docsrs, doc(cfg(feature = "internals")))]
+	#[cfg(feature = "unstable-internals")]
+	#[cfg_attr(docsrs, doc(cfg(feature = "unstable-internals")))]
 	pub fn code(self) -> String {
 		format!("{self:?}")
 	}
@@ -102,7 +102,7 @@ impl FaithErrorKind {
 }
 
 /// Every error code the library reports, in declaration order.
-#[cfg(feature = "internals")]
+#[cfg(feature = "unstable-internals")]
 pub fn error_codes() -> Vec<String> {
 	FaithErrorKind::iter().map(FaithErrorKind::code).collect()
 }
@@ -222,7 +222,7 @@ impl Display for FaithError {
 	}
 }
 
-#[cfg(all(test, feature = "internals"))]
+#[cfg(all(test, feature = "unstable-internals"))]
 mod tests {
 	use super::*;
 

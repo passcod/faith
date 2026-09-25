@@ -54,7 +54,7 @@ rustflags = ["--cfg", "reqwest_unstable"]
 | `tls-ring` |  | ring as the rustls crypto provider instead. |
 | `http3` |  | Transparent HTTP/3, upgraded into via Alt-Svc. Needs the cfg flag above. |
 | `raw-client` |  | Access to the reqwest client underneath. |
-| `internals` |  | Faith's internals. Permanently unstable and exempt from semver. |
+| `unstable-internals` |  | Faith's internals. Permanently unstable and exempt from semver. |
 
 ## Component crates
 

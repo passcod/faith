@@ -1,7 +1,7 @@
 [package]
 name = "web-faith"
 description = "A browser-shaped HTTP client"
-version = "1.0.1"
+version = "1.1.0"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -68,4 +68,4 @@ http3 = ["reqwest/http3", "tls-aws-lc-rs", "dep:web-faith-alt-svc"]
 tls-aws-lc-rs = ["reqwest/rustls"]
 tls-ring = ["reqwest/rustls-no-provider", "dep:rustls", "rustls/ring"]
 raw-client = []
-internals = ["raw-client"]
+unstable-internals = ["raw-client"]

@@ -17,7 +17,7 @@ impl<S: agent_options_builder::State> AgentOptionsBuilder<S> {
 }
 
 /// Taking the options rather than the agent. Permanently unstable.
-#[cfg(feature = "internals")]
+#[cfg(feature = "unstable-internals")]
 impl<S: agent_options_builder::IsComplete> AgentOptionsBuilder<S> {
 	/// The options as they stand, for passing on rather than building an agent here.
 	pub fn into_options(self) -> crate::options::AgentOptions {

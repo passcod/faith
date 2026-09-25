@@ -295,7 +295,7 @@ impl BodyShared {
 
 	/// Stop the transfer because the request was aborted, erroring every reader.
 	// spec:CANCEL#abortsignal
-	#[cfg_attr(not(feature = "internals"), allow(dead_code))]
+	#[cfg_attr(not(feature = "unstable-internals"), allow(dead_code))]
 	pub(crate) fn abort(self: &Arc<Self>) {
 		if !self.aborted.swap(true, Ordering::SeqCst) {
 			self.stop();
@@ -503,7 +503,7 @@ impl Debug for BodyReader {
 impl BodyReader {
 	/// A handle that gives this reader's claim up without holding the reader, for a caller
 	/// whose reader is busy on a read when it wants to cancel. Permanently unstable.
-	#[cfg(feature = "internals")]
+	#[cfg(feature = "unstable-internals")]
 	pub fn canceller(&self) -> BodyCanceller {
 		BodyCanceller(self.claim.clone())
 	}
@@ -570,11 +570,11 @@ impl Drop for BodyReader {
 }
 
 /// Gives a body reader's claim up from outside the reader. Permanently unstable.
-#[cfg(feature = "internals")]
+#[cfg(feature = "unstable-internals")]
 #[derive(Debug, Clone)]
 pub struct BodyCanceller(Arc<Claim>);
 
-#[cfg(feature = "internals")]
+#[cfg(feature = "unstable-internals")]
 impl BodyCanceller {
 	/// Give the claim up, as dropping the reader would.
 	pub fn cancel(&self) {

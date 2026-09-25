@@ -1,4 +1,4 @@
-//! The request shapes an `internals` caller constructs directly.
+//! The request shapes an `unstable-internals` caller constructs directly.
 //!
 //! In their own module so the feature can decide whether they are public.
 

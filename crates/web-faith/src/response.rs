@@ -636,7 +636,7 @@ impl Response {
 }
 
 /// A response's body plumbing, for a surface that drives it directly. Permanently unstable.
-#[cfg(feature = "internals")]
+#[cfg(feature = "unstable-internals")]
 impl Response {
 	/// Whether the body has already been read or handed out, marking it disturbed either way.
 	pub fn check_disturbed(&self) -> Result<(), FaithError> {
