@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.1](https://github.com/passcod/faith/compare/web-faith-v1.1.0...web-faith-v1.1.1) - 2026-09-28
+
+### Other
+
+- *(web-faith)* release v1.1.0
+
 ## [1.1.0](https://github.com/passcod/faith/compare/web-faith-v1.0.1...web-faith-v1.1.0) - 2026-09-25
 
 ### Other
