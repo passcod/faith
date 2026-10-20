@@ -1,7 +1,7 @@
 # Certificate revocation checking
 
-Check server certificates against a browser-style revocation source, on by default with an opt-out.
-Node gets the data at runtime; Rust can also embed a snapshot at compile time.
+Check server certificates against Mozilla's OneCRL (intermediates) and CRLite (leaves), fetched and kept current at runtime, each on by default with its own opt-out.
+Faith hands reqwest a rustls config of its own whose verifier wraps the platform verifier, rather than replacing reqwest's TLS stack.
 
 ## Findings
 
@@ -39,7 +39,6 @@ On Linux the platform verifier does no revocation checking at all; on macOS and 
 | Publisher | Mozilla Remote Settings | rustls project mirror of Mozilla's CRLite |
 | Size | ~1900 entries, ~800 KB JSON | ~7.5 MB (full filter plus deltas) |
 | Churn | rare | about twice daily |
-| Compile-time snapshot | viable | stale within a day |
 | Integrity | content signature (ECDSA P-384, x5u chain) | SHA-256 hashes in a manifest |
 | Rust support | none, we'd parse and match ourselves | `upki` / `rustls-upki` 1.0 |
 
@@ -150,3 +149,23 @@ Revocation data only ever adds distrust, so failure leaves the connection to the
 
 P-384 ECDSA verification uses the rustls crypto provider already chosen (aws-lc-rs or ring), so no new crypto dependency.
 Mozilla's signatures are raw `r‖s` and are converted to DER first.
+
+### Cache in the platform's user cache directory
+
+The cache is the platform user cache directory from `directories` (`~/.cache/web-faith/revocation` on Linux, the `~/Library/Caches` and `%LOCALAPPDATA%` equivalents elsewhere).
+On Linux that honours `XDG_CACHE_HOME`, which gives container operators a way to point it at a volume through a platform variable; ENV mentions it.
+There is no Faith option for it, since a per-agent setting on process-wide state would need a first-agent-wins rule.
+The component crate takes the path explicitly, so a Rust caller embedding it directly chooses its own.
+
+CRLite filter files are stored named by their hash, so processes on one host share a download, and every read is checked against the signed record anyway.
+Writes go through a temporary file and an atomic rename.
+Each process still polls on its own, which is a small conditional request.
+
+Where the directory is missing or unwritable, the set is held in memory only and one diagnostic is emitted.
+
+## Spec changes this implies
+
+- TLS: revocation checking, both sources, the opt-outs
+- A new revocation spec under `agent/` for the sources, polling, cache and matching behaviour
+- ENV: `XDG_CACHE_HOME` locating the cache
+- RUST: the sixth component crate and its features
