@@ -181,9 +181,11 @@ The poller fetches with its own internal client, built from the default recipe a
 Proxies only come from the environment and the OS, so it sees the same proxy configuration any agent would; `NODE_EXTRA_CA_CERTS` and `NODE_USE_ENV_PROXY` apply too, and agent options never do.
 It reaches `firefox.settings.services.mozilla.com` and the attachments host that service names, and moves no agent's counters.
 
-It is spawned on the Tokio runtime current at the first handshake that needs it, and respawned on the next one if that runtime goes away, since Rust callers can run many short-lived runtimes.
-This is the pattern `web-faith-dns` and `web-faith-alt-svc` already use for their background work; `web-faith` owns no runtime.
-On Node it lands on napi's `tokio_rt` runtime, which lives for the process and doesn't hold the event loop open.
+It runs on a dedicated thread with its own current-thread Tokio runtime, spawned once per process at the first agent construction that uses a source, after the cache load.
+`web-faith` owns no runtime on the Rust surface (its other background work borrows the caller's), and a poller tied to a caller's runtime would stop with it; Node uses the same thread rather than napi's `tokio_rt` so there is one code path.
+The thread is detached, so it doesn't hold up a Rust `main` returning, and a native thread doesn't hold Node's event loop open.
+A source an agent turns on later is handed to the running thread; nothing is fetched for a source no agent uses.
+It won't fetch straight away when the cache was confirmed within the polling interval, so constructing an agent on a warm host costs no request.
 The disk cache is read during agent construction (see above), never inside a handshake.
 
 A failed fetch, bad signature or hash mismatch keeps the last good set and retries with backoff.

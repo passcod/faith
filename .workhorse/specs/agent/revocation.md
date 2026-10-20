@@ -63,10 +63,9 @@ Data signed earlier than the data already held is refused, so a replayed older c
 
 ## Keeping current
 
-Every agent in a process shares one copy of each source's data and one poller per source, so many agents cost one fetch.
-A source's poller starts with the first TLS connection, for HTTP or DNS, made by an agent that uses the source.
-It runs on the async runtime that connection was made on, and if that runtime shuts down, the next such connection starts it again.
-On the Node surface that runtime is the module's own, which lasts as long as the process and does not keep it alive.
+Every agent in a process shares one copy of each source's data and one poller, so many agents cost one fetch.
+The poller runs on a thread of its own, independent of any async runtime the caller has, and lasts as long as the process without keeping it alive.
+It starts with the construction of the first agent that uses a source, right after that agent loads the cache, and takes on a source the first time an agent using it is constructed.
 
 The poller checks Remote Settings for changes about once a day, as Firefox does, and downloads only what has changed.
 A failed fetch, a signature that does not verify, or a filter whose hash does not match leaves the data already held in force, and the poller tries again later.
@@ -98,6 +97,6 @@ Confirmed current means a check against Remote Settings succeeded, whether or no
 ## Opting out
 
 `tls.revocation.onecrl` and `tls.revocation.crlite` each turn one source off for an agent; both default to on.
-An agent with a source off does not check it and does not start its poller, so a process in which no agent uses CRLite never downloads it.
+An agent with a source off does not check it and does not have the poller fetch it, so a process in which no agent uses CRLite never downloads it.
 An agent with certificate validation turned off checks neither source (see [ENV](../environment/variables.md)).
 On the Rust surface each source is also a compile-time feature, and a build without one has neither its check nor its option (see [RUST](../rust/overview.md)).
