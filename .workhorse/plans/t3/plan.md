@@ -122,3 +122,31 @@ Issuer-and-serial entries match on those fields, subject-and-key-hash entries on
 Linkage is by name and key ID, not signatures: the platform verifier has already proved a valid path, this only works out which presented certificates could be on it.
 It behaves the same on every platform.
 An issuer the OS fetched itself (AIA) isn't checked, so that gap fails open, like CRLite's missing coverage.
+
+### A component crate: `web-faith-revocation`
+
+It holds the wrapping `ServerCertVerifier`, the Remote Settings client, the OneCRL set and the CRLite store.
+Like `web-faith-alt-svc` it takes a `reqwest::Client` to fetch with, and it has its own error type.
+It is useful on its own: nothing else gives a rustls user OneCRL and CRLite on top of the platform verifier.
+
+Cargo features `onecrl` and `crlite`, passed through by `web-faith` and both on by default, so a Rust build can drop CRLite and its MPL-2.0 `clubcard-crlite` dependency at compile time.
+The RUST spec gains a sixth component crate; its "TLS isn't a component crate" line still holds, as this is a verifier plugin rather than the TLS stack.
+
+The pinned signing root and the Remote Settings base URL are parameters of the crate's API, so tests can stand up a fake server signed by a test root.
+`web-faith` always passes Mozilla's.
+
+### Fetching and polling
+
+The poller fetches with its own internal client, built from the default recipe and the environment, not borrowed from whichever agent came first.
+Proxies only come from the environment and the OS, so it sees the same proxy configuration any agent would.
+
+It is spawned on the Tokio runtime current at the first handshake that needs it, and respawned on the next one if that runtime goes away, since Rust callers can run many short-lived runtimes.
+The disk cache is read on the blocking pool, never inside a handshake.
+
+A failed fetch, bad signature or hash mismatch keeps the last good set and retries with backoff.
+Revocation data only ever adds distrust, so failure leaves the connection to the platform verifier alone.
+
+### Signature crypto from the rustls provider
+
+P-384 ECDSA verification uses the rustls crypto provider already chosen (aws-lc-rs or ring), so no new crypto dependency.
+Mozilla's signatures are raw `r‖s` and are converted to DER first.
