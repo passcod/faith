@@ -12,6 +12,11 @@ The platform trust store is the default source of roots on every OS.
 The extra-roots option adds PEM certificates to the trust store, for private CAs.
 Malformed PEM throws at agent construction: an explicit option is a deliberate act, so it fails loudly (the `NODE_EXTRA_CA_CERTS` equivalent is lenient instead; see [ENV](../environment/variables.md)).
 
+## Revocation
+
+Server certificates the platform verifier accepts are also checked against Mozilla's OneCRL and CRLite revocation data, on by default.
+`tls.revocation.onecrl` and `tls.revocation.crlite` each turn one source off; the checks, the data, and how it is kept current are specified in [REVOC](revocation.md).
+
 ## Client identity
 
 `tls.identity` takes a PEM bundle of private key (RSA, SEC1 EC, or PKCS#8) and at least one certificate, presented as the TLS client certificate (mTLS).

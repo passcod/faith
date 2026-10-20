@@ -38,6 +38,7 @@ The reset leaves every HTTP/3 origin either advertised or unknown, so the demoti
 - [ ] `http3.hints` keep their origins confirmed. A hint is the caller's assertion that an origin speaks HTTP/3 rather than something Faith observed, so it survives the signal and is still never probed, which is what keeps HTTP/3-only origins reachable across a network change (see [H3UP](../http3/upgrade.md)).
 - [ ] `Alt-Svc` advertisements are kept. An advertisement is the origin's statement about itself, and a change of client network does not revise it.
 - [ ] The cookie jar and the HTTP cache are kept, holding content and origin state rather than anything about a network path (see [COOK](cookies.md) and [CACHE](../cache/http-cache.md)).
+- [ ] Revocation data is kept. It is Mozilla's statement about certificates rather than anything about a network path, and it belongs to the process rather than to the agent (see [REVOC](revocation.md)).
 - [ ] The `stats()` counters are kept, being a cumulative record of what the agent has done rather than a description of the network (see [OBS](observability.md)).
 - [ ] The connections `connections()` lists are kept and lapse on the pool idle window as they always do. The signal cannot tell a connection it dropped from the pool from one still carrying a request, so clearing the list would hide live connections at the moment a caller is most likely to be watching them; a dropped connection instead ages out of the list on its own (see [OBS](observability.md)).
 

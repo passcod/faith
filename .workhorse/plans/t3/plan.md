@@ -161,7 +161,7 @@ CRLite filter files are stored named by their hash, so processes on one host sha
 Writes go through a temporary file and an atomic rename.
 Each process still polls on its own, which is a small conditional request.
 
-Where the directory is missing or unwritable, the set is held in memory only and one diagnostic is emitted.
+Where the directory is missing or unwritable, the set is held in memory only.
 
 ## Spec changes this implies
 
