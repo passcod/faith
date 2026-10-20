@@ -112,16 +112,56 @@ Fetched data is checked against its Remote Settings content signature before use
 The disk cache keeps the signature alongside the records and is re-verified on load.
 This stops someone who can intercept TLS to Mozilla from stripping entries, which is the same attacker a revoked intermediate helps.
 
-### OneCRL matching walks issuer links over the presented certificates
+### Path linking over presented certificates and a trust-store index
 
-The platform verifier says a trusted path exists but not which one, and servers often send stale cross-signs alongside it.
-So from the leaf, the check links each certificate to the presented certificates that could have issued it (subject matches issuer, and SKI matches AKI where both exist), and repeats upwards.
-A connection is rejected only when every chain built this way hits a OneCRL entry.
+The platform verifier says a trusted path exists but not which one, servers often send stale cross-signs alongside it, and they rarely send the root.
+So from the leaf, the check links each certificate to every candidate that could have issued it (subject matches issuer, and SKI matches AKI where both exist), and repeats upwards.
+Candidates are the presented certificates plus the agent's trust-store roots.
+A connection is rejected only when every path built this way hits a OneCRL entry.
 Issuer-and-serial entries match on those fields, subject-and-key-hash entries on theirs.
 
-Linkage is by name and key ID, not signatures: the platform verifier has already proved a valid path, this only works out which presented certificates could be on it.
+The platform roots come from `rustls-native-certs`, which lists the store on all three platforms and is what the platform verifier itself uses on Linux.
+A process-wide index of them (subject and SKI to certificate) is rebuilt off the handshake path after each OneCRL load or update, so a handshake only does map lookups; before the first build, the root step is skipped and fails open.
+The agent's extra roots and `NODE_EXTRA_CA_CERTS` are added per agent, since they are per-agent.
+Windows roots the OS fetches on demand from Windows Update aren't in the local store, and AIA-fetched intermediates aren't seen at all; both fail open.
+
+Linkage is by name and key ID, not signatures: the platform verifier has already proved a valid path, this only works out which certificates could be on it.
 It behaves the same on every platform.
-An issuer the OS fetched itself (AIA) isn't checked, so that gap fails open, like CRLite's missing coverage.
+
+CRLite uses the same linking to find the leaf's issuer, whose SPKI hash the query needs.
+With several candidate issuer keys the leaf is refused only when revoked under all of them; in practice there is one.
+`clubcard-crlite` answers `NotEnrolled` for an unknown issuer and `NotCovered` for timestamps outside the filter, and both pass.
+
+### CRLite filters are queried independently
+
+`clubcard-crlite` deltas aren't patches on the full filter: each is a filter of its own covering its window, and a leaf is revoked if any held filter says so.
+So a missing delta only loses its window's revocations and can never cause a false rejection; every held filter that verifies is used.
+A new full filter replaces the old full filter and its deltas once downloaded and verified.
+
+### Rollback is refused
+
+The signature covers the collection's timestamp, so data signed earlier than what is held is rejected, as Firefox does.
+Without this, an interceptor could replay an older, validly signed collection from before an entry was added.
+A process with nothing held yet can still be fed an old collection; that's unavoidable.
+
+### Session resumption is cut on data change
+
+rustls skips the verifier on resumption, and the stored chain in a session value is `pub(crate)`, so a session store can't re-check it.
+Instead, a process-wide epoch counter bumps whenever a source's data changes, and a wrapping `ClientSessionStore` drops tickets stored under an older epoch.
+reqwest's HTTP/3 config is a clone sharing the same store `Arc`, so QUIC is covered too.
+Cost: one full handshake per origin after each update (CRLite updates about twice a day); 0-RTT resumes from the next ticket.
+
+Open connections are left alone: an update applies to connections made after it, and pooled ones lapse on the idle window.
+
+### Staleness and errors
+
+Held data never expires; `stats()` shows its age.
+A refusal returns rustls's `CertificateError::Revoked` wrapped with the source, so the `Network` error's message names revocation and which source refused.
+
+### Cache pruning
+
+After each verified update, filter files no current signed record names are deleted once past a grace period, so another process still on the older set isn't cut off.
+On Unix an open file survives unlinking; on Windows the delete fails and is retried next update.
 
 ### A component crate: `web-faith-revocation`
 
@@ -138,9 +178,12 @@ The pinned signing root and the Remote Settings base URL are parameters of the c
 ### Fetching and polling
 
 The poller fetches with its own internal client, built from the default recipe and the environment, not borrowed from whichever agent came first.
-Proxies only come from the environment and the OS, so it sees the same proxy configuration any agent would.
+Proxies only come from the environment and the OS, so it sees the same proxy configuration any agent would; `NODE_EXTRA_CA_CERTS` and `NODE_USE_ENV_PROXY` apply too, and agent options never do.
+It reaches `firefox.settings.services.mozilla.com` and the attachments host that service names, and moves no agent's counters.
 
 It is spawned on the Tokio runtime current at the first handshake that needs it, and respawned on the next one if that runtime goes away, since Rust callers can run many short-lived runtimes.
+This is the pattern `web-faith-dns` and `web-faith-alt-svc` already use for their background work; `web-faith` owns no runtime.
+On Node it lands on napi's `tokio_rt` runtime, which lives for the process and doesn't hold the event loop open.
 The disk cache is read during agent construction (see above), never inside a handshake.
 
 A failed fetch, bad signature or hash mismatch keeps the last good set and retries with backoff.

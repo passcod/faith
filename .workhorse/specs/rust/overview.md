@@ -58,6 +58,7 @@ The Node module has HTTP/3 compiled in, since its own build sets that cfg.
 Turning a feature off drops the code behind it and the client continues to work without it; the parts of the API that only mean something with that subsystem present go with it, as in [RSAPI](client-api.md).
 
 Each revocation source is a feature of its own, `onecrl` and `crlite`, both on by default, so a build can leave CRLite and its filter decoder out entirely rather than only switching it off per agent.
+The Node module has both compiled in.
 
 A feature decides what is compiled in rather than what is switched on at run time, and the two need not agree: the cookies feature is on by default while the jar itself stays off until an agent asks for it (see [COOK](../agent/cookies.md)).
 

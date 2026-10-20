@@ -24,6 +24,8 @@ A background request is counted when it is made, whatever its outcome, since the
 For each revocation source the agent uses, `stats()` also reports the number of the agent's connections that source has refused, and when the process last confirmed that source's data current (see [REVOC](revocation.md)).
 The refusal counts are cumulative like the other counters and cover DNS connections as well as HTTP ones.
 The last-confirmed time is the same for every agent in a process, the data being shared, and is absent until the source has data and for a source the agent has turned off.
+A source compiled out of a Rust build has neither field.
+The revocation poller's own requests belong to the process rather than to any agent, so they move none of these counters; the last-confirmed time is where a poller that keeps failing shows.
 
 ## connections()
 

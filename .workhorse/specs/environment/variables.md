@@ -44,6 +44,7 @@ On Unix platforms other than macOS that directory follows `XDG_CACHE_HOME`, defa
 On macOS and Windows it is the OS's own per-user cache location.
 
 Unlike the rest of this spec, `XDG_CACHE_HOME` is consulted only at the construction of the first agent in a process that uses a revocation source, rather than at each agent's, the cache being shared by every agent in the process.
+The revocation poller likewise belongs to the process rather than to an agent: it reads the proxy variables, `NODE_USE_ENV_PROXY`, `NODE_EXTRA_CA_CERTS`, and the operating system's proxy settings when it starts, and takes nothing from any agent's options.
 
 ## Proxies
 
