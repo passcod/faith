@@ -13,7 +13,8 @@ Two sources are checked: OneCRL for intermediate and root certificates, and CRLi
 Revocation is checked after the platform verifier has accepted a certificate chain, and only ever adds rejections: a chain the platform verifier refuses stays refused, and one it accepts is refused only when a source says it is revoked.
 This holds on every platform, on top of whatever revocation checking the platform verifier does itself.
 Every TLS connection an agent makes for HTTP is checked, over TCP and over QUIC alike, including the connections its background requests open.
-A connection refused for revocation fails its request with the code `Network`, as any other certificate rejection does (see [ERR](../errors/errors.md)).
+So is every connection its resolver makes to an encrypted DNS server it authenticates; an opportunistic probe authenticates nothing, so there is no chain to check (see [DNS](dns.md)).
+A connection refused for revocation fails its request with the code `Network`, as any other certificate rejection does (see [ERR](../errors/errors.md)), and a DNS server refused for revocation fails the lookup as any other authentication failure does.
 
 ## Sources
 
@@ -54,7 +55,13 @@ Each verified update is written to a cache on disk, and a process starts from th
 The cache lives in the platform's per-user cache directory (see [ENV](../environment/variables.md) for how it is located).
 Processes on one host share it: a CRLite filter is stored under its hash, so one process's download serves the others, and each file is written whole before it becomes visible, so no process reads a partial one.
 Where the cache directory is missing or cannot be written, the data is held in memory only and each process fetches its own.
+The cache records when its data was last confirmed current, so a process starting from it reports that time.
 Until a source has any data, from the cache or the network, it refuses nothing.
+
+## Reporting
+
+Each agent's `stats()` reports, for each source the agent uses, how many of its connections that source has refused and when the data was last confirmed current (see [OBS](observability.md)).
+Confirmed current means a check against Remote Settings succeeded, whether or not it found a change, so a source that rarely changes still reads as fresh while a poller that keeps failing shows its age.
 
 ## Opting out
 

@@ -163,9 +163,20 @@ Each process still polls on its own, which is a small conditional request.
 
 Where the directory is missing or unwritable, the set is held in memory only.
 
-## Spec changes this implies
+### Reporting through `stats()`
 
-- TLS: revocation checking, both sources, the opt-outs
-- A new revocation spec under `agent/` for the sources, polling, cache and matching behaviour
-- ENV: `XDG_CACHE_HOME` locating the cache
-- RUST: the sixth component crate and its features
+Each agent's `stats()` gains, per source it uses, a count of its connections that source refused and when the data was last confirmed current.
+A refusal count rather than an entry count, because clubcard filters don't record how many certificates they hold.
+Confirmed current is the last successful check against Remote Settings, changed or not, stored in the cache so a restart reports it; a source that rarely changes still reads fresh, a failing poller shows its age.
+The time is process-wide, the counts per agent.
+
+### Encrypted DNS is checked too
+
+hickory 0.26's resolver builder takes a whole `rustls::ClientConfig` (`with_tls_config`), so the agent's resolver gets the same verifier as its HTTP connections, opt-outs included.
+`web-faith-dns` takes the config as a rustls type and stays independent of `web-faith-revocation`.
+Opportunistic probes (RFC 9539) verify nothing, so they're unaffected.
+To check when building: what hickory sets on its default config (ALPN per transport, SNI) that ours must keep.
+
+## Spec changes
+
+Drafted: the new certificate revocation spec (REVOC), with folds into TLS, ENV, RUST, AGENT, NETCHG, OBS and DNS.
