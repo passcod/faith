@@ -1,0 +1,82 @@
+# Certificate revocation checking
+
+Check server certificates against a browser-style revocation source, on by default with an opt-out.
+Node gets the data at runtime; Rust can also embed a snapshot at compile time.
+
+## Findings
+
+### Where reqwest lets us in
+
+reqwest 0.13 has no hook for a custom certificate verifier.
+Its own CRL support (`tls_crls_only`) only works with `tls_certs_only`, i.e. it drops the platform verifier, which Faith's trust model ([TLS](../../specs/agent/tls.md)) rules out.
+
+The one way in is `tls_backend_preconfigured(rustls::ClientConfig)`.
+That hands reqwest a finished config, and reqwest then skips everything it would otherwise build into it, so Faith takes over:
+
+- the verifier (platform verifier with extra roots, or the no-verify one for `NODE_TLS_REJECT_UNAUTHORIZED=0`)
+- client identity (mTLS)
+- `SSLKEYLOGFILE` key logging
+- TCP ALPN (`h2`, `http/1.1`): reqwest sets none on a preconfigured config
+- HTTP/3 early data: reqwest clones the config for QUIC and sets `h3` ALPN, but no longer applies `tls_early_data`
+- the crypto provider choice (aws-lc-rs vs ring)
+
+What stays with reqwest: connector setup, `tls_info` (peer certificate capture), `https_only`, the HTTP/3 connector.
+This is a few dozen lines replacing the `tls_*` builder calls in `ClientRecipe::build`, not a TLS stack rewrite.
+The cost is that the preconfigured path is documented as semver-unstable: the `rustls` version must match reqwest's exactly or the build fails at runtime with "unknown TLS backend".
+
+### The verifier
+
+A wrapping `ServerCertVerifier`: delegate to the platform verifier, and on success run the revocation check.
+Signature checks and scheme lists pass straight through.
+
+On Linux the platform verifier does no revocation checking at all; on macOS and Windows the OS does its own (OCSP/CRL), and ours runs on top.
+
+### Candidate data sources
+
+| | OneCRL | CRLite (via upki) |
+|---|---|---|
+| Covers | intermediates (and a few roots) | end-entity certificates |
+| Publisher | Mozilla Remote Settings | rustls project mirror of Mozilla's CRLite |
+| Size | ~1900 entries, ~800 KB JSON | ~7.5 MB (full filter plus deltas) |
+| Churn | rare | about twice daily |
+| Compile-time snapshot | viable | stale within a day |
+| Integrity | content signature (ECDSA P-384, x5u chain) | SHA-256 hashes in a manifest |
+| Rust support | none, we'd parse and match ourselves | `upki` / `rustls-upki` 1.0 |
+
+OneCRL entries are mostly issuer DN plus serial, a handful subject DN plus SPKI hash.
+Matching against only the certificates the server presented can wrongly reject a connection where a revoked cross-sign is presented but a valid path exists.
+Doing it right means checking the built path; webpki's `verify_for_usage` takes a `verify_path` callback that rejects a candidate path and lets path building try the next, but only where webpki is the path builder (Linux), not where the OS builds the path.
+
+`rustls-upki`'s verifier verifies with webpki against a fixed root store, so it can't be used as-is with the platform verifier.
+The lower-level `upki::revocation` API (`RevocationCheckInput`, `Store::check`) can be called from our wrapper.
+It pulls `rustls-webpki` 0.104 (alpha) alongside our 0.103, and reads data from a cache directory rather than memory.
+
+## Decisions
+
+### OneCRL only
+
+The source is OneCRL, fetched from Mozilla Remote Settings.
+CRLite is out of scope for this card.
+
+The point is that a revocation takes effect at runtime, without a Faith release.
+The eMudhra distrust needed a `rustls-webpki` bump to ship, and that same root is OneCRL's newest entry.
+A compile-time snapshot for Rust is a nice extra, not the goal.
+
+### Background polling, one process-wide set
+
+Faith polls Remote Settings itself, using the cheap change check, at roughly Firefox's daily cadence.
+The set and the poller are process-wide and shared by every agent, so many agents in one process cost one fetch.
+The opt-out stops the polling as well as the checks.
+
+### On-disk cache for cold start
+
+Each verified set is written to a cache directory and loaded at startup, so a restart enforces the last known set straight away.
+Before any set is known (a fresh machine, or an unwritable cache), nothing is enforced until the first fetch lands.
+
+No compile-time snapshot: webpki's own distrust releases already cover the window it would, so embedding one adds nothing.
+
+### Content signatures are verified
+
+Fetched data is checked against its Remote Settings content signature before use, as Firefox does: canonical JSON of the records, `x5u` chain to a pinned Mozilla content-signing root, SAN for the OneCRL collection, P-384 ECDSA.
+The disk cache keeps the signature alongside the records and is re-verified on load.
+This stops someone who can intercept TLS to Mozilla from stripping entries, which is the same attacker a revoked intermediate helps.
