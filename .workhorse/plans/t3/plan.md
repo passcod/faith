@@ -82,11 +82,16 @@ CRLite adds attachment download with hash checks against the signed records, ful
 The point is that a revocation takes effect at runtime, without a Faith release.
 The eMudhra distrust needed a `rustls-webpki` bump to ship, and that same root is OneCRL's newest entry.
 
-### Separate opt-outs
+### Separate opt-outs, as agent options only
 
-Each source has its own opt-out.
+`tls.revocation.onecrl` and `tls.revocation.crlite`, booleans defaulting to true, mirrored on the Rust `TlsOptions` builder.
 CRLite is the heavy one (a ~6 MB first download, ~500 KB of deltas a day, ~6 to 7 MB resident), so callers can keep OneCRL while dropping it.
-Opting out of a source stops both its checks and its polling.
+An agent with a source off skips that check; the source's poller starts with the first agent that uses it.
+
+No environment variable.
+ENV keeps to Node's vocabulary plus the standard proxy and OpenSSL variables, and a `FAITH_*` kill switch would be the first of its kind.
+`NODE_TLS_REJECT_UNAUTHORIZED=0` already turns revocation off along with the rest of verification, and a caller wanting a targeted switch can wire their own variable into the option.
+One can be added later without breaking anyone; removing one couldn't.
 
 ### Background polling, one process-wide set
 
