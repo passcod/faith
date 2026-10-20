@@ -51,6 +51,22 @@ Doing it right means checking the built path; webpki's `verify_for_usage` takes 
 The lower-level `upki::revocation` API (`RevocationCheckInput`, `Store::check`) can be called from our wrapper.
 It pulls `rustls-webpki` 0.104 (alpha) alongside our 0.103, and reads data from a cache directory rather than memory.
 
+### CRLite straight from Remote Settings
+
+Mozilla publishes the CRLite filters in Remote Settings too (`security-state/cert-revocations`), as attachments on records signed by the same signer as OneCRL.
+Each record carries its attachment's SHA-256, so the content signature covers the filter bytes as well.
+upki's mirror serves these same files; upki adds an unsigned manifest and its own index over them.
+
+The default channel is one full filter (~6 MB, the current one dated 18 Oct) plus a delta chain of ~250 KB twice a day, each delta naming its parent.
+Filters are clubcard, queried with Mozilla's `clubcard-crlite` (MPL-2.0, which upki also depends on).
+
+A query needs the leaf's serial, the issuer's SPKI hash and the leaf's SCT timestamps.
+webpki 0.103 doesn't expose SCTs, so we'd parse the SCT list extension ourselves.
+A leaf with no SCTs (private CAs, extra roots) or logged after the filter's coverage comes back as not covered, which is a pass.
+Stale data loses coverage, but it can't produce a false rejection.
+
+Going through upki instead: its fetch builds its own reqwest client, ignoring the agent's proxy, DNS and extra roots, and its cache location only comes from a TOML config file.
+
 ## Decisions
 
 ### OneCRL only
