@@ -106,3 +106,14 @@ No compile-time snapshot: webpki's own distrust releases already cover the windo
 Fetched data is checked against its Remote Settings content signature before use, as Firefox does: canonical JSON of the records, `x5u` chain to a pinned Mozilla content-signing root, SAN `onecrl.content-signature.mozilla.org` (which signs both collections), P-384 ECDSA.
 The disk cache keeps the signature alongside the records and is re-verified on load.
 This stops someone who can intercept TLS to Mozilla from stripping entries, which is the same attacker a revoked intermediate helps.
+
+### OneCRL matching walks issuer links over the presented certificates
+
+The platform verifier says a trusted path exists but not which one, and servers often send stale cross-signs alongside it.
+So from the leaf, the check links each certificate to the presented certificates that could have issued it (subject matches issuer, and SKI matches AKI where both exist), and repeats upwards.
+A connection is rejected only when every chain built this way hits a OneCRL entry.
+Issuer-and-serial entries match on those fields, subject-and-key-hash entries on theirs.
+
+Linkage is by name and key ID, not signatures: the platform verifier has already proved a valid path, this only works out which presented certificates could be on it.
+It behaves the same on every platform.
+An issuer the OS fetched itself (AIA) isn't checked, so that gap fails open, like CRLite's missing coverage.
