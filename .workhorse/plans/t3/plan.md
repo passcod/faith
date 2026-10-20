@@ -69,20 +69,30 @@ Going through upki instead: its fetch builds its own reqwest client, ignoring th
 
 ## Decisions
 
-### OneCRL only
+### OneCRL and CRLite, both from Remote Settings
 
-The source is OneCRL, fetched from Mozilla Remote Settings.
-CRLite is out of scope for this card.
+Two sources, each checked inside the same wrapping verifier:
+
+- OneCRL (`security-state/onecrl`) for intermediates
+- CRLite (`security-state/cert-revocations`, default channel) for leaf certificates
+
+Both come straight from Mozilla Remote Settings, not through upki, so they share one client: change check, content-signature verification, disk cache, poller.
+CRLite adds attachment download with hash checks against the signed records, full-plus-delta chain assembly, `clubcard-crlite` queries, and SCT extraction from the leaf.
 
 The point is that a revocation takes effect at runtime, without a Faith release.
 The eMudhra distrust needed a `rustls-webpki` bump to ship, and that same root is OneCRL's newest entry.
-A compile-time snapshot for Rust is a nice extra, not the goal.
+
+### Separate opt-outs
+
+Each source has its own opt-out.
+CRLite is the heavy one (a ~6 MB first download, ~500 KB of deltas a day, ~6 to 7 MB resident), so callers can keep OneCRL while dropping it.
+Opting out of a source stops both its checks and its polling.
 
 ### Background polling, one process-wide set
 
 Faith polls Remote Settings itself, using the cheap change check, at roughly Firefox's daily cadence.
 The set and the poller are process-wide and shared by every agent, so many agents in one process cost one fetch.
-The opt-out stops the polling as well as the checks.
+Polling only runs for sources some agent in the process has left on.
 
 ### On-disk cache for cold start
 
@@ -93,6 +103,6 @@ No compile-time snapshot: webpki's own distrust releases already cover the windo
 
 ### Content signatures are verified
 
-Fetched data is checked against its Remote Settings content signature before use, as Firefox does: canonical JSON of the records, `x5u` chain to a pinned Mozilla content-signing root, SAN for the OneCRL collection, P-384 ECDSA.
+Fetched data is checked against its Remote Settings content signature before use, as Firefox does: canonical JSON of the records, `x5u` chain to a pinned Mozilla content-signing root, SAN `onecrl.content-signature.mozilla.org` (which signs both collections), P-384 ECDSA.
 The disk cache keeps the signature alongside the records and is re-verified on load.
 This stops someone who can intercept TLS to Mozilla from stripping entries, which is the same attacker a revoked intermediate helps.
