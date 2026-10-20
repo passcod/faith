@@ -43,7 +43,7 @@ The revocation cache lives in the platform's per-user cache directory (see [REVO
 On Unix platforms other than macOS that directory follows `XDG_CACHE_HOME`, defaulting to `~/.cache`, which is how the cache is pointed at a persistent volume in a container.
 On macOS and Windows it is the OS's own per-user cache location.
 
-Unlike the rest of this spec, `XDG_CACHE_HOME` is consulted when the revocation data is first loaded in a process rather than at each agent's construction, the cache being shared by every agent in the process.
+Unlike the rest of this spec, `XDG_CACHE_HOME` is consulted only at the construction of the first agent in a process that uses a revocation source, rather than at each agent's, the cache being shared by every agent in the process.
 
 ## Proxies
 

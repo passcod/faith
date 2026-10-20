@@ -51,12 +51,14 @@ A failed fetch, a signature that does not verify, or a filter whose hash does no
 
 ## The cache
 
-Each verified update is written to a cache on disk, and a process starts from the cached data, so a restart enforces what was last known without waiting for the network.
+Each verified update is written to a cache on disk.
+The first agent in a process that uses a source loads that source's cached data while it is constructed, so a restart enforces what was last known from its first connection, without waiting for the network.
+Later agents share what the first one loaded.
 The cache lives in the platform's per-user cache directory (see [ENV](../environment/variables.md) for how it is located).
 Processes on one host share it: a CRLite filter is stored under its hash, so one process's download serves the others, and each file is written whole before it becomes visible, so no process reads a partial one.
 Where the cache directory is missing or cannot be written, the data is held in memory only and each process fetches its own.
 The cache records when its data was last confirmed current, so a process starting from it reports that time.
-Until a source has any data, from the cache or the network, it refuses nothing.
+Until a source has any data, from the cache or the network, it refuses nothing, so on a host with no cache yet the connections made before the first fetch lands go unchecked.
 
 ## Reporting
 

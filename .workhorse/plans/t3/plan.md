@@ -100,7 +100,8 @@ Polling only runs for sources some agent in the process has left on.
 
 ### On-disk cache for cold start
 
-Each verified set is written to a cache directory and loaded at startup, so a restart enforces the last known set straight away.
+Each verified set is written to a cache directory and loaded when the first agent using that source is constructed, so a restart enforces the last known set from its first connection.
+Loading at construction rather than at the first handshake means a handshake never waits on the disk and never races the load; the cost is a few MB read and verified synchronously, once per process.
 Before any set is known (a fresh machine, or an unwritable cache), nothing is enforced until the first fetch lands.
 
 No compile-time snapshot: webpki's own distrust releases already cover the window it would, so embedding one adds nothing.
@@ -140,7 +141,7 @@ The poller fetches with its own internal client, built from the default recipe a
 Proxies only come from the environment and the OS, so it sees the same proxy configuration any agent would.
 
 It is spawned on the Tokio runtime current at the first handshake that needs it, and respawned on the next one if that runtime goes away, since Rust callers can run many short-lived runtimes.
-The disk cache is read on the blocking pool, never inside a handshake.
+The disk cache is read during agent construction (see above), never inside a handshake.
 
 A failed fetch, bad signature or hash mismatch keeps the last good set and retries with backoff.
 Revocation data only ever adds distrust, so failure leaves the connection to the platform verifier alone.
