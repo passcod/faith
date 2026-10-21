@@ -2,6 +2,8 @@
 
 pub use crate::builder::AgentOptionsBuilder;
 pub use crate::stats::AgentStats;
+#[cfg(any(feature = "onecrl", feature = "crlite"))]
+pub use crate::{options::RevocationOptions, stats::RevocationStats};
 
 #[cfg(feature = "cache")]
 pub use crate::options::{CacheOptions, CacheStore};
@@ -356,7 +358,20 @@ impl Agent {
 
 	/// The agent's counters, as they stand.
 	pub fn stats(&self) -> AgentStats {
-		self.stats.snapshot()
+		#[cfg_attr(not(any(feature = "onecrl", feature = "crlite")), allow(unused_mut))]
+		let mut stats = self.stats.snapshot();
+		#[cfg(any(feature = "onecrl", feature = "crlite"))]
+		if let Some(revocation) = &self.recipe.tls.revocation {
+			#[cfg(feature = "onecrl")]
+			{
+				stats.onecrl = revocation.stats(web_faith_revocation::Source::OneCrl);
+			}
+			#[cfg(feature = "crlite")]
+			{
+				stats.crlite = revocation.stats(web_faith_revocation::Source::Crlite);
+			}
+		}
+		stats
 	}
 
 	/// The connections this agent currently holds open.

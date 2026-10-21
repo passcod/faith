@@ -602,6 +602,15 @@ pub struct TimeoutOptions {
 }
 
 /// TLS settings.
+// A source left out of the build takes its switch with it (spec:RSAPI#what-a-disabled-feature-removes).
+#[cfg_attr(
+	not(feature = "onecrl"),
+	doc = "\n```compile_fail\nweb_faith::Agent::builder()\n    .tls(|tls| tls.revocation(|r| r.onecrl(false).build()).build());\n```"
+)]
+#[cfg_attr(
+	not(feature = "crlite"),
+	doc = "\n```compile_fail\nweb_faith::Agent::builder()\n    .tls(|tls| tls.revocation(|r| r.crlite(false).build()).build());\n```"
+)]
 #[derive(bon::Builder, Clone, Debug, Default)]
 #[non_exhaustive]
 pub struct TlsOptions {
@@ -635,6 +644,36 @@ pub struct TlsOptions {
 	/// build.
 	#[builder(with = |items: impl IntoIterator<Item = impl Into<Vec<u8>>>| items.into_iter().map(Into::into).collect())]
 	pub extra_roots: Option<Vec<Vec<u8>>>,
+	/// Certificate revocation checking, against Mozilla's OneCRL and CRLite.
+	///
+	/// Both sources are on by default; each can be turned off for this agent.
+	// spec:REVOC#opting-out
+	#[cfg(any(feature = "onecrl", feature = "crlite"))]
+	#[builder(with = |with: impl FnOnce(RevocationOptionsBuilder) -> RevocationOptions| with(RevocationOptions::builder()))]
+	pub revocation: Option<RevocationOptions>,
+}
+
+/// Which revocation sources an agent checks.
+///
+/// The data and the poller keeping it current are shared by every agent in the process; turning a
+/// source off for an agent means it neither checks that source nor has the poller fetch it on its
+/// behalf.
+// spec:REVOC#opting-out
+#[cfg(any(feature = "onecrl", feature = "crlite"))]
+#[derive(bon::Builder, Clone, Debug, Default)]
+#[non_exhaustive]
+pub struct RevocationOptions {
+	/// Check intermediate and root certificates against OneCRL.
+	///
+	/// Default: true.
+	#[cfg(feature = "onecrl")]
+	pub onecrl: Option<bool>,
+	/// Check leaf certificates against CRLite. CRLite costs a download of a few megabytes, then a
+	/// few hundred kilobytes a day.
+	///
+	/// Default: true.
+	#[cfg(feature = "crlite")]
+	pub crlite: Option<bool>,
 }
 
 /// Everything an agent can be configured with.

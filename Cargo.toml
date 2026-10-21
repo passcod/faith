@@ -59,7 +59,9 @@ reqwest = { version = "0.13.4", default-features = false, features = [
     "stream",
     "system-proxy",
 ] }
-rustls = { version = "0.23.35", default-features = false }
+rustls = { version = "0.23.35", default-features = false, features = ["std", "tls12"] }
+rustls-pki-types = { version = "1.13", features = ["std"] }
+rustls-platform-verifier = "0.7.0"
 reqwest-middleware = { version = "0.5.2", features = ["http2", "rustls"] }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
@@ -76,6 +78,7 @@ web-faith-conn-tracker = { version = "1.0.1", path = "crates/web-faith-conn-trac
 web-faith-cookies = { version = "1.0.1", path = "crates/web-faith-cookies" }
 web-faith-dns = { version = "1.0.1", path = "crates/web-faith-dns" }
 web-faith-encoding = { version = "1.0.1", path = "crates/web-faith-encoding" }
+web-faith-revocation = { version = "1.0.0", path = "crates/web-faith-revocation", default-features = false }
 netlink-packet-core = "0.7.0"
 netlink-packet-sock-diag = { version = "0.4.2", features = ["rich_nlas"] }
 netlink-sys = "0.8.7"

@@ -97,6 +97,7 @@ It defaults to five seconds, unlike the agent's request timeouts, which are unse
 
 Falling through to the next server covers a server that does not answer, not one that answers as the wrong identity.
 An encrypted server whose certificate fails authentication fails the lookup outright with a network error, rather than counting as a dead server.
+Authentication includes the agent's revocation checks (see [REVOC](revocation.md)).
 The list orders the servers to try; it does not license reaching a named resolver as something else, so a resolver that cannot prove who it is stops the lookup instead of passing the name to whatever comes next.
 
 ## Bootstrapping

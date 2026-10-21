@@ -5,7 +5,7 @@ id: ENV
 # Environment variables
 
 Faith reads a set of environment variables.
-The set is deliberately Node's own vocabulary plus the standard proxy and OpenSSL variables, not a Faith-specific namespace; on the Node surface that is what makes `fetch()` behave like Node's built-in fetch without extra configuration.
+The set is deliberately Node's own vocabulary plus the standard proxy, OpenSSL, and XDG variables, not a Faith-specific namespace; on the Node surface that is what makes `fetch()` behave like Node's built-in fetch without extra configuration.
 
 Each section below names the surfaces it applies to.
 The `NODE_`-prefixed variables answer to a JavaScript runtime's conventions and belong to the Node surface alone; the rest is platform configuration both surfaces honour (see [RUST](../rust/overview.md)).
@@ -32,8 +32,19 @@ Extra roots set on the agent are an explicit programmatic choice and fail loudly
 
 This applies to the Node surface alone.
 
-`NODE_TLS_REJECT_UNAUTHORIZED` set to exactly `0` disables TLS certificate validation for the agent; any other value or unset keeps validation on.
+`NODE_TLS_REJECT_UNAUTHORIZED` set to exactly `0` disables TLS certificate validation for the agent, revocation checking included (see [REVOC](../agent/revocation.md)); any other value or unset keeps validation on.
 This matches Node's semantics and exists only for that compatibility; trusting a specific private CA, through `NODE_EXTRA_CA_CERTS` or the agent's extra roots, is the supported path.
+
+## Revocation cache
+
+This applies to both surfaces.
+
+The revocation cache lives in the platform's per-user cache directory (see [REVOC](../agent/revocation.md)).
+On Unix platforms other than macOS that directory follows `XDG_CACHE_HOME`, defaulting to `~/.cache`, which is how the cache is pointed at a persistent volume in a container.
+On macOS and Windows it is the OS's own per-user cache location.
+
+Unlike the rest of this spec, `XDG_CACHE_HOME` is consulted only at the construction of the first agent in a process that uses a revocation source, rather than at each agent's, the cache being shared by every agent in the process.
+The revocation poller likewise belongs to the process rather than to an agent: it reads the proxy variables, `NODE_USE_ENV_PROXY`, `NODE_EXTRA_CA_CERTS`, and the operating system's proxy settings when it starts, and takes nothing from any agent's options.
 
 ## Proxies
 

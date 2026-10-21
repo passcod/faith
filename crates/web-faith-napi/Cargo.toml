@@ -42,6 +42,8 @@ default = [
     "dns",
     "encoding",
     "http3",
+    "onecrl",
+    "crlite",
     "tls-aws-lc-rs",
 ]
 cache = ["dep:http-cache-reqwest", "web-faith/cache"]
@@ -49,6 +51,8 @@ connection-tracking = ["dep:web-faith-conn-tracker", "web-faith/connection-track
 cookies = ["dep:web-faith-cookies", "reqwest/cookies", "web-faith/cookies"]
 dns = ["web-faith/dns"]
 encoding = ["web-faith/encoding"]
+onecrl = ["web-faith/onecrl"]
+crlite = ["web-faith/crlite"]
 http3 = ["reqwest/http3", "tls-aws-lc-rs", "web-faith/http3"]
 tls-aws-lc-rs = ["reqwest/rustls", "web-faith/tls-aws-lc-rs"]
 tls-ring = ["reqwest/rustls-no-provider", "web-faith/tls-ring"]

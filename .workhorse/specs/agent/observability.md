@@ -21,6 +21,12 @@ It covers the synthetic `HEAD` a `preconnect` sends (see [WARM](warm-up.md)), an
 Counting them together gives an operator the wire traffic the agent generates beyond the caller's own requests, which is otherwise invisible: the caller's counters and the origin's logs disagree by exactly this number.
 A background request is counted when it is made, whatever its outcome, since these requests swallow their failures and a counter that moved only on success would hide the case worth seeing.
 
+For each revocation source the agent uses, `stats()` also reports the number of the agent's connections that source has refused, and when the process last confirmed that source's data current (see [REVOC](revocation.md)).
+The refusal counts are cumulative like the other counters and cover DNS connections as well as HTTP ones.
+The last-confirmed time is the same for every agent in a process, the data being shared, and is absent until the source has data and for a source the agent has turned off.
+A source compiled out of a Rust build has neither field.
+The revocation poller's own requests belong to the process rather than to any agent, so they move none of these counters; the last-confirmed time is where a poller that keeps failing shows.
+
 ## connections()
 
 `connections()` lists the agent's current TCP connections with per-connection statistics.

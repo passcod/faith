@@ -28,7 +28,9 @@ hyper.workspace = true
 hyper-util.workspace = true
 moka.workspace = true
 reqwest.workspace = true
-rustls = { workspace = true, optional = true }
+rustls.workspace = true
+rustls-pki-types.workspace = true
+rustls-platform-verifier.workspace = true
 reqwest-middleware.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -42,8 +44,13 @@ web-faith-encoding = { workspace = true, optional = true }
 web-faith-cookies = { workspace = true, features = ["reqwest"], optional = true }
 web-faith-dns = { workspace = true, features = ["reqwest"], optional = true }
 web-faith-alt-svc = { workspace = true, optional = true }
+web-faith-revocation = { workspace = true, optional = true }
+directories = { version = "6", optional = true }
 
 [dev-dependencies]
+rustls = { workspace = true, features = ["aws-lc-rs"] }
+tempfile = "3"
+web-faith-revocation = { workspace = true, features = ["onecrl", "crlite", "test-support"] }
 futures.workspace = true
 http-body-util.workspace = true
 serde.workspace = true
@@ -56,6 +63,8 @@ default = [
     "cookies",
     "dns",
     "encoding",
+    "onecrl",
+    "crlite",
     "tls-aws-lc-rs",
 ]
 cache = ["dep:http-cache-reqwest"]
@@ -63,9 +72,11 @@ connection-tracking = ["dep:web-faith-conn-tracker"]
 cookies = ["dep:web-faith-cookies", "reqwest/cookies"]
 dns = ["dep:web-faith-dns", "reqwest/hickory-dns", "web-faith-alt-svc?/dns"]
 encoding = ["dep:web-faith-encoding"]
+onecrl = ["dep:web-faith-revocation", "dep:directories", "web-faith-revocation/onecrl"]
+crlite = ["dep:web-faith-revocation", "dep:directories", "web-faith-revocation/crlite"]
 # Needs the consuming build to set `RUSTFLAGS="--cfg reqwest_unstable"`.
 http3 = ["reqwest/http3", "tls-aws-lc-rs", "dep:web-faith-alt-svc"]
-tls-aws-lc-rs = ["reqwest/rustls"]
-tls-ring = ["reqwest/rustls-no-provider", "dep:rustls", "rustls/ring"]
+tls-aws-lc-rs = ["reqwest/rustls", "rustls/aws-lc-rs"]
+tls-ring = ["reqwest/rustls-no-provider", "rustls/ring"]
 raw-client = []
 unstable-internals = ["raw-client"]

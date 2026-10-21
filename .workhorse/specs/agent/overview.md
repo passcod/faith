@@ -41,4 +41,4 @@ The network-change signal is the other verb that acts on a live agent's own stat
 
 ## Sub-configuration
 
-Nested option groups are specified in their own areas: [POOL](connection-pool.md), [COOK](cookies.md), [DNS](dns.md), [TLS](tls.md), [OBS](observability.md), [FLOW](flow-control.md), [QUIRK](quirks.md), [CACHE](../cache/http-cache.md), [H3UP](../http3/upgrade.md), [QUIC](../http3/transport.md), and [REDIR](../fetch/redirects.md) and [CANCEL](../fetch/cancellation-and-timeouts.md) for the `redirect` and `timeout` groups.
+Nested option groups are specified in their own areas: [POOL](connection-pool.md), [COOK](cookies.md), [DNS](dns.md), [TLS](tls.md) and [REVOC](revocation.md), [OBS](observability.md), [FLOW](flow-control.md), [QUIRK](quirks.md), [CACHE](../cache/http-cache.md), [H3UP](../http3/upgrade.md), [QUIC](../http3/transport.md), and [REDIR](../fetch/redirects.md) and [CANCEL](../fetch/cancellation-and-timeouts.md) for the `redirect` and `timeout` groups.

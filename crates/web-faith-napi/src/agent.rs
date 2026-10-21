@@ -48,17 +48,82 @@ pub struct AgentStats {
 	/// Number of response body streams that have been fully consumed.
 	/// When `bodies_started - bodies_finished > 0`, there are bodies holding connections open.
 	pub bodies_finished: i64,
+	#[cfg(feature = "onecrl")]
+	onecrl_stats: Option<web_faith::agent::RevocationStats>,
+	#[cfg(feature = "crlite")]
+	crlite_stats: Option<web_faith::agent::RevocationStats>,
+}
+
+fn count(value: u64) -> i64 {
+	i64::try_from(value).unwrap_or(i64::MAX)
 }
 
 impl From<web_faith::agent::AgentStats> for AgentStats {
 	fn from(stats: web_faith::agent::AgentStats) -> Self {
-		let count = |value: u64| i64::try_from(value).unwrap_or(i64::MAX);
 		Self {
 			requests_sent: count(stats.requests_sent),
 			responses_received: count(stats.responses_received),
 			bodies_started: count(stats.bodies_started),
 			bodies_finished: count(stats.bodies_finished),
+			#[cfg(feature = "onecrl")]
+			onecrl_stats: stats.onecrl,
+			#[cfg(feature = "crlite")]
+			crlite_stats: stats.crlite,
 		}
+	}
+}
+
+/// One revocation source, as `agent.stats()` reports it.
+// spec:OBS spec:REVOC#reporting
+#[cfg(any(feature = "onecrl", feature = "crlite"))]
+#[napi(object, object_from_js = false)]
+pub struct RevocationStats<'env> {
+	/// The agent's connections this source has refused, over HTTP and to DNS servers alike.
+	pub refused: i64,
+	/// When the process last confirmed this source's data current with Mozilla, whether or not it
+	/// had changed. The same for every agent in the process; `null` until there is data.
+	pub last_confirmed: napi::Either<napi::JsDate<'env>, napi::bindgen_prelude::Null>,
+}
+
+#[cfg(any(feature = "onecrl", feature = "crlite"))]
+fn revocation_stats<'env>(
+	env: &'env Env,
+	stats: Option<web_faith::agent::RevocationStats>,
+) -> Option<RevocationStats<'env>> {
+	use std::time::UNIX_EPOCH;
+
+	stats.map(|stats| RevocationStats {
+		refused: count(stats.refused),
+		last_confirmed: stats
+			.last_confirmed
+			.and_then(|at| {
+				let millis = at.duration_since(UNIX_EPOCH).ok()?.as_secs_f64() * 1000.0;
+				env.create_date(millis).ok()
+			})
+			.map_or(
+				napi::Either::B(napi::bindgen_prelude::Null),
+				napi::Either::A,
+			),
+	})
+}
+
+#[cfg(feature = "onecrl")]
+#[napi]
+impl AgentStats {
+	/// OneCRL revocation checking, or `null` when the agent does not check it.
+	#[napi(getter)]
+	pub fn onecrl<'env>(&self, env: &'env Env) -> Option<RevocationStats<'env>> {
+		revocation_stats(env, self.onecrl_stats)
+	}
+}
+
+#[cfg(feature = "crlite")]
+#[napi]
+impl AgentStats {
+	/// CRLite revocation checking, or `null` when the agent does not check it.
+	#[napi(getter)]
+	pub fn crlite<'env>(&self, env: &'env Env) -> Option<RevocationStats<'env>> {
+		revocation_stats(env, self.crlite_stats)
 	}
 }
 
@@ -163,6 +228,9 @@ impl Agent {
 	/// - `responsesReceived`
 	/// - `bodiesStarted`
 	/// - `bodiesFinished`
+	/// - `onecrl` and `crlite`: for each revocation source the agent checks, `refused`, how many
+	///   of its connections the source has refused, and `lastConfirmed`, when the process last
+	///   confirmed the source's data current. `null` for a source the agent does not check.
 	#[napi]
 	pub fn stats(&self) -> AgentStats {
 		AgentStats::from(self.inner.stats())

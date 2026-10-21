@@ -14,13 +14,14 @@ The Rust API surface itself is specified in [RSAPI](client-api.md).
 It owns the agent, the request and response types, and the `fetch` entry point, and it draws on the component crates for the subsystems beneath it.
 The name carries a `web-` prefix because the bare `faith` name on crates.io belongs to an unrelated project, and the prefix reads as the browser-shaped client the crate is.
 
-Five component crates are published alongside it, each one useful to a caller who wants that piece without the client above it:
+Six component crates are published alongside it, each one useful to a caller who wants that piece without the client above it:
 
 - `web-faith-cookies` is the cookie jar, with the storage, matching, and eviction rules in [COOK](../agent/cookies.md).
 - `web-faith-dns` is the resolver, its cache, the discovery ladder, the `HTTPS` record query, and Happy Eyeballs, as in [DNS](../agent/dns.md).
 - `web-faith-conn-tracker` reads live per-connection statistics from the operating system, which is the `connections()` view in [OBS](../agent/observability.md); the cumulative counters and the resolver listing that spec also covers belong to `web-faith` and `web-faith-dns` respectively.
 - `web-faith-alt-svc` is the Alt-Svc store and the HTTP/3 upgrade machinery, as in [H3UP](../http3/upgrade.md) and [PROBE](../http3/probing.md).
 - `web-faith-encoding` is content coding for request and response bodies, as in [ENC](../fetch/content-encoding.md).
+- `web-faith-revocation` is certificate revocation checking, as in [REVOC](../agent/revocation.md): a rustls server certificate verifier that wraps another verifier, the Remote Settings client with its signature checking, and the cache. It takes the data source, the pinned signing root, and the cache location as parameters, so it can be pointed at a test server or another deployment; `web-faith` passes Mozilla's and the platform cache directory.
 
 Subresource Integrity parsing and verification is part of `web-faith` itself (see [SRI](../fetch/integrity.md)).
 
@@ -42,7 +43,7 @@ Each component crate carries its own documentation, and its examples run against
 
 ## Subsystems that stay with the client
 
-QUIC and TLS are not component crates.
+QUIC and TLS are not component crates; revocation checking is one because it plugs into the TLS stack as a certificate verifier rather than being part of it.
 Faith reaches both through reqwest, which carries the HTTP/3 implementation Faith uses and offers the choice of TLS backend, so the swapping available there is the one the ecosystem already provides rather than one Faith builds above it.
 `web-faith` passes those choices through as features of its own: HTTP/3 has such a feature already, and the TLS backend is selected the same way, with aws-lc-rs the default and ring the alternative.
 What the two subsystems do is specified in [QUIC](../http3/transport.md) and [TLS](../agent/tls.md).
@@ -55,6 +56,9 @@ That one is opt-in, because reqwest gates its HTTP/3 support behind a `reqwest_u
 A caller who wants HTTP/3 names the feature and sets `RUSTFLAGS="--cfg reqwest_unstable"` in its own build, and the crate's documentation is built with both so the API is described whether or not a given build carries it.
 The Node module has HTTP/3 compiled in, since its own build sets that cfg.
 Turning a feature off drops the code behind it and the client continues to work without it; the parts of the API that only mean something with that subsystem present go with it, as in [RSAPI](client-api.md).
+
+Each revocation source is a feature of its own, `onecrl` and `crlite`, both on by default, so a build can leave CRLite and its filter decoder out entirely rather than only switching it off per agent.
+The Node module has both compiled in.
 
 A feature decides what is compiled in rather than what is switched on at run time, and the two need not agree: the cookies feature is on by default while the jar itself stays off until an agent asks for it (see [COOK](../agent/cookies.md)).
 
