@@ -1,0 +1,52 @@
+[package]
+name = "web-faith-revocation"
+description = "OneCRL and CRLite certificate revocation checking for rustls, on top of any verifier"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+documentation = "https://docs.rs/web-faith-revocation"
+readme = "README.md"
+authors.workspace = true
+
+[dependencies]
+base64 = "0.22"
+clubcard = { version = "0.3", optional = true }
+clubcard-crlite = { version = "0.6", default-features = false, features = ["bincode", "sha2"], optional = true }
+hex = "0.4"
+rcgen = { version = "0.14", default-features = false, features = ["aws_lc_rs", "pem"], optional = true }
+reqwest.workspace = true
+rustls.workspace = true
+rustls-native-certs = "0.8"
+rustls-pki-types.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2 = "0.10"
+tokio.workspace = true
+url.workspace = true
+webpki = { version = "0.103", package = "rustls-webpki", default-features = false, features = ["std"] }
+
+[dev-dependencies]
+clubcard = { version = "0.3", features = ["builder"] }
+clubcard-crlite = { version = "0.6", default-features = false, features = ["builder"] }
+rcgen = { version = "0.14", default-features = false, features = ["aws_lc_rs", "pem"] }
+rustls = { workspace = true, features = ["aws-lc-rs"] }
+rustls-platform-verifier.workspace = true
+tempfile = "3"
+
+[features]
+default = ["onecrl", "crlite"]
+onecrl = []
+crlite = ["dep:clubcard-crlite"]
+test-support = [
+	"dep:rcgen",
+	"dep:clubcard",
+	"clubcard/builder",
+	"clubcard-crlite?/builder",
+	"rustls/aws-lc-rs",
+]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

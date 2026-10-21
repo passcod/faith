@@ -265,49 +265,51 @@ A refactor with no behaviour change, landed on its own so the existing TLS tests
 
 ### 3. Scaffold `web-faith-revocation`
 
-- [ ] `crates/web-faith-revocation/` with `Cargo.toml` (features `onecrl`, `crlite` = `dep:clubcard-crlite`, both default), workspace dependency entry, README, docs.rs metadata matching the other component crates
-- [ ] Dependencies via `cargo add`: `rustls`, `rustls-webpki`, `reqwest`, `tokio`, `serde`, `serde_json`, `base64`, `sha2`, `x509-cert`, `rustls-native-certs`; dev: `rcgen`, `clubcard-crlite` with `builder`
-- [ ] Crate error type in the style of `web-faith-alt-svc` (no `thiserror` in the workspace)
-- [ ] Modules: `cert`, `links`, `remote_settings`, `signature`, `onecrl`, `crlite`, `store`, `cache`, `session`, `verifier`, `poller`
+- [x] `crates/web-faith-revocation/` with `Cargo.toml` (features `onecrl`, `crlite` = `dep:clubcard-crlite`, both default), docs.rs metadata matching the other component crates; README and workspace dependency entry land with step 11
+- [x] Dependencies: `rustls`, `rustls-webpki`, `reqwest`, `tokio`, `serde`, `serde_json`, `base64`, `sha2`, `hex`, `rustls-native-certs`; dev and `test-support`: `rcgen` (aws-lc-rs), `clubcard` and `clubcard-crlite` with `builder`
+- [x] Crate error type in the style of `web-faith-alt-svc` (no `thiserror` in the workspace)
+- [x] Modules: `cert`, `links`, `remote_settings`, `signature`, `onecrl`, `crlite`, `store`, `cache`, `session`, `verifier`, `poller`, `test_support`
 
 ### 4. Certificate facts (`cert`)
 
-- [ ] From a `CertificateDer`: raw issuer and subject DN, serial, SPKI DER and its SHA-256, SKI, AKI key identifier
-- [ ] SCT list extension (`1.3.6.1.4.1.11129.2.4.2`): unwrap the OCTET STRING, parse the TLS-encoded list into `(LogId, Timestamp)` pairs; tolerate a malformed list as "no SCTs"
-- [ ] Unit tests on rcgen certs and on one captured public leaf with SCTs committed as a fixture
+- [x] From a `CertificateDer`: raw issuer and subject DN, serial, SPKI SHA-256, SKI, AKI key identifier. A small DER reader rather than `x509-cert`: OneCRL matches the exact name bytes, and a decode/re-encode could normalise them
+- [x] SCT list extension: unwrap the OCTET STRING, parse the TLS-encoded list into `(LogId, Timestamp)` pairs; a malformed list reads as "no SCTs"; SCT versions other than 1 skipped
+- [x] Unit tests on rcgen certs and on a captured public leaf with SCTs (`fixtures/www-mozilla-org-chain.pem`)
 
 ### 5. Path linking (`links`)
 
-- [ ] `RootIndex`: platform roots from `rustls-native-certs`, keyed by subject and by SKI; built off the handshake path, absent until first built (root step fails open)
-- [ ] Per-agent extra roots (agent's and `NODE_EXTRA_CA_CERTS`) indexed alongside, for the HTTP verifier only
-- [ ] Path enumeration from the leaf over presented certs plus index lookups: subject = issuer, SKI = AKI where both present; cycle guard and depth cap
-- [ ] Tests: stale cross-sign presented alongside a valid path, root not presented, AKI mismatch skips a candidate, cycle, unknown issuer
+- [x] `RootIndex`: platform roots from `rustls-native-certs`, keyed by subject; built off the handshake path, absent until first built (root step fails open)
+- [x] Per-agent extra roots indexed alongside, for the HTTP verifier only
+- [x] Path enumeration from the leaf over presented certs plus index lookups: subject = issuer, SKI = AKI where both present; cycle guard, depth cap, and a visit budget per check
+- [x] Tests: stale cross-sign presented alongside a valid path, root not presented, AKI mismatch skips a candidate, mutual cross-signs, unknown issuer
 
 ### 6. Remote Settings and content signatures (`remote_settings`, `signature`)
 
-- [ ] Change check against `buckets/monitor/collections/changes/changeset`, then `buckets/main/collections/{cid}/changeset?_expected={ts}` for a collection that moved
-- [ ] Attachment base URL from the server root's `capabilities.attachments.base_url`
-- [ ] Canonical JSON of the records as Remote Settings signs it (records sorted by id, keys sorted, no whitespace, `last_modified` alongside)
-- [ ] `x5u` chain fetch and verification with webpki against the pinned root: code-signing EKU, SAN `onecrl.content-signature.mozilla.org`, validity now
-- [ ] P-384 signature over `Content-Signature:\0` + canonical JSON using the provider's `ECDSA_P384_SHA384`, raw `r‖s` converted to DER
-- [ ] Rollback refusal against the held timestamp
-- [ ] Mozilla's root and base URL as constants in the crate, passed in by `web-faith`
-- [ ] Tests: a captured real OneCRL changeset and its chain verify against the real root (fixture, no network); a tampered record, wrong SAN, wrong root, or older timestamp each fail
+- [x] Change check against `buckets/monitor/collections/changes/changeset`, then `buckets/security-state/collections/{cid}/changeset?_expected={ts}` (the bucket is `security-state`, not `main`)
+- [x] Attachment base URL from the server root's `capabilities.attachments.base_url`
+- [x] Canonical JSON as Remote Settings signs it: tombstones dropped, records sorted by id, keys sorted, no whitespace, non-ASCII escaped as `\uXXXX`. Checked against both live collections before writing it
+- [x] `x5u` chain verification with webpki against the pinned root hash: code-signing EKU required on the signing certificate and allowed-if-present above it (as Firefox does), SAN naming the signer, validity at the given time
+- [x] P-384 signature over `Content-Signature:\0` + canonical JSON with the provider's P-384 algorithms, raw `r‖s` converted to DER
+- [x] Rollback refusal against the held timestamp
+- [x] Mozilla's root hash (`C8:A8:0E:9A:…:06:DB`, the same one Mozilla's application-services client pins) and base URL as constants
+- [x] Tests: the captured real `cert-revocations` changeset (same signer as OneCRL, 15 KB rather than OneCRL's 800 KB) verifies against the real root at its own timestamp; a dropped record, changed timestamp, wrong root, expired chain, wrong signer, or older timestamp each fail
+- [x] Responses capped in size, so a misbehaving server cannot exhaust memory
 
 ### 7. OneCRL (`onecrl`)
 
-- [ ] Parse records (`issuerName` + `serialNumber`, or `subject` + `pubKeyHash`, base64) into lookup sets
-- [ ] Refuse only when every linked path contains a listed certificate
-- [ ] Tests over the step 5 fixtures, both entry kinds
+- [x] Parse records (`issuerName` + `serialNumber`, or `subject` + `pubKeyHash`, base64) into lookup sets. Every record is enforced whatever its `enabled` flag, as Firefox does (645 of the 1901 live records are `enabled: false`)
+- [x] Refuse only when every linked path contains a listed certificate
+- [x] Tests over rcgen chains, both entry kinds
 
 ### 8. CRLite (`crlite`)
 
-- [ ] Parse `cert-revocations` records for the default channel: attachment hash, size and location, full vs incremental, parent
-- [ ] Download attachments, check SHA-256 against the signed record, `CRLiteClubcard::from_bytes`
-- [ ] Split loading from querying: a provider hands the store its filter set, and the query works from that set alone, so a second provider plugs in without touching the verifier
-- [ ] Hold the full filter and every verified delta; a new full filter replaces the set only once downloaded and verified
-- [ ] Query each candidate issuer key with the leaf's serial and SCTs across all held filters; refuse only when revoked under every candidate; `NotEnrolled` / `NotCovered` pass
-- [ ] Tests with builder-made filters: revoked in the full filter, revoked only in a delta, missing delta, no SCTs, unknown issuer, two candidate issuers
+- [x] Parse `cert-revocations` records for the default channel: attachment hash, size and location, full vs incremental. Like Firefox, exactly one full filter and every incremental filter in the channel, without walking parents
+- [x] Download attachments, check size and SHA-256 against the signed record, decode. Mozilla's filters are clubcard encoding V3, so `clubcard-crlite`'s `bincode` feature is on
+- [x] Split loading from querying: `Filters` is a set of decoded filters with no knowledge of where they came from, so a second provider plugs in without touching the verifier
+- [x] Hold the full filter and every verified delta; a new full filter replaces the set only once downloaded and verified
+- [x] Query each candidate issuer key with the leaf's serial and SCTs across all held filters; refuse only when revoked under every candidate; `NotEnrolled` / `NotCovered` pass
+- [x] Tests with builder-made filters: revoked in the full filter, revoked only in a delta, missing delta, no SCTs, unknown issuer, issuer not enrolled, two candidate issuers
+- [x] Checked once by hand against the live 6 MB full filter: five public sites' leaves come back `Good`, which confirms the issuer key hash, serial bytes, and SCT parsing match Mozilla's encoding. Not committed (the filter is too large for a fixture)
 
 ### 9. Store, cache, session cutting, verifier
 
