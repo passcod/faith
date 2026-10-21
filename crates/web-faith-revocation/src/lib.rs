@@ -326,6 +326,7 @@ impl Revocation {
 	/// Until the source has data, from the cache or the network, it refuses nothing.
 	// spec:REVOC#the-cache
 	pub fn enable(&self, source: Source) {
+		self.inner.store.load_roots();
 		self.inner.store.load(source);
 
 		let mut poller = self.inner.poller.lock().expect("poisoned");
@@ -365,7 +366,7 @@ impl Revocation {
 	/// resumed session skips the verifier. Use it on every config the verifier is on.
 	// spec:REVOC#where-the-check-sits
 	pub fn session_store(&self) -> Arc<dyn ClientSessionStore> {
-		Arc::new(EpochSessionStore::new(Arc::clone(&self.inner.store.epoch)))
+		Arc::new(EpochSessionStore::new(Arc::clone(&self.inner.store)))
 	}
 
 	/// When `source`'s data was last confirmed current, or `None` before it has any.

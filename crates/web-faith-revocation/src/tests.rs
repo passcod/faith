@@ -12,7 +12,7 @@ use serde_json::Value;
 use super::*;
 use crate::test_support::{
 	FakeRemoteSettings, SigningPki, TlsPki, crlite_filter, crlite_record, handshake,
-	onecrl_issuer_serial, provider,
+	onecrl_issuer_serial, provider, transfer,
 };
 
 const POLL: Duration = Duration::from_millis(200);
@@ -284,6 +284,75 @@ fn a_session_saved_before_an_update_is_not_resumed() {
 		Some(Source::OneCrl),
 		"a resumption would have skipped the check"
 	);
+}
+
+#[test]
+fn a_ticket_arriving_after_an_update_is_checked_against_the_data_it_was_verified_under() {
+	let setup = Setup::new(false);
+	let unrelated = TlsPki::new(false);
+	setup.publish_onecrl(vec![onecrl_issuer_serial(&unrelated.intermediate)], 10);
+	let revocation = setup.revocation(None, POLL);
+	revocation.enable(Source::OneCrl);
+	wait_for("OneCRL", || {
+		held_timestamp(&revocation, Source::OneCrl) == Some(10)
+	});
+
+	let refusals = Arc::new(Refusals::default());
+	let client = setup.client(&revocation, Sources::all(), &refusals);
+	let server = setup.server_config();
+
+	// Run a handshake up to the client's Finished, which has the server queue its tickets, and
+	// hold them back.
+	let name = rustls::pki_types::ServerName::try_from("localhost").expect("a valid name");
+	let mut client_conn = rustls::Connection::Client(
+		rustls::ClientConnection::new(Arc::clone(&client), name).expect("a client"),
+	);
+	let mut server_conn = rustls::Connection::Server(
+		rustls::ServerConnection::new(Arc::clone(&server)).expect("a server"),
+	);
+	transfer(&mut client_conn, &mut server_conn).expect("hello");
+	transfer(&mut server_conn, &mut client_conn).expect("the server's flight, verified");
+	transfer(&mut client_conn, &mut server_conn).expect("finished");
+	assert!(server_conn.wants_write(), "the server has tickets to send");
+
+	setup.publish_onecrl(vec![onecrl_issuer_serial(&unrelated.root)], 20);
+	wait_for("the update", || {
+		held_timestamp(&revocation, Source::OneCrl) == Some(20)
+	});
+
+	// The tickets arrive now, after the data they were checked against has been replaced.
+	transfer(&mut server_conn, &mut client_conn).expect("the tickets");
+	assert_eq!(
+		handshake(&client, &server),
+		Ok(HandshakeKind::Full),
+		"a ticket from before the update must not resume"
+	);
+	assert_eq!(handshake(&client, &server), Ok(HandshakeKind::Resumed));
+}
+
+#[test]
+fn the_platform_roots_are_indexed_by_the_time_enable_returns() {
+	let setup = Setup::new(false);
+	let revocation = setup.revocation(None, DEFAULT_POLL_INTERVAL);
+	assert!(revocation.inner.store.roots.read().unwrap().is_none());
+
+	revocation.enable(Source::OneCrl);
+	assert!(revocation.inner.store.roots.read().unwrap().is_some());
+}
+
+#[test]
+fn another_agent_does_not_cut_a_backoff_short() {
+	let setup = Setup::new(false);
+	setup.server.set_failing(true);
+	let revocation = setup.revocation(None, DEFAULT_POLL_INTERVAL);
+	revocation.enable(Source::OneCrl);
+	wait_for("a failed check", || !setup.server.requests().is_empty());
+	std::thread::sleep(Duration::from_millis(200));
+
+	let before = setup.server.requests().len();
+	revocation.enable(Source::OneCrl);
+	std::thread::sleep(Duration::from_millis(500));
+	assert_eq!(setup.server.requests().len(), before, "no retry yet");
 }
 
 #[test]

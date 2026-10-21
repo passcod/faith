@@ -48,9 +48,6 @@ async fn run(
 	interval: Duration,
 	mut rx: UnboundedReceiver<Source>,
 ) {
-	// The roots are listed here rather than at agent construction: on some platforms it is slow.
-	store.rebuild_roots();
-
 	let mut sources: Vec<Source> = Vec::new();
 	let mut failures = 0u32;
 	let mut due: Option<Instant> = None;
@@ -66,10 +63,14 @@ async fn run(
 		tokio::select! {
 			source = rx.recv() => {
 				let Some(source) = source else { return };
+				// A source already followed changes nothing, and while checks are failing the
+				// backoff runs its course rather than starting over for each new agent.
 				if !sources.contains(&source) {
 					sources.push(source);
+					if failures == 0 {
+						due = Some(next_due(&store, &sources, interval));
+					}
 				}
-				due = Some(next_due(&store, &sources, interval));
 			}
 			() = wake => {
 				let ok = poll(&store, &remote, &sources).await;

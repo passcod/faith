@@ -6,7 +6,10 @@
 
 // spec:REVOC
 
-use std::sync::{Arc, OnceLock};
+use std::{
+	sync::{Arc, OnceLock},
+	time::Duration,
+};
 
 use web_faith_revocation::{Refusals, Revocation, RevocationConfig, Source, Sources};
 
@@ -15,6 +18,12 @@ use crate::{
 	client::{NodeEnvRecipe, TlsRecipe, crypto_provider},
 	error::{FaithError, FaithErrorKind},
 };
+
+/// Generous next to what a fetch takes, since the largest is a few megabytes of CRLite filter, but
+/// finite.
+const POLLER_CONNECT_TIMEOUT: Duration = Duration::from_secs(30);
+const POLLER_READ_TIMEOUT: Duration = Duration::from_secs(60);
+const POLLER_TOTAL_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 
 static REVOCATION: OnceLock<Revocation> = OnceLock::new();
 
@@ -74,6 +83,9 @@ fn handle() -> Result<&'static Revocation, FaithError> {
 
 /// The poller's client: the environment's network settings and none of any agent's options.
 ///
+/// It carries timeouts of its own: the poller is one loop awaiting each fetch, so a connection that
+/// stalls would otherwise stop every later check for the life of the process.
+///
 /// Its connections are not checked for revocation themselves. What it fetches is protected by the
 /// content signature, and checking the connection against the data it is fetching adds nothing.
 // spec:REVOC#keeping-current
@@ -87,6 +99,9 @@ fn poller_client() -> Result<reqwest::Client, FaithError> {
 		.apply(
 			reqwest::Client::builder()
 				.tls_backend_preconfigured(tls)
+				.connect_timeout(POLLER_CONNECT_TIMEOUT)
+				.read_timeout(POLLER_READ_TIMEOUT)
+				.timeout(POLLER_TOTAL_TIMEOUT)
 				.user_agent(USER_AGENT),
 		)
 		.build()

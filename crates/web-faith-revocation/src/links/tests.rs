@@ -171,3 +171,20 @@ fn a_root_sent_by_the_server_and_held_is_one_candidate() {
 	let intermediate = info(&intermediate.der);
 	assert_eq!(links.issuers_of(&intermediate).len(), 1);
 }
+
+#[test]
+fn a_self_signed_root_ends_the_path() {
+	let a = Ca::root("A");
+	let b = Ca::root("B");
+	let a_by_b = b.cross_sign(&a);
+	let leaf = a.issue_leaf(&[1], false, true);
+
+	// A is a trusted self-signed root, and the server also sends A's cross-sign by B, which is
+	// listed. The path that ends at A never used the cross-sign.
+	let presented = std::slice::from_ref(&a_by_b);
+	assert!(!blocked(&leaf, presented, &[&a.der], &[&a_by_b]));
+	// With the cross-sign the only way up, it still blocks.
+	assert!(blocked(&leaf, presented, &[], &[&a_by_b]));
+	// And a listed root blocks the path that ends at it.
+	assert!(blocked(&leaf, &[], &[&a.der], &[&a.der]));
+}

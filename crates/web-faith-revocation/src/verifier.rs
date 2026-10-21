@@ -36,6 +36,8 @@ impl ServerCertVerifier for RevocationVerifier {
 		ocsp_response: &[u8],
 		now: UnixTime,
 	) -> Result<ServerCertVerified, rustls::Error> {
+		// Read first: an update landing mid-check leaves this connection on the older epoch.
+		let epoch = self.store.current_epoch();
 		let verified = self.inner.verify_server_cert(
 			end_entity,
 			intermediates,
@@ -50,7 +52,10 @@ impl ServerCertVerifier for RevocationVerifier {
 			self.sources,
 			self.extra_roots.as_deref(),
 		) {
-			None => Ok(verified),
+			None => {
+				self.store.record_verified(server_name, epoch);
+				Ok(verified)
+			}
 			Some(source) => {
 				self.refusals.add(source);
 				Err(rustls::Error::InvalidCertificate(CertificateError::Other(

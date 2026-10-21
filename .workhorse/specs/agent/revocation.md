@@ -16,6 +16,7 @@ Every TLS connection an agent makes for HTTP is checked, over TCP and over QUIC 
 So is every connection its resolver makes to an encrypted DNS server it authenticates; an opportunistic probe authenticates nothing, so there is no chain to check (see [DNS](dns.md)).
 
 A resumed TLS session skips certificate verification, so a session saved before the revocation data last changed is not resumed: the connection makes a full handshake instead, and is checked against the current data.
+A session counts as saved at the time its connection's certificate was verified, not when its ticket arrived, since a ticket can reach a long-lived connection after the data has changed.
 A connection already open when an update lands carries on until it closes; the update applies to the connections opened after it.
 
 A connection refused for revocation fails its request with the code `Network`, as any other certificate rejection does (see [ERR](../errors/errors.md)), and its message says the certificate is revoked and names the source that refused it.
@@ -33,6 +34,8 @@ CRLite covers leaf certificates issued by the publicly trusted authorities enrol
 The platform verifier does not say which path it built, and servers often send certificates beyond the path that validates, such as stale cross-signs, while leaving out the root.
 So the check works out every path that could have been built, from the leaf upwards, linking each certificate to every candidate that could have issued it: one whose subject is its issuer, and whose key identifier matches its authority key identifier where both carry one.
 Candidates are the certificates the server presented and the roots of the agent's trust store, the platform's included, as Faith can list them.
+A path ends at a self-issued certificate, so a root is never linked on to a cross-sign of itself.
+The platform's roots are listed while the first agent that uses a source is constructed.
 A root the platform would fetch for itself rather than holding locally, and an intermediate it found for itself rather than receiving from the server, cannot be listed, so a path through one ends before it and the missing certificate is not checked.
 
 ## Matching OneCRL
@@ -68,6 +71,8 @@ The poller starts with the first agent that uses a source and lasts as long as t
 
 The poller checks Remote Settings for changes about once a day, as Firefox does, and downloads only what has changed.
 A failed fetch, a signature that does not verify, or a filter whose hash does not match leaves the data already held in force, and the poller tries again later.
+A fetch that stalls is abandoned after a timeout and counts as failed.
+A new agent using a source already followed does not bring a retry forward.
 Held data stays in force however long it goes without being confirmed current; its age shows in `stats()` (see [Reporting](#reporting)).
 
 The poller connects to Mozilla's Remote Settings service at `firefox.settings.services.mozilla.com` and to the host that service names for CRLite filter downloads.

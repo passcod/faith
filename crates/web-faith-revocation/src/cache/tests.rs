@@ -112,3 +112,27 @@ fn a_filter_named_again_is_not_pruned() {
 	cache.prune_filters(&HashSet::new(), now + PRUNE_GRACE + Duration::from_secs(1));
 	assert!(cache.read_filter(&hash).is_some(), "its clock restarted");
 }
+
+#[test]
+fn abandoned_temporary_files_are_swept() {
+	let dir = tempfile::tempdir().expect("temp dir");
+	let cache = Cache::new(Some(dir.path().to_path_buf()));
+	cache.write_collection("onecrl", &cached(5));
+	cache.write_filter(&[1; 32], b"filter");
+
+	let top = dir.path().join(".onecrl.json.1.0.tmp");
+	let filters = dir.path().join("filters").join(".aa.1.0.tmp");
+	fs::write(&top, b"half").expect("written");
+	fs::write(&filters, b"half").expect("written");
+
+	let now = SystemTime::now();
+	cache.prune_filters(&HashSet::new(), now);
+	assert!(
+		top.exists() && filters.exists(),
+		"a recent one may be in use"
+	);
+
+	cache.prune_filters(&HashSet::new(), now + TEMP_GRACE + Duration::from_secs(1));
+	assert!(!top.exists() && !filters.exists());
+	assert!(dir.path().join("onecrl.json").exists());
+}

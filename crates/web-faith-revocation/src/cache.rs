@@ -23,6 +23,10 @@ use crate::remote_settings::Signed;
 /// cut off. Processes check for changes daily, so a few days covers one that has been asleep.
 const PRUNE_GRACE: Duration = Duration::from_secs(3 * 24 * 60 * 60);
 
+/// How long a half-written temporary file is left alone before it counts as abandoned by a process
+/// that died mid-write. A write takes moments.
+const TEMP_GRACE: Duration = Duration::from_secs(60 * 60);
+
 /// The largest cache file read back: a full CRLite filter is a few megabytes.
 const MAX_FILE: u64 = 64 * 1024 * 1024;
 
@@ -32,7 +36,9 @@ pub(crate) struct Cached {
 	pub(crate) signed: Signed,
 	/// When the signature was checked against the network copy, in seconds since the epoch. The
 	/// chain is checked as of then on the way back in, as the signing certificates are
-	/// short-lived.
+	/// short-lived. The cache file is not itself signed, so this is only as trustworthy as the
+	/// directory: whoever can write there can pick the time, as they could already substitute any
+	/// older collection that verified.
 	pub(crate) verified_at: u64,
 	/// When the data was last confirmed current, in seconds since the epoch.
 	pub(crate) confirmed_at: u64,
@@ -88,6 +94,10 @@ impl Cache {
 		let Some(dir) = self.filters_dir() else {
 			return;
 		};
+		sweep_temporaries(&dir, now);
+		if let Some(parent) = dir.parent() {
+			sweep_temporaries(parent, now);
+		}
 		let Ok(entries) = fs::read_dir(&dir) else {
 			return;
 		};
@@ -140,6 +150,29 @@ fn read_capped(path: &Path) -> io::Result<Vec<u8>> {
 		return Err(io::Error::other("cache file too large"));
 	}
 	fs::read(path)
+}
+
+/// Delete temporary files in `dir` that a process died before renaming into place.
+fn sweep_temporaries(dir: &Path, now: SystemTime) {
+	let Ok(entries) = fs::read_dir(dir) else {
+		return;
+	};
+	for entry in entries.flatten() {
+		let name = entry.file_name();
+		let name = name.to_string_lossy();
+		if !(name.starts_with('.') && name.ends_with(".tmp")) {
+			continue;
+		}
+		let abandoned = entry
+			.metadata()
+			.and_then(|meta| meta.modified())
+			.ok()
+			.and_then(|modified| now.duration_since(modified).ok())
+			.is_some_and(|age| age > TEMP_GRACE);
+		if abandoned {
+			let _ = fs::remove_file(entry.path());
+		}
+	}
 }
 
 fn write_atomic(path: &Path, bytes: &[u8]) -> io::Result<()> {

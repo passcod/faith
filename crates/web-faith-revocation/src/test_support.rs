@@ -627,7 +627,8 @@ pub fn handshake(
 	}
 }
 
-fn transfer(
+/// Deliver everything `from` has to say to `to`, as one flight.
+pub fn transfer(
 	from: &mut rustls::Connection,
 	to: &mut rustls::Connection,
 ) -> Result<(), rustls::Error> {

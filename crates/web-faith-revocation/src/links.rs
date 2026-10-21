@@ -127,6 +127,11 @@ impl<'a> Links<'a> {
 		if path.len() >= MAX_DEPTH || *visits > MAX_VISITS {
 			return false;
 		}
+		// A self-issued certificate is where the platform's path ends at a trusted root. Linking on
+		// from it would reach same-name cross-signs of that root, which the path never used.
+		if cert.issuer == cert.subject {
+			return false;
+		}
 
 		let issuers: Vec<_> = self
 			.issuers_of(cert)

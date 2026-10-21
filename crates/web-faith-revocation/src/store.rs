@@ -7,17 +7,18 @@
 // spec:REVOC#the-cache
 
 use std::{
+	collections::HashMap,
 	sync::{
-		Arc, RwLock,
+		Arc, Mutex, Once, RwLock,
 		atomic::{AtomicU64, Ordering},
 	},
 	time::SystemTime,
 };
 
 #[cfg(feature = "crlite")]
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
-use rustls_pki_types::{CertificateDer, UnixTime};
+use rustls_pki_types::{CertificateDer, ServerName, UnixTime};
 
 #[cfg(feature = "crlite")]
 use crate::crlite::{self, Channel, Filter, Filters};
@@ -43,8 +44,6 @@ pub(crate) struct Held<T> {
 	/// Whether everything the signed records name is held. Only CRLite can fall short, by an
 	/// incremental filter that failed to download, in which case the poller tries again.
 	pub(crate) complete: bool,
-	/// Whether the cache has been read for this source.
-	loaded: bool,
 }
 
 impl<T> Default for Held<T> {
@@ -55,7 +54,6 @@ impl<T> Default for Held<T> {
 			verified_at: 0,
 			confirmed: None,
 			complete: false,
-			loaded: false,
 		}
 	}
 }
@@ -80,12 +78,25 @@ pub(crate) struct Store {
 	pub(crate) cache: Cache,
 	/// Moves whenever any source's data changes, so saved sessions can be told stale.
 	pub(crate) epoch: Arc<AtomicU64>,
+	/// The epoch each server's certificate was last verified under, so a session ticket can be
+	/// tagged with the data its connection was checked against rather than whatever is current
+	/// when the ticket arrives.
+	verified: Mutex<HashMap<ServerName<'static>, u64>>,
 	#[cfg(feature = "onecrl")]
 	pub(crate) onecrl: RwLock<Held<OneCrl>>,
+	#[cfg(feature = "onecrl")]
+	onecrl_load: Once,
 	#[cfg(feature = "crlite")]
 	pub(crate) crlite: RwLock<Held<Crlite>>,
+	#[cfg(feature = "crlite")]
+	crlite_load: Once,
 	pub(crate) roots: RwLock<Option<Arc<RootIndex>>>,
+	roots_load: Once,
 }
+
+/// How many servers' verified epochs are remembered. One past it forgets an arbitrary server,
+/// whose tickets then count as saved under no epoch and are never resumed.
+const VERIFIED_CAPACITY: usize = 1024;
 
 impl Store {
 	pub(crate) fn new(trust: Trust, cache: Cache) -> Self {
@@ -93,16 +104,52 @@ impl Store {
 			trust,
 			cache,
 			epoch: Arc::new(AtomicU64::new(0)),
+			verified: Mutex::default(),
 			#[cfg(feature = "onecrl")]
 			onecrl: RwLock::default(),
+			#[cfg(feature = "onecrl")]
+			onecrl_load: Once::new(),
 			#[cfg(feature = "crlite")]
 			crlite: RwLock::default(),
+			#[cfg(feature = "crlite")]
+			crlite_load: Once::new(),
 			roots: RwLock::default(),
+			roots_load: Once::new(),
 		}
 	}
 
 	fn bump_epoch(&self) {
 		self.epoch.fetch_add(1, Ordering::AcqRel);
+	}
+
+	/// The epoch the data stands at now.
+	pub(crate) fn current_epoch(&self) -> u64 {
+		self.epoch.load(Ordering::Acquire)
+	}
+
+	/// Note that `server_name`'s certificate was verified against the data as of `epoch`, which
+	/// the caller read before checking so that a change during the check counts against it.
+	pub(crate) fn record_verified(&self, server_name: &ServerName<'_>, epoch: u64) {
+		let mut verified = self.verified.lock().expect("poisoned");
+		let name = server_name.to_owned();
+		if verified.len() >= VERIFIED_CAPACITY
+			&& !verified.contains_key(&name)
+			&& let Some(victim) = verified.keys().next().cloned()
+		{
+			verified.remove(&victim);
+		}
+		verified.insert(name, epoch);
+	}
+
+	/// The epoch `server_name` was last verified under, or 0 when it is not known, which no
+	/// session saved after the first update will pass for current.
+	pub(crate) fn verified_epoch(&self, server_name: &ServerName<'_>) -> u64 {
+		self.verified
+			.lock()
+			.expect("poisoned")
+			.get(server_name)
+			.copied()
+			.unwrap_or(0)
 	}
 
 	/// The source that refuses this chain, if any. OneCRL is asked first.
@@ -154,6 +201,12 @@ impl Store {
 		None
 	}
 
+	/// Index the platform's roots if that has not been done yet. Slow on some platforms, so it runs
+	/// while the first agent using a source is constructed, never on a handshake.
+	pub(crate) fn load_roots(&self) {
+		self.roots_load.call_once(|| self.rebuild_roots());
+	}
+
 	/// Rebuild the index of the platform's roots. Slow on some platforms, so never on a handshake.
 	pub(crate) fn rebuild_roots(&self) {
 		let index = Arc::new(RootIndex::platform());
@@ -199,12 +252,8 @@ impl Store {
 	pub(crate) fn load(&self, source: Source) {
 		match source {
 			#[cfg(feature = "onecrl")]
-			Source::OneCrl => {
-				let mut held = self.onecrl.write().expect("poisoned");
-				if std::mem::replace(&mut held.loaded, true) {
-					return;
-				}
-				drop(held);
+			// `Once` makes a second agent wait for the first one's read to finish.
+			Source::OneCrl => self.onecrl_load.call_once(|| {
 				// A cache that does not verify is as good as none.
 				if let Some(cached) = self.cache.read_collection(onecrl::COLLECTION) {
 					let _ = self.install_onecrl(
@@ -214,19 +263,14 @@ impl Store {
 						false,
 					);
 				}
-			}
+			}),
 			#[cfg(feature = "crlite")]
-			Source::Crlite => {
-				let mut held = self.crlite.write().expect("poisoned");
-				if std::mem::replace(&mut held.loaded, true) {
-					return;
-				}
-				drop(held);
+			Source::Crlite => self.crlite_load.call_once(|| {
 				// As for OneCRL, and a cache missing its full filter likewise.
 				if let Some(cached) = self.cache.read_collection(crlite::COLLECTION) {
 					let _ = self.install_crlite_from_disk(cached);
 				}
-			}
+			}),
 		}
 	}
 
