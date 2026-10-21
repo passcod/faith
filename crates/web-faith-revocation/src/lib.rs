@@ -58,7 +58,13 @@
 // With a source compiled out, the machinery only it reaches goes unused.
 #![cfg_attr(
 	not(all(feature = "onecrl", feature = "crlite")),
-	allow(dead_code, unused_imports, unused_mut, unused_variables, unreachable_code)
+	allow(
+		dead_code,
+		unused_imports,
+		unused_mut,
+		unused_variables,
+		unreachable_code
+	)
 )]
 
 use std::{
@@ -94,6 +100,8 @@ mod signature;
 mod store;
 #[cfg(any(test, feature = "test-support"))]
 pub mod test_support;
+#[cfg(test)]
+mod tests;
 mod verifier;
 
 pub use error::{Error, Revoked};

@@ -81,8 +81,9 @@ impl From<io::Error> for Error {
 /// [`CertificateError::Other`](rustls::CertificateError::Other).
 ///
 /// Its message says the certificate is revoked and names the source that refused it, so the
-/// error a client surfaces for the failed connection does too.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// error a client surfaces for the failed connection does too. rustls renders the inside of
+/// `CertificateError::Other` with `Debug`, so `Debug` reads the same as `Display`.
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Revoked {
 	/// The source that listed the certificate.
 	pub source: Source,
@@ -91,6 +92,12 @@ pub struct Revoked {
 impl fmt::Display for Revoked {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		write!(f, "certificate revoked ({})", self.source)
+	}
+}
+
+impl fmt::Debug for Revoked {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		fmt::Display::fmt(self, f)
 	}
 }
 

@@ -313,20 +313,20 @@ A refactor with no behaviour change, landed on its own so the existing TLS tests
 
 ### 9. Store, cache, session cutting, verifier
 
-- [ ] `store`: the `Revocation` handle holding each source's current data, an epoch counter bumped on change, and the last-confirmed time per source
-- [ ] `cache`: layout under the given dir (OneCRL changeset with signature and confirmed time; CRLite records plus `filters/{sha256}`), temp file and rename, re-verified on load, memory-only when unwritable
-- [ ] Pruning: unnamed filters deleted after a grace period, first-unnamed time kept in the cache metadata, failed deletes retried next update
-- [ ] `session`: a `ClientSessionStore` wrapper over rustls's memory cache that tags entries with the epoch at insert and drops older ones on read
-- [ ] `verifier`: wraps an `Arc<dyn ServerCertVerifier>`, runs the inner first, then the enabled sources; refusal error per the build note; bumps a refusal counter handed in by the caller; signature checks, schemes and root hints pass straight through
-- [ ] Tests: a full rustls handshake against an rcgen chain over loopback with a listed intermediate refused, a revoked leaf refused, opt-outs honoured, and a resumed session not resumed after an epoch bump
+- [x] `store`: each source's current data, an epoch counter bumped on change, and the last-confirmed time per source; every update, from the cache or the network, goes through the same signature, rollback and hash checks
+- [x] `cache`: one JSON file per collection (signed changeset, its chain, when it was verified and confirmed) plus `filters/{sha256}`; temp file and rename; re-verified on load, the chain checked as of when it was first verified since the signing certificates are short-lived; memory-only when there is no directory or it cannot be written
+- [x] Pruning: unnamed filters deleted after a three-day grace period, first-unnamed time kept in `filters/unnamed.json`, failed deletes retried next update
+- [x] `session`: a `ClientSessionStore` over rustls's memory cache that tags each server's sessions with the epoch they were saved under and drops older ones on read; its tag map is bounded, and a server evicted from it has its sessions dropped too
+- [x] `verifier`: wraps an `Arc<dyn ServerCertVerifier>`, runs the inner first, then the enabled sources; a refusal is `CertificateError::Other` holding `Revoked`, whose `Debug` matches its `Display` because rustls renders `Other` with `Debug`; bumps the caller's `Refusals`; everything else passes straight through
+- [x] Tests (real rustls handshakes in memory): a listed intermediate refused, a revoked leaf refused, opt-outs honoured, and a session saved before an update not resumed
 
 ### 10. Poller (`poller`)
 
-- [ ] Dedicated thread with a current-thread Tokio runtime, detached, spawned once; a channel to add sources
-- [ ] Daily change check, skipped at start when the cache was confirmed within the interval; backoff on failure, last good data kept
-- [ ] Root index rebuilt on the poller thread after each OneCRL load or update, and once at start
-- [ ] Test against a fake Remote Settings server (hyper on 127.0.0.1, rcgen P-384 test root with the required SAN): first fetch, unchanged check updates confirmed time only, change bumps the epoch, bad signature keeps old data
-- [ ] The fake server and test chain live in a `test-support` module behind a non-default feature, so `web-faith`'s tests reuse them
+- [x] Dedicated thread with a current-thread Tokio runtime, detached, spawned once; a channel to add sources
+- [x] Change check per interval, skipped at start when the cache was confirmed within it; backoff from five minutes (capped at the interval) on failure or a missing incremental filter, last good data kept
+- [x] Root index built on the poller thread at start and after each OneCRL update
+- [x] Tests against the fake server: first fetch, unchanged check updates confirmed time only, a later delta picked up without re-downloading the full filter, a missing delta retried, bad signature keeps old data, a restart enforces from the cache before any fetch and asks for nothing when the cache is fresh, a tampered cache is not used
+- [x] The fake server, signing chain, TLS chain, filter builder and handshake driver live in `test_support`, behind the `test-support` feature, so `web-faith`'s tests reuse them. The server is plain HTTP on its own thread, so it serves whichever runtime the poller is on
 
 ### 11. `web-faith` integration
 
