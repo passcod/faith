@@ -10,7 +10,7 @@ is a very good effort! it just feels like a bit of an outdated choice today).
 
 Faith tries to bring a Node.js fetch that is closer to the browser's fetch, notably by having
 transparent support for HTTP/2 and HTTP/3, IPv6 and IPv4 using the "Happy Eyeballs" algorithm, a
-DNS cache, an optional cookie jar, revocation lists, and your choice of two HTTP caches.
+DNS cache, an optional cookie jar, certificate revocation lists, and your choice of two HTTP caches.
 
 ### 📐 Is it faster?
 
