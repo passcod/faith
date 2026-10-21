@@ -494,14 +494,21 @@ fn a_tampered_cache_is_not_used() {
 	first.enable(Source::OneCrl);
 	wait_for("OneCRL", || first.last_confirmed(Source::OneCrl).is_some());
 
-	let path = cache.path().join("onecrl.json");
+	// Tamper with a copy: the first one's poller is free to rewrite its own cache when it confirms
+	// the data, which would undo the tampering.
+	let tampered = tempfile::tempdir().expect("temp dir");
 	let mut cached: Value =
-		serde_json::from_slice(&std::fs::read(&path).expect("cached")).expect("cache parses");
+		serde_json::from_slice(&std::fs::read(cache.path().join("onecrl.json")).expect("cached"))
+			.expect("cache parses");
 	cached["signed"]["changeset"]["changes"] = Value::Array(Vec::new());
-	std::fs::write(&path, serde_json::to_vec(&cached).expect("serialises")).expect("written");
+	std::fs::write(
+		tampered.path().join("onecrl.json"),
+		serde_json::to_vec(&cached).expect("serialises"),
+	)
+	.expect("written");
 
 	setup.server.set_failing(true);
-	let second = setup.revocation(Some(cache.path().to_owned()), DEFAULT_POLL_INTERVAL);
+	let second = setup.revocation(Some(tampered.path().to_owned()), DEFAULT_POLL_INTERVAL);
 	second.enable(Source::OneCrl);
 	assert_eq!(second.last_confirmed(Source::OneCrl), None);
 }

@@ -233,12 +233,28 @@ fn platform_verifier(
 	extra_roots: &[CertificateDer<'static>],
 	provider: Arc<CryptoProvider>,
 ) -> Result<Arc<dyn ServerCertVerifier>, FaithError> {
+	let config_error =
+		|err: rustls::Error| FaithError::new(FaithErrorKind::Config, format!("{err:?}"));
+
 	let verifier = if extra_roots.is_empty() {
-		rustls_platform_verifier::Verifier::new(provider)
+		rustls_platform_verifier::Verifier::new(provider).map_err(config_error)?
 	} else {
-		rustls_platform_verifier::Verifier::new_with_extra_roots(extra_roots.to_vec(), provider)
-	}
-	.map_err(|err| FaithError::new(FaithErrorKind::Config, format!("{err:?}")))?;
+		// The Android verifier asks the system and has no way to add roots to that, so, as reqwest
+		// did, extra roots there are a configuration error.
+		#[cfg(not(target_os = "android"))]
+		{
+			rustls_platform_verifier::Verifier::new_with_extra_roots(extra_roots.to_vec(), provider)
+				.map_err(config_error)?
+		}
+		#[cfg(target_os = "android")]
+		{
+			let _ = provider;
+			return Err(FaithError::new(
+				FaithErrorKind::Config,
+				"rustls-platform-verifier could not load extra certs",
+			));
+		}
+	};
 
 	Ok(Arc::new(verifier))
 }
