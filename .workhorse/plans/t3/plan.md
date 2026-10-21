@@ -228,3 +228,123 @@ To check when building: what hickory sets on its default config (ALPN per transp
 ## Spec changes
 
 Drafted: the new certificate revocation spec (REVOC), with folds into TLS, ENV, RUST, AGENT, NETCHG, OBS and DNS.
+
+## Build notes
+
+Points that came up while grounding the checklist in the code.
+
+- hickory fills in ALPN per transport (`h2` for DoH, `doq` for DoQ) only when the config's `alpn_protocols` is empty, and turns SNI off on its own clone for DoT. So the DNS config is built separately from the HTTP one, with empty ALPN, rather than reusing the HTTP config that carries `h2`/`http/1.1`.
+- The DNS config keeps today's DNS trust: platform roots only, and not loosened by `NODE_TLS_REJECT_UNAUTHORIZED=0`; it gains only the revocation wrapper. hickory's default (`client_config()` with `rustls-platform-verifier`) already ignores the agent's extra roots, so handing it the HTTP verifier would have widened what DNS trusts as a side effect.
+- `FaithError` from a reqwest error carries the whole source chain in its message, so a refusal surfaces as `CertificateError::Other` holding a `Revoked` error of the crate's own whose `Display` names the source. rustls's unit `CertificateError::Revoked` can't carry which source refused.
+- `ClientRecipe::build` is re-run on a network change, so the rustls config, the verifier and the session store are rebuilt there, while the process-wide revocation handle and the agent's refusal counters are held by the agent and passed in, like the cookie jar and resolver.
+- The crate exposes a non-global `Revocation` handle (base URL, pinned root, cache dir, sources); the process-wide `OnceLock` lives in `web-faith`. That keeps the crate's own tests free of global state.
+- The poller's client is built with Faith's TLS config but without the revocation wrapper: its data is protected by the content signature, and checking the poller's own connection against the data it is fetching adds nothing.
+- `clubcard-crlite`'s `builder` feature (dev-dependency only) builds test filters, so CRLite tests need no captured Mozilla filter.
+- Agent-level refusals are tested through an `unstable-internals` Rust hook that points the process-wide handle at a fake source; the Node tests cover option plumbing and the stats shape only, so nothing new is exposed to JS.
+- x509 fields webpki doesn't expose (issuer and subject DN, serial, SPKI, SKI, AKI, the SCT list) come from a DER parser crate; `x509-cert` (RustCrypto) is the pick, as it parses without copying and has no C dependency.
+
+## Checklist
+
+### 1. Faith owns the rustls config (no revocation yet)
+
+A refactor with no behaviour change, landed on its own so the existing TLS tests vouch for it before revocation is layered on.
+
+- [ ] `cargo add` `rustls` as a non-optional `web-faith` dependency, its `aws-lc-rs` / `ring` features driven by `tls-aws-lc-rs` / `tls-ring`; `rustls-platform-verifier` at the version reqwest resolves in `Cargo.lock`; `rustls-pki-types` for PEM parsing
+- [ ] `crates/web-faith/src/client/tls.rs`: a `TlsRecipe` that builds the `rustls::ClientConfig` with the chosen provider, the platform verifier with extra roots (agent's plus `NODE_EXTRA_CA_CERTS`) or a no-verify verifier for `NODE_TLS_REJECT_UNAUTHORIZED=0`, client auth from `tls.identity`, `KeyLogFile`, ALPN `h2` + `http/1.1`, and `enable_early_data` from `tls.early_data`
+- [ ] `agent/build.rs` and `NodeEnvRecipe`: parse identity and extra roots into rustls types (`CertificateDer`, `PrivateKeyDer`) instead of `reqwest::Identity` / `Certificate`, keeping `PemParse` for malformed input and the lenient `NODE_EXTRA_CA_CERTS` read
+- [ ] `ClientRecipe::build`: replace `identity`, `tls_certs_merge`, `danger_accept_invalid_certs`, `tls_early_data` and `tls_sslkeylogfile` with `tls_backend_preconfigured(config)`; keep `tls_info` and `https_only`
+- [ ] Decide whether `install_crypto_provider` is still needed once Faith passes the provider explicitly (hickory's own default config may still read the process default under `tls-ring`)
+- [ ] Run the full Rust and Node suites; extra roots, `NODE_TLS_REJECT_UNAUTHORIZED`, mTLS, HTTP/3 and early data, ALPN negotiation of h2 must all still pass. Build with `--no-default-features --features tls-ring` too
+
+### 2. `web-faith-dns` takes a rustls config
+
+- [ ] `ResolverConfig` gains an optional `rustls::ClientConfig` (rustls as a workspace dependency of the crate), applied with `with_tls_config` in each builder in `discovery.rs`
+- [ ] Confirm in hickory-resolver that opportunistic probes (RFC 9539) still override the verifier on their clone of the supplied config
+- [ ] `web-faith` builds the DNS config per the build note: platform verifier, empty ALPN, same provider; wrapped with revocation in step 9
+
+### 3. Scaffold `web-faith-revocation`
+
+- [ ] `crates/web-faith-revocation/` with `Cargo.toml` (features `onecrl`, `crlite` = `dep:clubcard-crlite`, both default), workspace dependency entry, README, docs.rs metadata matching the other component crates
+- [ ] Dependencies via `cargo add`: `rustls`, `rustls-webpki`, `reqwest`, `tokio`, `serde`, `serde_json`, `base64`, `sha2`, `x509-cert`, `rustls-native-certs`; dev: `rcgen`, `clubcard-crlite` with `builder`
+- [ ] Crate error type in the style of `web-faith-alt-svc` (no `thiserror` in the workspace)
+- [ ] Modules: `cert`, `links`, `remote_settings`, `signature`, `onecrl`, `crlite`, `store`, `cache`, `session`, `verifier`, `poller`
+
+### 4. Certificate facts (`cert`)
+
+- [ ] From a `CertificateDer`: raw issuer and subject DN, serial, SPKI DER and its SHA-256, SKI, AKI key identifier
+- [ ] SCT list extension (`1.3.6.1.4.1.11129.2.4.2`): unwrap the OCTET STRING, parse the TLS-encoded list into `(LogId, Timestamp)` pairs; tolerate a malformed list as "no SCTs"
+- [ ] Unit tests on rcgen certs and on one captured public leaf with SCTs committed as a fixture
+
+### 5. Path linking (`links`)
+
+- [ ] `RootIndex`: platform roots from `rustls-native-certs`, keyed by subject and by SKI; built off the handshake path, absent until first built (root step fails open)
+- [ ] Per-agent extra roots (agent's and `NODE_EXTRA_CA_CERTS`) indexed alongside, for the HTTP verifier only
+- [ ] Path enumeration from the leaf over presented certs plus index lookups: subject = issuer, SKI = AKI where both present; cycle guard and depth cap
+- [ ] Tests: stale cross-sign presented alongside a valid path, root not presented, AKI mismatch skips a candidate, cycle, unknown issuer
+
+### 6. Remote Settings and content signatures (`remote_settings`, `signature`)
+
+- [ ] Change check against `buckets/monitor/collections/changes/changeset`, then `buckets/main/collections/{cid}/changeset?_expected={ts}` for a collection that moved
+- [ ] Attachment base URL from the server root's `capabilities.attachments.base_url`
+- [ ] Canonical JSON of the records as Remote Settings signs it (records sorted by id, keys sorted, no whitespace, `last_modified` alongside)
+- [ ] `x5u` chain fetch and verification with webpki against the pinned root: code-signing EKU, SAN `onecrl.content-signature.mozilla.org`, validity now
+- [ ] P-384 signature over `Content-Signature:\0` + canonical JSON using the provider's `ECDSA_P384_SHA384`, raw `r‖s` converted to DER
+- [ ] Rollback refusal against the held timestamp
+- [ ] Mozilla's root and base URL as constants in the crate, passed in by `web-faith`
+- [ ] Tests: a captured real OneCRL changeset and its chain verify against the real root (fixture, no network); a tampered record, wrong SAN, wrong root, or older timestamp each fail
+
+### 7. OneCRL (`onecrl`)
+
+- [ ] Parse records (`issuerName` + `serialNumber`, or `subject` + `pubKeyHash`, base64) into lookup sets
+- [ ] Refuse only when every linked path contains a listed certificate
+- [ ] Tests over the step 5 fixtures, both entry kinds
+
+### 8. CRLite (`crlite`)
+
+- [ ] Parse `cert-revocations` records for the default channel: attachment hash, size and location, full vs incremental, parent
+- [ ] Download attachments, check SHA-256 against the signed record, `CRLiteClubcard::from_bytes`
+- [ ] Hold the full filter and every verified delta; a new full filter replaces the set only once downloaded and verified
+- [ ] Query each candidate issuer key with the leaf's serial and SCTs across all held filters; refuse only when revoked under every candidate; `NotEnrolled` / `NotCovered` pass
+- [ ] Tests with builder-made filters: revoked in the full filter, revoked only in a delta, missing delta, no SCTs, unknown issuer, two candidate issuers
+
+### 9. Store, cache, session cutting, verifier
+
+- [ ] `store`: the `Revocation` handle holding each source's current data, an epoch counter bumped on change, and the last-confirmed time per source
+- [ ] `cache`: layout under the given dir (OneCRL changeset with signature and confirmed time; CRLite records plus `filters/{sha256}`), temp file and rename, re-verified on load, memory-only when unwritable
+- [ ] Pruning: unnamed filters deleted after a grace period, first-unnamed time kept in the cache metadata, failed deletes retried next update
+- [ ] `session`: a `ClientSessionStore` wrapper over rustls's memory cache that tags entries with the epoch at insert and drops older ones on read
+- [ ] `verifier`: wraps an `Arc<dyn ServerCertVerifier>`, runs the inner first, then the enabled sources; refusal error per the build note; bumps a refusal counter handed in by the caller; signature checks, schemes and root hints pass straight through
+- [ ] Tests: a full rustls handshake against an rcgen chain over loopback with a listed intermediate refused, a revoked leaf refused, opt-outs honoured, and a resumed session not resumed after an epoch bump
+
+### 10. Poller (`poller`)
+
+- [ ] Dedicated thread with a current-thread Tokio runtime, detached, spawned once; a channel to add sources
+- [ ] Daily change check, skipped at start when the cache was confirmed within the interval; backoff on failure, last good data kept
+- [ ] Root index rebuilt on the poller thread after each OneCRL load or update, and once at start
+- [ ] Test against a fake Remote Settings server (hyper on 127.0.0.1, rcgen P-384 test root with the required SAN): first fetch, unchanged check updates confirmed time only, change bumps the epoch, bad signature keeps old data
+- [ ] The fake server and test chain live in a `test-support` module behind a non-default feature, so `web-faith`'s tests reuse them
+
+### 11. `web-faith` integration
+
+- [ ] Features `onecrl` and `crlite` passing through to `web-faith-revocation`, both default; `lib.rs` feature table and README
+- [ ] `TlsOptions.revocation` with `onecrl` / `crlite` booleans, each behind its feature
+- [ ] Process-wide `OnceLock` holding the `Revocation` handle: created at the first agent using a source, with the `directories` user cache dir joined with `web-faith/revocation`, the cache loaded synchronously, then the poller spawned; a later agent enabling another source loads that one and hands it to the poller
+- [ ] Poller's `reqwest::Client` built from the default recipe and `NodeEnvRecipe` per the build note
+- [ ] `ClientRecipe` carries the handle, the agent's enabled sources and its refusal counters; HTTP verifier and DNS verifier both wrapped; no wrapper under `NODE_TLS_REJECT_UNAUTHORIZED=0` on HTTP
+- [ ] `AgentStats` gains per-source refused count and last-confirmed time, each behind its feature, absent for a source turned off or without data
+- [ ] `unstable-internals` test hook that points the process-wide handle at a given base URL, pinned root and cache dir; it must be called before the first agent that uses a source, and returns an error after that
+- [ ] Rust integration tests in their own test binary (the handle is process-wide) using the hook and the step 10 fake server: an agent refuses a revoked leaf and a listed intermediate with a `Network` error naming the source, opt-outs let them through, stats count the refusals and report last-confirmed, a restart from the cache enforces before any fetch
+- [ ] Rust tests: options with features off fail to compile (a `compile_fail` doctest)
+
+### 12. Node surface
+
+- [ ] `web-faith-napi` features `onecrl` and `crlite`, both in its default set
+- [ ] `AgentTlsOptions.revocation { onecrl?, crlite? }` in `agent/options.rs`, mapped in `agent/convert.rs`
+- [ ] napi `AgentStats` gains the revocation fields, following the existing stats field conventions
+- [ ] Rebuild to regenerate `index.d.ts`; update `wrapper.d.ts` if it restates the option types
+- [ ] Tape tests: options accepted, stats shape with sources on and off
+
+### 13. Release plumbing
+
+- [ ] `release-plz.toml` comment says seven published crates; check whether the new crate needs an entry
+- [ ] Top-level README mentions revocation checking and the MPL-2.0 `clubcard-crlite` dependency behind `crlite`
