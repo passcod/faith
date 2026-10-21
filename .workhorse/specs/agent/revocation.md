@@ -64,8 +64,7 @@ Data signed earlier than the data already held is refused, so a replayed older c
 ## Keeping current
 
 Every agent in a process shares one copy of each source's data and one poller, so many agents cost one fetch.
-The poller runs on a thread of its own, independent of any async runtime the caller has, and lasts as long as the process without keeping it alive.
-It starts with the construction of the first agent that uses a source, right after that agent loads the cache, and takes on a source the first time an agent using it is constructed.
+The poller starts with the first agent that uses a source and lasts as long as the process, without keeping the process alive.
 
 The poller checks Remote Settings for changes about once a day, as Firefox does, and downloads only what has changed.
 A failed fetch, a signature that does not verify, or a filter whose hash does not match leaves the data already held in force, and the poller tries again later.

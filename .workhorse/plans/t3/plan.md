@@ -181,7 +181,9 @@ The poller fetches with its own internal client, built from the default recipe a
 Proxies only come from the environment and the OS, so it sees the same proxy configuration any agent would; `NODE_EXTRA_CA_CERTS` and `NODE_USE_ENV_PROXY` apply too, and agent options never do.
 It reaches `firefox.settings.services.mozilla.com` and the attachments host that service names, and moves no agent's counters.
 
-It runs on a dedicated thread with its own current-thread Tokio runtime, spawned once per process at the first agent construction that uses a source, after the cache load.
+The spec only requires it to last as long as the process without keeping it alive; how is a choice made here.
+Other ways would do: a plain thread with a blocking loop, or a task on a runtime Faith keeps for itself.
+Chosen: it runs on a dedicated thread with its own current-thread Tokio runtime, spawned once per process at the first agent construction that uses a source, after the cache load.
 `web-faith` owns no runtime on the Rust surface (its other background work borrows the caller's), and a poller tied to a caller's runtime would stop with it; Node uses the same thread rather than napi's `tokio_rt` so there is one code path.
 The thread is detached, so it doesn't hold up a Rust `main` returning, and a native thread doesn't hold Node's event loop open.
 A source an agent turns on later is handed to the running thread; nothing is fetched for a source no agent uses.
