@@ -259,9 +259,9 @@ A refactor with no behaviour change, landed on its own so the existing TLS tests
 
 ### 2. `web-faith-dns` takes a rustls config
 
-- [ ] `ResolverConfig` gains an optional `rustls::ClientConfig` (rustls as a workspace dependency of the crate), applied with `with_tls_config` in each builder in `discovery.rs`
-- [ ] Confirm in hickory-resolver that opportunistic probes (RFC 9539) still override the verifier on their clone of the supplied config
-- [ ] `web-faith` builds the DNS config per the build note: platform verifier, empty ALPN, same provider; wrapped with revocation in step 9
+- [x] `FaithResolver::new_with_tls(config, tls)` takes a `rustls::ClientConfig` (rustls as a workspace dependency of the crate), applied with `with_tls_config` in each builder in `discovery.rs`, bootstrap included. A constructor rather than a `ResolverConfig` field, since that struct is exhaustive and a new field would be a semver break
+- [x] Checked hickory-resolver 0.26.1's opportunistic probes: it does not swap the verifier for them; a probe connects with the resolver's TLS config as given. So handing it Faith's config changes nothing about whether a probe authenticates. In practice discovery's system servers carry no encrypted connection configs for hickory to probe
+- [x] `web-faith` builds the DNS config per the build note: platform verifier, empty ALPN, same provider; wrapped with revocation in step 9
 
 ### 3. Scaffold `web-faith-revocation`
 

@@ -47,11 +47,25 @@ pub(crate) fn apply_options(
 	}
 }
 
+/// Hand the resolver the caller's TLS config, where one was given.
+fn with_tls(
+	builder: hickory_resolver::ResolverBuilder<TokioRuntimeProvider>,
+	tls: Option<&rustls::ClientConfig>,
+) -> hickory_resolver::ResolverBuilder<TokioRuntimeProvider> {
+	match tls {
+		Some(tls) => builder.with_tls_config(tls.clone()),
+		None => builder,
+	}
+}
+
 /// Discovery: configure from the system, then let hickory's RFC 9539 opportunistic encryption
 /// upgrade those servers to DoT/DoQ where they answer a probe. A configured search list overrides
 /// the system search list when set.
 // spec:DNS#discovery
-pub(crate) fn build_discovery(config: &ResolverConfig) -> Result<Built, NetError> {
+pub(crate) fn build_discovery(
+	config: &ResolverConfig,
+	tls: Option<&rustls::ClientConfig>,
+) -> Result<Built, NetError> {
 	let (mut hickory, options) = read_system_conf().unwrap_or_else(|_| {
 		// A host with no readable resolver configuration falls back to Google Public DNS over
 		// conventional DNS, probed like any other server (spec:DNS#discovery).
@@ -70,9 +84,10 @@ pub(crate) fn build_discovery(config: &ResolverConfig) -> Result<Built, NetError
 	let mut builder = TokioResolver::builder_with_config(hickory, TokioRuntimeProvider::default())
 		.with_options(options);
 	apply_options(&mut builder, config);
-	let builder = builder.with_opportunistic_encryption(OpportunisticEncryption::Enabled {
-		config: Default::default(),
-	});
+	let builder =
+		with_tls(builder, tls).with_opportunistic_encryption(OpportunisticEncryption::Enabled {
+			config: Default::default(),
+		});
 
 	Ok(Built {
 		resolver: builder.build()?,
@@ -83,7 +98,10 @@ pub(crate) fn build_discovery(config: &ResolverConfig) -> Result<Built, NetError
 /// The resolver that bootstraps hostname servers: the listed IP-host servers in order, so an
 /// encrypted server placed first resolves its siblings without exposing the hostname in plaintext.
 /// Where the list has no IP host, the system's own configuration bootstraps instead.
-pub(crate) fn bootstrap_resolver(config: &ResolverConfig) -> Result<TokioResolver, NetError> {
+pub(crate) fn bootstrap_resolver(
+	config: &ResolverConfig,
+	tls: Option<&rustls::ClientConfig>,
+) -> Result<TokioResolver, NetError> {
 	let ip_servers: Vec<NameServerConfig> = config
 		.servers
 		.iter()
@@ -105,15 +123,18 @@ pub(crate) fn bootstrap_resolver(config: &ResolverConfig) -> Result<TokioResolve
 	};
 	builder.options_mut().ip_strategy = LookupIpStrategy::Ipv4AndIpv6;
 	builder.options_mut().server_ordering_strategy = ServerOrderingStrategy::UserProvidedOrder;
-	builder.build()
+	with_tls(builder, tls).build()
 }
 
 /// Build the configured (or discovered) resolver and the report of its servers.
-pub(crate) async fn build(config: &ResolverConfig) -> Result<Built, NetError> {
+pub(crate) async fn build(
+	config: &ResolverConfig,
+	tls: Option<&rustls::ClientConfig>,
+) -> Result<Built, NetError> {
 	if config.servers.is_empty() {
-		build_discovery(config)
+		build_discovery(config, tls)
 	} else {
-		build_listed(config).await
+		build_listed(config, tls).await
 	}
 }
 
@@ -121,8 +142,11 @@ pub(crate) async fn build(config: &ResolverConfig) -> Result<Built, NetError> {
 /// from the parsed specs in order.
 // spec:DNS#transports
 // spec:DNS#bootstrapping
-pub(crate) async fn build_listed(config: &ResolverConfig) -> Result<Built, NetError> {
-	let name_servers = build_name_servers(config).await?;
+pub(crate) async fn build_listed(
+	config: &ResolverConfig,
+	tls: Option<&rustls::ClientConfig>,
+) -> Result<Built, NetError> {
+	let name_servers = build_name_servers(config, tls).await?;
 
 	let search = config.search_domains.clone().unwrap_or_default();
 	let hickory = HickoryConfig::from_parts(None, search, name_servers.clone());
@@ -132,7 +156,7 @@ pub(crate) async fn build_listed(config: &ResolverConfig) -> Result<Built, NetEr
 	apply_options(&mut builder, config);
 
 	Ok(Built {
-		resolver: builder.build()?,
+		resolver: with_tls(builder, tls).build()?,
 		reports,
 	})
 }
@@ -143,10 +167,11 @@ pub(crate) async fn build_listed(config: &ResolverConfig) -> Result<Built, NetEr
 // spec:DNS#bootstrapping
 pub(crate) async fn build_name_servers(
 	config: &ResolverConfig,
+	tls: Option<&rustls::ClientConfig>,
 ) -> Result<Vec<NameServerConfig>, NetError> {
 	let needs_bootstrap = config.servers.iter().any(|spec| spec.ip().is_none());
 	let bootstrap = if needs_bootstrap {
-		Some(bootstrap_resolver(config)?)
+		Some(bootstrap_resolver(config, tls)?)
 	} else {
 		None
 	};

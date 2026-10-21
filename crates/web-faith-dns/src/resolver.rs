@@ -76,6 +76,10 @@ struct Inner {
 	/// what the next generation is rebuilt from.
 	// spec:NETCHG#what-the-signal-keeps
 	config: ResolverConfig,
+	/// The TLS config for encrypted servers, or `None` for hickory's own: the platform verifier
+	/// with the default crypto provider.
+	// spec:DNS#server-order
+	tls: Option<rustls::ClientConfig>,
 	/// Replaced wholesale by [`FaithResolver::reset`]. Read once at the start of a lookup, so one
 	/// spanning the signal finishes against the resolvers it started on.
 	// spec:NETCHG#in-flight-requests
@@ -108,9 +112,22 @@ impl std::fmt::Debug for FaithResolver {
 impl FaithResolver {
 	/// Create a new resolver.
 	pub fn new(config: ResolverConfig) -> Self {
+		Self::with_tls(config, None)
+	}
+
+	/// Create a new resolver that connects to encrypted servers (DNS over TLS, HTTPS, QUIC, and
+	/// HTTP/3) with the given TLS config rather than hickory's default.
+	///
+	/// Leave the config's ALPN list empty: each transport fills in its own.
+	pub fn new_with_tls(config: ResolverConfig, tls: rustls::ClientConfig) -> Self {
+		Self::with_tls(config, Some(tls))
+	}
+
+	fn with_tls(config: ResolverConfig, tls: Option<rustls::ClientConfig>) -> Self {
 		Self {
 			inner: Arc::new(Inner {
 				config,
+				tls,
 				generation: Mutex::new(Arc::new(Generation::default())),
 				https_sink: Mutex::new(None),
 			}),
@@ -156,7 +173,11 @@ impl FaithResolver {
 	async fn built(&self, generation: &Generation) -> Result<Arc<Built>, NetError> {
 		generation
 			.built
-			.get_or_try_init(|| async { build(&self.inner.config).await.map(Arc::new) })
+			.get_or_try_init(|| async {
+				build(&self.inner.config, self.inner.tls.as_ref())
+					.await
+					.map(Arc::new)
+			})
 			.await
 			.cloned()
 	}

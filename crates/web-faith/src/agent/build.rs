@@ -174,7 +174,7 @@ impl Agent {
 					FaithError::new(FaithErrorKind::AddressParse, format!("{url:?}: {err}"))
 				})?);
 			}
-			Some(FaithResolver::new(ResolverConfig {
+			let resolver_config = ResolverConfig {
 				servers,
 				timeout: dns.timeout.map(|ms| Duration::from_millis(ms.into())),
 				ndots: dns.ndots.map(|n| n as usize),
@@ -190,7 +190,11 @@ impl Agent {
 					dns.max_stale
 						.map_or(DEFAULT_MAX_STALE, |ms| Duration::from_millis(ms.into()))
 				}),
-			}))
+			};
+			Some(FaithResolver::new_with_tls(
+				resolver_config,
+				TlsRecipe::dns_config()?,
+			))
 		};
 
 		#[cfg(feature = "encoding")]

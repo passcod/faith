@@ -148,6 +148,25 @@ impl TlsRecipe {
 		Ok(config)
 	}
 
+	/// Build the rustls config for the resolver's encrypted DNS servers.
+	///
+	/// DNS keeps its own trust: the platform roots alone, whatever the agent's extra roots or
+	/// `NODE_TLS_REJECT_UNAUTHORIZED` say, which is what hickory's default config trusts. The ALPN
+	/// list stays empty so each transport fills in its own.
+	// spec:DNS#server-order
+	pub(crate) fn dns_config() -> Result<ClientConfig, FaithError> {
+		let provider = crypto_provider();
+		let verifier = rustls_platform_verifier::Verifier::new(Arc::clone(&provider))
+			.map_err(|err| FaithError::new(FaithErrorKind::Config, format!("{err:?}")))?;
+
+		Ok(ClientConfig::builder_with_provider(provider)
+			.with_safe_default_protocol_versions()
+			.map_err(|err| FaithError::new(FaithErrorKind::Config, format!("{err:?}")))?
+			.dangerous()
+			.with_custom_certificate_verifier(Arc::new(verifier))
+			.with_no_client_auth())
+	}
+
 	/// The platform verifier, trusting the agent's extra roots and `NODE_EXTRA_CA_CERTS` on top of
 	/// the platform store.
 	// spec:TLS#trust-roots

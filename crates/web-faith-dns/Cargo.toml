@@ -16,6 +16,7 @@ moka.workspace = true
 tokio.workspace = true
 url.workspace = true
 reqwest = { workspace = true, optional = true }
+rustls.workspace = true
 
 [dev-dependencies]
 tokio = { workspace = true }
