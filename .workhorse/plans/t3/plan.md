@@ -250,12 +250,12 @@ Points that came up while grounding the checklist in the code.
 
 A refactor with no behaviour change, landed on its own so the existing TLS tests vouch for it before revocation is layered on.
 
-- [ ] `cargo add` `rustls` as a non-optional `web-faith` dependency, its `aws-lc-rs` / `ring` features driven by `tls-aws-lc-rs` / `tls-ring`; `rustls-platform-verifier` at the version reqwest resolves in `Cargo.lock`; `rustls-pki-types` for PEM parsing
-- [ ] `crates/web-faith/src/client/tls.rs`: a `TlsRecipe` that builds the `rustls::ClientConfig` with the chosen provider, the platform verifier with extra roots (agent's plus `NODE_EXTRA_CA_CERTS`) or a no-verify verifier for `NODE_TLS_REJECT_UNAUTHORIZED=0`, client auth from `tls.identity`, `KeyLogFile`, ALPN `h2` + `http/1.1`, and `enable_early_data` from `tls.early_data`
-- [ ] `agent/build.rs` and `NodeEnvRecipe`: parse identity and extra roots into rustls types (`CertificateDer`, `PrivateKeyDer`) instead of `reqwest::Identity` / `Certificate`, keeping `PemParse` for malformed input and the lenient `NODE_EXTRA_CA_CERTS` read
-- [ ] `ClientRecipe::build`: replace `identity`, `tls_certs_merge`, `danger_accept_invalid_certs`, `tls_early_data` and `tls_sslkeylogfile` with `tls_backend_preconfigured(config)`; keep `tls_info` and `https_only`
-- [ ] Decide whether `install_crypto_provider` is still needed once Faith passes the provider explicitly (hickory's own default config may still read the process default under `tls-ring`)
-- [ ] Run the full Rust and Node suites; extra roots, `NODE_TLS_REJECT_UNAUTHORIZED`, mTLS, HTTP/3 and early data, ALPN negotiation of h2 must all still pass. Build with `--no-default-features --features tls-ring` too
+- [x] `cargo add` `rustls` as a non-optional `web-faith` dependency, its `aws-lc-rs` / `ring` features driven by `tls-aws-lc-rs` / `tls-ring`; `rustls-platform-verifier` at the version reqwest resolves in `Cargo.lock`; `rustls-pki-types` for PEM parsing
+- [x] `crates/web-faith/src/client/tls.rs`: a `TlsRecipe` that builds the `rustls::ClientConfig` with the chosen provider, the platform verifier with extra roots (agent's plus `NODE_EXTRA_CA_CERTS`) or a no-verify verifier for `NODE_TLS_REJECT_UNAUTHORIZED=0`, client auth from `tls.identity`, `KeyLogFile`, ALPN `h2` + `http/1.1`, and `enable_early_data` from `tls.early_data`
+- [x] `agent/build.rs` and `NodeEnvRecipe`: parse identity and extra roots into rustls types (`CertificateDer`, `PrivateKeyDer`) instead of `reqwest::Identity` / `Certificate`, keeping `PemParse` for malformed input and the lenient `NODE_EXTRA_CA_CERTS` read
+- [x] `ClientRecipe::build`: replace `identity`, `tls_certs_merge`, `danger_accept_invalid_certs`, `tls_early_data` and `tls_sslkeylogfile` with `tls_backend_preconfigured(config)`; keep `tls_info` and `https_only`
+- [x] Decide whether `install_crypto_provider` is still needed once Faith passes the provider explicitly: dropped, since Faith picks the provider itself (a process default the embedder installed still wins), and step 2 hands hickory Faith's config too
+- [x] Run the full Rust and Node suites; extra roots, `NODE_TLS_REJECT_UNAUTHORIZED`, mTLS, HTTP/3 and early data, ALPN negotiation of h2 must all still pass. Build with `--no-default-features --features tls-ring` too
 
 ### 2. `web-faith-dns` takes a rustls config
 

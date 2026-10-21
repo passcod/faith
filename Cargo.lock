@@ -2903,6 +2903,8 @@ dependencies = [
  "reqwest",
  "reqwest-middleware",
  "rustls",
+ "rustls-pki-types",
+ "rustls-platform-verifier",
  "serde",
  "serde_json",
  "ssri",

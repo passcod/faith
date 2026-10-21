@@ -15,14 +15,17 @@ use http::header::HeaderMap;
 
 #[cfg(feature = "cache")]
 mod http_cache;
+mod tls;
 
 #[cfg(feature = "cache")]
 pub(crate) use http_cache::{HttpCacheRecipe, HttpCacheStore};
+pub(crate) use tls::{ClientIdentity, TlsRecipe, certs_from_pem};
 
 #[cfg(feature = "cache")]
 use http_cache_reqwest::{Cache, HttpCache};
-use reqwest::{Client, Identity, redirect::Policy, tls::Certificate};
+use reqwest::{Client, redirect::Policy};
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
+use rustls_pki_types::CertificateDer;
 #[cfg(feature = "cookies")]
 use web_faith_cookies::FaithJar;
 
@@ -92,8 +95,8 @@ pub(crate) struct ResolvedWindows {
 // spec:NETCHG
 #[derive(Debug, Clone, Default)]
 pub(crate) struct NodeEnvRecipe {
-	extra_ca_certs: Vec<Certificate>,
-	accept_invalid_certs: bool,
+	pub(crate) extra_ca_certs: Vec<CertificateDer<'static>>,
+	pub(crate) accept_invalid_certs: bool,
 	no_proxy: bool,
 }
 
@@ -104,7 +107,7 @@ impl NodeEnvRecipe {
 		if let Ok(path) = std::env::var("NODE_EXTRA_CA_CERTS")
 			&& !path.is_empty()
 			&& let Ok(bytes) = std::fs::read(&path)
-			&& let Ok(certs) = Certificate::from_pem_bundle(&bytes)
+			&& let Ok(certs) = certs_from_pem(&bytes)
 		{
 			recipe.extra_ca_certs = certs;
 		}
@@ -116,15 +119,8 @@ impl NodeEnvRecipe {
 		recipe
 	}
 
+	/// The variables that act on the client builder; the TLS ones are read by [`TlsRecipe`].
 	fn apply(&self, mut client: reqwest::ClientBuilder) -> reqwest::ClientBuilder {
-		if !self.extra_ca_certs.is_empty() {
-			client = client.tls_certs_merge(self.extra_ca_certs.iter().cloned());
-		}
-
-		if self.accept_invalid_certs {
-			client = client.danger_accept_invalid_certs(true);
-		}
-
 		if self.no_proxy {
 			client = client.no_proxy();
 		}
@@ -179,12 +175,8 @@ pub(crate) struct ClientRecipe {
 	pub(crate) connect_timeout: Option<Duration>,
 	pub(crate) read_timeout: Option<Duration>,
 	pub(crate) total_timeout: Option<Duration>,
-	/// Only reachable over QUIC, so only applied when HTTP/3 is compiled in.
-	#[cfg(feature = "http3")]
-	pub(crate) tls_early_data: Option<bool>,
-	pub(crate) tls_identity: Option<Identity>,
+	pub(crate) tls: TlsRecipe,
 	pub(crate) tls_required: Option<bool>,
-	pub(crate) tls_extra_roots: Vec<Certificate>,
 	pub(crate) node_env: NodeEnvRecipe,
 	#[cfg(feature = "cache")]
 	pub(crate) http_cache: Option<HttpCacheRecipe>,
@@ -225,22 +217,6 @@ pub(crate) struct BuiltClients {
 	pub(crate) prober: Option<Arc<H3Prober>>,
 }
 
-/// Install ring as the process's rustls crypto provider.
-///
-/// reqwest reads the process default when it builds a client and panics if there is none. Only
-/// where ring is the chosen backend; with `tls-aws-lc-rs` also on, reqwest supplies aws-lc-rs
-/// itself. Once-only and process-wide, so a provider the embedding program installed is left
-/// alone.
-#[cfg(all(feature = "tls-ring", not(feature = "tls-aws-lc-rs")))]
-fn install_crypto_provider() {
-	use std::sync::Once;
-
-	static ONCE: Once = Once::new();
-	ONCE.call_once(|| {
-		let _ = rustls::crypto::ring::default_provider().install_default();
-	});
-}
-
 impl ClientRecipe {
 	/// The window an idle pooled connection lives in, which is also how long a warm-up counts as
 	/// warm and how long a connection stays listed.
@@ -264,12 +240,9 @@ impl ClientRecipe {
 		#[cfg(feature = "dns")] dns_resolver: Option<&FaithResolver>,
 		#[cfg(feature = "http3")] alt_svc_cache: Option<&Arc<AltSvcCache>>,
 	) -> Result<BuiltClients, FaithError> {
-		#[cfg(all(feature = "tls-ring", not(feature = "tls-aws-lc-rs")))]
-		install_crypto_provider();
-
 		let mut client = Client::builder()
+			.tls_backend_preconfigured(self.tls.config(&self.node_env)?)
 			.tls_info(true)
-			.tls_sslkeylogfile(true)
 			.user_agent(self.user_agent.clone());
 
 		if let Some(ip) = self.local_address {
@@ -359,21 +332,8 @@ impl ClientRecipe {
 			client = client.timeout(timeout);
 		}
 
-		#[cfg(feature = "http3")]
-		if let Some(early_data) = self.tls_early_data {
-			client = client.tls_early_data(early_data);
-		}
-
-		if let Some(identity) = &self.tls_identity {
-			client = client.identity(identity.clone());
-		}
-
 		if let Some(https_only) = self.tls_required {
 			client = client.https_only(https_only);
-		}
-
-		if !self.tls_extra_roots.is_empty() {
-			client = client.tls_certs_merge(self.tls_extra_roots.iter().cloned());
 		}
 
 		client = self.node_env.apply(client);

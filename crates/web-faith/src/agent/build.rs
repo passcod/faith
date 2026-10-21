@@ -22,7 +22,6 @@ use http_cache_reqwest::{
 	CACacheManager, CacheOptions, HttpCacheOptions, MokaCacheBuilder, MokaManager,
 };
 use moka::sync::Cache as MokaCache;
-use reqwest::{Identity, tls::Certificate};
 
 #[cfg(feature = "connection-tracking")]
 use web_faith_conn_tracker::ConnectionTracker;
@@ -40,7 +39,7 @@ use crate::{
 	USER_AGENT,
 	agent::{Agent, AgentSettings, Live},
 	body::DrainPolicy,
-	client::{ClientRecipe, NodeEnvRecipe},
+	client::{ClientIdentity, ClientRecipe, NodeEnvRecipe, TlsRecipe, certs_from_pem},
 	error::{FaithError, FaithErrorKind},
 	options::{AgentOptions, DnsOverride, Header, ipv6_wildcard_bindable, resolve_windows},
 	request::PRIORITY,
@@ -317,31 +316,34 @@ impl Agent {
 			.and_then(|t| t.total)
 			.map(|millis| Duration::from_millis(millis.into()));
 
-		#[cfg(feature = "http3")]
-		let tls_early_data = tls.as_ref().and_then(|tls| tls.early_data);
 		let tls_required = tls.as_ref().and_then(|tls| tls.required);
 		// PEM inputs are parsed here rather than kept as bytes: the parsed forms are what a
 		// rebuilt client needs, and a syntax error belongs to construction (spec:AGENT#construction).
-		let (tls_identity, tls_extra_roots) = match tls {
-			None => (None, Vec::new()),
-			Some(tls) => {
-				let identity = match &tls.identity {
-					None => None,
-					Some(identity) => Some(Identity::from_pem(identity).map_err(|err| {
-						FaithError::new(FaithErrorKind::PemParse, err.to_string())
-					})?),
-				};
+		let tls =
+			match tls {
+				None => TlsRecipe::default(),
+				Some(tls) => {
+					let identity = tls
+						.identity
+						.as_deref()
+						.map(ClientIdentity::from_pem)
+						.transpose()?;
 
-				let mut extra_roots = Vec::new();
-				for pem in tls.extra_roots.iter().flatten() {
-					extra_roots.extend(Certificate::from_pem_bundle(pem).map_err(|err| {
-						FaithError::new(FaithErrorKind::PemParse, err.to_string())
-					})?);
+					let mut extra_roots = Vec::new();
+					for pem in tls.extra_roots.iter().flatten() {
+						extra_roots.extend(certs_from_pem(pem).map_err(|message| {
+							FaithError::new(FaithErrorKind::PemParse, message)
+						})?);
+					}
+
+					TlsRecipe {
+						#[cfg(feature = "http3")]
+						early_data: tls.early_data.unwrap_or(false),
+						identity,
+						extra_roots,
+					}
 				}
-
-				(identity, extra_roots)
-			}
-		};
+			};
 
 		#[cfg(feature = "cache")]
 		let http_cache = if let Some(cache) = cache
@@ -511,11 +513,8 @@ impl Agent {
 			connect_timeout,
 			read_timeout,
 			total_timeout,
-			#[cfg(feature = "http3")]
-			tls_early_data,
-			tls_identity,
+			tls,
 			tls_required,
-			tls_extra_roots,
 			node_env: NodeEnvRecipe::read(),
 			#[cfg(feature = "cache")]
 			http_cache,
