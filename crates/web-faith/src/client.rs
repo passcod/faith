@@ -19,6 +19,8 @@ mod tls;
 
 #[cfg(feature = "cache")]
 pub(crate) use http_cache::{HttpCacheRecipe, HttpCacheStore};
+#[cfg(any(feature = "onecrl", feature = "crlite"))]
+pub(crate) use tls::crypto_provider;
 pub(crate) use tls::{ClientIdentity, TlsRecipe, certs_from_pem};
 
 #[cfg(feature = "cache")]
@@ -120,7 +122,7 @@ impl NodeEnvRecipe {
 	}
 
 	/// The variables that act on the client builder; the TLS ones are read by [`TlsRecipe`].
-	fn apply(&self, mut client: reqwest::ClientBuilder) -> reqwest::ClientBuilder {
+	pub(crate) fn apply(&self, mut client: reqwest::ClientBuilder) -> reqwest::ClientBuilder {
 		if self.no_proxy {
 			client = client.no_proxy();
 		}

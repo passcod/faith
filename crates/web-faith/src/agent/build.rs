@@ -51,6 +51,32 @@ use crate::{client::H3UpgradeRecipe, options::Http3Congestion};
 #[cfg(all(feature = "http3", feature = "dns"))]
 use crate::client::install_https_sink;
 
+#[cfg(any(feature = "onecrl", feature = "crlite"))]
+use crate::{options::RevocationOptions, revocation::RevocationRecipe};
+#[cfg(any(feature = "onecrl", feature = "crlite"))]
+use web_faith_revocation::Sources;
+
+/// The revocation sources an agent checks: each on unless its option turns it off, and none at all
+/// with certificate validation turned off.
+// spec:REVOC#opting-out
+#[cfg(any(feature = "onecrl", feature = "crlite"))]
+fn revocation_sources(options: Option<&RevocationOptions>, node_env: &NodeEnvRecipe) -> Sources {
+	if node_env.accept_invalid_certs {
+		return Sources::none();
+	}
+	#[cfg_attr(not(all(feature = "onecrl", feature = "crlite")), allow(unused_mut))]
+	let mut sources = Sources::all();
+	#[cfg(feature = "onecrl")]
+	{
+		sources.onecrl = options.and_then(|o| o.onecrl).unwrap_or(true);
+	}
+	#[cfg(feature = "crlite")]
+	{
+		sources.crlite = options.and_then(|o| o.crlite).unwrap_or(true);
+	}
+	sources
+}
+
 /// Building an agent from `AgentOptions` directly. Permanently unstable; [`Agent::builder`] is the
 /// supported route.
 #[cfg(feature = "unstable-internals")]
@@ -156,6 +182,51 @@ impl Agent {
 			})
 			.collect::<Result<Vec<_>, FaithError>>()?;
 
+		// Read once, here: what a rebuilt client replays (spec:ENV#read-at-construction-semantics).
+		let node_env = NodeEnvRecipe::read();
+
+		let tls_required = tls.as_ref().and_then(|tls| tls.required);
+		// The first agent to use a source reads its cache here, so a handshake never waits on the
+		// disk (spec:REVOC#the-cache).
+		#[cfg(any(feature = "onecrl", feature = "crlite"))]
+		let revocation = RevocationRecipe::start(revocation_sources(
+			tls.as_ref().and_then(|tls| tls.revocation.as_ref()),
+			&node_env,
+		))?;
+		// PEM inputs are parsed here rather than kept as bytes: the parsed forms are what a
+		// rebuilt client needs, and a syntax error belongs to construction (spec:AGENT#construction).
+		let tls =
+			match tls {
+				None => TlsRecipe {
+					#[cfg(any(feature = "onecrl", feature = "crlite"))]
+					revocation,
+					..TlsRecipe::default()
+				},
+				Some(tls) => {
+					let identity = tls
+						.identity
+						.as_deref()
+						.map(ClientIdentity::from_pem)
+						.transpose()?;
+
+					let mut extra_roots = Vec::new();
+					for pem in tls.extra_roots.iter().flatten() {
+						extra_roots.extend(certs_from_pem(pem).map_err(|message| {
+							FaithError::new(FaithErrorKind::PemParse, message)
+						})?);
+					}
+
+					TlsRecipe {
+						#[cfg(feature = "http3")]
+						early_data: tls.early_data.unwrap_or(false),
+						identity,
+						extra_roots,
+						#[cfg(any(feature = "onecrl", feature = "crlite"))]
+						revocation,
+					}
+				}
+			};
+
 		// Faith owns the hickory resolver rather than leaving it to reqwest's built-in one, so
 		// `prefetch_dns` can warm the very cache reqwest's requests read (spec:WARM),
 		// `network_changed` can flush it (spec:NETCHG), and `dns.servers` can pick the transport and
@@ -193,7 +264,7 @@ impl Agent {
 			};
 			Some(FaithResolver::new_with_tls(
 				resolver_config,
-				TlsRecipe::dns_config()?,
+				tls.dns_config()?,
 			))
 		};
 
@@ -319,35 +390,6 @@ impl Agent {
 		let total_timeout = timeout
 			.and_then(|t| t.total)
 			.map(|millis| Duration::from_millis(millis.into()));
-
-		let tls_required = tls.as_ref().and_then(|tls| tls.required);
-		// PEM inputs are parsed here rather than kept as bytes: the parsed forms are what a
-		// rebuilt client needs, and a syntax error belongs to construction (spec:AGENT#construction).
-		let tls =
-			match tls {
-				None => TlsRecipe::default(),
-				Some(tls) => {
-					let identity = tls
-						.identity
-						.as_deref()
-						.map(ClientIdentity::from_pem)
-						.transpose()?;
-
-					let mut extra_roots = Vec::new();
-					for pem in tls.extra_roots.iter().flatten() {
-						extra_roots.extend(certs_from_pem(pem).map_err(|message| {
-							FaithError::new(FaithErrorKind::PemParse, message)
-						})?);
-					}
-
-					TlsRecipe {
-						#[cfg(feature = "http3")]
-						early_data: tls.early_data.unwrap_or(false),
-						identity,
-						extra_roots,
-					}
-				}
-			};
 
 		#[cfg(feature = "cache")]
 		let http_cache = if let Some(cache) = cache
@@ -519,7 +561,7 @@ impl Agent {
 			total_timeout,
 			tls,
 			tls_required,
-			node_env: NodeEnvRecipe::read(),
+			node_env,
 			#[cfg(feature = "cache")]
 			http_cache,
 			#[cfg(feature = "http3")]

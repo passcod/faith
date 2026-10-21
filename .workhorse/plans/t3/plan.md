@@ -330,15 +330,15 @@ A refactor with no behaviour change, landed on its own so the existing TLS tests
 
 ### 11. `web-faith` integration
 
-- [ ] Features `onecrl` and `crlite` passing through to `web-faith-revocation`, both default; `lib.rs` feature table and README
-- [ ] `TlsOptions.revocation` with `onecrl` / `crlite` booleans, each behind its feature
-- [ ] Process-wide `OnceLock` holding the `Revocation` handle: created at the first agent using a source, with the `directories` user cache dir joined with `web-faith/revocation`, the cache loaded synchronously, then the poller spawned; a later agent enabling another source loads that one and hands it to the poller
-- [ ] Poller's `reqwest::Client` built from the default recipe and `NodeEnvRecipe` per the build note
-- [ ] `ClientRecipe` carries the handle, the agent's enabled sources and its refusal counters; HTTP verifier and DNS verifier both wrapped; no wrapper under `NODE_TLS_REJECT_UNAUTHORIZED=0` on HTTP
-- [ ] `AgentStats` gains per-source refused count and last-confirmed time, each behind its feature, absent for a source turned off or without data
-- [ ] `unstable-internals` test hook that points the process-wide handle at a given base URL, pinned root and cache dir; it must be called before the first agent that uses a source, and returns an error after that
-- [ ] Rust integration tests in their own test binary (the handle is process-wide) using the hook and the step 10 fake server: an agent refuses a revoked leaf and a listed intermediate with a `Network` error naming the source, opt-outs let them through, stats count the refusals and report last-confirmed, a restart from the cache enforces before any fetch
-- [ ] Rust tests: options with features off fail to compile (a `compile_fail` doctest)
+- [x] Features `onecrl` and `crlite` passing through to `web-faith-revocation`, both default; `lib.rs` feature table, README, and component crate list
+- [x] `TlsOptions.revocation` with `onecrl` / `crlite` booleans, each behind its feature
+- [x] Process-wide `OnceLock` holding the `Revocation` handle (`src/revocation.rs`): created at the first agent using a source, with the `directories` user cache dir joined with `web-faith/revocation`; `enable` reads each source's cache synchronously and starts or feeds the poller
+- [x] Poller's `reqwest::Client` built from Faith's TLS config and `NodeEnvRecipe` (proxies, `NODE_EXTRA_CA_CERTS`), with `NODE_TLS_REJECT_UNAUTHORIZED` ignored and no revocation wrapper, per the build note
+- [x] `TlsRecipe` carries the handle, the agent's enabled sources and its refusal counters, so a rebuild on network change keeps them; HTTP verifier and DNS verifier both wrapped, both configs resuming through the epoch session store; no wrapper and no sources under `NODE_TLS_REJECT_UNAUTHORIZED=0`
+- [x] `AgentStats` gains `onecrl` / `crlite: Option<RevocationStats { refused, last_confirmed }>`, each behind its feature, `None` for a source turned off
+- [x] `unstable-internals` hook `web_faith::install_revocation(config) -> bool`: takes effect only before the first agent starts checking
+- [x] Rust integration test in its own test binary (`tests/revocation.rs`) using the hook and the fake server: an agent refuses a revoked leaf and a listed intermediate with a `Network` error naming the source, opt-outs let them through and drop the source from stats, stats count refusals and report last-confirmed, the cache is written. A restart from the cache is covered in the crate's own tests, as the handle cannot be reset within a process
+- [x] Rust tests: options with a source compiled out fail to compile (`compile_fail` doctests on `TlsOptions`, present only in such a build; run by hand with `--no-default-features --features tls-aws-lc-rs,onecrl`)
 
 ### 12. Node surface
 

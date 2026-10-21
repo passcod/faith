@@ -19,6 +19,10 @@ impl InnerAgentStats {
 			responses_received: self.responses_received.load(Ordering::Relaxed),
 			bodies_started: self.bodies_started.load(Ordering::Relaxed),
 			bodies_finished: self.bodies_finished.load(Ordering::Relaxed),
+			#[cfg(feature = "onecrl")]
+			onecrl: None,
+			#[cfg(feature = "crlite")]
+			crlite: None,
 		}
 	}
 }
@@ -38,4 +42,25 @@ pub struct AgentStats {
 	/// Response body streams read to the end. The gap against `bodies_started` is how many bodies
 	/// are holding a connection open.
 	pub bodies_finished: u64,
+	/// OneCRL revocation checking, or `None` when the agent does not check it.
+	// spec:OBS
+	#[cfg(feature = "onecrl")]
+	pub onecrl: Option<RevocationStats>,
+	/// CRLite revocation checking, or `None` when the agent does not check it.
+	// spec:OBS
+	#[cfg(feature = "crlite")]
+	pub crlite: Option<RevocationStats>,
+}
+
+/// One revocation source, as an agent uses it.
+// spec:REVOC#reporting
+#[cfg(any(feature = "onecrl", feature = "crlite"))]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct RevocationStats {
+	/// The agent's connections this source has refused, over HTTP and to DNS servers alike.
+	pub refused: u64,
+	/// When the process last confirmed this source's data current with Remote Settings, whether
+	/// or not it had changed. The same for every agent in the process. `None` until there is data.
+	pub last_confirmed: Option<std::time::SystemTime>,
 }

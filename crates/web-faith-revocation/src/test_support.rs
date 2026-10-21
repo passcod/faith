@@ -145,6 +145,8 @@ pub const TEST_SCT_TIMESTAMP: u64 = 1_700_000_000_000;
 /// A server chain: a root, an intermediate, and a leaf for `localhost`.
 pub struct TlsPki {
 	pub root: CertificateDer<'static>,
+	/// The root as PEM, to hand a client as an extra root.
+	pub root_pem: String,
 	pub intermediate: CertificateDer<'static>,
 	pub leaf: CertificateDer<'static>,
 	pub leaf_key: PrivateKeyDer<'static>,
@@ -181,6 +183,7 @@ impl TlsPki {
 
 		Self {
 			root: root.der().clone(),
+			root_pem: root.pem(),
 			intermediate: intermediate.der().clone(),
 			leaf: leaf.der().clone(),
 			leaf_key: PrivatePkcs8KeyDer::from(leaf_key.serialize_der()).into(),

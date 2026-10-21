@@ -50,6 +50,8 @@ rustflags = ["--cfg", "reqwest_unstable"]
 | `cookies` | ✓ | The cookie jar. |
 | `dns` | ✓ | Faith's own caching resolver. Without it, names resolve through the platform. |
 | `encoding` | ✓ | Content codings for request and response bodies. |
+| `onecrl` | ✓ | Certificate revocation checking against Mozilla's OneCRL. |
+| `crlite` | ✓ | Certificate revocation checking against Mozilla's CRLite, with its MPL-2.0 filter decoder. |
 | `tls-aws-lc-rs` | ✓ | aws-lc-rs as the rustls crypto provider. |
 | `tls-ring` |  | ring as the rustls crypto provider instead. |
 | `http3` |  | Transparent HTTP/3, upgraded into via Alt-Svc. Needs the cfg flag above. |
@@ -63,6 +65,7 @@ rustflags = ["--cfg", "reqwest_unstable"]
 - [`web-faith-conn-tracker`](https://docs.rs/web-faith-conn-tracker)
 - [`web-faith-alt-svc`](https://docs.rs/web-faith-alt-svc)
 - [`web-faith-encoding`](https://docs.rs/web-faith-encoding)
+- [`web-faith-revocation`](https://docs.rs/web-faith-revocation)
 
 ## Elsewhere
 

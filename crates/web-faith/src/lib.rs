@@ -40,6 +40,8 @@
 //! | `cookies` | ✓ | The cookie jar. |
 //! | `dns` | ✓ | Faith's own caching resolver. Without it, names resolve through the platform. |
 //! | `encoding` | ✓ | Content codings for request and response bodies. |
+//! | `onecrl` | ✓ | Certificate revocation checking against Mozilla's OneCRL. |
+//! | `crlite` | ✓ | Certificate revocation checking against Mozilla's CRLite, with its MPL-2.0 filter decoder. |
 //! | `tls-aws-lc-rs` | ✓ | aws-lc-rs as the rustls crypto provider. |
 //! | `tls-ring` |  | ring as the rustls crypto provider instead. |
 //! | `http3` |  | Transparent HTTP/3, upgraded into via Alt-Svc. Needs the cfg flag above. |
@@ -53,6 +55,7 @@
 //! - [`web-faith-conn-tracker`](https://docs.rs/web-faith-conn-tracker)
 //! - [`web-faith-alt-svc`](https://docs.rs/web-faith-alt-svc)
 //! - [`web-faith-encoding`](https://docs.rs/web-faith-encoding)
+//! - [`web-faith-revocation`](https://docs.rs/web-faith-revocation)
 //!
 //! # Elsewhere
 //!
@@ -77,6 +80,8 @@ mod builder;
 mod client;
 mod integrity;
 mod retry;
+#[cfg(any(feature = "onecrl", feature = "crlite"))]
+mod revocation;
 mod stats;
 mod timing;
 mod warm_up;
@@ -120,3 +125,9 @@ pub use response::Response;
 
 #[cfg(feature = "unstable-internals")]
 pub use error::error_codes;
+
+#[cfg(all(
+	feature = "unstable-internals",
+	any(feature = "onecrl", feature = "crlite")
+))]
+pub use revocation::install as install_revocation;

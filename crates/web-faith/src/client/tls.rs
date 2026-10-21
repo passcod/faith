@@ -19,6 +19,11 @@ use rustls_pki_types::{
 	pem::{PemObject, SectionKind},
 };
 
+#[cfg(any(feature = "onecrl", feature = "crlite"))]
+use rustls::client::Resumption;
+
+#[cfg(any(feature = "onecrl", feature = "crlite"))]
+use crate::revocation::RevocationRecipe;
 use crate::{
 	client::NodeEnvRecipe,
 	error::{FaithError, FaithErrorKind},
@@ -105,6 +110,9 @@ pub(crate) struct TlsRecipe {
 	pub(crate) early_data: bool,
 	pub(crate) identity: Option<ClientIdentity>,
 	pub(crate) extra_roots: Vec<CertificateDer<'static>>,
+	/// The revocation sources the agent checks, if any.
+	#[cfg(any(feature = "onecrl", feature = "crlite"))]
+	pub(crate) revocation: Option<RevocationRecipe>,
 }
 
 impl TlsRecipe {
@@ -126,7 +134,14 @@ impl TlsRecipe {
 		let builder = if node_env.accept_invalid_certs {
 			builder.with_custom_certificate_verifier(Arc::new(NoVerifier))
 		} else {
-			builder.with_custom_certificate_verifier(self.platform_verifier(node_env, provider)?)
+			let extra_roots: Vec<_> = self
+				.extra_roots
+				.iter()
+				.chain(&node_env.extra_ca_certs)
+				.cloned()
+				.collect();
+			let verifier = platform_verifier(&extra_roots, provider)?;
+			builder.with_custom_certificate_verifier(self.with_revocation(verifier, &extra_roots))
 		};
 
 		let mut config = match &self.identity {
@@ -145,6 +160,7 @@ impl TlsRecipe {
 			config.enable_early_data = self.early_data;
 		}
 
+		self.resume_with_revocation(&mut config);
 		Ok(config)
 	}
 
@@ -153,44 +169,78 @@ impl TlsRecipe {
 	/// DNS keeps its own trust: the platform roots alone, whatever the agent's extra roots or
 	/// `NODE_TLS_REJECT_UNAUTHORIZED` say, which is what hickory's default config trusts. The ALPN
 	/// list stays empty so each transport fills in its own.
+	///
+	/// It gains the agent's revocation checks, which count their refusals with the agent's.
 	// spec:DNS#server-order
-	pub(crate) fn dns_config() -> Result<ClientConfig, FaithError> {
+	// spec:REVOC#where-the-check-sits
+	#[cfg(feature = "dns")]
+	pub(crate) fn dns_config(&self) -> Result<ClientConfig, FaithError> {
 		let provider = crypto_provider();
-		let verifier = rustls_platform_verifier::Verifier::new(Arc::clone(&provider))
-			.map_err(|err| FaithError::new(FaithErrorKind::Config, format!("{err:?}")))?;
+		let verifier = platform_verifier(&[], Arc::clone(&provider))?;
 
-		Ok(ClientConfig::builder_with_provider(provider)
+		let mut config = ClientConfig::builder_with_provider(provider)
 			.with_safe_default_protocol_versions()
 			.map_err(|err| FaithError::new(FaithErrorKind::Config, format!("{err:?}")))?
 			.dangerous()
-			.with_custom_certificate_verifier(Arc::new(verifier))
-			.with_no_client_auth())
+			.with_custom_certificate_verifier(self.with_revocation(verifier, &[]))
+			.with_no_client_auth();
+		self.resume_with_revocation(&mut config);
+		Ok(config)
 	}
 
-	/// The platform verifier, trusting the agent's extra roots and `NODE_EXTRA_CA_CERTS` on top of
-	/// the platform store.
-	// spec:TLS#trust-roots
-	fn platform_verifier(
+	/// Wrap `verifier` with the agent's revocation checks, if it has any. `extra_roots` are the
+	/// roots it trusts beyond the platform's, so paths through them are linked too.
+	// spec:REVOC#where-the-check-sits
+	#[cfg_attr(
+		not(any(feature = "onecrl", feature = "crlite")),
+		allow(unused_variables)
+	)]
+	fn with_revocation(
 		&self,
-		node_env: &NodeEnvRecipe,
-		provider: Arc<CryptoProvider>,
-	) -> Result<Arc<dyn ServerCertVerifier>, FaithError> {
-		let extra_roots: Vec<_> = self
-			.extra_roots
-			.iter()
-			.chain(&node_env.extra_ca_certs)
-			.cloned()
-			.collect();
-
-		let verifier = if extra_roots.is_empty() {
-			rustls_platform_verifier::Verifier::new(provider)
-		} else {
-			rustls_platform_verifier::Verifier::new_with_extra_roots(extra_roots, provider)
+		verifier: Arc<dyn ServerCertVerifier>,
+		extra_roots: &[CertificateDer<'static>],
+	) -> Arc<dyn ServerCertVerifier> {
+		#[cfg(any(feature = "onecrl", feature = "crlite"))]
+		if let Some(revocation) = &self.revocation {
+			return revocation.handle.verifier(
+				verifier,
+				revocation.sources,
+				extra_roots,
+				Arc::clone(&revocation.refusals),
+			);
 		}
-		.map_err(|err| FaithError::new(FaithErrorKind::Config, format!("{err:?}")))?;
-
-		Ok(Arc::new(verifier))
+		verifier
 	}
+
+	/// A resumed session skips the verifier, so with revocation checks on, sessions saved before
+	/// the data last changed are not resumed.
+	// spec:REVOC#where-the-check-sits
+	#[cfg_attr(
+		not(any(feature = "onecrl", feature = "crlite")),
+		allow(unused_variables)
+	)]
+	fn resume_with_revocation(&self, config: &mut ClientConfig) {
+		#[cfg(any(feature = "onecrl", feature = "crlite"))]
+		if let Some(revocation) = &self.revocation {
+			config.resumption = Resumption::store(revocation.handle.session_store());
+		}
+	}
+}
+
+/// The platform verifier, trusting `extra_roots` on top of the platform store.
+// spec:TLS#trust-roots
+fn platform_verifier(
+	extra_roots: &[CertificateDer<'static>],
+	provider: Arc<CryptoProvider>,
+) -> Result<Arc<dyn ServerCertVerifier>, FaithError> {
+	let verifier = if extra_roots.is_empty() {
+		rustls_platform_verifier::Verifier::new(provider)
+	} else {
+		rustls_platform_verifier::Verifier::new_with_extra_roots(extra_roots.to_vec(), provider)
+	}
+	.map_err(|err| FaithError::new(FaithErrorKind::Config, format!("{err:?}")))?;
+
+	Ok(Arc::new(verifier))
 }
 
 /// Accepts every certificate, for `NODE_TLS_REJECT_UNAUTHORIZED=0`.
