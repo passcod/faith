@@ -241,6 +241,7 @@ Points that came up while grounding the checklist in the code.
 - The poller's client is built with Faith's TLS config but without the revocation wrapper: its data is protected by the content signature, and checking the poller's own connection against the data it is fetching adds nothing.
 - `clubcard-crlite`'s `builder` feature (dev-dependency only) builds test filters, so CRLite tests need no captured Mozilla filter.
 - Agent-level refusals are tested through an `unstable-internals` Rust hook that points the process-wide handle at a fake source; the Node tests cover option plumbing and the stats shape only, so nothing new is exposed to JS.
+- CRLite filters reach the store through a provider seam: the query side takes a set of held filters and their coverage, whoever supplied them. Faith's own Remote Settings fetch is the one provider here; a system upki cache is a second, on its own card.
 - x509 fields webpki doesn't expose (issuer and subject DN, serial, SPKI, SKI, AKI, the SCT list) come from a DER parser crate; `x509-cert` (RustCrypto) is the pick, as it parses without copying and has no C dependency.
 
 ## Checklist
@@ -303,6 +304,7 @@ A refactor with no behaviour change, landed on its own so the existing TLS tests
 
 - [ ] Parse `cert-revocations` records for the default channel: attachment hash, size and location, full vs incremental, parent
 - [ ] Download attachments, check SHA-256 against the signed record, `CRLiteClubcard::from_bytes`
+- [ ] Split loading from querying: a provider hands the store its filter set, and the query works from that set alone, so a second provider plugs in without touching the verifier
 - [ ] Hold the full filter and every verified delta; a new full filter replaces the set only once downloaded and verified
 - [ ] Query each candidate issuer key with the leaf's serial and SCTs across all held filters; refuse only when revoked under every candidate; `NotEnrolled` / `NotCovered` pass
 - [ ] Tests with builder-made filters: revoked in the full filter, revoked only in a delta, missing delta, no SCTs, unknown issuer, two candidate issuers
