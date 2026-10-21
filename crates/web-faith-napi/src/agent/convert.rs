@@ -117,7 +117,7 @@ impl TryFrom<AgentOptions> for options::AgentOptions {
 			}))
 			.maybe_tls(opts.tls.map(|tls| {
 				move |_| {
-					options::TlsOptions::builder()
+					let builder = options::TlsOptions::builder()
 						.maybe_early_data(tls.early_data)
 						.maybe_required(tls.required)
 						// Either spelling of a PEM is the same bytes to the client.
@@ -125,8 +125,19 @@ impl TryFrom<AgentOptions> for options::AgentOptions {
 						.maybe_extra_roots(
 							tls.extra_roots
 								.map(|roots| roots.iter().map(pem_bytes).collect::<Vec<_>>()),
-						)
-						.build()
+						);
+					// A build without either source takes the group and ignores it.
+					#[cfg(any(feature = "onecrl", feature = "crlite"))]
+					let builder = builder.maybe_revocation(tls.revocation.map(|revocation| {
+						move |builder: options::RevocationOptionsBuilder| {
+							#[cfg(feature = "onecrl")]
+							let builder = builder.maybe_onecrl(revocation.onecrl);
+							#[cfg(feature = "crlite")]
+							let builder = builder.maybe_crlite(revocation.crlite);
+							builder.build()
+						}
+					}));
+					builder.build()
 				}
 			}));
 

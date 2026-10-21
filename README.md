@@ -1288,6 +1288,33 @@ Disables plain-text HTTP.
 
 Default: false.
 
+#### `AgentOptions.tls.revocation: object`
+
+Certificate revocation checking, on top of the platform's own certificate verification. Faith
+checks server certificates against Mozilla's revocation data, the same Firefox uses:
+
+- **OneCRL**, for intermediate and root certificates;
+- **CRLite**, for leaf certificates.
+
+The data is fetched from Mozilla in the background, checked against Mozilla's signature, refreshed
+about once a day, and cached on disk (see [Revocation cache](#revocation-cache)). It is shared by
+every agent in the process. A revoked certificate is refused with a `Network` error naming the
+source. Encrypted DNS servers are checked too.
+
+Setting [`NODE_TLS_REJECT_UNAUTHORIZED=0`](#node_tls_reject_unauthorized) turns both off.
+
+#### `AgentOptions.tls.revocation.onecrl: boolean`
+
+Check OneCRL. Default: true.
+
+#### `AgentOptions.tls.revocation.crlite: boolean`
+
+Check CRLite. CRLite costs a download of a few megabytes, then a few hundred kilobytes a day.
+Default: true.
+
+The CRLite filter decoder, Mozilla's [`clubcard-crlite`](https://crates.io/crates/clubcard-crlite),
+is MPL-2.0 licensed and compiled into the module.
+
 ### `AgentOptions.userAgent`
 
 Custom user agent string.
@@ -1507,6 +1534,10 @@ Returns statistics gathered by this agent:
 - `responsesReceived`
 - `bodiesStarted`
 - `bodiesFinished`
+- `onecrl` and `crlite`: for each [revocation source](#agentoptionstlsrevocation-object) the agent
+  checks, an object with `refused`, how many of the agent's connections the source has refused, and
+  `lastConfirmed`, a `Date` when the process last confirmed the data current with Mozilla (`null`
+  until there is data). `null` for a source the agent does not check.
 
 ## Error mapping
 
@@ -1570,8 +1601,8 @@ parse is ignored rather than fatal.
 
 ### `NODE_TLS_REJECT_UNAUTHORIZED`
 
-When set to exactly `0`, TLS certificate validation is disabled for the agent. Any other value (or
-leaving it unset) keeps validation enabled.
+When set to exactly `0`, TLS certificate validation is disabled for the agent, revocation checking
+included. Any other value (or leaving it unset) keeps validation enabled.
 
 This is insecure — it accepts any certificate, defeating TLS authentication — and exists only to
 match Node's semantics. Prefer `NODE_EXTRA_CA_CERTS` or `tls.extraRoots` to trust a specific
@@ -1603,6 +1634,17 @@ trust store is used directly and these are ignored, as they are by Node on those
 
 Note that `SSL_CERT_FILE` *replaces* the system roots with the given file, whereas
 `NODE_EXTRA_CA_CERTS` *adds* to them.
+
+### Revocation cache
+
+[Revocation data](#agentoptionstlsrevocation-object) is cached in the platform's per-user cache
+directory, under `web-faith/revocation`: `$XDG_CACHE_HOME` (default `~/.cache`) on Linux and other
+Unixes, `~/Library/Caches` on macOS, and `%LOCALAPPDATA%` on Windows. Point `XDG_CACHE_HOME` at a
+persistent volume in a container to keep it across restarts. Processes on one host share it. Where
+it cannot be written, the data is held in memory and each process fetches its own.
+
+The background fetch uses the proxy variables, `NODE_USE_ENV_PROXY`, and `NODE_EXTRA_CA_CERTS`, and
+no agent's options.
 
 ### `SSLKEYLOGFILE`
 

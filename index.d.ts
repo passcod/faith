@@ -56,6 +56,9 @@ export declare class Agent {
    * - `responsesReceived`
    * - `bodiesStarted`
    * - `bodiesFinished`
+   * - `onecrl` and `crlite`: for each revocation source the agent checks, `refused`, how many
+   *   of its connections the source has refused, and `lastConfirmed`, when the process last
+   *   confirmed the source's data current. `null` for a source the agent does not check.
    */
   stats(): AgentStats
   /**
@@ -139,6 +142,10 @@ export declare class AgentStats {
    * When `bodies_started - bodies_finished > 0`, there are bodies holding connections open.
    */
   bodiesFinished: number
+  /** OneCRL revocation checking, or `null` when the agent does not check it. */
+  get onecrl(): RevocationStats | null
+  /** CRLite revocation checking, or `null` when the agent does not check it. */
+  get crlite(): RevocationStats | null
 }
 
 /**
@@ -1044,6 +1051,23 @@ export interface AgentQuirksOptions {
   h1RequestStreaming?: boolean
 }
 
+/** Which revocation sources the agent checks. This is a nested object. */
+export interface AgentRevocationOptions {
+  /**
+   * Check intermediate and root certificates against OneCRL.
+   *
+   * Default: true.
+   */
+  onecrl?: boolean
+  /**
+   * Check leaf certificates against CRLite. CRLite costs a download of a few megabytes, then a
+   * few hundred kilobytes a day.
+   *
+   * Default: true.
+   */
+  crlite?: boolean
+}
+
 /** Timeouts for requests made with this agent. This is a nested object. */
 export interface AgentTimeoutOptions {
   /**
@@ -1110,6 +1134,14 @@ export interface AgentTlsOptions {
    * the wrong format.
    */
   extraRoots?: Array<Buffer | string>
+  /**
+   * Certificate revocation checking against Mozilla's OneCRL and CRLite. This is a nested object.
+   *
+   * Both sources are on by default, and the data is fetched and kept current in the background,
+   * shared by every agent in the process. Turning certificate validation off with
+   * `NODE_TLS_REJECT_UNAUTHORIZED=0` turns this off too.
+   */
+  revocation?: AgentRevocationOptions
 }
 
 /**
@@ -1365,6 +1397,17 @@ export interface ResolverInfo {
   transport: string
   /** How the transport was arrived at: `configured` by the caller, or `conventional` DNS. */
   source: string
+}
+
+/** One revocation source, as `agent.stats()` reports it. */
+export interface RevocationStats {
+  /** The agent's connections this source has refused, over HTTP and to DNS servers alike. */
+  refused: number
+  /**
+   * When the process last confirmed this source's data current with Mozilla, whether or not it
+   * had changed. The same for every agent in the process; `null` until there is data.
+   */
+  lastConfirmed: Date | null
 }
 
 /**

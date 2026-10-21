@@ -342,13 +342,13 @@ A refactor with no behaviour change, landed on its own so the existing TLS tests
 
 ### 12. Node surface
 
-- [ ] `web-faith-napi` features `onecrl` and `crlite`, both in its default set
-- [ ] `AgentTlsOptions.revocation { onecrl?, crlite? }` in `agent/options.rs`, mapped in `agent/convert.rs`
-- [ ] napi `AgentStats` gains the revocation fields, following the existing stats field conventions
-- [ ] Rebuild to regenerate `index.d.ts`; update `wrapper.d.ts` if it restates the option types
-- [ ] Tape tests: options accepted, stats shape with sources on and off
+- [x] `web-faith-napi` features `onecrl` and `crlite`, both in its default set
+- [x] `AgentTlsOptions.revocation { onecrl?, crlite? }` in `agent/options.rs`, mapped in `agent/convert.rs`. Like the other napi option types it is always declared; a build without either source ignores it
+- [x] napi `AgentStats` gains `onecrl` and `crlite` getters returning `{ refused, lastConfirmed: Date | null }` or `null`, so the class stays a class and the time is a `Date` as in `connections()`
+- [x] Rebuild to regenerate `index.d.ts`; `wrapper.d.ts` re-exports `AgentRevocationOptions` and `RevocationStats`
+- [x] Tape tests: options accepted, stats shape with sources on and off, `NODE_TLS_REJECT_UNAUTHORIZED=0`
 
 ### 13. Release plumbing
 
-- [ ] `release-plz.toml` comment says seven published crates; check whether the new crate needs an entry
-- [ ] Top-level README mentions revocation checking and the MPL-2.0 `clubcard-crlite` dependency behind `crlite`
+- [x] `release-plz.toml` comment says seven published crates; the new crate needs no entry of its own. It starts at `1.0.0`, as the RUST spec requires of every published crate
+- [x] Top-level README documents `tls.revocation`, the stats fields, the revocation cache location, and the MPL-2.0 `clubcard-crlite` dependency behind `crlite`

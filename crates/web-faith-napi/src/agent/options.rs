@@ -671,6 +671,29 @@ pub struct AgentTlsOptions {
 	/// few options that will cause the `Agent` constructor to throw if the input is in
 	/// the wrong format.
 	pub extra_roots: Option<Vec<Either<Buffer, String>>>,
+	/// Certificate revocation checking against Mozilla's OneCRL and CRLite. This is a nested object.
+	///
+	/// Both sources are on by default, and the data is fetched and kept current in the background,
+	/// shared by every agent in the process. Turning certificate validation off with
+	/// `NODE_TLS_REJECT_UNAUTHORIZED=0` turns this off too.
+	// spec:REVOC#opting-out
+	pub revocation: Option<AgentRevocationOptions>,
+}
+
+/// Which revocation sources the agent checks. This is a nested object.
+// spec:REVOC#opting-out
+#[napi(object)]
+#[derive(Debug, Clone, Default)]
+pub struct AgentRevocationOptions {
+	/// Check intermediate and root certificates against OneCRL.
+	///
+	/// Default: true.
+	pub onecrl: Option<bool>,
+	/// Check leaf certificates against CRLite. CRLite costs a download of a few megabytes, then a
+	/// few hundred kilobytes a day.
+	///
+	/// Default: true.
+	pub crlite: Option<bool>,
 }
 
 impl Debug for AgentTlsOptions {
@@ -680,7 +703,7 @@ impl Debug for AgentTlsOptions {
 			.field("identity", &"[sensitive]")
 			.field("required", &self.required)
 			.field("extra_roots", &self.extra_roots.as_ref().map(|r| r.len()))
-			.finish()
+			.finish_non_exhaustive()
 	}
 }
 
@@ -702,6 +725,7 @@ impl Clone for AgentTlsOptions {
 					})
 					.collect()
 			}),
+			revocation: self.revocation.clone(),
 		}
 	}
 }
