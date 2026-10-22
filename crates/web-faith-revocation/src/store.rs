@@ -5,6 +5,9 @@
 
 // spec:REVOC#keeping-current
 // spec:REVOC#the-cache
+// spec:REVOC#a-usable-cache
+// spec:REVOC#a-fresh-cache
+// spec:REVOC#choosing-between-providers
 
 use std::{
 	collections::HashMap,
@@ -17,6 +20,8 @@ use std::{
 
 #[cfg(feature = "crlite")]
 use std::collections::HashSet;
+#[cfg(feature = "upki")]
+use std::{path::PathBuf, time::Duration};
 
 use rustls_pki_types::{CertificateDer, ServerName, UnixTime};
 
@@ -24,8 +29,10 @@ use rustls_pki_types::{CertificateDer, ServerName, UnixTime};
 use crate::crlite::{self, Channel, Filter, Filters};
 #[cfg(feature = "onecrl")]
 use crate::onecrl::{self, OneCrl};
+#[cfg(feature = "upki")]
+use crate::upki::{self, Locator};
 use crate::{
-	Source, Sources,
+	InForce, Provider, Source, Sources,
 	cache::{Cache, Cached, from_secs, secs},
 	error::Error,
 	links::{Links, RootIndex},
@@ -71,6 +78,33 @@ pub(crate) struct Crlite {
 	pub(crate) filters: Filters,
 }
 
+/// The CRLite data read from the system's upki cache, which Faith does not fetch, sign-check or
+/// write, and so does not hold as a [`Held`].
+#[cfg(feature = "upki")]
+#[derive(Debug, Default)]
+pub(crate) struct UpkiHeld {
+	pub(crate) data: Option<Arc<Crlite>>,
+	/// The hashes of the filters in `data`, to tell a reload that changed them from one that did
+	/// not.
+	hashes: HashSet<[u8; 32]>,
+	/// When upki last fetched, as the data in `data` has it.
+	pub(crate) confirmed: Option<SystemTime>,
+	/// Whether `confirmed` is recent enough for the data to be the only CRLite data in force.
+	/// Kept here, and updated by the poller's local check, so no handshake reads a clock.
+	pub(crate) fresh: bool,
+	/// The cache directory and manifest time of the last read, whether or not it worked, so a
+	/// cache that stays unusable is not read again until it changes.
+	seen: Option<(PathBuf, SystemTime)>,
+}
+
+/// How the system's upki cache is found and judged.
+#[cfg(feature = "upki")]
+#[derive(Clone, Debug)]
+pub(crate) struct UpkiSettings {
+	pub(crate) location: upki::UpkiLocation,
+	pub(crate) max_age: Duration,
+}
+
 /// Everything the process holds, shared by the verifiers and the poller.
 #[derive(Debug)]
 pub(crate) struct Store {
@@ -90,6 +124,12 @@ pub(crate) struct Store {
 	pub(crate) crlite: RwLock<Held<Crlite>>,
 	#[cfg(feature = "crlite")]
 	crlite_load: Once,
+	#[cfg(feature = "upki")]
+	pub(crate) upki: RwLock<UpkiHeld>,
+	#[cfg(feature = "upki")]
+	upki_load: Once,
+	#[cfg(feature = "upki")]
+	upki_settings: UpkiSettings,
 	pub(crate) roots: RwLock<Option<Arc<RootIndex>>>,
 	roots_load: Once,
 }
@@ -99,7 +139,11 @@ pub(crate) struct Store {
 const VERIFIED_CAPACITY: usize = 1024;
 
 impl Store {
-	pub(crate) fn new(trust: Trust, cache: Cache) -> Self {
+	pub(crate) fn new(
+		trust: Trust,
+		cache: Cache,
+		#[cfg(feature = "upki")] upki_settings: UpkiSettings,
+	) -> Self {
 		Self {
 			trust,
 			cache,
@@ -113,6 +157,12 @@ impl Store {
 			crlite: RwLock::default(),
 			#[cfg(feature = "crlite")]
 			crlite_load: Once::new(),
+			#[cfg(feature = "upki")]
+			upki: RwLock::default(),
+			#[cfg(feature = "upki")]
+			upki_load: Once::new(),
+			#[cfg(feature = "upki")]
+			upki_settings,
 			roots: RwLock::default(),
 			roots_load: Once::new(),
 		}
@@ -169,8 +219,9 @@ impl Store {
 		#[cfg(feature = "crlite")]
 		let crlite = sources
 			.crlite
-			.then(|| self.crlite.read().expect("poisoned").data.clone())
-			.flatten();
+			.then(|| self.crlite_choice(sources.uses_upki()))
+			.flatten()
+			.map(|(_, data, _)| data);
 
 		// Linking costs a parse of every certificate, so it is skipped when no source has data.
 		let mut any = false;
@@ -213,15 +264,84 @@ impl Store {
 		*self.roots.write().expect("poisoned") = Some(index);
 	}
 
-	pub(crate) fn has_data(&self, source: Source) -> bool {
+	/// The data in force for an agent using `sources`, and when it was last confirmed current.
+	/// `None` until there is any.
+	// spec:REVOC#reporting
+	pub(crate) fn in_force(&self, source: Source, sources: Sources) -> Option<InForce> {
 		match source {
 			#[cfg(feature = "onecrl")]
-			Source::OneCrl => self.onecrl.read().expect("poisoned").data.is_some(),
+			Source::OneCrl => {
+				let held = self.onecrl.read().expect("poisoned");
+				held.data.is_some().then_some(InForce {
+					provider: Provider::RemoteSettings,
+					confirmed: held.confirmed,
+				})
+			}
 			#[cfg(feature = "crlite")]
-			Source::Crlite => self.crlite.read().expect("poisoned").data.is_some(),
+			Source::Crlite => self
+				.crlite_choice(sources.uses_upki())
+				.map(|(provider, _, confirmed)| InForce {
+					provider,
+					confirmed,
+				}),
 		}
 	}
 
+	/// The CRLite data an agent is checked against, which provider it came from, and when it was
+	/// last confirmed. An agent that uses upki is given the system's data while it is usable and
+	/// fresh, and otherwise Faith's own unless the system's is stale but newer than it.
+	// spec:REVOC#choosing-between-providers
+	#[cfg(feature = "crlite")]
+	#[cfg_attr(not(feature = "upki"), allow(unused_variables))]
+	fn crlite_choice(&self, upki: bool) -> Option<(Provider, Arc<Crlite>, Option<SystemTime>)> {
+		let own = || {
+			let held = self.crlite.read().expect("poisoned");
+			let data = held.data.clone()?;
+			Some((Provider::RemoteSettings, data, held.confirmed))
+		};
+
+		#[cfg(feature = "upki")]
+		if upki {
+			let held = self.upki.read().expect("poisoned");
+			if let Some(data) = held.data.clone() {
+				let theirs = (Provider::Upki, data, held.confirmed);
+				if held.fresh {
+					return Some(theirs);
+				}
+				drop(held);
+				// Stale data stays in force until Faith's own is newer, so there is no gap while
+				// the first fetch lands.
+				return match own() {
+					Some(ours) if ours.2 > theirs.2 => Some(ours),
+					_ => Some(theirs),
+				};
+			}
+		}
+		own()
+	}
+
+	fn crlite_provider(&self) -> Option<Provider> {
+		#[cfg(feature = "crlite")]
+		return self.crlite_choice(true).map(|(provider, ..)| provider);
+		#[cfg(not(feature = "crlite"))]
+		None
+	}
+
+	/// Whether the poller must keep Faith's own CRLite data current for an agent that uses upki
+	/// as `upki` says: it does unless the system's data is usable and fresh.
+	pub(crate) fn needs_own_crlite(&self, upki: bool) -> bool {
+		!(upki && self.upki_fresh())
+	}
+
+	/// Whether the system's CRLite data is held and fresh.
+	pub(crate) fn upki_fresh(&self) -> bool {
+		#[cfg(feature = "upki")]
+		return self.upki.read().expect("poisoned").fresh;
+		#[cfg(not(feature = "upki"))]
+		false
+	}
+
+	/// When Faith's own data for `source` was last confirmed current.
 	pub(crate) fn confirmed(&self, source: Source) -> Option<SystemTime> {
 		match source {
 			#[cfg(feature = "onecrl")]
@@ -231,7 +351,7 @@ impl Store {
 		}
 	}
 
-	/// The held collection's timestamp, and whether everything it names is held.
+	/// The held collection's timestamp, and whether everything it names is held. Faith's own data.
 	pub(crate) fn held(&self, source: Source) -> (Option<u64>, bool) {
 		match source {
 			#[cfg(feature = "onecrl")]
@@ -276,6 +396,8 @@ impl Store {
 
 	/// Record that the source's data was confirmed current at `now`, and write that to the cache.
 	pub(crate) fn confirm(&self, source: Source, now: SystemTime) {
+		// Faith's own data being newer can hand CRLite back from stale system data.
+		let before = self.crlite_provider();
 		let (signed, verified_at, collection) = match source {
 			#[cfg(feature = "onecrl")]
 			Source::OneCrl => {
@@ -290,6 +412,9 @@ impl Store {
 				(held.signed.clone(), held.verified_at, crlite::COLLECTION)
 			}
 		};
+		if self.crlite_provider() != before {
+			self.bump_epoch();
+		}
 		if let Some(signed) = signed {
 			self.cache.write_collection(
 				collection,
@@ -299,6 +424,99 @@ impl Store {
 					confirmed_at: secs(now),
 				},
 			);
+		}
+	}
+
+	/// Read the system's upki cache for the first time, once per process. Synchronous, for the
+	/// same reason as [`load`](Self::load).
+	#[cfg(feature = "upki")]
+	pub(crate) fn load_upki(&self) {
+		self.upki_load.call_once(|| self.refresh_upki());
+	}
+
+	/// Check the system's upki cache without touching the network: read it again if its manifest
+	/// has changed since the last read, replacing the data held only when the new data is usable,
+	/// and work out whether the data held is still fresh.
+	///
+	/// The location is worked out afresh each time, so a cache that appears, moves or goes away
+	/// is noticed. Data already held stays in force through a cache gone absent or unusable, and
+	/// ages.
+	// spec:REVOC#keeping-up-with-the-cache
+	#[cfg(feature = "upki")]
+	pub(crate) fn refresh_upki(&self) {
+		let before = self.crlite_provider();
+		let dir = match &self.upki_settings.location {
+			upki::UpkiLocation::System => Locator::platform().revocation_dir(),
+			upki::UpkiLocation::Dir(dir) => Some(dir.clone()),
+			upki::UpkiLocation::Off => None,
+		};
+
+		let replaced = dir.is_some_and(|dir| self.reload_upki(dir));
+
+		let now = SystemTime::now();
+		let mut held = self.upki.write().expect("poisoned");
+		// A manifest dated in the future is a clock that was wrong, not a stale fetch.
+		let fresh = held.data.is_some()
+			&& held.confirmed.is_some_and(|at| {
+				now.duration_since(at)
+					.map_or(true, |age| age <= self.upki_settings.max_age)
+			});
+		let flipped = held.fresh != fresh;
+		held.fresh = fresh;
+		drop(held);
+
+		if replaced || flipped || self.crlite_provider() != before {
+			self.bump_epoch();
+		}
+	}
+
+	/// Read the cache in `dir` if its manifest has changed since it was last read. `true` when
+	/// that replaced the data held.
+	#[cfg(feature = "upki")]
+	fn reload_upki(&self, dir: PathBuf) -> bool {
+		let stat = std::fs::metadata(dir.join("manifest.json"))
+			.and_then(|meta| meta.modified())
+			.ok();
+
+		let reuse: Vec<Arc<Filter>> = {
+			let held = self.upki.read().expect("poisoned");
+			if let Some(stat) = stat
+				&& held.seen.as_ref() == Some(&(dir.clone(), stat))
+			{
+				return false;
+			}
+			held.data
+				.iter()
+				.flat_map(|data| data.filters.filters.iter().cloned())
+				.collect()
+		};
+		let Some(stat) = stat else {
+			// Nothing to read; whatever turns up next is read.
+			self.upki.write().expect("poisoned").seen = None;
+			return false;
+		};
+
+		// Not under the lock: a first read decodes megabytes.
+		let read = upki::read(&dir, &reuse);
+		let mut held = self.upki.write().expect("poisoned");
+		match read {
+			Ok(snapshot) => {
+				held.seen = Some((dir, snapshot.confirmed));
+				held.confirmed = Some(snapshot.confirmed);
+				if held.data.is_some() && held.hashes == snapshot.hashes {
+					return false;
+				}
+				held.data = Some(Arc::new(Crlite {
+					filters: snapshot.filters,
+				}));
+				held.hashes = snapshot.hashes;
+				true
+			}
+			// An unusable cache leaves the data held in force.
+			Err(_) => {
+				held.seen = Some((dir, stat));
+				false
+			}
 		}
 	}
 
