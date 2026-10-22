@@ -68,8 +68,9 @@ impl Demand {
 	}
 
 	/// Whether the system's cache needs watching.
+	#[cfg(feature = "upki")]
 	fn watches_upki(&self) -> bool {
-		cfg!(feature = "upki") && self.crlite_with_upki
+		self.crlite_with_upki
 	}
 
 	/// The sources to check at Remote Settings now. CRLite is left out while the system supplies it.

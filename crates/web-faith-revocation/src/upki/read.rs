@@ -103,18 +103,15 @@ fn read_once(dir: &Path, reuse: &HashMap<[u8; 32], &Arc<Filter>>) -> Result<Snap
 	// bytes read rather than whatever replaced them since.
 	let manifest_file = File::open(dir.join("manifest.json"))?;
 	let confirmed = manifest_file.metadata()?.modified()?;
-	let manifest: Manifest = serde_json::from_slice(&read_capped(manifest_file, MAX_MANIFEST)?)
-		.map_err(Error::from)?;
+	let manifest: Manifest =
+		serde_json::from_slice(&read_capped(manifest_file, MAX_MANIFEST)?).map_err(Error::from)?;
 	let files: HashMap<&str, &ManifestFile> = manifest
 		.files
 		.iter()
 		.map(|file| (file.filename.as_str(), file))
 		.collect();
 
-	let names = index::filter_names(&read_capped(
-		File::open(dir.join("index.bin"))?,
-		MAX_INDEX,
-	)?)?;
+	let names = index::filter_names(&read_capped(File::open(dir.join("index.bin"))?, MAX_INDEX)?)?;
 	if names.is_empty() {
 		return Err(Error::Upki("the index names no filters").into());
 	}

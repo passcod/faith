@@ -103,12 +103,12 @@ mod remote_settings;
 mod session;
 mod signature;
 mod store;
-#[cfg(feature = "upki")]
-mod upki;
 #[cfg(any(test, feature = "test-support"))]
 pub mod test_support;
 #[cfg(test)]
 mod tests;
+#[cfg(feature = "upki")]
+mod upki;
 mod verifier;
 
 pub use error::{Error, Revoked};
@@ -412,6 +412,10 @@ impl Revocation {
 	/// CRLite data or can do with the system's. Until a source has data, from the cache or the
 	/// network, it refuses nothing.
 	// spec:REVOC#the-cache
+	#[cfg_attr(
+		not(any(feature = "onecrl", feature = "crlite")),
+		allow(clippy::never_loop)
+	)]
 	pub fn enable(&self, sources: Sources) {
 		let store = &self.inner.store;
 		store.load_roots();

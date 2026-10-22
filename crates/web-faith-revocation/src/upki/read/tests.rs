@@ -5,15 +5,18 @@ use std::{
 
 use super::*;
 use crate::test_support::{
-	crlite_filter, set_upki_manifest_time, write_upki_cache, write_upki_index,
-	write_upki_manifest,
+	crlite_filter, set_upki_manifest_time, write_upki_cache, write_upki_index, write_upki_manifest,
 };
+use crate::upki::Locator;
 
 const FULL: &str = "20261017-1-default.filter";
 const DELTA: &str = "20261018-0-default.filter.delta";
 
 fn filter(serial: u8) -> Vec<u8> {
-	crlite_filter(&[([serial; 32], vec![serial])], &[([serial; 32], vec![0xff])])
+	crlite_filter(
+		&[([serial; 32], vec![serial])],
+		&[([serial; 32], vec![0xff])],
+	)
 }
 
 fn confirmed() -> SystemTime {
@@ -84,12 +87,19 @@ fn a_filter_replaced_by_a_new_index_while_reading_is_found_on_the_second_look() 
 	// The first attempt finds a name the old index still has; the second sees a settled cache.
 	// Simulated by reading an index that names a file that is absent, then settling it.
 	let extra = filter(3);
-	write_upki_index(cache.path(), &[FULL, DELTA, "20261019-0-default.filter.delta"]);
+	write_upki_index(
+		cache.path(),
+		&[FULL, DELTA, "20261019-0-default.filter.delta"],
+	);
 	assert!(cache.read().is_err());
 
 	write_upki_cache(
 		cache.path(),
-		&[(FULL, &cache.full), (DELTA, &cache.delta), ("20261019-0-default.filter.delta", &extra)],
+		&[
+			(FULL, &cache.full),
+			(DELTA, &cache.delta),
+			("20261019-0-default.filter.delta", &extra),
+		],
 		confirmed(),
 	);
 	assert_eq!(cache.read().expect("settled").filters.filters.len(), 3);
@@ -161,7 +171,11 @@ fn an_index_naming_nothing_is_unusable() {
 fn a_filter_that_does_not_decode_is_unusable() {
 	let cache = Cache::new();
 	let junk = b"not a filter".to_vec();
-	write_upki_cache(cache.path(), &[(FULL, &cache.full), (DELTA, &junk)], confirmed());
+	write_upki_cache(
+		cache.path(),
+		&[(FULL, &cache.full), (DELTA, &junk)],
+		confirmed(),
+	);
 	assert!(cache.read().is_err());
 }
 
@@ -204,4 +218,15 @@ fn a_reused_filter_whose_file_is_gone_is_not_usable() {
 	let first = cache.read().expect("usable");
 	fs::remove_file(cache.path().join(FULL)).expect("removing");
 	assert!(read(cache.path(), &first.filters.filters).is_err());
+}
+
+/// Reads whatever upki cache this host has, which a CI machine does not. Run with `--ignored`.
+#[test]
+#[ignore = "needs a upki cache on the host"]
+fn the_hosts_own_cache_is_usable() {
+	let dir = Locator::platform()
+		.revocation_dir()
+		.expect("upki's cache is located");
+	let snapshot = read(&dir, &[]).expect("the host's cache is usable");
+	assert!(!snapshot.filters.filters.is_empty());
 }

@@ -18,6 +18,6 @@ mod index;
 mod locate;
 mod read;
 
-pub use locate::UpkiLocation;
 pub(crate) use locate::Locator;
+pub use locate::UpkiLocation;
 pub(crate) use read::read;

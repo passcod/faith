@@ -66,7 +66,8 @@ pub(crate) fn filter_names(index: &[u8]) -> Result<Vec<String>, Error> {
 	}
 
 	let mut names: Vec<String> = Vec::with_capacity(count);
-	for slot in rest[..names_len].chunks_exact(NAME_SLOT) {
+	let (slots, _) = rest[..names_len].as_chunks::<NAME_SLOT>();
+	for slot in slots {
 		let end = slot.iter().position(|&byte| byte == 0).unwrap_or(NAME_SLOT);
 		let Ok(name) = std::str::from_utf8(&slot[..end]) else {
 			return bad("index.bin names a filter that is not text");

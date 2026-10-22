@@ -116,7 +116,7 @@ Faith locates the cache as upki does.
 The configuration file is the user's own `upki/config.toml` in the per-user configuration directory when that exists, and otherwise the system one: `/etc/upki/config.toml` on Unix, `/Library/Application Support/upki/config.toml` on macOS, and `upki\config.toml` under `%ProgramData%\rustls` on Windows.
 Its `cache-dir` names the directory that holds the cache, and the CRLite data is in that directory's `revocation` subdirectory.
 Without a configuration file the cache directory is upki's per-user cache directory where that exists, and otherwise its system one: `/var/cache/upki`, `/Library/Caches/dev.rustls.upki`, or `upki\cache` under `%ProgramData%\rustls`.
-A configuration file that exists but cannot be read or parsed leaves the cache unlocated.
+A configuration file that exists but cannot be read or parsed, or that names no `cache-dir`, leaves the cache unlocated, and the system's file is not consulted in place of a user's that does.
 The location is worked out afresh at each check of the cache, so a cache installed or reconfigured while the process runs is found.
 
 ### A usable cache

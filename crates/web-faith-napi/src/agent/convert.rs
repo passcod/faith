@@ -134,6 +134,8 @@ impl TryFrom<AgentOptions> for options::AgentOptions {
 							let builder = builder.maybe_onecrl(revocation.onecrl);
 							#[cfg(feature = "crlite")]
 							let builder = builder.maybe_crlite(revocation.crlite);
+							#[cfg(feature = "upki")]
+							let builder = builder.maybe_upki(revocation.upki);
 							builder.build()
 						}
 					}));

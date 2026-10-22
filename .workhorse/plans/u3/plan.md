@@ -54,10 +54,10 @@ That keeps a 6 MB decode off the startup of a host whose upki cache is fresh.
 
 The crate has no release tag, so signatures can still change; check `git tag` and crates.io before landing, and keep the old `enable(source)` shape if it turns out to be published.
 
-- `RevocationConfig` gains `upki: UpkiLocation` (`System` by default, `Dir(PathBuf)` to name the `revocation` directory directly, for tests and embedders), `upki_poll_interval` (ten minutes) and `upki_max_age` (three days). These are config fields with defaults so tests need not wait; the spec's numbers are the defaults.
+- `RevocationConfig` gains `upki: UpkiLocation` (`System` by default, `Dir(PathBuf)` to name the `revocation` directory directly, and `Off` to look nowhere, for tests and embedders), `upki_poll_interval` (ten minutes) and `upki_max_age` (three days). These are config fields with defaults so tests need not wait; the spec's numbers are the defaults.
 - `Sources` gains `upki: bool`, on in `all()`, behind the `upki` feature.
 - `Revocation::enable` takes the agent's `Sources`, since the per-source loop in `RevocationRecipe::start` loses the information it needs.
-- `Revocation::in_force(source, upki) -> Option<InForce>` replaces `last_confirmed`; `InForce { provider: Provider, confirmed: Option<SystemTime> }` and `Provider::{RemoteSettings, Upki}`, both `#[non_exhaustive]`.
+- `Revocation::in_force(source, sources) -> Option<InForce>`, taking the agent's `Sources` rather than a bare flag, replaces `last_confirmed`; `InForce { provider: Provider, confirmed: Option<SystemTime> }` and `Provider::{RemoteSettings, Upki}`, both `#[non_exhaustive]`.
 
 ### Real-data check
 
@@ -67,70 +67,70 @@ Alongside the builder-made fixtures, load this machine's real cache and compare 
 
 ### 1. Locate the cache (`upki/locate.rs`)
 
-- [ ] `upki` feature on `web-faith-revocation`: `upki = ["crlite", "dep:toml", "dep:directories"]`, both added with `cargo add` (`toml` with only `parse` and `serde`)
-- [ ] `Locator { user_config_dir, user_cache_dir, system_config_dir, system_cache_dir }` and `Locator::platform()` from `directories::ProjectDirs::from("dev", "rustls", "upki")` plus the per-platform system constants, with `%ProgramData%` read and defaulted to `C:\ProgramData`
-- [ ] Config choice: user `config.toml` if it exists, else the system one, else none; a file that exists but cannot be read, or has no `cache-dir`, leaves the cache unlocated; unknown keys are ignored
-- [ ] No config file: the user cache directory if it exists, else the system one if it exists, else unlocated
-- [ ] Resolve `<cache-dir>/revocation` from the `cache-dir` key
-- [ ] `UpkiLocation::{System, Dir}` on `RevocationConfig`; `Dir` skips the lookup
-- [ ] Unit tests with temp directories: user config beats system, config `cache-dir` honoured, no config with a user cache, no config with only a system cache, nothing present, malformed config, config without `cache-dir`
+- [x] `upki` feature on `web-faith-revocation`: `upki = ["crlite", "dep:toml", "dep:directories"]`, both added with `cargo add` (`toml` with only `parse` and `serde`)
+- [x] `Locator { user_config_dir, user_cache_dir, system_config_dir, system_cache_dir }` and `Locator::platform()` from `directories::ProjectDirs::from("dev", "rustls", "upki")` plus the per-platform system constants, with `%ProgramData%` read and defaulted to `C:\ProgramData`
+- [x] Config choice: user `config.toml` if it exists, else the system one, else none; a file that exists but cannot be read, or has no `cache-dir`, leaves the cache unlocated; unknown keys are ignored
+- [x] No config file: the user cache directory if it exists, else the system one if it exists, else unlocated
+- [x] Resolve `<cache-dir>/revocation` from the `cache-dir` key
+- [x] `UpkiLocation::{System, Dir, Off}` on `RevocationConfig`; `Dir` skips the lookup
+- [x] Unit tests with temp directories: user config beats system, config `cache-dir` honoured, no config with a user cache, no config with only a system cache, nothing present, malformed config, config without `cache-dir`
 
 ### 2. Read the cache (`upki/read.rs`, `upki/index.rs`)
 
-- [ ] `index.rs`: parse `upkiidx1` and `upkiidx0` headers and the filename table from one read of `index.bin`, bounds-checking every count against the file length, rejecting a table that does not fit, and validating each name (`[A-Za-z0-9-._]`, 1 to 32 bytes, not `.` or `..`, no path separators); capped file size
-- [ ] `read.rs`: open `manifest.json`, take the mtime from the same handle, then parse it; read `index.bin`; for each named filter require a manifest entry, read the file (capped like `cache::MAX_FILE`), check its SHA-256 against the manifest, decode with `Filter::decode`; an index naming no filters is unusable
-- [ ] A missing filter re-reads from `index.bin` once before the cache counts as unusable; any other failure is unusable at once
-- [ ] Reuse already-decoded filters by hash on a reload, so a 6 hourly rewrite of the manifest costs two small reads rather than a 6 MB decode
-- [ ] Result type carrying the `Filters`, the hash set, and the confirmed time; errors fold into the crate's `Error` with a variant for a damaged cache
-- [ ] Unit tests on bytes: both index versions, bad magic, truncated header, a name count beyond the file, a log count that overflows, names with `..`, `/`, `\`, NUL inside, 33 bytes, empty, and a table that ends mid-name
-- [ ] `test_support`: a writer that lays down a upki-format directory (index with an empty log directory, manifest, filters from `crlite_filter`) so tests can also corrupt a filter, drop a file, drop the manifest, change an mtime with `File::set_modified`, and swap in a new set
-- [ ] Unit tests on the fixture: usable cache, filter missing, filter hash mismatch, filter not in the manifest, no manifest, index naming nothing, undecodable filter, a name that would escape the directory
+- [x] `index.rs`: parse `upkiidx1` and `upkiidx0` headers and the filename table from one read of `index.bin`, bounds-checking every count against the file length, rejecting a table that does not fit, and validating each name (`[A-Za-z0-9-._]`, 1 to 32 bytes, not `.` or `..`, no path separators); capped file size
+- [x] `read.rs`: open `manifest.json`, take the mtime from the same handle, then parse it; read `index.bin`; for each named filter require a manifest entry, read the file (capped like `cache::MAX_FILE`), check its SHA-256 against the manifest, decode with `Filter::decode`; an index naming no filters is unusable
+- [x] A missing filter re-reads from `index.bin` once before the cache counts as unusable; any other failure is unusable at once
+- [x] Reuse already-decoded filters by hash on a reload, so a 6 hourly rewrite of the manifest costs two small reads rather than a 6 MB decode
+- [x] Result type carrying the `Filters`, the hash set, and the confirmed time; errors fold into the crate's `Error` with a variant for a damaged cache
+- [x] Unit tests on bytes: both index versions, bad magic, truncated header, a name count beyond the file, a log count that overflows, names with `..`, `/`, `\`, NUL inside, 33 bytes, empty, and a table that ends mid-name
+- [x] `test_support`: a writer that lays down a upki-format directory (index with an empty log directory, manifest, filters from `crlite_filter`) so tests can also corrupt a filter, drop a file, drop the manifest, change an mtime with `File::set_modified`, and swap in a new set
+- [x] Unit tests on the fixture: usable cache, filter missing, filter hash mismatch, filter not in the manifest, no manifest, index naming nothing, undecodable filter, a name that would escape the directory
 
 ### 3. Store: second slot and per-agent choice (`store.rs`)
 
-- [ ] `Store.upki: RwLock<UpkiHeld>` and a `upki_fresh` flag; `upki_poll`-facing methods `load_upki` (once, at first enable), `refresh_upki` (stat the manifest, reload on a changed mtime, re-evaluate freshness, return what changed) and `wants_own_crlite`
-- [ ] `refresh_upki` re-runs the lookup every call, so a cache that appears, moves, or vanishes is noticed; a failed reload keeps the data held; an unchanged filter set updates only `confirmed`; a changed set or a flipped freshness bumps the epoch
-- [ ] Selection function per the design notes, used by `refusing_source` in place of reading `self.crlite` directly; `refusing_source` takes the agent's `Sources.upki`
-- [ ] Lazy own-cache load: split `load(Source::Crlite)` so the `Once` can be fired from `enable` or from the poller
-- [ ] `in_force(source, upki)` and `has_data` updated for the two slots; `held`/`confirmed` keep meaning Faith's own data
-- [ ] `// spec:REVOC#a-usable-cache`, `#a-fresh-cache`, `#choosing-between-providers` traceability comments
-- [ ] Store tests over the matrix: fresh upki beats own; upki absent gives own; stale upki and no own data stays in force; stale with newer own gives own; stale with older own gives upki; agent with upki off gets own only; freshness flipping both ways moves the epoch; an unchanged reload does not; a failed reload keeps the data held
+- [x] `Store.upki: RwLock<UpkiHeld>` and a `upki_fresh` flag; `upki_poll`-facing methods `load_upki` (once, at first enable), `refresh_upki` (stat the manifest, reload on a changed mtime, re-evaluate freshness, return what changed) and `wants_own_crlite`
+- [x] `refresh_upki` re-runs the lookup every call, so a cache that appears, moves, or vanishes is noticed; a failed reload keeps the data held; an unchanged filter set updates only `confirmed`; a changed set or a flipped freshness bumps the epoch
+- [x] Selection function per the design notes, used by `refusing_source` in place of reading `self.crlite` directly; `refusing_source` takes the agent's `Sources.upki`
+- [x] Lazy own-cache load: split `load(Source::Crlite)` so the `Once` can be fired from `enable` or from the poller
+- [x] `in_force(source, upki)` and `has_data` updated for the two slots; `held`/`confirmed` keep meaning Faith's own data
+- [x] `// spec:REVOC#a-usable-cache`, `#a-fresh-cache`, `#choosing-between-providers` traceability comments
+- [x] Store tests over the matrix: fresh upki beats own; upki absent gives own; stale upki and no own data stays in force; stale with newer own gives own; stale with older own gives upki; agent with upki off gets own only; freshness flipping both ways moves the epoch; an unchanged reload does not; a failed reload keeps the data held
 
 ### 4. Poller (`poller.rs`)
 
-- [ ] Message type for the channel carries the agent's `Sources` so the poller learns whether any agent wants own CRLite
-- [ ] Second timer for the local check at `upki_poll_interval`; a tick calls `refresh_upki`, and brings the Remote Settings check forward when own demand has appeared
-- [ ] `poll` and `next_due` leave CRLite out while `wants_own_crlite` is false; `poll` returns `true` when only CRLite was skipped
-- [ ] Fire the lazy own-cache load on the poller thread when demand first appears
-- [ ] The poller thread still starts for CRLite-via-upki alone
-- [ ] Tests against the fake server with a fixture directory: fresh upki means no CRLite request while OneCRL is still fetched; ageing the manifest past `upki_max_age` starts CRLite requests; refreshing it stops them; an agent with upki off fetches regardless; a cache that appears mid-process is picked up; a manifest rewrite with new filters is enforced without a restart
+- [x] Message type for the channel carries the agent's `Sources` so the poller learns whether any agent wants own CRLite
+- [x] Second timer for the local check at `upki_poll_interval`; a tick calls `refresh_upki`, and brings the Remote Settings check forward when own demand has appeared
+- [x] `poll` and `next_due` leave CRLite out while `wants_own_crlite` is false; `poll` returns `true` when only CRLite was skipped
+- [x] Fire the lazy own-cache load on the poller thread when demand first appears
+- [x] The poller thread still starts for CRLite-via-upki alone
+- [x] Tests against the fake server with a fixture directory: fresh upki means no CRLite request while OneCRL is still fetched; ageing the manifest past `upki_max_age` starts CRLite requests; refreshing it stops them; an agent with upki off fetches regardless; a cache that appears mid-process is picked up; a manifest rewrite with new filters is enforced without a restart
 
 ### 5. Crate surface and docs (`lib.rs`, README)
 
-- [ ] `RevocationConfig` fields, `Sources.upki`, `Provider`, `InForce`, `Revocation::enable(Sources)` and `in_force`, all behind `upki` where they only mean something with it; `mozilla()` defaults
-- [ ] Handshake tests through real rustls: a leaf revoked in upki data is refused naming CRLite; a leaf revoked only in own data passes an agent on fresh upki
-- [ ] Crate README and `lib.rs` feature tables and module docs: the `upki` feature, the trust model in a sentence, the example
+- [x] `RevocationConfig` fields, `Sources.upki`, `Provider`, `InForce`, `Revocation::enable(Sources)` and `in_force`, all behind `upki` where they only mean something with it; `mozilla()` defaults
+- [x] Handshake tests through real rustls: a leaf revoked in upki data is refused naming CRLite; a leaf revoked only in own data passes an agent on fresh upki
+- [x] Crate README and `lib.rs` feature tables and module docs: the `upki` feature, the trust model in a sentence, the example
 
 ### 6. `web-faith` integration
 
-- [ ] Feature `upki = ["crlite", "web-faith-revocation/upki"]`, default; `lib.rs` and README feature tables
-- [ ] `RevocationOptions.upki: Option<bool>` behind the feature, defaulting to on, with a `compile_fail` doctest when the feature is out, as the other two have
-- [ ] `revocation_sources` in `agent/build.rs` sets `Sources.upki`; `RevocationRecipe::start` passes the whole `Sources` to `enable`
-- [ ] `RevocationStats` gains `provider: Option<RevocationProvider>`, set for CRLite and `None` for OneCRL, and `last_confirmed` comes from `in_force`; update the doc comment that says the time is the same for every agent
-- [ ] `install` (the `unstable-internals` hook) already takes a `RevocationConfig`, so tests point it at a fixture directory with `UpkiLocation::Dir`
-- [ ] `tests/revocation.rs`: an agent on a fixture upki cache refuses a revoked leaf and reports `upki` with the manifest's mtime; a second agent with `upki: false` is served from the fake Remote Settings server and reports `remote-settings`; a stale fixture reports `remote-settings` once the fetch lands
-- [ ] Builds: `--no-default-features --features tls-aws-lc-rs,crlite` (no `upki`), `...,onecrl` only, and the default set
+- [x] Feature `upki = ["crlite", "web-faith-revocation/upki"]`, default; `lib.rs` and README feature tables
+- [x] `RevocationOptions.upki: Option<bool>` behind the feature, defaulting to on, with a `compile_fail` doctest when the feature is out, as the other two have
+- [x] `revocation_sources` in `agent/build.rs` sets `Sources.upki`; `RevocationRecipe::start` passes the whole `Sources` to `enable`
+- [x] `RevocationStats` gains `provider: Option<RevocationProvider>`, set for CRLite and `None` for OneCRL, and `last_confirmed` comes from `in_force`; update the doc comment that says the time is the same for every agent
+- [x] `install` (the `unstable-internals` hook) already takes a `RevocationConfig`, so tests point it at a fixture directory with `UpkiLocation::Dir`
+- [x] `tests/revocation.rs`: an agent on a fixture upki cache refuses a revoked leaf and reports `upki` with the manifest's mtime; a second agent with `upki: false` is served from the fake Remote Settings server and reports `remote-settings`; a stale fixture reports `remote-settings` once the fetch lands
+- [x] Builds: `--no-default-features --features tls-aws-lc-rs,crlite` (no `upki`), `...,onecrl` only, and the default set
 
 ### 7. Node surface
 
-- [ ] `web-faith-napi` feature `upki = ["web-faith/upki"]`, in its default set
-- [ ] `AgentRevocationOptions.upki?: boolean` in `agent/options.rs`, mapped in `agent/convert.rs`
-- [ ] napi `RevocationStats` gains `provider: 'remote-settings' | 'upki' | null`; rebuild to regenerate `index.d.ts`; re-export any new type from `wrapper.d.ts`
-- [ ] Tape tests: the option is accepted, the stats shape carries `provider` for CRLite and `null` for OneCRL
+- [x] `web-faith-napi` feature `upki = ["web-faith/upki"]`, in its default set
+- [x] `AgentRevocationOptions.upki?: boolean` in `agent/options.rs`, mapped in `agent/convert.rs`
+- [x] napi `RevocationStats` gains `provider: 'remote-settings' | 'upki' | null`; rebuild to regenerate `index.d.ts`; re-export any new type from `wrapper.d.ts`
+- [x] Tape tests: the option is accepted, the stats shape carries `provider` for CRLite and `null` for OneCRL
 
 ### 8. Docs and checks
 
-- [ ] Root README: `AgentOptions.tls.revocation.upki`, the `provider` stats field, how upki is found and when it is preferred, the revocation cache section pointing at upki's XDG variables, and the container note that a mounted host cache needs no download
-- [ ] Real-data check against this machine's cache as described in the design notes
-- [ ] `cargo fmt`, `cargo clippy` across the feature sets above, `cargo test`, and the Node suite with `HTTPBIN_URL=http://localhost:8888` after `NODE_ENV=development npm run build`
-- [ ] Confirm CI builds `web-faith-revocation` on macOS and Windows with the `upki` feature, since the platform constants are cfg-gated there and nothing locally compiles them
+- [x] Root README: `AgentOptions.tls.revocation.upki`, the `provider` stats field, how upki is found and when it is preferred, the revocation cache section pointing at upki's XDG variables, and the container note that a mounted host cache needs no download
+- [x] Real-data check against this machine's cache as described in the design notes
+- [x] `cargo fmt`, `cargo clippy` across the feature sets above, `cargo test`, and the Node suite with `HTTPBIN_URL=http://localhost:8888` after `NODE_ENV=development npm run build`
+- [ ] Confirm CI builds `web-faith-revocation` on macOS and Windows with the `upki` feature, since the platform constants are cfg-gated there. The Windows (gnu) target checks locally; macOS is only compiled in CI

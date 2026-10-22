@@ -1315,6 +1315,31 @@ Default: true.
 The CRLite filter decoder, Mozilla's [`clubcard-crlite`](https://crates.io/crates/clubcard-crlite),
 is MPL-2.0 licensed and compiled into the module.
 
+#### `AgentOptions.tls.revocation.upki: boolean`
+
+Where [upki](https://github.com/rustls/upki) is installed, its cache is the CRLite data Faith
+checks instead of a download of its own, so the system's revocation list is used: one copy for the
+whole host, refreshed by upki's timer from the mirror its administrator chose, and nothing to
+download in a container that mounts the host's cache. Faith reads the cache and never writes to it.
+Set to `false` to ignore upki and use Faith's own signed download. Has no effect with `crlite` off.
+Default: true.
+
+Faith finds the cache as upki does: the user's `upki/config.toml` if there is one, then the
+system's (`/etc/upki/config.toml` on Linux, `/Library/Application Support/upki/config.toml` on
+macOS, `%ProgramData%\rustls\upki\config.toml` on Windows), whose `cache-dir` names the
+directory. Without a configuration file it is upki's per-user cache directory (`$XDG_CACHE_HOME/upki`
+on Linux) if that exists, and otherwise `/var/cache/upki`, `/Library/Caches/dev.rustls.upki` or
+`%ProgramData%\rustls\upki\cache`.
+
+The cache is used while it is complete and its last fetch, the modification time of its
+`manifest.json`, is less than three days old. A cache that is missing, damaged or older than that
+is left to Faith's own download, and a stale one stays in force until Faith's own data is newer.
+Faith looks at the cache about every ten minutes, so a refresh is enforced without a restart.
+
+upki's manifest is not signed, so its data is trusted as the system's own, as the platform's
+certificate store is: through the authenticated connection upki fetches it over and the
+permissions of its cache directory. OneCRL is unaffected, as upki carries no intermediate data.
+
 ### `AgentOptions.userAgent`
 
 Custom user agent string.
@@ -1536,8 +1561,10 @@ Returns statistics gathered by this agent:
 - `bodiesFinished`
 - `onecrl` and `crlite`: for each [revocation source](#agentoptionstlsrevocation-object) the agent
   checks, an object with `refused`, how many of the agent's connections the source has refused, and
-  `lastConfirmed`, a `Date` when the process last confirmed the data current with Mozilla (`null`
-  until there is data). `null` for a source the agent does not check.
+  `lastConfirmed`, a `Date` when the data's provider last confirmed it current (`null` until there
+  is data), and `provider`, `'remote-settings'` for Faith's own download or `'upki'` for the
+  system's cache (`null` until there is data). For upki, `lastConfirmed` is the time of its last
+  fetch. `null` for a source the agent does not check.
 
 ## Error mapping
 
@@ -1645,6 +1672,10 @@ it cannot be written, the data is held in memory and each process fetches its ow
 
 The background fetch uses the proxy variables, `NODE_USE_ENV_PROXY`, and `NODE_EXTRA_CA_CERTS`, and
 no agent's options.
+
+Where upki supplies CRLite (see [`tls.revocation.upki`](#agentoptionstlsrevocationupki-boolean)),
+that part of the cache is not used. upki's own location follows `XDG_CONFIG_HOME` and
+`XDG_CACHE_HOME` on Linux and other Unixes, read at each check of its cache rather than once.
 
 ### `SSLKEYLOGFILE`
 

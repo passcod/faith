@@ -694,6 +694,11 @@ pub struct AgentRevocationOptions {
 	///
 	/// Default: true.
 	pub crlite: Option<bool>,
+	/// Take CRLite data from the system's upki cache where one is installed, usable and fresh,
+	/// instead of fetching it. Has no effect with `crlite` off.
+	///
+	/// Default: true.
+	pub upki: Option<bool>,
 }
 
 impl Debug for AgentTlsOptions {

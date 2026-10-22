@@ -34,7 +34,10 @@ fn names(bytes: &[u8]) -> Vec<String> {
 #[test]
 fn a_version_1_index_names_its_filters_in_order() {
 	let index = index_v1(&[b"1-default.filter", b"2-default.filter.delta"], 3);
-	assert_eq!(names(&index), ["1-default.filter", "2-default.filter.delta"]);
+	assert_eq!(
+		names(&index),
+		["1-default.filter", "2-default.filter.delta"]
+	);
 }
 
 #[test]
@@ -121,7 +124,11 @@ fn names_that_could_leave_the_directory_are_refused() {
 	] {
 		// An empty name, from an unused slot, is refused too.
 		let index = index_v1(&[bad], 0);
-		assert!(filter_names(&index).is_err(), "{:?}", String::from_utf8_lossy(bad));
+		assert!(
+			filter_names(&index).is_err(),
+			"{:?}",
+			String::from_utf8_lossy(bad)
+		);
 	}
 	assert!(filter_names(&index_v1(&[b""], 0)).is_err());
 }

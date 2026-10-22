@@ -91,7 +91,9 @@ fn without_a_config_the_user_cache_is_preferred() {
 	mkdir(&dirs.locator.system_cache_dir);
 	assert_eq!(
 		dirs.locator.revocation_dir(),
-		dirs.locator.user_cache_dir.map(|dir| dir.join("revocation"))
+		dirs.locator
+			.user_cache_dir
+			.map(|dir| dir.join("revocation"))
 	);
 }
 

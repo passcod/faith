@@ -60,7 +60,24 @@ pub struct AgentStats {
 pub struct RevocationStats {
 	/// The agent's connections this source has refused, over HTTP and to DNS servers alike.
 	pub refused: u64,
-	/// When the process last confirmed this source's data current with Remote Settings, whether
-	/// or not it had changed. The same for every agent in the process. `None` until there is data.
+	/// When the provider of this source's data last confirmed it current: for Remote Settings, the
+	/// last successful check, whether or not it had changed; for upki, its last successful fetch.
+	/// The same for every agent in the process with the same provider. `None` until there is data.
 	pub last_confirmed: Option<std::time::SystemTime>,
+	/// Who supplied the data in force, or `None` until there is data. OneCRL always comes from
+	/// Remote Settings.
+	pub provider: Option<RevocationProvider>,
+}
+
+/// Who supplied the revocation data an agent is checked against.
+// spec:REVOC#reporting
+#[cfg(any(feature = "onecrl", feature = "crlite"))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum RevocationProvider {
+	/// Faith's own fetch from Mozilla Remote Settings.
+	RemoteSettings,
+	/// The system's upki cache.
+	#[cfg(feature = "upki")]
+	Upki,
 }

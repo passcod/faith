@@ -514,7 +514,9 @@ fn a_tampered_cache_is_not_used() {
 
 	let first = setup.revocation(Some(cache.path().to_owned()), DEFAULT_POLL_INTERVAL);
 	first.enable(only(Source::OneCrl));
-	wait_for("OneCRL", || last_confirmed(&first, Source::OneCrl).is_some());
+	wait_for("OneCRL", || {
+		last_confirmed(&first, Source::OneCrl).is_some()
+	});
 
 	// Tamper with a copy: the first one's poller is free to rewrite its own cache when it confirms
 	// the data, which would undo the tampering.

@@ -37,7 +37,10 @@ impl Host {
 	/// A filter that states the leaf is not revoked.
 	fn clean(&self) -> Vec<u8> {
 		let key = self.setup.tls.intermediate_spki_hash;
-		crlite_filter(&[(key, vec![0x7f])], &[(key, self.setup.tls.leaf_serial.clone())])
+		crlite_filter(
+			&[(key, vec![0x7f])],
+			&[(key, self.setup.tls.leaf_serial.clone())],
+		)
 	}
 
 	/// Lay down a upki cache holding `filter`, last fetched `age` ago.
@@ -111,8 +114,10 @@ fn a_fresh_cache_is_the_only_crlite_data_in_force() {
 	host.upki(&host.revoked(), Duration::from_secs(60));
 	// Faith's own data says the opposite, so which one decides shows.
 	host.publish_own(host.clean(), 10);
-	host.setup
-		.publish_onecrl(vec![onecrl_issuer_serial(&TlsPki::new(false).intermediate)], 10);
+	host.setup.publish_onecrl(
+		vec![onecrl_issuer_serial(&TlsPki::new(false).intermediate)],
+		10,
+	);
 	let revocation = host.revocation(3 * DAY);
 
 	revocation.enable(Sources::all());
@@ -120,7 +125,10 @@ fn a_fresh_cache_is_the_only_crlite_data_in_force() {
 		held_timestamp(&revocation, Source::OneCrl) == Some(10)
 	});
 
-	assert_eq!(host.verdict(&revocation, Sources::all()), Some(Source::Crlite));
+	assert_eq!(
+		host.verdict(&revocation, Sources::all()),
+		Some(Source::Crlite)
+	);
 	let in_force = revocation
 		.in_force(Source::Crlite, Sources::all())
 		.expect("data");
@@ -151,8 +159,14 @@ fn an_agent_with_upki_off_has_faiths_own_data_alone() {
 		Some(Provider::RemoteSettings)
 	);
 	// The agent on upki is unaffected.
-	assert_eq!(host.verdict(&revocation, crlite_only(true)), Some(Source::Crlite));
-	assert_eq!(provider_of(&revocation, crlite_only(true)), Some(Provider::Upki));
+	assert_eq!(
+		host.verdict(&revocation, crlite_only(true)),
+		Some(Source::Crlite)
+	);
+	assert_eq!(
+		provider_of(&revocation, crlite_only(true)),
+		Some(Provider::Upki)
+	);
 }
 
 #[test]
@@ -166,7 +180,10 @@ fn without_a_cache_faiths_own_data_is_used() {
 		held_timestamp(&revocation, Source::Crlite) == Some(10)
 	});
 
-	assert_eq!(host.verdict(&revocation, crlite_only(true)), Some(Source::Crlite));
+	assert_eq!(
+		host.verdict(&revocation, crlite_only(true)),
+		Some(Source::Crlite)
+	);
 	assert_eq!(
 		provider_of(&revocation, crlite_only(true)),
 		Some(Provider::RemoteSettings)
@@ -174,30 +191,39 @@ fn without_a_cache_faiths_own_data_is_used() {
 }
 
 #[test]
-fn a_stale_cache_stays_in_force_until_faiths_own_data_is_newer() {
+fn a_stale_cache_stays_in_force_while_faith_has_no_data_of_its_own() {
 	let host = Host::new();
 	host.upki(&host.revoked(), 4 * DAY);
 	let revocation = host.revocation(3 * DAY);
 
 	revocation.enable(crlite_only(true));
-	assert_eq!(host.verdict(&revocation, crlite_only(true)), Some(Source::Crlite));
-	assert_eq!(provider_of(&revocation, crlite_only(true)), Some(Provider::Upki));
 	assert!(
 		!revocation.inner.store.upki_fresh(),
 		"four days is past three"
 	);
-
-	// Faith fetches its own meanwhile, and once that lands it is the newer.
-	wait_for("the poller to try", || host.crlite_requests() > 0);
-	host.publish_own(host.clean(), 10);
-	wait_for("Faith's own CRLite", || {
-		held_timestamp(&revocation, Source::Crlite) == Some(10)
-	});
-	assert_eq!(host.verdict(&revocation, crlite_only(true)), None);
+	assert_eq!(
+		host.verdict(&revocation, crlite_only(true)),
+		Some(Source::Crlite)
+	);
 	assert_eq!(
 		provider_of(&revocation, crlite_only(true)),
-		Some(Provider::RemoteSettings)
+		Some(Provider::Upki)
 	);
+}
+
+#[test]
+fn faiths_own_data_replaces_a_stale_cache_once_it_lands() {
+	let host = Host::new();
+	host.upki(&host.revoked(), 4 * DAY);
+	host.publish_own(host.clean(), 10);
+	let revocation = host.revocation(3 * DAY);
+
+	revocation.enable(crlite_only(true));
+	wait_for("Faith's own CRLite", || {
+		provider_of(&revocation, crlite_only(true)) == Some(Provider::RemoteSettings)
+	});
+	assert_eq!(host.verdict(&revocation, crlite_only(true)), None);
+	assert!(host.crlite_requests() > 0);
 }
 
 #[test]
@@ -217,8 +243,14 @@ fn a_stale_cache_newer_than_faiths_own_data_stays_in_force() {
 		!revocation.inner.store.upki_fresh()
 	});
 
-	assert_eq!(provider_of(&revocation, crlite_only(true)), Some(Provider::Upki));
-	assert_eq!(host.verdict(&revocation, crlite_only(true)), Some(Source::Crlite));
+	assert_eq!(
+		provider_of(&revocation, crlite_only(true)),
+		Some(Provider::Upki)
+	);
+	assert_eq!(
+		host.verdict(&revocation, crlite_only(true)),
+		Some(Source::Crlite)
+	);
 }
 
 #[test]
@@ -236,7 +268,10 @@ fn a_refreshed_cache_takes_over_again() {
 	wait_for("upki to take over", || {
 		provider_of(&revocation, crlite_only(true)) == Some(Provider::Upki)
 	});
-	assert_eq!(host.verdict(&revocation, crlite_only(true)), Some(Source::Crlite));
+	assert_eq!(
+		host.verdict(&revocation, crlite_only(true)),
+		Some(Source::Crlite)
+	);
 }
 
 #[test]
@@ -250,7 +285,11 @@ fn a_manifest_rewritten_with_new_filters_is_enforced_without_a_restart() {
 	assert!(handshake(&client, &server).is_ok());
 
 	let revoked = host.revoked();
-	write_upki_cache(host.path(), &[("20261018-0-default.filter", &revoked)], SystemTime::now());
+	write_upki_cache(
+		host.path(),
+		&[("20261018-0-default.filter", &revoked)],
+		SystemTime::now(),
+	);
 	wait_for("the new filter", || {
 		revoked_by(handshake(&client, &server)) == Some(Source::Crlite)
 	});
@@ -270,7 +309,10 @@ fn a_cache_that_appears_while_the_process_runs_is_found() {
 	wait_for("the cache", || {
 		provider_of(&revocation, crlite_only(true)) == Some(Provider::Upki)
 	});
-	assert_eq!(host.verdict(&revocation, crlite_only(true)), Some(Source::Crlite));
+	assert_eq!(
+		host.verdict(&revocation, crlite_only(true)),
+		Some(Source::Crlite)
+	);
 }
 
 #[test]
@@ -286,8 +328,14 @@ fn a_reload_that_finds_the_cache_unusable_keeps_the_data_held() {
 	set_upki_manifest_time(host.path(), SystemTime::now());
 	revocation.inner.store.refresh_upki();
 
-	assert_eq!(revocation.in_force(Source::Crlite, crlite_only(true)), before);
-	assert_eq!(host.verdict(&revocation, crlite_only(true)), Some(Source::Crlite));
+	assert_eq!(
+		revocation.in_force(Source::Crlite, crlite_only(true)),
+		before
+	);
+	assert_eq!(
+		host.verdict(&revocation, crlite_only(true)),
+		Some(Source::Crlite)
+	);
 	assert_eq!(epoch(&revocation), epoch_before);
 }
 
@@ -365,7 +413,10 @@ fn a_session_saved_under_the_other_provider_is_not_resumed() {
 	let revoked = host.revoked();
 	write_upki_cache(host.path(), &[(FILTER, &revoked)], SystemTime::now());
 	revocation.inner.store.refresh_upki();
-	assert_eq!(revoked_by(handshake(&client, &server)), Some(Source::Crlite));
+	assert_eq!(
+		revoked_by(handshake(&client, &server)),
+		Some(Source::Crlite)
+	);
 }
 
 #[test]

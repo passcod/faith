@@ -50,7 +50,7 @@ directories = { version = "6", optional = true }
 [dev-dependencies]
 rustls = { workspace = true, features = ["aws-lc-rs"] }
 tempfile = "3"
-web-faith-revocation = { workspace = true, features = ["onecrl", "crlite", "test-support"] }
+web-faith-revocation = { workspace = true, features = ["onecrl", "crlite", "upki", "test-support"] }
 futures.workspace = true
 http-body-util.workspace = true
 serde.workspace = true
@@ -65,6 +65,7 @@ default = [
     "encoding",
     "onecrl",
     "crlite",
+    "upki",
     "tls-aws-lc-rs",
 ]
 cache = ["dep:http-cache-reqwest"]
@@ -74,6 +75,7 @@ dns = ["dep:web-faith-dns", "reqwest/hickory-dns", "web-faith-alt-svc?/dns"]
 encoding = ["dep:web-faith-encoding"]
 onecrl = ["dep:web-faith-revocation", "dep:directories", "web-faith-revocation/onecrl"]
 crlite = ["dep:web-faith-revocation", "dep:directories", "web-faith-revocation/crlite"]
+upki = ["crlite", "web-faith-revocation/upki"]
 # Needs the consuming build to set `RUSTFLAGS="--cfg reqwest_unstable"`.
 http3 = ["reqwest/http3", "tls-aws-lc-rs", "dep:web-faith-alt-svc"]
 tls-aws-lc-rs = ["reqwest/rustls", "rustls/aws-lc-rs"]

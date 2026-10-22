@@ -74,6 +74,10 @@ fn revocation_sources(options: Option<&RevocationOptions>, node_env: &NodeEnvRec
 	{
 		sources.crlite = options.and_then(|o| o.crlite).unwrap_or(true);
 	}
+	#[cfg(feature = "upki")]
+	{
+		sources.upki = options.and_then(|o| o.upki).unwrap_or(true);
+	}
 	sources
 }
 

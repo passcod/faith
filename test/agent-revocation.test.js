@@ -10,12 +10,37 @@ function isSourceStats(t, stats, name) {
 		stats.lastConfirmed === null || stats.lastConfirmed instanceof Date,
 		`${name}.lastConfirmed is a Date or null`,
 	);
+	t.ok(
+		["remote-settings", "upki", null].includes(stats.provider),
+		`${name}.provider is a known provider or null`,
+	);
+	t.equal(
+		stats.provider === null,
+		stats.lastConfirmed === null,
+		`${name}.provider is null only without data`,
+	);
 }
 
 test("both revocation sources are on by default", (t) => {
 	const stats = new Agent().stats();
 	isSourceStats(t, stats.onecrl, "onecrl");
 	isSourceStats(t, stats.crlite, "crlite");
+	t.end();
+});
+
+test("OneCRL always comes from Remote Settings", (t) => {
+	const { onecrl } = new Agent().stats();
+	t.ok(onecrl.provider === null || onecrl.provider === "remote-settings", "onecrl provider");
+	t.end();
+});
+
+test("upki can be turned off for an agent", (t) => {
+	const off = new Agent({ tls: { revocation: { upki: false } } }).stats();
+	isSourceStats(t, off.crlite, "crlite");
+	t.notEqual(off.crlite.provider, "upki", "CRLite is not from upki");
+
+	const crliteOff = new Agent({ tls: { revocation: { crlite: false, upki: true } } }).stats();
+	t.equal(crliteOff.crlite, null, "upki has no effect with CRLite off");
 	t.end();
 });
 

@@ -3,7 +3,10 @@
 pub use crate::builder::AgentOptionsBuilder;
 pub use crate::stats::AgentStats;
 #[cfg(any(feature = "onecrl", feature = "crlite"))]
-pub use crate::{options::RevocationOptions, stats::RevocationStats};
+pub use crate::{
+	options::RevocationOptions,
+	stats::{RevocationProvider, RevocationStats},
+};
 
 #[cfg(feature = "cache")]
 pub use crate::options::{CacheOptions, CacheStore};

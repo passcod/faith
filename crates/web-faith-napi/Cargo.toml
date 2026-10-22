@@ -44,6 +44,7 @@ default = [
     "http3",
     "onecrl",
     "crlite",
+    "upki",
     "tls-aws-lc-rs",
 ]
 cache = ["dep:http-cache-reqwest", "web-faith/cache"]
@@ -53,6 +54,7 @@ dns = ["web-faith/dns"]
 encoding = ["web-faith/encoding"]
 onecrl = ["web-faith/onecrl"]
 crlite = ["web-faith/crlite"]
+upki = ["web-faith/upki"]
 http3 = ["reqwest/http3", "tls-aws-lc-rs", "web-faith/http3"]
 tls-aws-lc-rs = ["reqwest/rustls", "web-faith/tls-aws-lc-rs"]
 tls-ring = ["reqwest/rustls-no-provider", "web-faith/tls-ring"]

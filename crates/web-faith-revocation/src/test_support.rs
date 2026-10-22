@@ -10,10 +10,11 @@ use std::{
 	collections::HashMap,
 	io::{BufRead, BufReader, Write},
 	net::{SocketAddr, TcpListener, TcpStream},
-	path::Path,
 	sync::{Arc, Mutex},
-	time::{Duration, SystemTime},
+	time::Duration,
 };
+#[cfg(feature = "upki")]
+use std::{path::Path, time::SystemTime};
 
 use base64::{Engine, prelude::BASE64_STANDARD, prelude::BASE64_URL_SAFE_NO_PAD};
 use rcgen::{

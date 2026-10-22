@@ -80,9 +80,14 @@ impl From<web_faith::agent::AgentStats> for AgentStats {
 pub struct RevocationStats<'env> {
 	/// The agent's connections this source has refused, over HTTP and to DNS servers alike.
 	pub refused: i64,
-	/// When the process last confirmed this source's data current with Mozilla, whether or not it
-	/// had changed. The same for every agent in the process; `null` until there is data.
+	/// When the provider of the data last confirmed it current: for `remote-settings`, the last
+	/// successful check whether or not anything had changed; for `upki`, its last successful
+	/// fetch. `null` until there is data.
 	pub last_confirmed: napi::Either<napi::JsDate<'env>, napi::bindgen_prelude::Null>,
+	/// Who supplied the data in force: Faith's own fetch from Mozilla Remote Settings, or the
+	/// system's upki cache. `null` until there is data. OneCRL is always `remote-settings`.
+	#[napi(ts_type = "'remote-settings' | 'upki' | null")]
+	pub provider: napi::Either<String, napi::bindgen_prelude::Null>,
 }
 
 #[cfg(any(feature = "onecrl", feature = "crlite"))]
@@ -104,6 +109,18 @@ fn revocation_stats<'env>(
 				napi::Either::B(napi::bindgen_prelude::Null),
 				napi::Either::A,
 			),
+		provider: stats
+			.provider
+			.map_or(napi::Either::B(napi::bindgen_prelude::Null), |provider| {
+				napi::Either::A(
+					match provider {
+						#[cfg(feature = "upki")]
+						web_faith::agent::RevocationProvider::Upki => "upki",
+						_ => "remote-settings",
+					}
+					.to_owned(),
+				)
+			}),
 	})
 }
 
