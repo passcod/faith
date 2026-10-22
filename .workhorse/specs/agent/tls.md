@@ -15,7 +15,7 @@ Malformed PEM throws at agent construction: an explicit option is a deliberate a
 ## Revocation
 
 Server certificates the platform verifier accepts are also checked against Mozilla's OneCRL and CRLite revocation data, on by default.
-`tls.revocation.onecrl` and `tls.revocation.crlite` each turn one source off; the checks, the data, and how it is kept current are specified in [REVOC](revocation.md).
+`tls.revocation.onecrl` and `tls.revocation.crlite` each turn one source off, and `tls.revocation.upki` stops CRLite using the system's upki cache where one is installed; the checks, the data, and how it is kept current are specified in [REVOC](revocation.md).
 
 ## Client identity
 
