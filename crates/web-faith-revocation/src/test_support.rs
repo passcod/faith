@@ -13,6 +13,8 @@ use std::{
 	sync::{Arc, Mutex},
 	time::Duration,
 };
+#[cfg(feature = "upki")]
+use std::{path::Path, time::SystemTime};
 
 use base64::{Engine, prelude::BASE64_STANDARD, prelude::BASE64_URL_SAFE_NO_PAD};
 use rcgen::{
@@ -112,6 +114,11 @@ impl SigningPki {
 		config.base_url = server.base_url();
 		config.root_hash = self.root_hash();
 		config.cache_dir = cache_dir;
+		// A test must not read the host's own upki cache; it names a directory of its own to.
+		#[cfg(feature = "upki")]
+		{
+			config.upki = crate::UpkiLocation::Off;
+		}
 		config
 	}
 }
@@ -644,4 +651,66 @@ pub fn transfer(
 		to.process_new_packets()?;
 	}
 	Ok(())
+}
+
+/// Lay down a upki cache in `dir` as upki writes one: the filters, then an `index.bin` naming them
+/// with an empty log directory, then a `manifest.json` stamped `confirmed`.
+#[cfg(feature = "upki")]
+pub fn write_upki_cache(dir: &Path, filters: &[(&str, &[u8])], confirmed: SystemTime) {
+	std::fs::create_dir_all(dir).expect("cache directory");
+	for (name, bytes) in filters {
+		std::fs::write(dir.join(name), bytes).expect("a filter file");
+	}
+	let names: Vec<&str> = filters.iter().map(|(name, _)| *name).collect();
+	write_upki_index(dir, &names);
+	write_upki_manifest(dir, filters, confirmed);
+}
+
+/// Write a version 1 `index.bin` naming `names`, with an empty log directory.
+#[cfg(feature = "upki")]
+pub fn write_upki_index(dir: &Path, names: &[&str]) {
+	let mut bytes = b"upkiidx1".to_vec();
+	bytes.extend(
+		u16::try_from(names.len())
+			.expect("fewer than 65536 names")
+			.to_be_bytes(),
+	);
+	bytes.extend(0u32.to_be_bytes());
+	for name in names {
+		let mut slot = [0u8; 32];
+		slot[..name.len()].copy_from_slice(name.as_bytes());
+		bytes.extend(slot);
+	}
+	std::fs::write(dir.join("index.bin"), bytes).expect("an index");
+}
+
+/// Write a `manifest.json` listing `files` with their sizes and hashes, and set its modification
+/// time to `confirmed`, as the time upki last fetched.
+#[cfg(feature = "upki")]
+pub fn write_upki_manifest(dir: &Path, files: &[(&str, &[u8])], confirmed: SystemTime) {
+	let generated_at = confirmed
+		.duration_since(std::time::UNIX_EPOCH)
+		.map_or(0, |since| since.as_secs());
+	let manifest = json!({
+		"generated_at": generated_at,
+		"comment": "",
+		"files": files.iter().map(|(name, bytes)| json!({
+			"filename": name,
+			"size": bytes.len(),
+			"hash": hex::encode(Sha256::digest(bytes)),
+		})).collect::<Vec<_>>(),
+	});
+	std::fs::write(dir.join("manifest.json"), manifest.to_string()).expect("a manifest");
+	set_upki_manifest_time(dir, confirmed);
+}
+
+/// Set the manifest's modification time, as a successful fetch does even when nothing changed.
+#[cfg(feature = "upki")]
+pub fn set_upki_manifest_time(dir: &Path, confirmed: SystemTime) {
+	std::fs::File::options()
+		.write(true)
+		.open(dir.join("manifest.json"))
+		.expect("a manifest")
+		.set_modified(confirmed)
+		.expect("setting the modification time");
 }

@@ -28,7 +28,7 @@ const PRUNE_GRACE: Duration = Duration::from_secs(3 * 24 * 60 * 60);
 const TEMP_GRACE: Duration = Duration::from_secs(60 * 60);
 
 /// The largest cache file read back: a full CRLite filter is a few megabytes.
-const MAX_FILE: u64 = 64 * 1024 * 1024;
+pub(crate) const MAX_FILE: u64 = 64 * 1024 * 1024;
 
 /// A collection as cached.
 #[derive(Debug, Deserialize, Serialize)]

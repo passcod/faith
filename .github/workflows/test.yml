@@ -154,6 +154,8 @@ jobs:
         run: cargo check -p web-faith
       - name: Nothing but a TLS backend
         run: cargo check -p web-faith --no-default-features --features tls-aws-lc-rs
+      - name: CRLite without upki
+        run: cargo check -p web-faith --no-default-features --features tls-aws-lc-rs,crlite
       - name: HTTP/3 opted in
         # The repo's .cargo/config.toml supplies the reqwest_unstable cfg this needs.
         run: cargo check -p web-faith --features http3

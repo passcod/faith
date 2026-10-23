@@ -21,7 +21,7 @@ Six component crates are published alongside it, each one useful to a caller who
 - `web-faith-conn-tracker` reads live per-connection statistics from the operating system, which is the `connections()` view in [OBS](../agent/observability.md); the cumulative counters and the resolver listing that spec also covers belong to `web-faith` and `web-faith-dns` respectively.
 - `web-faith-alt-svc` is the Alt-Svc store and the HTTP/3 upgrade machinery, as in [H3UP](../http3/upgrade.md) and [PROBE](../http3/probing.md).
 - `web-faith-encoding` is content coding for request and response bodies, as in [ENC](../fetch/content-encoding.md).
-- `web-faith-revocation` is certificate revocation checking, as in [REVOC](../agent/revocation.md): a rustls server certificate verifier that wraps another verifier, the Remote Settings client with its signature checking, and the cache. It takes the data source, the pinned signing root, and the cache location as parameters, so it can be pointed at a test server or another deployment; `web-faith` passes Mozilla's and the platform cache directory.
+- `web-faith-revocation` is certificate revocation checking, as in [REVOC](../agent/revocation.md): a rustls server certificate verifier that wraps another verifier, the Remote Settings client with its signature checking, the cache, and the reader of the system's upki cache. It takes the data source, the pinned signing root, and the cache location as parameters, so it can be pointed at a test server or another deployment; `web-faith` passes Mozilla's and the platform cache directory.
 
 Subresource Integrity parsing and verification is part of `web-faith` itself (see [SRI](../fetch/integrity.md)).
 
@@ -58,7 +58,8 @@ The Node module has HTTP/3 compiled in, since its own build sets that cfg.
 Turning a feature off drops the code behind it and the client continues to work without it; the parts of the API that only mean something with that subsystem present go with it, as in [RSAPI](client-api.md).
 
 Each revocation source is a feature of its own, `onecrl` and `crlite`, both on by default, so a build can leave CRLite and its filter decoder out entirely rather than only switching it off per agent.
-The Node module has both compiled in.
+Reading the system's upki cache is a further feature, `upki`, on by default and requiring `crlite`, so a build can leave that reader out while keeping CRLite from Remote Settings.
+The Node module has all three compiled in.
 
 A feature decides what is compiled in rather than what is switched on at run time, and the two need not agree: the cookies feature is on by default while the jar itself stays off until an agent asks for it (see [COOK](../agent/cookies.md)).
 

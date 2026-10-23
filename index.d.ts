@@ -1066,6 +1066,13 @@ export interface AgentRevocationOptions {
    * Default: true.
    */
   crlite?: boolean
+  /**
+   * Take CRLite data from the system's upki cache where one is installed, usable and fresh,
+   * instead of fetching it. Has no effect with `crlite` off.
+   *
+   * Default: true.
+   */
+  upki?: boolean
 }
 
 /** Timeouts for requests made with this agent. This is a nested object. */
@@ -1404,10 +1411,16 @@ export interface RevocationStats {
   /** The agent's connections this source has refused, over HTTP and to DNS servers alike. */
   refused: number
   /**
-   * When the process last confirmed this source's data current with Mozilla, whether or not it
-   * had changed. The same for every agent in the process; `null` until there is data.
+   * When the provider of the data last confirmed it current: for `remote-settings`, the last
+   * successful check whether or not anything had changed; for `upki`, its last successful
+   * fetch. `null` until there is data.
    */
   lastConfirmed: Date | null
+  /**
+   * Who supplied the data in force: Faith's own fetch from Mozilla Remote Settings, or the
+   * system's upki cache. `null` until there is data. OneCRL is always `remote-settings`.
+   */
+  provider: 'remote-settings' | 'upki' | null
 }
 
 /**

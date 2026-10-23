@@ -12,6 +12,11 @@
 //! current by a background poller, and cached on disk so a restart enforces the last known data
 //! from its first connection.
 //!
+//! Where [upki](https://github.com/rustls/upki) keeps CRLite data current for the whole system,
+//! the `upki` feature reads that cache instead of fetching CRLite. Its manifest is not signed, so
+//! that data is trusted as the system's own, like its trust store, and Faith's signed fetch is the
+//! fallback when the cache is missing, damaged or stale.
+//!
 //! A [`Revocation`] holds that data. Make one per process and share it: every verifier built from
 //! it reads the same data, and the poller fetches once for all of them.
 //!
@@ -21,15 +26,14 @@
 //! use std::sync::Arc;
 //!
 //! use rustls::ClientConfig;
-//! use web_faith_revocation::{Refusals, Revocation, RevocationConfig, Source, Sources};
+//! use web_faith_revocation::{Refusals, Revocation, RevocationConfig, Sources};
 //!
 //! let provider = Arc::new(rustls::crypto::aws_lc_rs::default_provider());
 //! let mut config = RevocationConfig::mozilla(Arc::clone(&provider));
 //! config.cache_dir = Some("/var/cache/my-app/revocation".into());
 //!
 //! let revocation = Revocation::new(config, reqwest::Client::new());
-//! revocation.enable(Source::OneCrl);
-//! revocation.enable(Source::Crlite);
+//! revocation.enable(Sources::all());
 //!
 //! let platform = Arc::new(rustls_platform_verifier::Verifier::new(Arc::clone(&provider))?);
 //! let verifier = revocation.verifier(platform, Sources::all(), &[], Arc::new(Refusals::default()));
@@ -49,6 +53,7 @@
 //! | --- | :-: | --- |
 //! | `onecrl` | ✓ | The OneCRL source. |
 //! | `crlite` | ✓ | The CRLite source, and its MPL-2.0 filter decoder `clubcard-crlite`. |
+//! | `upki` | ✓ | Reading CRLite data from the system's [upki](https://github.com/rustls/upki) cache. |
 //! | `test-support` |  | A fake Remote Settings server and signing chain, for tests. |
 
 // spec:REVOC
@@ -102,12 +107,18 @@ mod store;
 pub mod test_support;
 #[cfg(test)]
 mod tests;
+#[cfg(feature = "upki")]
+mod upki;
 mod verifier;
 
 pub use error::{Error, Revoked};
 pub use session::EpochSessionStore;
+#[cfg(feature = "upki")]
+pub use upki::UpkiLocation;
 pub use verifier::RevocationVerifier;
 
+#[cfg(feature = "upki")]
+use crate::store::UpkiSettings;
 use crate::{
 	cache::Cache, links::RootIndex, remote_settings::RemoteSettings, signature::Trust, store::Store,
 };
@@ -126,6 +137,15 @@ pub const MOZILLA_SIGNER: &str = "onecrl.content-signature.mozilla.org";
 
 /// How often the poller checks for changes, as Firefox does.
 pub const DEFAULT_POLL_INTERVAL: Duration = Duration::from_secs(24 * 60 * 60);
+
+/// How often the poller looks at the system's upki cache, which costs a `stat` unless it changed.
+#[cfg(feature = "upki")]
+pub const DEFAULT_UPKI_POLL_INTERVAL: Duration = Duration::from_secs(10 * 60);
+
+/// How long after upki's last fetch its data stops being the only CRLite data in force. upki
+/// fetches about every six hours, so this is a dozen missed runs.
+#[cfg(feature = "upki")]
+pub const DEFAULT_UPKI_MAX_AGE: Duration = Duration::from_secs(3 * 24 * 60 * 60);
 
 /// A revocation source.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -161,6 +181,28 @@ impl fmt::Display for Source {
 	}
 }
 
+/// Who supplied the data in force for a source.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum Provider {
+	/// Fetched by this crate from Mozilla Remote Settings, and checked against its signature.
+	RemoteSettings,
+	/// Read from the system's upki cache.
+	#[cfg(feature = "upki")]
+	Upki,
+}
+
+/// The data a verifier is checking a source against.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct InForce {
+	/// Where the data came from.
+	pub provider: Provider,
+	/// When the provider last confirmed the data current: the last successful check of Remote
+	/// Settings, or the last successful fetch by upki. `None` if that is not known.
+	pub confirmed: Option<SystemTime>,
+}
+
 /// Which sources a verifier checks.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
@@ -171,6 +213,10 @@ pub struct Sources {
 	/// Check CRLite.
 	#[cfg(feature = "crlite")]
 	pub crlite: bool,
+	/// Take CRLite data from the system's upki cache where it is usable and fresh. Has no effect
+	/// without `crlite`.
+	#[cfg(feature = "upki")]
+	pub upki: bool,
 }
 
 impl Sources {
@@ -181,6 +227,8 @@ impl Sources {
 			onecrl: true,
 			#[cfg(feature = "crlite")]
 			crlite: true,
+			#[cfg(feature = "upki")]
+			upki: true,
 		}
 	}
 
@@ -191,7 +239,17 @@ impl Sources {
 			onecrl: false,
 			#[cfg(feature = "crlite")]
 			crlite: false,
+			#[cfg(feature = "upki")]
+			upki: false,
 		}
+	}
+
+	/// Whether CRLite is taken from the system's upki cache where it can be.
+	pub(crate) const fn uses_upki(self) -> bool {
+		#[cfg(feature = "upki")]
+		return self.upki;
+		#[cfg(not(feature = "upki"))]
+		false
 	}
 
 	/// The sources turned on.
@@ -261,6 +319,15 @@ pub struct RevocationConfig {
 	pub cache_dir: Option<PathBuf>,
 	/// How often to check for changes.
 	pub poll_interval: Duration,
+	/// Where to read the system's upki cache from.
+	#[cfg(feature = "upki")]
+	pub upki: UpkiLocation,
+	/// How often to look at the upki cache for changes.
+	#[cfg(feature = "upki")]
+	pub upki_poll_interval: Duration,
+	/// How old upki's last fetch may be before its data is stale.
+	#[cfg(feature = "upki")]
+	pub upki_max_age: Duration,
 	/// The crypto provider that checks signatures.
 	pub crypto_provider: Arc<CryptoProvider>,
 }
@@ -274,6 +341,12 @@ impl RevocationConfig {
 			signer: ServerName::try_from(MOZILLA_SIGNER).expect("a valid DNS name"),
 			cache_dir: None,
 			poll_interval: DEFAULT_POLL_INTERVAL,
+			#[cfg(feature = "upki")]
+			upki: UpkiLocation::System,
+			#[cfg(feature = "upki")]
+			upki_poll_interval: DEFAULT_UPKI_POLL_INTERVAL,
+			#[cfg(feature = "upki")]
+			upki_max_age: DEFAULT_UPKI_MAX_AGE,
 			crypto_provider,
 		}
 	}
@@ -292,7 +365,9 @@ struct Inner {
 	store: Arc<Store>,
 	remote: RemoteSettings,
 	poll_interval: Duration,
-	poller: Mutex<Option<UnboundedSender<Source>>>,
+	#[cfg(feature = "upki")]
+	upki_poll_interval: Duration,
+	poller: Mutex<Option<UnboundedSender<Sources>>>,
 }
 
 impl Revocation {
@@ -312,33 +387,71 @@ impl Revocation {
 		};
 		Self {
 			inner: Arc::new(Inner {
-				store: Arc::new(Store::new(trust, Cache::new(config.cache_dir))),
+				store: Arc::new(Store::new(
+					trust,
+					Cache::new(config.cache_dir),
+					#[cfg(feature = "upki")]
+					UpkiSettings {
+						location: config.upki,
+						max_age: config.upki_max_age,
+					},
+				)),
 				remote: RemoteSettings::new(client, base_url),
 				poll_interval: config.poll_interval,
+				#[cfg(feature = "upki")]
+				upki_poll_interval: config.upki_poll_interval,
 				poller: Mutex::new(None),
 			}),
 		}
 	}
 
-	/// Start enforcing `source`: read its cached data now, synchronously, and have the poller keep
-	/// it current, starting the poller if it is not running yet.
+	/// Start enforcing `sources`: read their cached data now, synchronously, and have the poller
+	/// keep it current, starting the poller if it is not running yet.
 	///
-	/// Until the source has data, from the cache or the network, it refuses nothing.
+	/// `sources` is one verifier's, so the poller learns whether any verifier wants Faith's own
+	/// CRLite data or can do with the system's. Until a source has data, from the cache or the
+	/// network, it refuses nothing.
 	// spec:REVOC#the-cache
-	pub fn enable(&self, source: Source) {
-		self.inner.store.load_roots();
-		self.inner.store.load(source);
+	#[cfg_attr(
+		not(any(feature = "onecrl", feature = "crlite")),
+		allow(clippy::never_loop)
+	)]
+	pub fn enable(&self, sources: Sources) {
+		let store = &self.inner.store;
+		store.load_roots();
+		for source in sources.iter() {
+			match source {
+				#[cfg(feature = "onecrl")]
+				Source::OneCrl => store.load(source),
+				#[cfg(feature = "crlite")]
+				Source::Crlite => {
+					// The system's data is read first, since a fresh cache saves decoding Faith's
+					// own, which the poller then loads if and when it is wanted.
+					#[cfg(feature = "upki")]
+					if sources.upki {
+						store.load_upki();
+					}
+					if store.needs_own_crlite(sources.uses_upki()) {
+						store.load(source);
+					}
+				}
+			}
+		}
 
 		let mut poller = self.inner.poller.lock().expect("poisoned");
 		let sender = poller.get_or_insert_with(|| {
 			poller::spawn(
 				Arc::clone(&self.inner.store),
 				self.inner.remote.clone(),
-				self.inner.poll_interval,
+				poller::Intervals {
+					remote: self.inner.poll_interval,
+					#[cfg(feature = "upki")]
+					upki: self.inner.upki_poll_interval,
+				},
 			)
 		});
 		// A poller whose thread could not start has no receiver; the cached data stays in force.
-		let _ = sender.send(source);
+		let _ = sender.send(sources);
 	}
 
 	/// A verifier that runs `inner`, then checks `sources`.
@@ -369,13 +482,10 @@ impl Revocation {
 		Arc::new(EpochSessionStore::new(Arc::clone(&self.inner.store)))
 	}
 
-	/// When `source`'s data was last confirmed current, or `None` before it has any.
+	/// The data in force for a verifier using `sources`: who supplied it, and when it was last
+	/// confirmed current. `None` before `source` has any.
 	// spec:REVOC#reporting
-	pub fn last_confirmed(&self, source: Source) -> Option<SystemTime> {
-		self.inner
-			.store
-			.has_data(source)
-			.then(|| self.inner.store.confirmed(source))
-			.flatten()
+	pub fn in_force(&self, source: Source, sources: Sources) -> Option<InForce> {
+		self.inner.store.in_force(source, sources)
 	}
 }

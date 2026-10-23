@@ -25,6 +25,9 @@ pub enum Error {
 	/// A CRLite filter could not be decoded.
 	#[cfg(feature = "crlite")]
 	Filter,
+	/// The system's upki cache was not usable, in the way the message gives.
+	#[cfg(feature = "upki")]
+	Upki(&'static str),
 	/// The collection did not have the shape this crate expects.
 	Collection(&'static str),
 	/// Reading or writing the cache failed.
@@ -42,6 +45,8 @@ impl fmt::Display for Error {
 			Self::FilterHash => f.write_str("CRLite filter does not match its signed record"),
 			#[cfg(feature = "crlite")]
 			Self::Filter => f.write_str("CRLite filter does not decode"),
+			#[cfg(feature = "upki")]
+			Self::Upki(why) => write!(f, "upki cache: {why}"),
 			Self::Collection(why) => write!(f, "unexpected collection: {why}"),
 			Self::Io(err) => write!(f, "revocation cache: {err}"),
 		}

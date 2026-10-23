@@ -3,7 +3,7 @@
 
 use std::{
 	sync::Arc,
-	time::{Duration, Instant},
+	time::{Duration, Instant, SystemTime},
 };
 
 use rustls::{CertificateError, ClientConfig, HandshakeKind, client::Resumption};
@@ -14,6 +14,9 @@ use crate::test_support::{
 	FakeRemoteSettings, SigningPki, TlsPki, crlite_filter, crlite_record, handshake,
 	onecrl_issuer_serial, provider, transfer,
 };
+
+#[cfg(feature = "upki")]
+mod upki;
 
 const POLL: Duration = Duration::from_millis(200);
 
@@ -102,6 +105,25 @@ fn revoked_by(result: Result<HandshakeKind, rustls::Error>) -> Option<Source> {
 	}
 }
 
+/// The sources of an agent that uses `source` alone.
+fn only(source: Source) -> Sources {
+	let mut sources = Sources::none();
+	match source {
+		#[cfg(feature = "onecrl")]
+		Source::OneCrl => sources.onecrl = true,
+		#[cfg(feature = "crlite")]
+		Source::Crlite => sources.crlite = true,
+	}
+	sources
+}
+
+/// When `source`'s data was last confirmed current, for an agent that uses every source.
+fn last_confirmed(revocation: &Revocation, source: Source) -> Option<SystemTime> {
+	revocation
+		.in_force(source, Sources::all())
+		.and_then(|in_force| in_force.confirmed)
+}
+
 fn held_timestamp(revocation: &Revocation, source: Source) -> Option<u64> {
 	revocation.inner.store.held(source).0
 }
@@ -117,9 +139,9 @@ fn a_listed_intermediate_is_refused() {
 	let server = setup.server_config();
 	assert!(handshake(&client, &server).is_ok(), "nothing is known yet");
 
-	revocation.enable(Source::OneCrl);
+	revocation.enable(only(Source::OneCrl));
 	wait_for("OneCRL", || {
-		revocation.last_confirmed(Source::OneCrl).is_some()
+		last_confirmed(&revocation, Source::OneCrl).is_some()
 	});
 
 	let error = handshake(&client, &server);
@@ -155,9 +177,9 @@ fn a_revoked_leaf_is_refused() {
 	);
 	setup.publish_crlite(&[("full", full, false)], 10);
 	let revocation = setup.revocation(None, DEFAULT_POLL_INTERVAL);
-	revocation.enable(Source::Crlite);
+	revocation.enable(only(Source::Crlite));
 	wait_for("CRLite", || {
-		revocation.last_confirmed(Source::Crlite).is_some()
+		last_confirmed(&revocation, Source::Crlite).is_some()
 	});
 
 	let refusals = Arc::new(Refusals::default());
@@ -189,7 +211,7 @@ fn a_revocation_in_a_later_incremental_filter_is_picked_up() {
 	setup.publish_crlite(&[("full", full.clone(), false)], 10);
 
 	let revocation = setup.revocation(None, POLL);
-	revocation.enable(Source::Crlite);
+	revocation.enable(only(Source::Crlite));
 	wait_for("CRLite", || {
 		held_timestamp(&revocation, Source::Crlite) == Some(10)
 	});
@@ -238,9 +260,9 @@ fn a_missing_incremental_filter_is_retried() {
 	);
 
 	let revocation = setup.revocation(None, POLL);
-	revocation.enable(Source::Crlite);
+	revocation.enable(only(Source::Crlite));
 	wait_for("the full filter", || {
-		revocation.last_confirmed(Source::Crlite).is_some()
+		last_confirmed(&revocation, Source::Crlite).is_some()
 	});
 
 	let refusals = Arc::new(Refusals::default());
@@ -264,7 +286,7 @@ fn a_session_saved_before_an_update_is_not_resumed() {
 	let unrelated = TlsPki::new(false);
 	setup.publish_onecrl(vec![onecrl_issuer_serial(&unrelated.intermediate)], 10);
 	let revocation = setup.revocation(None, POLL);
-	revocation.enable(Source::OneCrl);
+	revocation.enable(only(Source::OneCrl));
 	wait_for("OneCRL", || {
 		held_timestamp(&revocation, Source::OneCrl) == Some(10)
 	});
@@ -292,7 +314,7 @@ fn a_ticket_arriving_after_an_update_is_checked_against_the_data_it_was_verified
 	let unrelated = TlsPki::new(false);
 	setup.publish_onecrl(vec![onecrl_issuer_serial(&unrelated.intermediate)], 10);
 	let revocation = setup.revocation(None, POLL);
-	revocation.enable(Source::OneCrl);
+	revocation.enable(only(Source::OneCrl));
 	wait_for("OneCRL", || {
 		held_timestamp(&revocation, Source::OneCrl) == Some(10)
 	});
@@ -336,7 +358,7 @@ fn the_platform_roots_are_indexed_by_the_time_enable_returns() {
 	let revocation = setup.revocation(None, DEFAULT_POLL_INTERVAL);
 	assert!(revocation.inner.store.roots.read().unwrap().is_none());
 
-	revocation.enable(Source::OneCrl);
+	revocation.enable(only(Source::OneCrl));
 	assert!(revocation.inner.store.roots.read().unwrap().is_some());
 }
 
@@ -345,12 +367,12 @@ fn another_agent_does_not_cut_a_backoff_short() {
 	let setup = Setup::new(false);
 	setup.server.set_failing(true);
 	let revocation = setup.revocation(None, DEFAULT_POLL_INTERVAL);
-	revocation.enable(Source::OneCrl);
+	revocation.enable(only(Source::OneCrl));
 	wait_for("a failed check", || !setup.server.requests().is_empty());
 	std::thread::sleep(Duration::from_millis(200));
 
 	let before = setup.server.requests().len();
-	revocation.enable(Source::OneCrl);
+	revocation.enable(only(Source::OneCrl));
 	std::thread::sleep(Duration::from_millis(500));
 	assert_eq!(setup.server.requests().len(), before, "no retry yet");
 }
@@ -360,15 +382,15 @@ fn an_unchanged_collection_is_only_confirmed() {
 	let setup = Setup::new(false);
 	setup.publish_onecrl(vec![onecrl_issuer_serial(&setup.tls.intermediate)], 10);
 	let revocation = setup.revocation(None, POLL);
-	revocation.enable(Source::OneCrl);
+	revocation.enable(only(Source::OneCrl));
 	wait_for("OneCRL", || {
-		revocation.last_confirmed(Source::OneCrl).is_some()
+		last_confirmed(&revocation, Source::OneCrl).is_some()
 	});
 
-	let first = revocation.last_confirmed(Source::OneCrl);
+	let first = last_confirmed(&revocation, Source::OneCrl);
 	let epoch = revocation.inner.store.epoch.load(Ordering::Acquire);
 	wait_for("a second check", || {
-		revocation.last_confirmed(Source::OneCrl) > first
+		last_confirmed(&revocation, Source::OneCrl) > first
 	});
 
 	assert_eq!(revocation.inner.store.epoch.load(Ordering::Acquire), epoch);
@@ -386,9 +408,9 @@ fn a_bad_signature_keeps_the_data_held() {
 	let setup = Setup::new(false);
 	setup.publish_onecrl(vec![onecrl_issuer_serial(&setup.tls.intermediate)], 10);
 	let revocation = setup.revocation(None, POLL);
-	revocation.enable(Source::OneCrl);
+	revocation.enable(only(Source::OneCrl));
 	wait_for("OneCRL", || {
-		revocation.last_confirmed(Source::OneCrl).is_some()
+		last_confirmed(&revocation, Source::OneCrl).is_some()
 	});
 
 	let stripped = Vec::new();
@@ -430,19 +452,19 @@ fn a_restart_enforces_the_cache_before_any_fetch() {
 	setup.publish_crlite(&[("full", full, false)], 10);
 
 	let first = setup.revocation(Some(cache.path().to_owned()), DEFAULT_POLL_INTERVAL);
-	first.enable(Source::OneCrl);
-	first.enable(Source::Crlite);
+	first.enable(only(Source::OneCrl));
+	first.enable(only(Source::Crlite));
 	wait_for("both sources", || {
-		first.last_confirmed(Source::OneCrl).is_some()
-			&& first.last_confirmed(Source::Crlite).is_some()
+		last_confirmed(&first, Source::OneCrl).is_some()
+			&& last_confirmed(&first, Source::Crlite).is_some()
 	});
-	let confirmed = first.last_confirmed(Source::OneCrl);
+	let confirmed = last_confirmed(&first, Source::OneCrl);
 
 	setup.server.set_failing(true);
 	let requests = setup.server.requests().len();
 	let second = setup.revocation(Some(cache.path().to_owned()), DEFAULT_POLL_INTERVAL);
-	second.enable(Source::OneCrl);
-	second.enable(Source::Crlite);
+	second.enable(only(Source::OneCrl));
+	second.enable(only(Source::Crlite));
 
 	// Enforced straight away, from the cache alone.
 	let refusals = Arc::new(Refusals::default());
@@ -475,7 +497,7 @@ fn a_restart_enforces_the_cache_before_any_fetch() {
 	// Confirmed at the time the first process confirmed it, to the second.
 	let to_secs = |time: Option<SystemTime>| time.map(cache::secs);
 	assert_eq!(
-		to_secs(second.last_confirmed(Source::OneCrl)),
+		to_secs(last_confirmed(&second, Source::OneCrl)),
 		to_secs(confirmed)
 	);
 
@@ -491,8 +513,10 @@ fn a_tampered_cache_is_not_used() {
 	setup.publish_onecrl(vec![onecrl_issuer_serial(&setup.tls.intermediate)], 10);
 
 	let first = setup.revocation(Some(cache.path().to_owned()), DEFAULT_POLL_INTERVAL);
-	first.enable(Source::OneCrl);
-	wait_for("OneCRL", || first.last_confirmed(Source::OneCrl).is_some());
+	first.enable(only(Source::OneCrl));
+	wait_for("OneCRL", || {
+		last_confirmed(&first, Source::OneCrl).is_some()
+	});
 
 	// Tamper with a copy: the first one's poller is free to rewrite its own cache when it confirms
 	// the data, which would undo the tampering.
@@ -509,6 +533,6 @@ fn a_tampered_cache_is_not_used() {
 
 	setup.server.set_failing(true);
 	let second = setup.revocation(Some(tampered.path().to_owned()), DEFAULT_POLL_INTERVAL);
-	second.enable(Source::OneCrl);
-	assert_eq!(second.last_confirmed(Source::OneCrl), None);
+	second.enable(only(Source::OneCrl));
+	assert_eq!(last_confirmed(&second, Source::OneCrl), None);
 }

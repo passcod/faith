@@ -611,6 +611,10 @@ pub struct TimeoutOptions {
 	not(feature = "crlite"),
 	doc = "\n```compile_fail\nweb_faith::Agent::builder()\n    .tls(|tls| tls.revocation(|r| r.crlite(false).build()).build());\n```"
 )]
+#[cfg_attr(
+	not(feature = "upki"),
+	doc = "\n```compile_fail\nweb_faith::Agent::builder()\n    .tls(|tls| tls.revocation(|r| r.upki(false).build()).build());\n```"
+)]
 #[derive(bon::Builder, Clone, Debug, Default)]
 #[non_exhaustive]
 pub struct TlsOptions {
@@ -646,7 +650,8 @@ pub struct TlsOptions {
 	pub extra_roots: Option<Vec<Vec<u8>>>,
 	/// Certificate revocation checking, against Mozilla's OneCRL and CRLite.
 	///
-	/// Both sources are on by default; each can be turned off for this agent.
+	/// Both sources are on by default; each can be turned off for this agent, and CRLite can be
+	/// kept from using the system's upki cache.
 	// spec:REVOC#opting-out
 	#[cfg(any(feature = "onecrl", feature = "crlite"))]
 	#[builder(with = |with: impl FnOnce(RevocationOptionsBuilder) -> RevocationOptions| with(RevocationOptions::builder()))]
@@ -674,6 +679,12 @@ pub struct RevocationOptions {
 	/// Default: true.
 	#[cfg(feature = "crlite")]
 	pub crlite: Option<bool>,
+	/// Take CRLite data from the system's upki cache where one is installed, usable and fresh,
+	/// instead of fetching it. Has no effect with CRLite off.
+	///
+	/// Default: true.
+	#[cfg(feature = "upki")]
+	pub upki: Option<bool>,
 }
 
 /// Everything an agent can be configured with.

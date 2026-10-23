@@ -42,6 +42,7 @@
 //! | `encoding` | ✓ | Content codings for request and response bodies. |
 //! | `onecrl` | ✓ | Certificate revocation checking against Mozilla's OneCRL. |
 //! | `crlite` | ✓ | Certificate revocation checking against Mozilla's CRLite, with its MPL-2.0 filter decoder. |
+//! | `upki` | ✓ | CRLite data read from the system's upki cache where one is kept, instead of fetched. Needs `crlite`. |
 //! | `tls-aws-lc-rs` | ✓ | aws-lc-rs as the rustls crypto provider. |
 //! | `tls-ring` |  | ring as the rustls crypto provider instead. |
 //! | `http3` |  | Transparent HTTP/3, upgraded into via Alt-Svc. Needs the cfg flag above. |

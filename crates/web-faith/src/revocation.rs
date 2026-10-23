@@ -11,12 +11,15 @@ use std::{
 	time::Duration,
 };
 
+#[cfg(feature = "upki")]
+use web_faith_revocation::Provider;
 use web_faith_revocation::{Refusals, Revocation, RevocationConfig, Source, Sources};
 
 use crate::{
 	USER_AGENT,
 	client::{NodeEnvRecipe, TlsRecipe, crypto_provider},
 	error::{FaithError, FaithErrorKind},
+	stats::RevocationProvider,
 };
 
 /// Generous next to what a fetch takes, since the largest is a few megabytes of CRLite filter, but
@@ -45,9 +48,7 @@ impl RevocationRecipe {
 		}
 
 		let handle = handle()?;
-		for source in sources.iter() {
-			handle.enable(source);
-		}
+		handle.enable(sources);
 		Ok(Some(Self {
 			handle: handle.clone(),
 			sources,
@@ -57,12 +58,18 @@ impl RevocationRecipe {
 
 	/// The agent's stats for `source`: `None` for a source it does not use.
 	pub(crate) fn stats(&self, source: Source) -> Option<crate::stats::RevocationStats> {
+		let in_force = self.handle.in_force(source, self.sources);
 		self.sources
 			.iter()
 			.any(|on| on == source)
 			.then(|| crate::stats::RevocationStats {
 				refused: self.refusals.count(source),
-				last_confirmed: self.handle.last_confirmed(source),
+				last_confirmed: in_force.and_then(|in_force| in_force.confirmed),
+				provider: in_force.map(|in_force| match in_force.provider {
+					#[cfg(feature = "upki")]
+					Provider::Upki => RevocationProvider::Upki,
+					_ => RevocationProvider::RemoteSettings,
+				}),
 			})
 	}
 }
