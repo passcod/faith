@@ -151,13 +151,20 @@ async fn run(
 						store.load(Source::Crlite);
 					}
 					if failures == 0 {
-						due = Some(next_due(&store, &demand.to_fetch(&store), intervals.remote));
+						let active = demand.to_fetch(&store);
+						due = (!active.is_empty())
+							.then(|| next_due(&store, &active, intervals.remote));
 					}
 				}
 			}
 			() = sleep_until_some(due) => {
 				let active = demand.to_fetch(&store);
-				if poll(&store, &remote, &active).await {
+				if active.is_empty() {
+					// Nothing is wanted from Remote Settings, as when the system's cache supplies
+					// all there is. The next change of demand sets the timer again.
+					failures = 0;
+					due = None;
+				} else if poll(&store, &remote, &active).await {
 					failures = 0;
 					due = Some(next_due(&store, &active, intervals.remote));
 				} else {
@@ -211,8 +218,7 @@ fn next_due(store: &Store, sources: &[Source], interval: Duration) -> Instant {
 	due
 }
 
-/// Check each of `sources` once. `true` when each was confirmed current, which is vacuously so
-/// when there are none.
+/// Check each of `sources` once. `true` when each was confirmed current.
 async fn poll(store: &Store, remote: &RemoteSettings, sources: &[Source]) -> bool {
 	let collections: Vec<&str> = sources.iter().map(|source| source.collection()).collect();
 	let Ok(modified) = remote.last_modified(&collections).await else {

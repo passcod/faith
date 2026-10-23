@@ -254,6 +254,46 @@ fn a_stale_cache_newer_than_faiths_own_data_stays_in_force() {
 }
 
 #[test]
+fn a_manifest_dated_far_ahead_is_stale() {
+	let host = Host::new();
+	write_upki_cache(
+		host.path(),
+		&[(FILTER, &host.revoked())],
+		SystemTime::now() + 30 * DAY,
+	);
+	let revocation = host.revocation(3 * DAY);
+	revocation.enable(crlite_only(true));
+	assert!(!revocation.inner.store.upki_fresh());
+}
+
+#[test]
+fn a_manifest_dated_slightly_ahead_is_fresh() {
+	let host = Host::new();
+	write_upki_cache(
+		host.path(),
+		&[(FILTER, &host.revoked())],
+		SystemTime::now() + Duration::from_secs(60),
+	);
+	let revocation = host.revocation(3 * DAY);
+	revocation.enable(crlite_only(true));
+	assert!(revocation.inner.store.upki_fresh());
+}
+
+#[test]
+fn a_fresh_cache_alone_costs_no_request_to_remote_settings() {
+	let host = Host::new();
+	host.upki(&host.revoked(), Duration::ZERO);
+	let mut revocation_config = host.setup.signing.config(&host.setup.server, None);
+	revocation_config.upki = UpkiLocation::Dir(host.path().to_owned());
+	revocation_config.poll_interval = Duration::from_millis(50);
+	let revocation = Revocation::new(revocation_config, reqwest::Client::new());
+
+	revocation.enable(crlite_only(true));
+	std::thread::sleep(Duration::from_millis(500));
+	assert!(host.setup.server.requests().is_empty());
+}
+
+#[test]
 fn a_refreshed_cache_takes_over_again() {
 	let host = Host::new();
 	host.upki(&host.revoked(), 4 * DAY);

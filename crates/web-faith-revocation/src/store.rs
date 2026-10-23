@@ -97,6 +97,10 @@ pub(crate) struct UpkiHeld {
 	seen: Option<(PathBuf, SystemTime)>,
 }
 
+/// How far ahead of the clock a manifest's modification time may be and still count as recent.
+#[cfg(feature = "upki")]
+const UPKI_CLOCK_SKEW: Duration = Duration::from_secs(60 * 60);
+
 /// How the system's upki cache is found and judged.
 #[cfg(feature = "upki")]
 #[derive(Clone, Debug)]
@@ -445,6 +449,7 @@ impl Store {
 	#[cfg(feature = "upki")]
 	pub(crate) fn refresh_upki(&self) {
 		let before = self.crlite_provider();
+		let was_fresh = self.upki.read().expect("poisoned").fresh;
 		let dir = match &self.upki_settings.location {
 			upki::UpkiLocation::System => Locator::platform().revocation_dir(),
 			upki::UpkiLocation::Dir(dir) => Some(dir.clone()),
@@ -453,21 +458,30 @@ impl Store {
 
 		let replaced = dir.is_some_and(|dir| self.reload_upki(dir));
 
-		let now = SystemTime::now();
 		let mut held = self.upki.write().expect("poisoned");
-		// A manifest dated in the future is a clock that was wrong, not a stale fetch.
-		let fresh = held.data.is_some()
-			&& held.confirmed.is_some_and(|at| {
-				now.duration_since(at)
-					.map_or(true, |age| age <= self.upki_settings.max_age)
-			});
-		let flipped = held.fresh != fresh;
+		let fresh = self.upki_is_fresh(&held, SystemTime::now());
+		let flipped = was_fresh != fresh;
 		held.fresh = fresh;
 		drop(held);
 
 		if replaced || flipped || self.crlite_provider() != before {
 			self.bump_epoch();
 		}
+	}
+
+	/// Whether the data in `held` is fresh at `now`: held, and fetched by upki recently enough.
+	///
+	/// A manifest dated a little ahead of `now` is a clock that was slightly off. One dated further
+	/// ahead than that says nothing about when upki last fetched, so it is not fresh.
+	#[cfg(feature = "upki")]
+	fn upki_is_fresh(&self, held: &UpkiHeld, now: SystemTime) -> bool {
+		held.data.is_some()
+			&& held
+				.confirmed
+				.is_some_and(|at| match now.duration_since(at) {
+					Ok(age) => age <= self.upki_settings.max_age,
+					Err(ahead) => ahead.duration() <= UPKI_CLOCK_SKEW,
+				})
 	}
 
 	/// Read the cache in `dir` if its manifest has changed since it was last read. `true` when
@@ -504,12 +518,16 @@ impl Store {
 				held.seen = Some((dir, snapshot.confirmed));
 				held.confirmed = Some(snapshot.confirmed);
 				if held.data.is_some() && held.hashes == snapshot.hashes {
+					held.fresh = self.upki_is_fresh(&held, SystemTime::now());
 					return false;
 				}
 				held.data = Some(Arc::new(Crlite {
 					filters: snapshot.filters,
 				}));
 				held.hashes = snapshot.hashes;
+				// Judged here, under the lock that swaps the data, so no handshake sees the new
+				// data with the old data's verdict.
+				held.fresh = self.upki_is_fresh(&held, SystemTime::now());
 				true
 			}
 			// An unusable cache leaves the data held in force.

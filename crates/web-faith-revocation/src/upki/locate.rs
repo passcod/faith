@@ -58,7 +58,7 @@ impl Locator {
 	/// The directory holding `index.bin` and `manifest.json`, if upki's cache can be located.
 	///
 	/// The user's configuration file wins over the system one. A file that exists but cannot be
-	/// read or parsed, or has no `cache-dir`, leaves the cache unlocated rather than falling back
+	/// read or parsed, or has no `cache-dir` or a relative one, leaves the cache unlocated rather than falling back
 	/// to a default upki itself would not have used. Without any configuration file the cache is
 	/// upki's per-user cache directory if there is one, and otherwise the system's.
 	pub(crate) fn revocation_dir(&self) -> Option<PathBuf> {
@@ -71,6 +71,11 @@ impl Locator {
 			match fs::read_to_string(&path) {
 				Ok(text) => {
 					let config: Config = toml::from_str(&text).ok()?;
+					// upki resolves a relative one against its own working directory, which Faith
+					// cannot know.
+					if !config.cache_dir.has_root() {
+						return None;
+					}
 					return Some(config.cache_dir.join("revocation"));
 				}
 				Err(err) if absent(&err) => continue,

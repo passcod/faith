@@ -129,6 +129,14 @@ fn a_config_without_a_cache_dir_leaves_the_cache_unlocated() {
 }
 
 #[test]
+fn a_relative_cache_dir_leaves_the_cache_unlocated() {
+	let dirs = Dirs::new();
+	mkdir(&dirs.locator.system_cache_dir);
+	dirs.system_config("cache-dir = 'relative/cache'");
+	assert_eq!(dirs.locator.revocation_dir(), None);
+}
+
+#[test]
 fn a_broken_user_config_does_not_fall_through_to_the_systems() {
 	let dirs = Dirs::new();
 	dirs.user_config("not toml at all =");
