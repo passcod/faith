@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.1](https://github.com/passcod/faith/compare/web-faith-v1.1.0...web-faith-v1.1.1) - 2026-10-23
+
+### Fixed
+
+- *(ci)* refuse extra roots on Android, and tamper with a cache copy in the revocation test
+- *(revocation)* end paths at self-issued certs, time out the poller, tag sessions by verified epoch
+
+### Other
+
+- update revocation spec, update 32 files
+- check revocation on every agent's connections
+- hand the resolver Faith's rustls config for encrypted DNS
+- build reqwest's rustls config in Faith
+- *(web-faith)* release v1.1.0
+
 ## [1.1.0](https://github.com/passcod/faith/compare/web-faith-v1.0.1...web-faith-v1.1.0) - 2026-09-25
 
 ### Other
