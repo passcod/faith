@@ -23,8 +23,18 @@ Faith’s published native builds also include ARMv7 and x86_64 FreeBSD, which G
 A provider selected as Faith’s default would consequently remove support from published targets and could crash on older supported x86_64 CPUs.
 
 All three TLS 1.3 cipher suites in `rustls-graviola` declare no QUIC algorithm.
+Rustls rejects a QUIC client configuration without a QUIC-capable TLS 1.3 cipher suite.
 Faith’s default feature set supports HTTP/3 and its TLS configuration is shared with the HTTP/3 client.
-Using the provider would therefore make Graviola incompatible with Faith’s HTTP/3 and TLS 1.3 early-data behaviour.
+Using the provider would therefore prevent client construction for Faith’s HTTP/3 build, rather than merely disabling HTTP/3 at request time.
+It would also make TLS 1.3 early-data behaviour unavailable.
+
+Graviola supports RSA, P-256, P-384, and Ed25519 client keys in the formats its Rustls key provider recognises.
+Faith accepts a wider set of PEM key encodings at agent construction, so some currently accepted identities, including P-521 keys, would instead fail when Rustls loads the identity.
+A selectable Graviola backend would need to reconcile that delayed incompatibility with Faith’s construction-time validation contract.
+
+Selecting Graviola would not remove AWS-LC from Faith’s dependency graph.
+Faith’s Hickory DNS dependency currently enables its AWS-LC TLS features, although encrypted DNS requests use Faith’s custom Rustls configuration.
+Removing AWS-LC would require a separate resolver dependency and feature design.
 
 Graviola describes itself as very new and asks users to exercise due caution.
 Its Rustls integration is version-compatible in principle with Faith’s Rustls 0.23 dependency, but Faith must not treat that compatibility as sufficient for adoption while platform and QUIC coverage are incomplete.
@@ -41,3 +51,4 @@ This decision keeps Faith’s published binary targets, HTTP/3 support, and curr
 Re-evaluate Graviola only when its Rustls provider supports QUIC for its TLS 1.3 cipher suites and Graviola can cover every Faith release target without requiring unavailable CPU features.
 
 A future evaluation should prove a full feature build against Faith’s resolved Rustls version, exercise HTTP/1.1, HTTP/2, and HTTP/3 handshakes, verify mTLS identities across Faith’s supported PEM key formats, and confirm that platform trust, extra roots, revocation, key logging, and error-code behaviour are unchanged.
+It should also establish whether a Graviola backend can replace AWS-LC in the DNS dependency graph and whether its provider has reached a suitable security maturity for a public Node package.
