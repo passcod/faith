@@ -71,6 +71,9 @@ Faith's suite is tape, so the example either adopts mocha-remote for its own tes
 ## Decided
 
 - The example runs on an Android emulator, not merely cross-compiles. Compiling already passes in `publish.yml` for two Android ABIs and proves nothing about Hermes.
+- The job is path-filtered: it runs when the React Native example, `web-faith-napi`, or the workflow itself changes, and not otherwise. The repository is public, so runner minutes are free and the filter is about keeping a long job off unrelated pull requests rather than about cost.
+- Upstream drift is consequently not covered. A moved Hermes pin or a React Native nightly that disappears will surface the next time one of the filtered paths changes, not when it happens. Accepted knowingly.
+- Apple platforms are out of scope here and carried by their own card, to be picked up once Android is proven.
 
 ## Open
 
