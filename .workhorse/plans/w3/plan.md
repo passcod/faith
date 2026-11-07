@@ -34,8 +34,7 @@ Every body accessor that does not stream (`text()`, `json()`, `arrayBuffer()`) i
 
 **The Android trust store needs app-side wiring.**
 `rustls-platform-verifier` calls into the JVM to reach Android's trust manager, which requires a Kotlin component added to the app's Gradle build, a Proguard keep rule, and a one-time `init_with_env` call handing over a `JavaVM` and a `Context`.
-React Native Node-API loads the library with `dlopen` rather than `System.loadLibrary`, so `JNI_OnLoad` is not a route to the handles either.
-A prebuilt Faith is therefore not drop-in on Android; either the consuming app does this setup, or the React Native Android build trades the system trust store for static roots.
+React Native Node-API loads the library with `dlopen` rather than `System.loadLibrary`, and its own `JNI_OnLoad` takes a `JavaVM` only to register its TurboModule and discards it, so neither is a route to the handles.
 Faith already refuses extra roots on Android for the related reason that the platform verifier has nowhere to put them.
 
 **The system resolver is not readable on Android.**
@@ -74,7 +73,34 @@ Faith's suite is tape, so the example either adopts mocha-remote for its own tes
 - The job is path-filtered: it runs when the React Native example, `web-faith-napi`, or the workflow itself changes, and not otherwise. The repository is public, so runner minutes are free and the filter is about keeping a long job off unrelated pull requests rather than about cost.
 - Upstream drift is consequently not covered. A moved Hermes pin or a React Native nightly that disappears will surface the next time one of the filtered paths changes, not when it happens. Accepted knowingly.
 - Apple platforms are out of scope here and carried by their own card, to be picked up once Android is proven.
+- The React Native build is the slim one: a TLS backend and nothing else, as `build:slim` already produces. Widening it is carded.
+- The example carries its own test harness, whatever suits running inside an app, and the tape suite under `test/` is left alone. The two have different hosts and no reason to share a runner.
+- The React Native build keeps the system trust store rather than falling back to static roots, so Android devices honour user-installed and enterprise roots and the OS's own distrust decisions.
+- Integrating that is Faith's job, not the consuming app's, as far as it can be taken. React Native autolinking adds a package's `android/` Gradle module to the app build with no action from the consumer, which is what makes the Maven dependency on the Kotlin component and the Proguard keep rule something Faith can ship rather than document.
+
+## Handing the JVM to the verifier
+
+The Gradle module is needed whichever way the handles arrive, because the `org.rustls.platformverifier` classes have to be in the APK for the verifier to call at all.
+What is open is how Faith obtains an `Env` and a `Context` at runtime, given that its library is dlopened by a TurboModule rather than loaded by the class loader.
+
+Faith ships its own autolinked Android module and takes the integration on whole, so a consuming app adds the package and nothing else.
+The prebuilt layout is jniLibs-shaped, so Faith's library is packed into the APK's native library directory like any other, and the module's Kotlin component loads it with `SoLoader` at app startup.
+That runs `JNI_OnLoad` with the `JavaVM` in hand, before anything requires the addon from JavaScript and triggers the TurboModule's `dlopen`, and a native init declared on the Kotlin side passes the `Context` through.
+Because the JNI entry point lives in Faith's own library alongside the napi one, no second shared object is needed.
+
+Two things to prove against a real build: that the `SoLoader` load and the TurboModule's later `dlopen` coexist, and that the name the prebuild packs the library under is one `SoLoader` can ask for.
+
+This machinery would shrink if `react-native-node-api` kept the `JavaVM` its own `JNI_OnLoad` already receives and offered it to addons, which is a few lines there and would serve every Rust addon reaching an Android system API.
+Worth raising upstream once Faith's own integration proves what the interface needs to be.
+
+## What slim leaves out, and what it buys
+
+The slim build is HTTP/1.1 and HTTP/2 over TLS with the platform trust store, and no cookie jar, content decoding, HTTP cache, HTTP/3, revocation checking or Faith's own DNS client.
+Dropping content decoding is the loss that will be felt first on a mobile connection.
+
+Dropping the DNS client is a gain rather than a compromise here: resolution falls to the system resolver, which on Android consults the device's real configuration, so the silent fall back to Google Public DNS does not arise.
+Connection tracking is absent from the slim build anyway, and would report nothing if it were present, because the tracker has no Android backend and leaves its statistics empty.
 
 ## Open
 
-- How often the Android job runs, given the cold-build cost. See the discussion on the card.
+Nothing blocking. The build order is the napi feature split, then the prebuild through ferric, then the autolinked Android module, then the example app and its workflow.
