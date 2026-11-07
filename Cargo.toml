@@ -44,8 +44,15 @@ http-cache-reqwest = { version = "1.0.0-alpha.6", features = [
     "manager-moka",
 ] }
 hyper-util = { version = "0.1", features = ["client-legacy", "tokio"] }
+# Must resolve to the same version rustls-platform-verifier takes, or the handles handed
+# across the JNI boundary are of a different crate's types.
+jni = { version = "0.22.4", default-features = false }
 libc = "0.2.179"
-napi = { version = "3.7.0", features = [
+# default-features = false drops `dyn-symbols`, which resolves Node-API functions in
+# the host process at runtime. Node builds need it and re-enable it through
+# web-faith-napi's own `dyn-symbols` feature; React Native has no such host and links
+# against weak-node-api instead, so its build must leave it off.
+napi = { version = "3.7.0", default-features = false, features = [
     "napi9",
     "serde-json",
     "tokio_rt",

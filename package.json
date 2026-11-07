@@ -17,14 +17,16 @@
 			"import": "./wrapper.mjs",
 			"require": "./wrapper.js",
 			"types": "./wrapper.d.ts"
-		}
+		},
+		"./wrapper-factory": "./wrapper-factory.js"
 	},
 	"files": [
 		"index.js",
 		"index.d.ts",
 		"wrapper.js",
 		"wrapper.mjs",
-		"wrapper.d.ts"
+		"wrapper.d.ts",
+		"wrapper-factory.js"
 	],
 	"napi": {
 		"binaryName": "faith",
@@ -46,7 +48,7 @@
 	"scripts": {
 		"build": "napi build --release --platform --manifest-path crates/web-faith-napi/Cargo.toml --output-dir .",
 		"build:debug": "napi build --platform --manifest-path crates/web-faith-napi/Cargo.toml --output-dir .",
-		"build:slim": "napi build --platform --manifest-path crates/web-faith-napi/Cargo.toml --output-dir . --no-default-features --features tls-aws-lc-rs",
+		"build:slim": "napi build --platform --manifest-path crates/web-faith-napi/Cargo.toml --output-dir . --no-default-features --features tls-aws-lc-rs,dyn-symbols",
 		"test": "npm run build && cargo test && npm run test:only",
 		"test:only": "tape test/*.test.js",
 		"test:slim": "npm run build:slim && tape test/slim/*.test.js",

@@ -101,6 +101,41 @@ Dropping content decoding is the loss that will be felt first on a mobile connec
 Dropping the DNS client is a gain rather than a compromise here: resolution falls to the system resolver, which on Android consults the device's real configuration, so the silent fall back to Google Public DNS does not arise.
 Connection tracking is absent from the slim build anyway, and would report nothing if it were present, because the tracker has no Android backend and leaves its statistics empty.
 
-## Open
+## ferric cannot express the slim build
 
-Nothing blocking. The build order is the napi feature split, then the prebuild through ferric, then the autolinked Android module, then the example app and its workflow.
+`ferric build` invokes cargo with the target and the configuration and nothing else, so there is no way to pass `--no-default-features` or `--features` through it.
+The packaging it does afterwards is not ferric's own: `createAndroidLibsDirectory` and its siblings are exported from the host package, which is what ferric itself imports.
+
+So the prebuild is driven by a small script of Faith's own that calls cargo with the slim features and the NDK environment, then hands the artifacts to those same exported helpers.
+Faith does not need ferric's other job either, generating TypeScript declarations, because the Node surface is already declared by hand.
+A `--features` passthrough is worth raising upstream alongside the `JavaVM` one.
+
+That script also has to set `CARGO_ENCODED_RUSTFLAGS` to link `weak-node-api`, which overrides the repository's `.cargo/config.toml` and so drops `--cfg reqwest_unstable`.
+The slim build has no HTTP/3 and does not need it.
+
+## Build steps
+
+- [x] Split `dyn-symbols` out of `web-faith-napi`'s napi dependency into a feature of its own, inside `default`, so the React Native build can leave it off.
+- [x] Expose a JNI entry point on the napi crate that hands an `Env` and a `Context` to `rustls-platform-verifier`. Kept on the napi crate rather than `web-faith`: the symbol has to be in the cdylib the JVM loads, and exposing `jni` types from a published crate's API would tie its semver to theirs. Not yet compiled, for want of an NDK.
+- [x] Add the `react-native` package: the prebuild script, the JavaScript entrypoint, and `wrapper-factory.js`, which takes the binding and its environment as parameters so one wrapper serves both packages.
+- [x] Add the autolinked Android module: the Gradle build with the Maven dependency on the verifier's Kotlin component, the consumer Proguard rule, and the Kotlin that loads the library and calls the initialiser.
+- [x] Add the example app and its test harness, under `react-native/example`, reporting through mocha-remote as `react-native-node-api`'s own test app does.
+- [x] Add the path-filtered workflow: the emulator run, a cross-compile job for the three architectures the emulator does not cover, and a check that the Gradle module's pinned verifier version matches `Cargo.lock`.
+
+## Verifying the Android side
+
+Everything above the Gradle module is verified: the three feature shapes resolve as intended, and the Node suite's 2229 tests pass over the wrapper that now takes its binding as a parameter.
+Nothing below it is, because this machine carries no JDK, Android SDK or NDK, so the Rust Android target does not link, the Kotlin does not compile, and the example has never been bundled.
+
+What a local loop needs, to be installed by hand:
+
+- A JDK 17 distribution, which is what React Native's Gradle build expects.
+- The Android SDK command-line tools, then through `sdkmanager`: `platform-tools`, `platforms;android-35`, `build-tools;35.0.0`, `ndk;27.1.12297006`, `cmake;3.22.1`, `emulator`, and `system-images;android-29;default;x86_64`.
+- `ANDROID_HOME` exported to the SDK directory.
+- An AVD on API 29 x86_64, and membership of the `kvm` group for hardware acceleration.
+- The remaining Rust targets: `rustup target add x86_64-linux-android i686-linux-android armv7-linux-androideabi`.
+
+The NDK version is the one the React Native community template pins, which the prebuild script defaults to and the workflow sets; a different one needs `FAITH_NDK_VERSION` and the workflow's `NDK_VERSION` moved together.
+
+One local wrinkle to expect: this machine runs cargo under an `sccache` wrapper, and a first attempt at an Android target failed because sccache could not find the NDK compiler on `PATH`.
+The prebuild script puts the NDK's bin directory on `PATH` and passes absolute compiler paths, which should settle it, but it is the first thing to suspect if a target fails to build locally and builds in CI.

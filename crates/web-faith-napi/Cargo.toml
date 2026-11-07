@@ -31,6 +31,13 @@ web-faith = { workspace = true, features = ["unstable-internals"] }
 web-faith-conn-tracker = { workspace = true, optional = true }
 web-faith-cookies = { workspace = true, features = ["reqwest"], optional = true }
 
+# The JNI entry point that gives the platform verifier its handles. Exported from this
+# crate rather than web-faith because the symbol has to live in the cdylib the JVM loads,
+# and because the mangled name carries the Kotlin package Faith's own Gradle module ships.
+[target.'cfg(target_os = "android")'.dependencies]
+jni.workspace = true
+rustls-platform-verifier.workspace = true
+
 [build-dependencies]
 napi-build.workspace = true
 
@@ -40,6 +47,7 @@ default = [
     "connection-tracking",
     "cookies",
     "dns",
+    "dyn-symbols",
     "encoding",
     "http3",
     "onecrl",
@@ -47,6 +55,10 @@ default = [
     "upki",
     "tls-aws-lc-rs",
 ]
+# Resolve Node-API functions in the host process at runtime. Every Node build wants
+# this. A React Native build must not have it: there is no Node host to resolve
+# against, and the symbols are linked against weak-node-api instead.
+dyn-symbols = ["napi/dyn-symbols"]
 cache = ["dep:http-cache-reqwest", "web-faith/cache"]
 connection-tracking = ["dep:web-faith-conn-tracker", "web-faith/connection-tracking"]
 cookies = ["dep:web-faith-cookies", "reqwest/cookies", "web-faith/cookies"]
