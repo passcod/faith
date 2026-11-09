@@ -4,3 +4,11 @@ node_modules
 
 test/conformance/matrix.json
 test/conformance/matrix.md
+
+# The example app's Android build, and the Gradle wrapper it writes for itself.
+/react-native/example/android/.gradle
+/react-native/example/android/build
+/react-native/example/android/app
+/react-native/example/android/gradle
+/react-native/example/android/gradlew
+/react-native/example/android/gradlew.bat

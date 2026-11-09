@@ -4,15 +4,16 @@
 	"private": true,
 	"description": "Runs Faith inside a React Native app, on an Android emulator",
 	"scripts": {
+		"gradle": "node scripts/ensure-gradle.mjs",
 		"metro": "react-native start --no-interactive",
-		"android": "react-native run-android --no-packager --active-arch-only",
+		"android": "npm run gradle && react-native run-android --no-packager --active-arch-only",
 		"test:android": "mocha-remote --exit-on-error -- concurrently --kill-others-on-fail --passthrough-arguments npm:metro 'npm:android -- {@}' --"
 	},
 	"dependencies": {
 		"@passcod/faith-react-native": "file:..",
 		"@passcod/faith": "file:../..",
-		"react": "19.2.3",
-		"react-native": "0.88.0-nightly-20260809-db662caea",
+		"react": "19.1.0",
+		"react-native": "0.81.5",
 		"react-native-node-api": "^1.2.2"
 	},
 	"devDependencies": {
@@ -21,14 +22,14 @@
 		"@babel/runtime": "^7.27.0",
 		"@react-native-community/cli": "^20.0.2",
 		"@react-native-community/cli-platform-android": "^20.0.2",
-		"@react-native/babel-preset": "0.88.0-nightly-20260809-db662caea",
-		"@react-native/metro-config": "0.88.0-nightly-20260809-db662caea",
+		"@react-native/babel-preset": "0.81.5",
+		"@react-native/metro-config": "0.81.5",
 		"@rnx-kit/metro-config": "^2.2.4",
 		"concurrently": "^9.1.2",
 		"mocha": "^11.6.0",
 		"mocha-remote-cli": "^1.13.2",
 		"mocha-remote-react-native": "^1.13.2",
-		"react-native-test-app": "^5.4.8"
+		"react-native-test-app": "^5.4.17"
 	},
 	"overrides": {
 		"@passcod/faith": "file:../.."

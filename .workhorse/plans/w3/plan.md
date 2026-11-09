@@ -1,7 +1,7 @@
 # React Native support
 
 Investigation of whether Faith can run under React Native, and what a tested-in-CI example would cost.
-Findings below were read off the sources on 2026-11-07; re-derive them before relying on them, because every component involved is pre-1.0 or pinned to a nightly.
+Findings below were read off the sources on 2026-11-07 and corrected where a build disproved them; re-derive them before relying on them, because every component involved is young and pinned.
 
 ## The route exists: react-native-node-api
 
@@ -10,8 +10,10 @@ React Native does not run Node, so a Node-API addon has no host to link against.
 Its sibling `ferric-cli` wraps Cargo and napi-rs to produce those artifacts from an annotated Rust crate, which is exactly Faith's shape.
 
 Two consequences follow from the pinning.
-React Native itself has not shipped a Hermes with Node-API, so the host package's `react-native` peer dependency is a single nightly (`0.88.0-nightly-20260809-db662caea` at time of reading).
-Anything built on this is pinned to that nightly until React Native ships Node-API in a release, and the host package is explicitly "use at your own risk".
+React Native itself has not shipped a Hermes with Node-API, so the host package vendors one from a fork of Hermes that carries it.
+`vendor-hermes` reads `sdks/.hermesversion` out of the installed React Native and clones the fork at the tag `node-api-<that version>`, so the React Native releases this works with are exactly the ones the fork has tagged.
+The host package lists them in its `react-native` peer dependency: at 1.2.2 that is 0.79.1 through 0.81.5, stable releases rather than nightlies.
+The example pins 0.81.5, the newest of them. The host package is explicitly "use at your own risk".
 
 Prebuilt layout is not npm-platform-packages: Android wants a jniLibs-shaped `faith.android.node/` directory with a `react-native-node-api-module` marker file, Apple wants an XCFramework of `.framework` bundles named `faith.apple.node/`.
 Supported targets cover the four Android ABIs, iOS device and simulator, and also macOS, tvOS and visionOS.
@@ -71,7 +73,7 @@ Faith's suite is tape, so the example either adopts mocha-remote for its own tes
 
 - The example runs on an Android emulator, not merely cross-compiles. Compiling already passes in `publish.yml` for two Android ABIs and proves nothing about Hermes.
 - The job is path-filtered: it runs when the React Native example, `web-faith-napi`, or the workflow itself changes, and not otherwise. The repository is public, so runner minutes are free and the filter is about keeping a long job off unrelated pull requests rather than about cost.
-- Upstream drift is consequently not covered. A moved Hermes pin or a React Native nightly that disappears will surface the next time one of the filtered paths changes, not when it happens. Accepted knowingly.
+- Upstream drift is consequently not covered. A React Native release dropping out of the fork's tags, or the host package narrowing its peer dependency, will surface the next time one of the filtered paths changes, not when it happens. Accepted knowingly.
 - Apple platforms are out of scope here and carried by their own card, to be picked up once Android is proven.
 - The React Native build is the slim one: a TLS backend and nothing else, as `build:slim` already produces. Widening it is carded.
 - The example carries its own test harness, whatever suits running inside an app, and the tape suite under `test/` is left alone. The two have different hosts and no reason to share a runner.
@@ -151,3 +153,14 @@ Metro cannot see a path outside the project root unless it is in `watchFolders`,
 `react-native-node-api`'s own Gradle module is what adds the prebuild to the app, not Faith's. A `linkNodeApiModules` task runs its CLI over the project, collects every `*.android.node` directory carrying the marker file, and appends the results to its own `jniLibs.srcDirs`; the same module adds `weak-node-api`'s prebuilt libraries. So `libfaith.so` and `libweak-node-api.so` are both in the APK's library directory, which is what lets `System.loadLibrary("faith")` find it from the content provider, and what satisfies the `DT_NEEDED` entry the `--no-as-needed` link flag records.
 
 Faith's own Gradle module therefore carries no native build at all. It is there for the Kotlin, the manifest entry, the Maven dependency on the verifier's Kotlin component, and the Proguard rule.
+
+## How the example gets Gradle
+
+Neither of the usual answers was right. Committing `gradle-wrapper.jar` puts a binary in a repository that has none, and asking everyone who touches the example to install Gradle means tracking whatever version React Native currently wants by hand.
+
+So the example fetches Gradle when it needs it, in `scripts/ensure-gradle.mjs`, and writes the wrapper itself. The version is not pinned anywhere: `react-native-test-app` publishes the Gradle version each React Native release calls for, as a table its own Gradle code reads, and the script reads the same table against the installed React Native. The distribution is checked against the digest Gradle publishes beside it, and that digest is written into the generated wrapper, so every later `./gradlew` verifies what it downloads. Gradle itself is unpacked under `node_modules/.cache`, which is already ignored and goes with the install.
+
+This replaces the workflow's `gradle wrapper` step. `gradle/actions/setup-gradle` stays, without a version, because what it is wanted for is caching Gradle's own dependency cache across runs.
+
+> [!NOTE]
+> The reason first given for not committing a wrapper was wrong, and worth recording so it is not reasoned from again: that the version it pinned would drift from what react-native-test-app wants. It would not. `configureGradleWrapper` rewrites `distributionUrl` in an existing wrapper on every `run-android`, which is why react-native-test-app's own example commits one. The objection that stands is only the binary.

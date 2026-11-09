@@ -6,8 +6,10 @@ networking stack. This package is the React Native build of it, for Android.
 > [!WARNING]
 > React Native has not shipped a Hermes with Node-API, so this rests on
 > [`react-native-node-api`](https://github.com/callstackincubator/react-native-node-api)
-> vendoring one from a pinned commit, and on the single React Native nightly that package
-> builds against. Treat it as experimental until React Native ships Node-API itself.
+> vendoring one from a fork that carries it. That fork publishes a patched tag per React
+> Native release, so the React Native versions this works with are the ones it has tagged,
+> which the host package lists in its peer dependency. Treat it as experimental until
+> React Native ships Node-API itself.
 >
 > This package is not on npm yet. Build it from a checkout, as below.
 

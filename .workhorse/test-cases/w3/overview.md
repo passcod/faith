@@ -18,10 +18,10 @@ The emulator cases run in CI; `*.node` is gitignored, so the prebuild is built b
 
 ## The prebuild
 
-- [ ] The build script produces a `faith.android.node` directory holding one `libfaith.so` per requested ABI.
-- [ ] The directory carries the `react-native-node-api-module` marker, without which the host does not auto-link it.
-- [ ] The library is named `libfaith.so`, which is the name `System.loadLibrary("faith")` asks for.
-- [ ] Building for one ABI alone succeeds, which is what the emulator job does.
+- [x] The build script produces a `faith.android.node` directory holding one `libfaith.so` per requested ABI.
+- [x] The directory carries the `react-native-node-api-module` marker, without which the host does not auto-link it.
+- [x] The library is named `libfaith.so`, which is the name `System.loadLibrary("faith")` asks for.
+- [x] Building for one ABI alone succeeds, which is what the emulator job does.
 
 ## The Android trust store
 

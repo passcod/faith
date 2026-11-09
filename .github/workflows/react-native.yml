@@ -5,9 +5,9 @@ name: React Native
 # far too slow to sit on every pull request. The repository is public, so this is about
 # keeping a long job off unrelated changes rather than about runner minutes.
 #
-# The cost of that choice: a moved Hermes pin, or a React Native nightly that disappears
-# from the registry, surfaces the next time one of these paths changes rather than when it
-# happens.
+# The cost of that choice: a React Native release dropping out of the Hermes fork's tags,
+# or the host package narrowing the versions it supports, surfaces the next time one of
+# these paths changes rather than when it happens.
 on:
   pull_request:
     paths: &paths
@@ -27,9 +27,12 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # Matching the version the React Native community template pins, which is what the
-  # prebuild script defaults to.
+  # All three come from the React Native version the example pins, which declares them in
+  # its own Gradle version catalog. The NDK version is also what the prebuild script
+  # defaults to.
   NDK_VERSION: 27.1.12297006
+  COMPILE_SDK: "36"
+  BUILD_TOOLS: 36.0.0
 
 jobs:
   # The Kotlin component the platform verifier calls over JNI is versioned in lockstep with
@@ -93,7 +96,11 @@ jobs:
           distribution: temurin
       - uses: android-actions/setup-android@v4
         with:
-          packages: tools platform-tools ndk;${{ env.NDK_VERSION }} cmake;3.22.1
+          packages: >-
+            tools platform-tools
+            platforms;android-${{ env.COMPILE_SDK }}
+            build-tools;${{ env.BUILD_TOOLS }}
+            ndk;${{ env.NDK_VERSION }} cmake;3.22.1
       - run: rustup toolchain install --profile minimal --no-self-update stable
       - run: rustup target add x86_64-linux-android
       - uses: Swatinem/rust-cache@v2
@@ -118,14 +125,13 @@ jobs:
           echo "REACT_NATIVE_OVERRIDE_HERMES_DIR=$(npx react-native-node-api vendor-hermes --silent)" >> "$GITHUB_ENV"
         working-directory: react-native/example
 
-      - name: Generate the Gradle wrapper
-        # Kept out of the repository rather than committing a jar: the version it would
-        # pin is the one react-native-test-app wants, and that moves with the package.
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: "9.4.1"
-      - run: gradle wrapper --gradle-version 9.4.1
-        working-directory: react-native/example/android
+      # No Gradle version here: the example fetches the one its React Native calls for and
+      # writes the wrapper itself. This action is for caching Gradle's dependency cache
+      # between runs, which a build that compiles React Native from source needs.
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Write the Gradle wrapper
+        run: npm run gradle
+        working-directory: react-native/example
 
       - uses: actions/setup-go@v5
         with:
