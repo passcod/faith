@@ -2,12 +2,16 @@
  * Faith for React Native.
  *
  * The same wrapper the Node package uses, over the prebuilt addon the React Native host
- * loads. `react-native-node-api`'s Babel plugin rewrites the require below into a
+ * loads. The wrapper and its type declarations are copied in beside this file when the
+ * prebuild is built, rather than taken as a dependency on the Node package: that package is
+ * the repository root, which contains this one, and `react-native-node-api` scans each
+ * dependency for prebuilds, so it would find this package's prebuild twice and refuse to
+ * link either. `react-native-node-api`'s Babel plugin rewrites the require below into a
  * `requireNodeAddon` call on its TurboModule, so the app must have that plugin in its
  * Babel configuration, as it must for any Node-API addon.
  */
 
-const createFaith = require("@passcod/faith/wrapper-factory");
+const createFaith = require("./wrapper-factory.js");
 
 const native = require("./faith.android.node");
 

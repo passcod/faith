@@ -164,3 +164,18 @@ This replaces the workflow's `gradle wrapper` step. `gradle/actions/setup-gradle
 
 > [!NOTE]
 > The reason first given for not committing a wrapper was wrong, and worth recording so it is not reasoned from again: that the version it pinned would drift from what react-native-test-app wants. It would not. `configureGradleWrapper` rewrites `distributionUrl` in an existing wrapper on every `run-android`, which is why react-native-test-app's own example commits one. The objection that stands is only the binary.
+
+## Why the package carries the wrapper rather than depending on it
+
+The React Native package needs `wrapper-factory.js`, and the obvious way to get it is a dependency on the Node package. That cannot work here, for a reason that took a failed build to see: the Node package is the repository root, and the repository root contains the React Native package. `react-native-node-api` keys the app's dependencies by name and scans each one for prebuilds, so with both in the tree it finds `faith.android.node` twice, once under `@passcod/faith-react-native` and once under `@passcod/faith`, and refuses to link either with "Found conflicting library names". Nothing short of removing the dependency avoids it, since any `file:` reference to the root reproduces the containment.
+
+So the prebuild script copies `wrapper-factory.js`, `wrapper.d.ts` and `index.d.ts` into the package beside the binary, and the package declares no dependencies at all. The copies are ignored by git, like the prebuild. This also ties the wrapper to the binary it was built against, and it removes the version problem that came with the dependency: no published Faith carries the factory, so the dependency could name no version that both existed and worked.
+
+`index.d.ts` is the binding's generated declarations, which describe the whole binding rather than the slim build's subset. That was equally true when the types came from the Node package.
+
+> [!NOTE]
+> Two arrangements were tried and abandoned before this one, both defeated by npm. An `overrides` entry is refused when the same package is also a direct dependency, and a range of `>=1.0.2 <2` cannot be installed at all while no such version is published, which broke `npm install` in the package and so the prebuild step in CI.
+
+## Known fragility in the emulator job
+
+The job compiles React Native from source, which downloads Boost, Folly, glog, fmt and double-conversion from several hosts as part of the build. One such download failing takes the job with it: a run here failed on `archives.boost.io` not resolving, and succeeded on a retry minutes later with nothing changed. These are React Native's own Gradle tasks, so there is no retry to configure without patching them. A failure of this kind is worth re-running before being investigated.

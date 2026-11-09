@@ -71,7 +71,9 @@ npm run build:android -- x86_64-linux-android # just one
 ```
 
 That writes `faith.android.node`, which `react-native-node-api` finds and adds to the app's
-native libraries. The build takes the wrapper from the Node package in the same checkout,
+native libraries. A prebuild directory names exactly the architectures it was built with, so
+naming a subset replaces what was there rather than adding to it: to end up with all four,
+build all four in one go. The build takes the wrapper from the Node package in the same checkout,
 which is what the `overrides` entry in this package's manifest resolves.
 
 ## Licence

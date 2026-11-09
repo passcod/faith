@@ -144,3 +144,17 @@ const outputPath = await createAndroidLibsDirectory({
 	autoLink: true,
 });
 console.log(`Wrote ${path.relative(repoRoot, outputPath)}`);
+
+// The wrapper and its declarations are copied in rather than depended on. A dependency on
+// the Node package would be a dependency on the repository root, which contains this
+// package, and `react-native-node-api` scans every dependency of the app for prebuilds: it
+// would find this package's prebuild under both names and refuse to link either. Copying
+// also ties the wrapper to the binary it was built alongside.
+//
+// `index.d.ts` is the binding's own generated declarations, which `wrapper.d.ts` imports
+// from `./index`. It describes the whole binding rather than the slim build's subset, as it
+// did when these types came from the Node package.
+for (const name of ["wrapper-factory.js", "wrapper.d.ts", "index.d.ts"]) {
+	fs.copyFileSync(path.join(repoRoot, name), path.join(packageRoot, name));
+}
+console.log(`Copied the wrapper into ${path.relative(repoRoot, packageRoot)}`);
