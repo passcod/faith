@@ -208,3 +208,20 @@ It also reached Faith's code. `JsSyntaxError` is napi's wrapper over that very s
 
 > [!NOTE]
 > This is the one failure of the card that could not have been found by reading. The symbol is referenced from napi's generated bindings, the binary links cleanly because every Node-API symbol is undefined by design, and nothing resolves until the host loads it on a device.
+
+## What actually blocks this: Hermes has no threadsafe functions
+
+The addon loads. The log reads `Loaded addon`, then `Found napi_register_module_v1`, and then the process takes `SIGABRT` inside `napi_create_threadsafe_function` in `libweak-node-api.so`.
+
+That library is a table of stubs, each of which aborts when the host has injected no implementation for it, with "called before it was injected". The host injects what it has. Hermes' Node-API defines 115 functions and `react-native-node-api`'s own host adds 17 more, including all five Buffer functions and the async-work queue, which Hermes lacks. Between them they still leave six that Faith calls:
+
+- `napi_create_threadsafe_function`, `napi_call_threadsafe_function`, `napi_release_threadsafe_function`, `napi_unref_threadsafe_function`
+- `napi_fatal_exception`
+- `napi_add_env_cleanup_hook`
+
+The four threadsafe functions are the whole of it. Faith's asynchrony is a Tokio runtime on its own threads settling promises on the JavaScript thread, and a threadsafe function is the only Node-API mechanism for calling into a JavaScript thread from a thread that does not own it. There is no way to express Faith's model without one, and no feature of Faith's that can be turned off to avoid it: a single `fetch` needs it. `napi_fatal_exception` and `napi_add_env_cleanup_hook` would be easier to live without, and are moot while the first four are missing.
+
+So React Native support is blocked upstream, on Hermes implementing threadsafe functions or on the host package implementing them over Hermes' runtime as it already does for buffers and async work. Nothing in this repository can work around it.
+
+> [!NOTE]
+> Everything else on this card works, and the work stands: the prebuild builds for four architectures, the autolinked Gradle module puts Faith in an app with no consumer action, the content provider's library load and the host's later `dlopen` of the same library coexist, the wrapper bundles under Metro, and the app reaches the point of registering the module. The gap is one upstream capability, found at the last step before the tests would have run.
