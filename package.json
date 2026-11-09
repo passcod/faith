@@ -48,7 +48,7 @@
 	"scripts": {
 		"build": "napi build --release --platform --manifest-path crates/web-faith-napi/Cargo.toml --output-dir .",
 		"build:debug": "napi build --platform --manifest-path crates/web-faith-napi/Cargo.toml --output-dir .",
-		"build:slim": "napi build --platform --manifest-path crates/web-faith-napi/Cargo.toml --output-dir . --no-default-features --features tls-aws-lc-rs,dyn-symbols",
+		"build:slim": "napi build --platform --manifest-path crates/web-faith-napi/Cargo.toml --output-dir . --no-default-features --features tls-aws-lc-rs,dyn-symbols,napi9",
 		"test": "npm run build && cargo test && npm run test:only",
 		"test:only": "tape test/*.test.js",
 		"test:slim": "npm run build:slim && tape test/slim/*.test.js",

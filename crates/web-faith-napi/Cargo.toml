@@ -49,6 +49,7 @@ default = [
     "dns",
     "dyn-symbols",
     "encoding",
+    "napi9",
     "http3",
     "onecrl",
     "crlite",
@@ -59,6 +60,15 @@ default = [
 # this. A React Native build must not have it: there is no Node host to resolve
 # against, and the symbols are linked against weak-node-api instead.
 dyn-symbols = ["napi/dyn-symbols"]
+# The Node-API version ceiling. These are cumulative, and one of them must be on: with
+# none, only Node-API 1 exists and napi's own code does not compile.
+#
+# 8 is as high as a React Native build can go. Node-API 9 is where the `node_api_`-prefixed
+# extensions live, which Node provides and other hosts need not; weak-node-api, and so
+# Hermes behind it, implements none of them. A binary built at 9 loads under Node and fails
+# to `dlopen` on a device, naming whichever extension it happened to reference.
+napi8 = ["napi/napi8"]
+napi9 = ["napi8", "napi/napi9"]
 cache = ["dep:http-cache-reqwest", "web-faith/cache"]
 connection-tracking = ["dep:web-faith-conn-tracker", "web-faith/connection-tracking"]
 cookies = ["dep:web-faith-cookies", "reqwest/cookies", "web-faith/cookies"]

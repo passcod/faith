@@ -27,7 +27,11 @@ const API_LEVEL = 24;
 // The slim build: HTTP/1.1 and HTTP/2 over TLS with the platform trust store. The Node
 // default set carries a disk cache, a DNS client and revocation machinery that each want
 // something an Android app sandbox does not hand out, and four more megabytes per ABI.
-const FEATURES = "tls-aws-lc-rs";
+//
+// `napi8` caps the Node-API version. The host implements the standard surface but none of
+// the `node_api_` extensions Node-API 9 adds, so a binary built any higher fails to load
+// on the device. Some ceiling has to be named: with none, only Node-API 1 exists.
+const FEATURES = "tls-aws-lc-rs,napi8";
 
 /**
  * Each Rust target, with the NDK's name for its compilers and the host package's name for

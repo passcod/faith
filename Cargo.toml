@@ -49,11 +49,12 @@ hyper-util = { version = "0.1", features = ["client-legacy", "tokio"] }
 jni = { version = "0.22.4", default-features = false }
 libc = "0.2.179"
 # default-features = false drops `dyn-symbols`, which resolves Node-API functions in
-# the host process at runtime. Node builds need it and re-enable it through
-# web-faith-napi's own `dyn-symbols` feature; React Native has no such host and links
-# against weak-node-api instead, so its build must leave it off.
+# the host process at runtime. The Node-API version ceiling is left out for the same
+# reason: both differ between the two builds, so web-faith-napi carries each as a feature
+# of its own, in its default set. React Native has no host to resolve against and links
+# against weak-node-api, which implements the standard Node-API surface but none of the
+# node_api_ extensions that Node-API 9 adds.
 napi = { version = "3.7.0", default-features = false, features = [
-    "napi9",
     "serde-json",
     "tokio_rt",
     "web_stream",

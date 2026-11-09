@@ -503,6 +503,10 @@ module.exports = function createFaith(native, { fileURLToPath }) {
 		return entry;
 	}
 
+	// Keys the one-off setup method on Response below. A symbol so it does not read as
+	// part of the class's API.
+	const mirrorNativeGetters = Symbol("mirrorNativeGetters");
+
 	/**
 	 * Response class that provides standards-compliant Fetch API
 	 */
@@ -570,10 +574,16 @@ module.exports = function createFaith(native, { fileURLToPath }) {
 			}
 		}
 
-		// Mirror the native class's getters onto this prototype, once at class
-		// definition time rather than per instance. The getter functions are
-		// declared inside the class body so they can access #nativeResponse.
-		static {
+		// Mirror the native class's getters onto this prototype, once rather than per
+		// instance. Declared in the class body so the getters can reach #nativeResponse,
+		// and called just after the class below.
+		//
+		// A static block would be the natural shape for this and is deliberately not used:
+		// React Native's Babel preset does not enable them, so one here would make every
+		// app that bundles Faith add `@babel/plugin-transform-class-static-block` to its
+		// own Babel configuration, and the failure it gets without it names Babel rather
+		// than Faith.
+		static [mirrorNativeGetters]() {
 			const descriptors = Object.getOwnPropertyDescriptors(
 				native.FaithResponse.prototype,
 			);
@@ -791,6 +801,8 @@ module.exports = function createFaith(native, { fileURLToPath }) {
 			}
 		}
 	}
+
+	Response[mirrorNativeGetters]();
 
 	let defaultAgent;
 
