@@ -1,4 +1,6 @@
 mod agent;
+#[cfg(target_os = "android")]
+mod android;
 mod async_task;
 #[cfg(feature = "connection-tracking")]
 mod conn_tracker;

@@ -1,0 +1,44 @@
+buildscript {
+    apply(from: {
+        def searchDir = rootDir.toPath()
+        do {
+            def p = searchDir.resolve("node_modules/react-native-test-app/android/dependencies.gradle")
+            if (p.toFile().exists()) {
+                return p.toRealPath().toString()
+            }
+        } while (searchDir = searchDir.getParent())
+        throw new GradleException("Could not find `react-native-test-app`");
+    }())
+
+    repositories {
+        mavenCentral()
+        google()
+    }
+
+    dependencies {
+        getReactNativeDependencies().each { dependency ->
+            classpath(dependency)
+        }
+    }
+}
+
+allprojects {
+    repositories {
+        // React Native is no longer published to npm as of 0.80, so its Android artifacts
+        // come from the Maven repository inside the installed package.
+        {
+            def searchDir = rootDir.toPath()
+            do {
+                def p = searchDir.resolve("node_modules/react-native/android")
+                if (p.toFile().exists()) {
+                    maven {
+                        url(p.toRealPath().toString())
+                    }
+                    break
+                }
+            } while (searchDir = searchDir.getParent())
+        }()
+        mavenCentral()
+        google()
+    }
+}

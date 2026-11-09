@@ -96,6 +96,19 @@ pub trait FaithErrorExt {
 	fn into_js_error<'env>(self, env: &'env Env) -> Unknown<'env>;
 }
 
+/// Build a JavaScript error carrying a given `name`.
+///
+/// Falls back to a plain error if any step of it fails, so an error is always produced.
+fn named_error<'env>(env: &'env Env, err: FaithError, name: &str) -> Unknown<'env> {
+	env.create_error(err.to_napi())
+		.and_then(|mut error| {
+			error.set_named_property("name", name)?;
+			Ok(error)
+		})
+		.and_then(|error| error.into_unknown(env))
+		.unwrap_or_else(|_| JsError::from(err.into_napi()).into_unknown(*env))
+}
+
 impl FaithErrorExt for FaithError {
 	fn into_napi(self) -> napi::Error {
 		self.to_napi()
@@ -109,16 +122,16 @@ impl FaithErrorExt for FaithError {
 		let code = self.kind().code();
 		let unk = match js_type(self.kind()) {
 			JsErrorType::TypeError => JsTypeError::from(self.into_napi()).into_unknown(*env),
+			// `JsSyntaxError` wraps `node_api_create_syntax_error`, which belongs to the
+			// `node_api_` extensions a host need not implement, so it is only reachable at
+			// Node-API 9. Below that the error is built by hand instead, which gives one
+			// that reads as a SyntaxError without being an instance of it.
+			#[cfg(feature = "napi9")]
 			JsErrorType::SyntaxError => JsSyntaxError::from(self.into_napi()).into_unknown(*env),
+			#[cfg(not(feature = "napi9"))]
+			JsErrorType::SyntaxError => named_error(env, self, "SyntaxError"),
 			JsErrorType::GenericError => JsError::from(self.into_napi()).into_unknown(*env),
-			JsErrorType::NamedError(name) => env
-				.create_error(self.to_napi())
-				.and_then(|mut err| {
-					err.set_named_property("name", name)?;
-					Ok(err)
-				})
-				.and_then(|err| err.into_unknown(env))
-				.unwrap_or_else(|_| JsError::from(self.into_napi()).into_unknown(*env)),
+			JsErrorType::NamedError(name) => named_error(env, self, name),
 		};
 
 		// we do this manually instead of using the TryFrom so we can return the untouched Unknown if we fail
