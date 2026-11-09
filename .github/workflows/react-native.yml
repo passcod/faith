@@ -119,8 +119,9 @@ jobs:
         working-directory: react-native/example
 
       - name: Vendor the Node-API Hermes
-        # React Native has not shipped a Hermes with Node-API, so the host package clones
-        # the pinned commit and Gradle compiles it as part of the app build.
+        # React Native has not shipped a Hermes with Node-API, so the host package clones a
+        # fork that carries it, at the tag matching the Hermes version the installed React
+        # Native names, and Gradle compiles it as part of the app build.
         run: |
           echo "REACT_NATIVE_OVERRIDE_HERMES_DIR=$(npx react-native-node-api vendor-hermes --silent)" >> "$GITHUB_ENV"
         working-directory: react-native/example

@@ -97,6 +97,17 @@ const sha256 = (await download(`${DISTRIBUTIONS}/gradle-${version}-bin.zip.sha25
 const gradle = await fetchDistribution(version, sha256);
 
 console.log(`Writing a Gradle ${version} wrapper into ${path.relative(exampleRoot, androidDir)}`);
+
+// Generated in an empty directory and copied in, rather than run in `android` itself. The
+// `wrapper` task belongs to the root project, so running it there would configure the whole
+// build first: minutes of work, and it would need the vendored Hermes already in place.
+// What it writes does not depend on the project at all.
+const scratch = path.join(cacheRoot, "wrapper");
+fs.rmSync(scratch, { recursive: true, force: true });
+fs.mkdirSync(scratch, { recursive: true });
+// Gradle refuses to run a task in a directory holding no build, and an empty settings file
+// is enough of one for the `wrapper` task.
+fs.writeFileSync(path.join(scratch, "settings.gradle"), "");
 execFileSync(
 	gradle,
 	[
@@ -108,5 +119,12 @@ execFileSync(
 		"--gradle-distribution-sha256-sum",
 		sha256,
 	],
-	{ cwd: androidDir, stdio: "inherit" },
+	{ cwd: scratch, stdio: "inherit" },
 );
+
+fs.mkdirSync(path.join(androidDir, "gradle", "wrapper"), { recursive: true });
+for (const entry of ["gradlew", "gradlew.bat", "gradle/wrapper/gradle-wrapper.jar", "gradle/wrapper/gradle-wrapper.properties"]) {
+	fs.copyFileSync(path.join(scratch, entry), path.join(androidDir, entry));
+}
+fs.chmodSync(path.join(androidDir, "gradlew"), 0o755);
+fs.rmSync(scratch, { recursive: true, force: true });
