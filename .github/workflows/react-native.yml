@@ -33,6 +33,11 @@ env:
   NDK_VERSION: 27.1.12297006
   COMPILE_SDK: "36"
   BUILD_TOOLS: 36.0.0
+  # Two, because two things build native code here and they ask for different ones:
+  # React Native's own Android sources take the later version, and `react-native-node-api`
+  # builds its host against the one the Gradle plugin defaults to. Installing both keeps
+  # Gradle from stopping mid-build to fetch the missing one.
+  CMAKE_VERSIONS: cmake;3.22.1 cmake;3.30.5
 
 jobs:
   # The Kotlin component the platform verifier calls over JNI is versioned in lockstep with
@@ -100,7 +105,7 @@ jobs:
             tools platform-tools
             platforms;android-${{ env.COMPILE_SDK }}
             build-tools;${{ env.BUILD_TOOLS }}
-            ndk;${{ env.NDK_VERSION }} cmake;3.22.1
+            ndk;${{ env.NDK_VERSION }} ${{ env.CMAKE_VERSIONS }}
       - run: rustup toolchain install --profile minimal --no-self-update stable
       - run: rustup target add x86_64-linux-android
       - uses: Swatinem/rust-cache@v2

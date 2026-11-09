@@ -179,3 +179,9 @@ So the prebuild script copies `wrapper-factory.js`, `wrapper.d.ts` and `index.d.
 ## Known fragility in the emulator job
 
 The job compiles React Native from source, which downloads Boost, Folly, glog, fmt and double-conversion from several hosts as part of the build. One such download failing takes the job with it: a run here failed on `archives.boost.io` not resolving, and succeeded on a retry minutes later with nothing changed. These are React Native's own Gradle tasks, so there is no retry to configure without patching them. A failure of this kind is worth re-running before being investigated.
+
+## Two cmakes
+
+Two things in this build compile native code and they do not agree on a cmake. React Native's own Android sources read `CMAKE_VERSION` and default to 3.30.5; `react-native-node-api` builds its host through the Android Gradle Plugin against the one the SDK carries, which is 3.22.1. A build with only 3.22.1 installed works, because Gradle fetches the other itself partway through, which is a download in the middle of an already long job. The workflow installs both up front instead.
+
+Do not force `CMAKE_VERSION` to the older one to make them agree: React Native asks for the later version for its own reasons, and nothing here has a stake in which it uses.
