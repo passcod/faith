@@ -8,6 +8,8 @@ networking stack. This package is the React Native build of it, for Android.
 > [`react-native-node-api`](https://github.com/callstackincubator/react-native-node-api)
 > vendoring one from a pinned commit, and on the single React Native nightly that package
 > builds against. Treat it as experimental until React Native ships Node-API itself.
+>
+> This package is not on npm yet. Build it from a checkout, as below.
 
 ## Installing
 
@@ -57,13 +59,18 @@ provide. `text()`, `json()`, `arrayBuffer()` and `toFile()` are unaffected.
 
 ## Building the prebuild
 
-Published releases carry it. To build from a checkout, with `ANDROID_HOME` set and the NDK
+The binary is not in the repository. Build it with `ANDROID_HOME` set and the NDK
 installed:
 
 ```sh
-npm run build:android                        # every architecture
+npm install
+npm run build:android                         # every architecture
 npm run build:android -- x86_64-linux-android # just one
 ```
+
+That writes `faith.android.node`, which `react-native-node-api` finds and adds to the app's
+native libraries. The build takes the wrapper from the Node package in the same checkout,
+which is what the `overrides` entry in this package's manifest resolves.
 
 ## Licence
 

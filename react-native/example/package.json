@@ -10,6 +10,7 @@
 	},
 	"dependencies": {
 		"@passcod/faith-react-native": "file:..",
+		"@passcod/faith": "file:../..",
 		"react": "19.2.3",
 		"react-native": "0.88.0-nightly-20260809-db662caea",
 		"react-native-node-api": "^1.2.2"
@@ -28,5 +29,8 @@
 		"mocha-remote-cli": "^1.13.2",
 		"mocha-remote-react-native": "^1.13.2",
 		"react-native-test-app": "^5.4.8"
+	},
+	"overrides": {
+		"@passcod/faith": "file:../.."
 	}
 }

@@ -78,10 +78,7 @@ export function loadTests({
 					fetch(`${httpbinUrl}/status/200?n=${index}`),
 				),
 			);
-			equal(
-				responses.map((response) => response.status),
-				Array.from({ length: 10 }, () => 200),
-			);
+			equal(responses.filter((response) => response.status === 200).length, 10);
 		});
 
 		it("rejects an aborted request rather than hanging", async () => {

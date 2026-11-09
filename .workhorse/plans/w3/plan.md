@@ -139,3 +139,15 @@ The NDK version is the one the React Native community template pins, which the p
 
 One local wrinkle to expect: this machine runs cargo under an `sccache` wrapper, and a first attempt at an Android target failed because sccache could not find the NDK compiler on `PATH`.
 The prebuild script puts the NDK's bin directory on `PATH` and passes absolute compiler paths, which should settle it, but it is the first thing to suspect if a target fails to build locally and builds in CI.
+
+## How the example resolves Faith
+
+The React Native package needs `wrapper-factory.js`, which the published `@passcod/faith` does not carry: 1.0.1 is the latest release and predates the split. The dependency therefore names `>=1.0.2 <2` rather than a version that exists, so a consumer's install fails loudly instead of bundling a package with no factory in it, and both packages carry an npm `overrides` entry pointing at this checkout, which npm honours only for the package being installed as the root. That is what makes a plain `npm install` work in the package and in the example without reaching the registry for Faith.
+
+Metro cannot see a path outside the project root unless it is in `watchFolders`, and the Node package is the repository root, so the root is watched. Cargo's `target` directory is inside it and runs to several gigabytes, so the directories that hold no JavaScript are in Metro's block list. Without that, every Metro start crawls the Rust build output.
+
+## Where libfaith.so ends up
+
+`react-native-node-api`'s own Gradle module is what adds the prebuild to the app, not Faith's. A `linkNodeApiModules` task runs its CLI over the project, collects every `*.android.node` directory carrying the marker file, and appends the results to its own `jniLibs.srcDirs`; the same module adds `weak-node-api`'s prebuilt libraries. So `libfaith.so` and `libweak-node-api.so` are both in the APK's library directory, which is what lets `System.loadLibrary("faith")` find it from the content provider, and what satisfies the `DT_NEEDED` entry the `--no-as-needed` link flag records.
+
+Faith's own Gradle module therefore carries no native build at all. It is there for the Kotlin, the manifest entry, the Maven dependency on the verifier's Kotlin component, and the Proguard rule.

@@ -25,7 +25,7 @@ The emulator cases run in CI; `*.node` is gitignored, so the prebuild is built b
 
 ## The Android trust store
 
-- [ ] The Gradle module's pinned `rustls-platform-verifier` version matches the `rustls-platform-verifier-android` crate in `Cargo.lock`. Verifies spec: TLS#trust-roots
+- [x] The Gradle module's pinned `rustls-platform-verifier` version matches the `rustls-platform-verifier-android` crate in `Cargo.lock`. Verifies spec: TLS#trust-roots
 - [ ] An app that lists Faith as a dependency gets the content provider through manifest merging, with nothing added to the app.
 - [ ] `System.loadLibrary` at provider creation and the host's later `dlopen` of the same library coexist.
 - [ ] An HTTPS request to a host trusted by the device's own store succeeds, so the verifier received its handles. Verifies spec: TLS#trust-roots
