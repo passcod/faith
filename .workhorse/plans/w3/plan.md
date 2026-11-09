@@ -195,3 +195,16 @@ That is Hermes compiled four times for an emulator that uses one, and on a job a
 It is passed as `ORG_GRADLE_PROJECT_reactNativeArchitectures` instead, which every build in the composite reads from its own environment. A dry run with it set configures only x86_64. `-P` on the command line does not work for this, and neither does the properties file, which is why `--active-arch-only` does not cover it either: that flag passes `-P`, so it filters the app module and leaves React Native building everything.
 
 The example's `android` script sets it, defaulting to x86_64 and overridable with `FAITH_ANDROID_ABI` for anyone running on a real device.
+
+## Node-API 8 is the ceiling, and the reason is not arbitrary
+
+The first build that reached the device failed to load it: `dlopen failed: cannot locate symbol "node_api_create_syntax_error"`. Faith references 66 Node-API symbols and weak-node-api defines 145, so this was one symbol out of 66, and worth measuring rather than guessing at.
+
+The line it falls on is exact. Node-API functions named `node_api_` rather than `napi_` are Node's own extensions, which a host is not obliged to implement, and Node-API 9 is where they begin. The host defines all four symbols Node-API 8 adds and none of the four Node-API 9 adds. So 8 is not a cautious choice below some working value: it is the whole standard surface, and 9 is the first version that asks for something only Node has.
+
+The version is therefore a feature of `web-faith-napi` rather than a setting of the workspace dependency, as `dyn-symbols` already was. One of them has to be on, because with no version feature only Node-API 1 exists and napi's own code does not compile against it.
+
+It also reached Faith's code. `JsSyntaxError` is napi's wrapper over that very symbol, so below Node-API 9 the error is built by hand with its `name` set instead, which reads as a SyntaxError without being an instance of one. The error mapping already did this for the error kinds it calls named errors, so it was the existing path rather than a new one.
+
+> [!NOTE]
+> This is the one failure of the card that could not have been found by reading. The symbol is referenced from napi's generated bindings, the binary links cleanly because every Node-API symbol is undefined by design, and nothing resolves until the host loads it on a device.

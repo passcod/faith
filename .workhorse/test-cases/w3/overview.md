@@ -7,13 +7,13 @@ The emulator cases run in CI; `*.node` is gitignored, so the prebuild is built b
 
 - [x] The Node default build resolves `napi-sys` with `dyn-symbols` enabled.
 - [x] The React Native build resolves `napi-sys` without `dyn-symbols`, which is what `ferric build` refuses and the host cannot link.
-- [x] The React Native build resolves no `napiN` feature above 10, the highest the host implements.
+- [x] The React Native build resolves no `napiN` feature above 8. Every symbol Node-API 9 adds is a `node_api_` extension the host does not implement, so a binary built higher fails to load on a device.
 - [x] The slim Node build keeps `dyn-symbols`, so `test:slim` still has a host to resolve against.
 
 ## The wrapper over two bindings
 
 - [x] The Node suite passes with the wrapper taking its binding as a parameter rather than requiring it.
-- [ ] The React Native entrypoint reaches no Node builtin, so Metro resolves the bundle without a polyfill.
+- [x] The React Native entrypoint reaches no Node builtin, and no syntax React Native's Babel preset leaves disabled, so Metro bundles it without extra configuration.
 - [ ] `toFile()` accepts a `file:` URL under React Native and refuses one carrying an encoded separator.
 
 ## The prebuild
