@@ -15,7 +15,13 @@ import android.content.Context
  */
 internal object FaithModule {
     init {
-        System.loadLibrary("faith")
+        // Not "faith". `react-native-node-api` renames each prebuild as it links it into the
+        // app, to keep two packages from shipping libraries of the same name, and the name it
+        // gives is the package's name without its scope, then the prebuild's own name, joined
+        // by a double dash. So `@passcod/faith-react-native` and `faith.android.node` become
+        // `libfaith-react-native--faith.so`. Its Gradle task passes no naming options and its
+        // configuration offers none, so this holds for every app that links the package.
+        System.loadLibrary("faith-react-native--faith")
     }
 
     /**

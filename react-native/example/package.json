@@ -5,6 +5,7 @@
 	"description": "Runs Faith inside a React Native app, on an Android emulator",
 	"scripts": {
 		"gradle": "node scripts/ensure-gradle.mjs",
+		"pregradle": "node scripts/clear-stale-codegen.mjs",
 		"metro": "react-native start --no-interactive",
 		"android": "npm run gradle && ORG_GRADLE_PROJECT_reactNativeArchitectures=${FAITH_ANDROID_ABI:-x86_64} react-native run-android --no-packager --active-arch-only",
 		"test:android": "mocha-remote --exit-on-error -- concurrently --kill-others-on-fail --passthrough-arguments npm:metro 'npm:android -- {@}' --"
