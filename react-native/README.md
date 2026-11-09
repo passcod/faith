@@ -3,15 +3,26 @@
 [Faith](https://github.com/passcod/faith) is a fetch implementation backed by a Rust
 networking stack. This package is the React Native build of it, for Android.
 
-> [!WARNING]
-> React Native has not shipped a Hermes with Node-API, so this rests on
-> [`react-native-node-api`](https://github.com/callstackincubator/react-native-node-api)
-> vendoring one from a fork that carries it. That fork publishes a patched tag per React
-> Native release, so the React Native versions this works with are the ones it has tagged,
-> which the host package lists in its peer dependency. Treat it as experimental until
-> React Native ships Node-API itself.
+> [!CAUTION]
+> This does not work yet, and cannot be made to work from here. Hermes' Node-API has no
+> threadsafe functions, and a threadsafe function is the only way Node-API offers to call
+> into the JavaScript thread from a thread that does not own it. Faith answers every request
+> from a Tokio runtime on its own threads, so a single `fetch` needs one. The app builds and
+> starts, the addon loads, and the process aborts inside `napi_create_threadsafe_function`
+> the moment the module registers.
 >
-> This package is not on npm yet. Build it from a checkout, as below.
+> What unblocks it is Hermes implementing those functions, or
+> [`react-native-node-api`](https://github.com/callstackincubator/react-native-node-api)
+> implementing them over Hermes' runtime as it already does for buffers and async work.
+> Everything else here is built and working, and is waiting on that.
+>
+> This package is not on npm, and will not be published before it runs.
+
+> [!NOTE]
+> React Native has not shipped a Hermes with Node-API at all, so this rests on the host
+> package vendoring one from a fork that carries it. That fork publishes a patched tag per
+> React Native release, so the versions this builds against are the ones it has tagged,
+> which the host package lists in its peer dependency.
 
 ## Installing
 
