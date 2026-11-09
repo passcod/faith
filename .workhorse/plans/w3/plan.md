@@ -185,3 +185,13 @@ The job compiles React Native from source, which downloads Boost, Folly, glog, f
 Two things in this build compile native code and they do not agree on a cmake. React Native's own Android sources read `CMAKE_VERSION` and default to 3.30.5; `react-native-node-api` builds its host through the Android Gradle Plugin against the one the SDK carries, which is 3.22.1. A build with only 3.22.1 installed works, because Gradle fetches the other itself partway through, which is a download in the middle of an already long job. The workflow installs both up front instead.
 
 Do not force `CMAKE_VERSION` to the older one to make them agree: React Native asks for the later version for its own reasons, and nothing here has a stake in which it uses.
+
+## The architecture filter has to go through the environment
+
+`react-native-test-app` pulls React Native in with `settings.includeBuild` when building it from source, and a project property set in the app's own `gradle.properties` does not cross into an included build. So `reactNativeArchitectures=x86_64` reached the app module and nothing else: React Native and Hermes both fell back to their default of all four architectures. A build here was seen configuring CMake for arm64-v8a, armeabi-v7a, x86 and x86_64 under hermes-engine while the app module configured x86_64 alone, which is the boundary showing itself.
+
+That is Hermes compiled four times for an emulator that uses one, and on a job already budgeted at ninety minutes it is the largest single cost in it.
+
+It is passed as `ORG_GRADLE_PROJECT_reactNativeArchitectures` instead, which every build in the composite reads from its own environment. A dry run with it set configures only x86_64. `-P` on the command line does not work for this, and neither does the properties file, which is why `--active-arch-only` does not cover it either: that flag passes `-P`, so it filters the app module and leaves React Native building everything.
+
+The example's `android` script sets it, defaulting to x86_64 and overridable with `FAITH_ANDROID_ABI` for anyone running on a real device.
