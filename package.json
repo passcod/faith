@@ -69,9 +69,9 @@
 		"h2"
 	],
 	"devDependencies": {
-		"@napi-rs/cli": "^3.5.0",
-		"@types/node": "^24.10.1",
-		"tape": "^5.9.0"
+		"@napi-rs/cli": "^3.10.12",
+		"@types/node": "^24.19.2",
+		"tape": "^5.10.3"
 	},
 	"engines": {
 		"node": ">= 20"
