@@ -10,11 +10,12 @@
 //! Usage: h3-server --cert cert.pem --key key.pem [--port 0]
 //! Prints "LISTENING <port>" on stdout once ready.
 
-use std::{collections::HashMap, fs, net::SocketAddr, sync::Arc, time::Duration};
+use std::{collections::HashMap, net::SocketAddr, sync::Arc, time::Duration};
 
 use bytes::Bytes;
 use http::{Request, Response, StatusCode};
 use quinn::crypto::rustls::QuicServerConfig;
+use rustls::pki_types::{CertificateDer, PrivateKeyDer, pem::PemObject};
 
 fn payload(bytes: usize, cache: &mut HashMap<usize, Bytes>) -> Bytes {
 	cache
@@ -90,10 +91,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 	let port: u16 = arg("--port").map_or(0, |p| p.parse().expect("invalid --port"));
 	let host = arg("--host").unwrap_or_else(|| "127.0.0.1".to_string());
 
-	let certs = rustls_pemfile::certs(&mut fs::read(&cert_path)?.as_slice())
-		.collect::<Result<Vec<_>, _>>()?;
-	let key = rustls_pemfile::private_key(&mut fs::read(&key_path)?.as_slice())?
-		.expect("no private key found");
+	let certs = CertificateDer::pem_file_iter(&cert_path)?.collect::<Result<Vec<_>, _>>()?;
+	let key = PrivateKeyDer::from_pem_file(&key_path)?;
 
 	let mut tls = rustls::ServerConfig::builder_with_provider(Arc::new(
 		rustls::crypto::aws_lc_rs::default_provider(),
