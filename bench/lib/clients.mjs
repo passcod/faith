@@ -123,9 +123,9 @@ export async function loadImpls({ ca }) {
 		closeContext: (ctx) => ctx.session.close(),
 	});
 
-	// got. h1/h1s over node core, plus h2 via http2-wrapper — the popular JS
-	// client that actually speaks HTTP/2, so it gives the h2 rows a realistic
-	// (non-raw-core) competitor.
+	// got. h1/h1s over node core, plus h2 via its own client over node:http2 —
+	// the popular JS client that actually speaks HTTP/2, so it gives the h2 rows
+	// a realistic (non-raw-core) competitor.
 	const { default: got } = await import("got");
 	impls.set("got", {
 		name: "got",
@@ -136,7 +136,7 @@ export async function loadImpls({ ca }) {
 				http2: h2,
 				https: { certificateAuthority: ca },
 				retry: { limit: 0 },
-				// keep-alive agents for the h1 stacks; http2-wrapper pools h2 itself
+				// keep-alive agents for the h1 stacks; got pools h2 sessions itself
 				agent: h2
 					? undefined
 					: {
