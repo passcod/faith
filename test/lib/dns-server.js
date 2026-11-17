@@ -509,9 +509,13 @@ async function startDnsServer({
 		socket.on("error", () => socket.destroy());
 	});
 
-	// The OS picks the port by binding UDP, then TCP takes the same number. Nothing
-	// reserves that number on the TCP side in between, so another listener can take it
-	// first: retry on a fresh pair rather than failing whichever test asked for a server.
+	// The OS picks the port by listening on TCP, then UDP takes the same number. TCP
+	// picks because Windows reserves blocks of TCP ports (WinNAT / Hyper-V excluded
+	// ranges) that its UDP allocator knows nothing of, and it hands out ports in
+	// sequence: a UDP-picked number can land in such a block, and so can every retry
+	// after it. Nothing reserves the number on the UDP side in between, so another
+	// socket can take it first: retry on a fresh pair rather than failing whichever
+	// test asked for a server.
 	//
 	// Both sockets are closed before retrying, and before giving up. A UDP socket left
 	// bound holds the event loop open, which would turn one failed bind into the whole
@@ -523,13 +527,13 @@ async function startDnsServer({
 		tcp.on("error", () => {});
 		try {
 			await new Promise((resolve, reject) => {
-				udp.once("error", reject);
-				udp.bind(0, host, resolve);
-			});
-			port = udp.address().port;
-			await new Promise((resolve, reject) => {
 				tcp.once("error", reject);
-				tcp.listen(port, host, resolve);
+				tcp.listen(0, host, resolve);
+			});
+			port = tcp.address().port;
+			await new Promise((resolve, reject) => {
+				udp.once("error", reject);
+				udp.bind(port, host, resolve);
 			});
 			break;
 		} catch (err) {
