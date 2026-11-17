@@ -74,10 +74,10 @@ pub fn query_tcp_stats(keys: &[ConnectionKey]) -> io::Result<Vec<(ConnectionKey,
 				remote_addr,
 			};
 
-			if key_map.contains_key(&key) {
-				if let Some(stats) = get_tcp_connection_info(fd) {
-					results.push((key, stats));
-				}
+			if key_map.contains_key(&key)
+				&& let Some(stats) = get_tcp_connection_info(fd)
+			{
+				results.push((key, stats));
 			}
 		}
 	}
@@ -144,20 +144,28 @@ fn get_socket_addrs(fd: RawFd) -> Option<(SocketAddr, SocketAddr)> {
 	Some((local, remote))
 }
 
+/// # Safety
+///
+/// `addr` must point to an initialised socket address whose storage is large
+/// enough for the structure its `sa_family` names, as filled in by
+/// `getsockname` or `getpeername` into a `sockaddr_in6`-sized buffer.
 unsafe fn sockaddr_to_socketaddr(addr: *const sockaddr) -> Option<SocketAddr> {
-	let family = (*addr).sa_family as c_int;
+	// SAFETY: the caller guarantees `addr` points to an initialised sockaddr.
+	let family = unsafe { (*addr).sa_family } as c_int;
 
 	match family {
 		AF_INET => {
-			let addr_in = addr as *const sockaddr_in;
-			let ip = Ipv4Addr::from(u32::from_be((*addr_in).sin_addr.s_addr));
-			let port = u16::from_be((*addr_in).sin_port);
+			// SAFETY: the family is AF_INET, so the storage holds a sockaddr_in.
+			let addr_in = unsafe { &*(addr as *const sockaddr_in) };
+			let ip = Ipv4Addr::from(u32::from_be(addr_in.sin_addr.s_addr));
+			let port = u16::from_be(addr_in.sin_port);
 			Some(SocketAddr::new(IpAddr::V4(ip), port))
 		}
 		AF_INET6 => {
-			let addr_in6 = addr as *const sockaddr_in6;
-			let ip = Ipv6Addr::from((*addr_in6).sin6_addr.s6_addr);
-			let port = u16::from_be((*addr_in6).sin6_port);
+			// SAFETY: the family is AF_INET6, so the storage holds a sockaddr_in6.
+			let addr_in6 = unsafe { &*(addr as *const sockaddr_in6) };
+			let ip = Ipv6Addr::from(addr_in6.sin6_addr.s6_addr);
+			let port = u16::from_be(addr_in6.sin6_port);
 			Some(SocketAddr::new(IpAddr::V6(ip), port))
 		}
 		_ => None,
