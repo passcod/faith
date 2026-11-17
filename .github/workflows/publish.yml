@@ -35,7 +35,7 @@ jobs:
       skip: ${{ steps.decide.outputs.skip }}
       allowed-skips: ${{ steps.decide.outputs.allowed-skips }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           # The branch head, not the merge ref: the comparison is against this
           # branch's previous commit. Depth 2 covers both and carries the script.
@@ -102,9 +102,9 @@ jobs:
     name: stable - ${{ matrix.settings.target }} - node@24
     runs-on: ${{ matrix.settings.host }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Setup node
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
@@ -137,7 +137,7 @@ jobs:
         run: ${{ matrix.settings.build }}
         shell: bash
       - name: Upload artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: bindings-${{ matrix.settings.target }}
           path: |
@@ -150,10 +150,9 @@ jobs:
     runs-on: ubuntu-latest
     name: Build FreeBSD
     steps:
-      - uses: actions/checkout@v6
-      - name: Build
-        id: build
-        uses: cross-platform-actions/action@v0.30.0
+      - uses: actions/checkout@v7
+      - name: Start VM
+        uses: cross-platform-actions/action@v1.7.0
         env:
           DEBUG: napi:*
           RUSTUP_IO_THREADS: 1
@@ -164,27 +163,30 @@ jobs:
           cpu_count: 3
           environment_variables: "DEBUG RUSTUP_IO_THREADS"
           shell: bash
-          run: |
-            sudo pkg install -y -f curl node libnghttp2 npm cmake
-            curl https://sh.rustup.rs -sSf --output rustup.sh
-            sh rustup.sh -y --profile minimal --default-toolchain stable
-            source "$HOME/.cargo/env"
-            echo "~~~~ rustc --version ~~~~"
-            rustc --version
-            echo "~~~~ node -v ~~~~"
-            node -v
-            pwd
-            ls -lah
-            whoami
-            env
-            freebsd-version
-            npm install
-            npm run build
-            rm -rf node_modules
-            rm -rf target
-            rm -rf .npm/cache
+      - name: Build
+        id: build
+        shell: cpa.sh {0}
+        run: |
+          sudo pkg install -y -f curl node libnghttp2 npm cmake
+          curl https://sh.rustup.rs -sSf --output rustup.sh
+          sh rustup.sh -y --profile minimal --default-toolchain stable
+          source "$HOME/.cargo/env"
+          echo "~~~~ rustc --version ~~~~"
+          rustc --version
+          echo "~~~~ node -v ~~~~"
+          node -v
+          pwd
+          ls -lah
+          whoami
+          env
+          freebsd-version
+          npm install
+          npm run build
+          rm -rf node_modules
+          rm -rf target
+          rm -rf .npm/cache
       - name: Upload artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: bindings-freebsd
           path: ${{ env.APP_NAME }}.*.node
@@ -199,9 +201,9 @@ jobs:
       - build
       - build-freebsd
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Setup node
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
@@ -210,7 +212,7 @@ jobs:
       - name: create npm dirs
         run: npx napi create-npm-dirs
       - name: Download all artifacts
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v8
         with:
           path: artifacts
       - name: Move artifacts

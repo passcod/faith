@@ -33,7 +33,7 @@ jobs:
       skip: ${{ steps.decide.outputs.skip }}
       allowed-skips: ${{ steps.decide.outputs.allowed-skips }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           # The branch head, not the merge ref: the comparison is against this
           # branch's previous commit. Depth 2 covers both and carries the script.
@@ -65,15 +65,15 @@ jobs:
     name: stable - ${{ matrix.host }} - node@${{ matrix.nodejs }}
     runs-on: ${{ matrix.host }}
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ matrix.nodejs }}
           cache: npm
       - run: rustup toolchain install --profile minimal --no-self-update stable
       - uses: Swatinem/rust-cache@v2
       - run: npm install
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version: stable
       - name: Start httpbin
@@ -111,10 +111,10 @@ jobs:
     name: msrv - 1.96
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - run: rustup toolchain install --profile minimal --no-self-update 1.96
       - uses: Swatinem/rust-cache@v2
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version: stable
       - name: Start httpbin
@@ -147,7 +147,7 @@ jobs:
     name: features
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - run: rustup toolchain install --profile minimal --no-self-update stable
       - uses: Swatinem/rust-cache@v2
       - name: Default features, so without HTTP/3
