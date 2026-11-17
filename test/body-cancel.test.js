@@ -91,6 +91,19 @@ async function origin() {
 /** An agent that closes the connection of any abandoned body, so closing is prompt. */
 const noDrain = () => new Agent({ pool: { drainLimit: 0 } });
 
+/**
+ * Reads until `n` bytes have arrived. The origin's writes can reach the stream split across
+ * any number of reads, so a single read is no guarantee the next one will wait.
+ */
+async function readBytes(reader, n) {
+	let total = 0;
+	while (total < n) {
+		const { done, value } = await reader.read();
+		if (done) throw new Error(`body ended after ${total} of ${n} bytes`);
+		total += value.byteLength;
+	}
+}
+
 test("body cancel: reader.cancel() closes the connection of an endless HTTP/1 body", async (t) => {
 	const server = await origin();
 	t.teardown(server.close);
@@ -121,7 +134,7 @@ test("body cancel: cancelling while a read waits on the network still reaches it
 
 	const res = await fetch(server.url("/stall"), { agent: noDrain() });
 	const reader = res.body.getReader();
-	await reader.read();
+	await readBytes(reader, 10000);
 	// The origin sends nothing more, so this read is still waiting when the cancel lands.
 	const pending = reader.read();
 	await reader.cancel();
@@ -208,7 +221,7 @@ test("body cancel: discard() errors this response's own stream mid-read", async 
 
 	const res = await fetch(server.url("/stall"), { agent: noDrain() });
 	const reader = res.body.getReader();
-	await reader.read();
+	await readBytes(reader, 10000);
 	// Settled into a value up front, so the rejection is handled while discard() runs.
 	const pending = reader.read().then(
 		() => null,
