@@ -43,6 +43,11 @@ fn is_idempotent(method: &Method) -> bool {
 /// answers about the origin. Walks the whole source chain, the classification sitting several
 /// layers below this one.
 fn died_before_response(err: &reqwest_middleware::Error) -> bool {
+	// A connect failure can carry a reset too, from a handshake the origin cut short, and that is
+	// an answer about the origin rather than a pooled connection that had died.
+	if matches!(err, reqwest_middleware::Error::Reqwest(err) if err.is_connect()) {
+		return false;
+	}
 	let mut source: Option<&(dyn std::error::Error + 'static)> = Some(err);
 	while let Some(err) = source {
 		if let Some(err) = err.downcast_ref::<hyper::Error>() {
@@ -51,6 +56,20 @@ fn died_before_response(err: &reqwest_middleware::Error) -> bool {
 			// produces. `is_closed` is the same situation caught a moment earlier,
 			// where the send half was already known to be gone.
 			if err.is_incomplete_message() || err.is_closed() {
+				return true;
+			}
+			// An origin that tore the connection down rather than closing it surfaces as the
+			// socket's own error instead, depending on whether the reset met the write or the
+			// read. A response that had begun would already be the caller's, so any error
+			// reaching this layer came before one.
+			if let Some(io) = std::error::Error::source(err)
+				.and_then(|source| source.downcast_ref::<std::io::Error>())
+				&& matches!(
+					io.kind(),
+					std::io::ErrorKind::ConnectionReset
+						| std::io::ErrorKind::ConnectionAborted
+						| std::io::ErrorKind::BrokenPipe
+				) {
 				return true;
 			}
 		}
@@ -133,5 +152,65 @@ mod tests {
 		for method in [Method::POST, Method::PATCH, Method::CONNECT] {
 			assert!(!is_idempotent(&method), "{method} should not be replayable");
 		}
+	}
+
+	/// An origin that resets the first connection once it has read a request, and answers on
+	/// every connection after that. Returns its URL and how many connections it has accepted.
+	async fn resets_first_connection() -> (String, std::sync::Arc<std::sync::atomic::AtomicUsize>) {
+		use std::sync::{
+			Arc,
+			atomic::{AtomicUsize, Ordering},
+		};
+		use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+		let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+		let url = format!("http://{}/", listener.local_addr().unwrap());
+		let accepted = Arc::new(AtomicUsize::new(0));
+		let counter = accepted.clone();
+		tokio::spawn(async move {
+			while let Ok((mut stream, _)) = listener.accept().await {
+				let first = counter.fetch_add(1, Ordering::SeqCst) == 0;
+				tokio::spawn(async move {
+					let mut buf = [0; 4096];
+					let _ = stream.read(&mut buf).await;
+					if first {
+						// A zero linger turns the close into a reset rather than a FIN.
+						stream.set_zero_linger().unwrap();
+						drop(stream);
+					} else {
+						let _ = stream
+							.write_all(b"HTTP/1.1 200 OK\r\ncontent-length: 2\r\n\r\nok")
+							.await;
+					}
+				});
+			}
+		});
+		(url, accepted)
+	}
+
+	fn client() -> reqwest_middleware::ClientWithMiddleware {
+		reqwest_middleware::ClientBuilder::new(reqwest::Client::new())
+			.with(DeadConnectionRetry)
+			.build()
+	}
+
+	#[tokio::test]
+	async fn a_reset_before_any_response_is_replayed() {
+		let (url, accepted) = resets_first_connection().await;
+		let response = client()
+			.get(&url)
+			.send()
+			.await
+			.expect("the GET is sent again");
+		assert_eq!(response.text().await.unwrap(), "ok");
+		assert_eq!(accepted.load(std::sync::atomic::Ordering::SeqCst), 2);
+	}
+
+	#[tokio::test]
+	async fn a_reset_is_not_replayed_for_a_post() {
+		let (url, accepted) = resets_first_connection().await;
+		let outcome = client().post(&url).body("payload").send().await;
+		assert!(outcome.is_err(), "the reset reaches the caller");
+		assert_eq!(accepted.load(std::sync::atomic::Ordering::SeqCst), 1);
 	}
 }
