@@ -107,20 +107,15 @@ impl From<RequestCacheMode> for CacheMode {
 ///
 /// Defaults to `include` (browsers default to `same-origin`).
 #[napi(string_enum)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum CredentialsOption {
 	#[napi(value = "omit")]
 	Omit,
 	#[napi(value = "same-origin")]
 	SameOrigin,
 	#[napi(value = "include")]
+	#[default]
 	Include,
-}
-
-impl Default for CredentialsOption {
-	fn default() -> Self {
-		CredentialsOption::Include
-	}
 }
 
 /// Declares the duplex behaviour of the request. If this is present it must have the value `half`,

@@ -97,10 +97,7 @@ fn query_family(
 				NetlinkPayload::Done(_) => return Ok(results),
 				NetlinkPayload::Error(e) => {
 					if let Some(code) = e.code {
-						return Err(io::Error::new(
-							io::ErrorKind::Other,
-							format!("netlink error code: {}", code),
-						));
+						return Err(io::Error::other(format!("netlink error code: {}", code)));
 					}
 				}
 				NetlinkPayload::InnerMessage(SockDiagMessage::InetResponse(resp)) => {

@@ -212,12 +212,11 @@ impl Middleware for AltSvcMiddleware {
 							);
 						}
 
-						if let Some(alt_svc) = response.headers().get("alt-svc") {
-							if let Ok(value) = alt_svc.to_str() {
-								if let Ok(advertisement) = value.parse::<AltSvcAdvertisement>() {
-									self.cache.record_alt_svc(&url, &advertisement);
-								}
-							}
+						if let Some(alt_svc) = response.headers().get("alt-svc")
+							&& let Ok(value) = alt_svc.to_str()
+							&& let Ok(advertisement) = value.parse::<AltSvcAdvertisement>()
+						{
+							self.cache.record_alt_svc(&url, &advertisement);
 						}
 
 						Ok(response)
@@ -260,15 +259,14 @@ impl Middleware for AltSvcMiddleware {
 				self.cache
 					.record_path_time(&url, response.version(), at.duration_since(started));
 
-				if let Some(alt_svc) = response.headers().get("alt-svc") {
-					if let Ok(value) = alt_svc.to_str() {
-						if let Ok(advertisement) = value.parse::<AltSvcAdvertisement>() {
-							self.cache.record_alt_svc(&url, &advertisement);
-							// Probe as soon as the advertisement lands, racing
-							// the gap before the caller's next request.
-							self.maybe_probe(&url);
-						}
-					}
+				if let Some(alt_svc) = response.headers().get("alt-svc")
+					&& let Ok(value) = alt_svc.to_str()
+					&& let Ok(advertisement) = value.parse::<AltSvcAdvertisement>()
+				{
+					self.cache.record_alt_svc(&url, &advertisement);
+					// Probe as soon as the advertisement lands, racing
+					// the gap before the caller's next request.
+					self.maybe_probe(&url);
 				}
 			}
 

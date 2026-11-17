@@ -56,6 +56,10 @@ pub struct Request {
 
 impl Request {
 	/// Prepare a request aimed at `target`.
+	#[expect(
+		clippy::new_ret_no_self,
+		reason = "the builder is the way into a request; it yields `Self` once built"
+	)]
 	pub fn new<T>(target: T) -> RequestBuilder
 	where
 		T: TryInto<Target>,

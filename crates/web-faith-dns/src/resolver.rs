@@ -306,9 +306,7 @@ impl FaithResolver {
 	/// `None` for the cases that must go to the resolver: no entry, an entry still fresh, or one so
 	/// old it has stopped being evidence about the host.
 	fn stale_addrs(&self, generation: &Generation, host: &str) -> Option<Vec<IpAddr>> {
-		let Some(max_stale) = self.inner.config.serve_stale else {
-			return None;
-		};
+		let max_stale = self.inner.config.serve_stale?;
 		let entry = generation.stale.get(host)?;
 		let now = Instant::now();
 		if now <= entry.valid_until {

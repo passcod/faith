@@ -44,7 +44,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REQUIRED_CHECK: Tests pass
-          SKIPPABLE_JOBS: test, msrv, features
+          SKIPPABLE_JOBS: test, msrv, features, clippy
         run: .github/scripts/cleanup-only-gate.sh
 
   test:
@@ -160,11 +160,28 @@ jobs:
         # The repo's .cargo/config.toml supplies the reqwest_unstable cfg this needs.
         run: cargo check -p web-faith --features http3
 
+  # Lints on stable, so a lint new to a stable release fails here until it is
+  # addressed. Linux only, so the macOS and Windows connection-tracking code goes
+  # unlinted.
+  clippy:
+    needs: gate
+    if: needs.gate.outputs.skip != 'true'
+    name: clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: rustup toolchain install --profile minimal --component clippy --no-self-update stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Every feature
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+      - name: Default features
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
   # Dummy job to have a stable name for PR requirements
   tests-pass:
     if: always() # always run even if dependencies fail
     name: Tests pass
-    needs: [gate, test, msrv, features]
+    needs: [gate, test, msrv, features, clippy]
     runs-on: ubuntu-latest
     steps:
       - uses: re-actors/alls-green@release/v1

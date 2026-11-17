@@ -5,7 +5,6 @@ use napi::{
 	bindgen_prelude::*,
 	sys::{napi_env, napi_value},
 };
-use serde_json;
 
 use crate::error::{FaithError, FaithErrorExt};
 
