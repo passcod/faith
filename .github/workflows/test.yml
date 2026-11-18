@@ -64,6 +64,9 @@ jobs:
           - 26
     name: stable - ${{ matrix.host }} - node@${{ matrix.nodejs }}
     runs-on: ${{ matrix.host }}
+    # The slowest cell takes about a quarter of an hour on a warm cache. Without a
+    # ceiling, a test run that never exits holds its runner for GitHub's six hours.
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -110,6 +113,7 @@ jobs:
     if: needs.gate.outputs.skip != 'true'
     name: msrv - 1.96
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
       - run: rustup toolchain install --profile minimal --no-self-update 1.96
