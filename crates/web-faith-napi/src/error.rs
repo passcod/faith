@@ -3,6 +3,10 @@ use napi_derive::napi;
 pub use web_faith::error::{FaithError, FaithErrorKind};
 
 #[derive(Debug, Clone, Copy)]
+#[expect(
+	clippy::enum_variant_names,
+	reason = "the variants are named after the JavaScript error classes they throw"
+)]
 enum JsErrorType {
 	GenericError,
 	NamedError(&'static str),

@@ -516,7 +516,7 @@ impl Response {
 		let body = self.gather().await?;
 		let length = body.iter().map(|chunk| chunk.len()).sum();
 		let mut bytes = Vec::with_capacity(length);
-		for chunk in body.into_iter() {
+		for chunk in body.iter() {
 			bytes.extend_from_slice(chunk);
 		}
 
@@ -600,10 +600,10 @@ impl Response {
 			// A server cannot send more than it promised: once the bytes off the wire exceed
 			// the advertised length, the write fails and the bytes so far stay on disk
 			// (spec:BODY#tofile).
-			if let Some(limit) = content_length {
-				if written > limit {
-					return Err(FaithErrorKind::ContentLengthOverrun.into());
-				}
+			if let Some(limit) = content_length
+				&& written > limit
+			{
+				return Err(FaithErrorKind::ContentLengthOverrun.into());
 			}
 			if reported_at.elapsed() >= PROGRESS_INTERVAL {
 				reported_at = Instant::now();

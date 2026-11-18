@@ -30,7 +30,7 @@ jobs:
     # queues into the same group, even with cancel-in-progress false, so grouping this job could
     # drop a release: push 2 sits pending behind push 1, push 3 arrives, and push 2 never publishes.
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: Configure toolchain
@@ -58,7 +58,7 @@ jobs:
       group: release-plz-pr-${{ github.ref }}
       cancel-in-progress: false
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: Configure toolchain

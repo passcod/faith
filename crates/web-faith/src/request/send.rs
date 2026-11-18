@@ -18,9 +18,6 @@ use reqwest_middleware::ClientWithMiddleware;
 #[cfg(feature = "connection-tracking")]
 use hyper_util::client::legacy::connect::HttpInfo;
 
-#[cfg(feature = "cache")]
-use http_cache_reqwest::CacheMode;
-
 #[cfg(feature = "encoding")]
 use reqwest::header::ACCEPT_ENCODING;
 
@@ -65,7 +62,7 @@ pub async fn send(
 	// Captured before the builder takes the method (spec:REQ#body).
 	let is_query = method.as_str() == QUERY;
 
-	let mut parsed_url = reqwest::Url::parse(&url).map_err(|_| FaithErrorKind::InvalidUrl)?;
+	let mut parsed_url = reqwest::Url::parse(url).map_err(|_| FaithErrorKind::InvalidUrl)?;
 
 	// A `compress` naming no coding Faith can compress in is misuse whether or not the
 	// request turns out to carry a body, so it is refused before anything else looks at
@@ -97,7 +94,7 @@ pub async fn send(
 	let mut request = client.request(method, parsed_url.clone());
 	#[cfg(feature = "cache")]
 	{
-		request = request.with_extension(CacheMode::from(options.cache));
+		request = request.with_extension(options.cache);
 	}
 
 	if let Some(headers) = &options.headers {

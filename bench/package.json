@@ -9,14 +9,14 @@
 		"plot": "node plot.mjs"
 	},
 	"dependencies": {
-		"got": "^15.1.0",
+		"got": "^16.2.0",
 		"node-fetch": "^3.3.2",
-		"undici": "^8.7.0"
+		"undici": "^8.12.4"
 	},
 	"optionalDependencies": {
 		"node-libcurl": "^5.1.2"
 	},
 	"engines": {
-		"node": ">= 20"
+		"node": ">= 22.19"
 	}
 }

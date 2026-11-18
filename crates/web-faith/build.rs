@@ -29,10 +29,10 @@ fn extract_reqwest_version(lock_path: &PathBuf) -> Option<String> {
 			lines_iter.next(); // Skip the name line
 
 			for next_line in lines_iter.take(5) {
-				if let Some(version) = next_line.trim().strip_prefix("version = \"") {
-					if let Some(version) = version.strip_suffix("\"") {
-						return Some(version.to_string());
-					}
+				if let Some(version) = next_line.trim().strip_prefix("version = \"")
+					&& let Some(version) = version.strip_suffix("\"")
+				{
+					return Some(version.to_string());
 				}
 			}
 		}

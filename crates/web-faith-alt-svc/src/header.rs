@@ -85,10 +85,12 @@ fn parse(value: &str) -> Option<AltSvcAdvertisement> {
 			}
 		}
 
-		if protocol_id.is_some() && port.is_some() {
+		if protocol_id.is_some()
+			&& let Some(port) = port
+		{
 			return Some(AltSvcAdvertisement {
 				host: host.unwrap_or_default().to_owned(),
-				port: port.unwrap(),
+				port,
 				max_age,
 			});
 		}

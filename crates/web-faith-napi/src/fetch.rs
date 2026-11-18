@@ -67,7 +67,7 @@ pub fn faith_fetch<'env>(
 			(None, None) => RequestBody::None,
 		};
 
-		let abort = has_signal.then(|| async move {
+		let abort = has_signal.then_some(async move {
 			let mut abort = abort;
 			let _ = abort.recv().await;
 		});

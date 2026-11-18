@@ -33,7 +33,7 @@ jobs:
       skip: ${{ steps.decide.outputs.skip }}
       allowed-skips: ${{ steps.decide.outputs.allowed-skips }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           # The branch head, not the merge ref: the comparison is against this
           # branch's previous commit. Depth 2 covers both and carries the script.
@@ -44,7 +44,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REQUIRED_CHECK: Tests pass
-          SKIPPABLE_JOBS: test, msrv, features
+          SKIPPABLE_JOBS: test, msrv, features, clippy
         run: .github/scripts/cleanup-only-gate.sh
 
   test:
@@ -64,16 +64,19 @@ jobs:
           - 26
     name: stable - ${{ matrix.host }} - node@${{ matrix.nodejs }}
     runs-on: ${{ matrix.host }}
+    # The slowest cell takes about a quarter of an hour on a warm cache. Without a
+    # ceiling, a test run that never exits holds its runner for GitHub's six hours.
+    timeout-minutes: 40
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ matrix.nodejs }}
           cache: npm
       - run: rustup toolchain install --profile minimal --no-self-update stable
       - uses: Swatinem/rust-cache@v2
       - run: npm install
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version: stable
       - name: Start httpbin
@@ -110,11 +113,12 @@ jobs:
     if: needs.gate.outputs.skip != 'true'
     name: msrv - 1.96
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - run: rustup toolchain install --profile minimal --no-self-update 1.96
       - uses: Swatinem/rust-cache@v2
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version: stable
       - name: Start httpbin
@@ -147,7 +151,7 @@ jobs:
     name: features
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - run: rustup toolchain install --profile minimal --no-self-update stable
       - uses: Swatinem/rust-cache@v2
       - name: Default features, so without HTTP/3
@@ -160,11 +164,28 @@ jobs:
         # The repo's .cargo/config.toml supplies the reqwest_unstable cfg this needs.
         run: cargo check -p web-faith --features http3
 
+  # Lints on stable, so a lint new to a stable release fails here until it is
+  # addressed. Linux only, so the macOS and Windows connection-tracking code goes
+  # unlinted.
+  clippy:
+    needs: gate
+    if: needs.gate.outputs.skip != 'true'
+    name: clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: rustup toolchain install --profile minimal --component clippy --no-self-update stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Every feature
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+      - name: Default features
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
   # Dummy job to have a stable name for PR requirements
   tests-pass:
     if: always() # always run even if dependencies fail
     name: Tests pass
-    needs: [gate, test, msrv, features]
+    needs: [gate, test, msrv, features, clippy]
     runs-on: ubuntu-latest
     steps:
       - uses: re-actors/alls-green@release/v1

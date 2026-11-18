@@ -399,7 +399,7 @@ impl Agent {
 		let http_cache = if let Some(cache) = cache
 			&& let Some(store) = cache.store
 		{
-			let mode = cache.mode.unwrap_or_default().into();
+			let mode = cache.mode.unwrap_or_default();
 			let options = HttpCacheOptions {
 				cache_options: Some(CacheOptions {
 					shared: cache.shared.unwrap_or(true),

@@ -715,12 +715,12 @@ impl Debug for AgentTlsOptions {
 impl Clone for AgentTlsOptions {
 	fn clone(&self) -> Self {
 		Self {
-			early_data: self.early_data.clone(),
+			early_data: self.early_data,
 			identity: self.identity.as_ref().map(|either| match either {
 				Either::A(buf) => Either::A(Buffer::from(buf.as_ref())),
 				Either::B(string) => Either::B(string.clone()),
 			}),
-			required: self.required.clone(),
+			required: self.required,
 			extra_roots: self.extra_roots.as_ref().map(|roots| {
 				roots
 					.iter()

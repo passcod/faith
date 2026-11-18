@@ -146,11 +146,7 @@ impl FaithResponse {
 		)?;
 		obj.set(
 			"certificate",
-			self.inner
-				.peer()
-				.certificate
-				.as_deref()
-				.map(|cert| Buffer::from(cert)),
+			self.inner.peer().certificate.as_deref().map(Buffer::from),
 		)?;
 		Ok(obj)
 	}

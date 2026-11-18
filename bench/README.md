@@ -11,7 +11,7 @@ picked to have at most one representative per (stack, API-style):
 | `native` | undici (standard fetch) | h1, h1s | Node's built-in `fetch()` |
 | `undici` | undici (raw) | h1, h1s | `undici.request()` (same underlying API, but with less wrapping) |
 | `http2` | node core | h2 | `node:http2` client (native, built-in) |
-| `got` | node core / http2-wrapper | h1, h1s, h2 | a popular JS client that actually speaks h2 |
+| `got` | node core | h1, h1s, h2 | a popular JS client that actually speaks h2 |
 | `node-fetch` | node core | h1, h1s | most common non-built-in `fetch()` |
 | `libcurl` | curl (C) | h1, h1s, h2 | also uses NAPI, so most comparable overhead |
 | `faith` | reqwest (Rust) | h1, h1s, h2, h3 | this project |
