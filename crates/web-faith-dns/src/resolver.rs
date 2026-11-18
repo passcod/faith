@@ -2,6 +2,7 @@
 use std::{
 	collections::HashSet,
 	net::IpAddr,
+	panic::AssertUnwindSafe,
 	sync::{Arc, Mutex},
 	time::Instant,
 };
@@ -78,8 +79,12 @@ struct Inner {
 	config: ResolverConfig,
 	/// The TLS config for encrypted servers, or `None` for hickory's own: the platform verifier
 	/// with the default crypto provider.
+	///
+	/// Asserted unwind-safe: its verifier, session store and other trait objects are not, but
+	/// nothing here writes to them, and hickory's resolvers already hold the same ones behind
+	/// the generation lock.
 	// spec:DNS#server-order
-	tls: Option<rustls::ClientConfig>,
+	tls: Option<AssertUnwindSafe<rustls::ClientConfig>>,
 	/// Replaced wholesale by [`FaithResolver::reset`]. Read once at the start of a lookup, so one
 	/// spanning the signal finishes against the resolvers it started on.
 	// spec:NETCHG#in-flight-requests
@@ -96,6 +101,13 @@ struct Inner {
 pub struct FaithResolver {
 	inner: Arc<Inner>,
 }
+
+// Auto traits are public API: a field that drops one is a breaking change, so it fails the build
+// here rather than at release.
+const _: fn() = || {
+	fn assert_auto_traits<T: Send + Sync + std::panic::UnwindSafe + std::panic::RefUnwindSafe>() {}
+	assert_auto_traits::<FaithResolver>();
+};
 
 impl Default for FaithResolver {
 	fn default() -> Self {
@@ -127,7 +139,7 @@ impl FaithResolver {
 		Self {
 			inner: Arc::new(Inner {
 				config,
-				tls,
+				tls: tls.map(AssertUnwindSafe),
 				generation: Mutex::new(Arc::new(Generation::default())),
 				https_sink: Mutex::new(None),
 			}),
@@ -174,7 +186,7 @@ impl FaithResolver {
 		generation
 			.built
 			.get_or_try_init(|| async {
-				build(&self.inner.config, self.inner.tls.as_ref())
+				build(&self.inner.config, self.inner.tls.as_deref())
 					.await
 					.map(Arc::new)
 			})
