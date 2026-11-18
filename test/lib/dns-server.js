@@ -509,13 +509,14 @@ async function startDnsServer({
 		socket.on("error", () => socket.destroy());
 	});
 
-	// The OS picks the port by listening on TCP, then UDP takes the same number. TCP
-	// picks because Windows reserves blocks of TCP ports (WinNAT / Hyper-V excluded
-	// ranges) that its UDP allocator knows nothing of, and it hands out ports in
-	// sequence: a UDP-picked number can land in such a block, and so can every retry
-	// after it. Nothing reserves the number on the UDP side in between, so another
-	// socket can take it first: retry on a fresh pair rather than failing whichever
-	// test asked for a server.
+	// TCP and UDP share one port number. The first attempt lets the OS pick it by
+	// listening on TCP, then UDP takes the same number. Windows keeps separate excluded
+	// ranges for each protocol (WinNAT / Hyper-V reservations), so a number TCP may
+	// have can still be refused to UDP; and its allocator hands out numbers in
+	// sequence, so asking it again lands in the same reserved block every time. Later
+	// attempts therefore try random numbers below every platform's ephemeral range,
+	// where one reserved block cannot decide every attempt and outgoing connections
+	// rarely sit. A number another socket holds fails the same way and is retried too.
 	//
 	// Both sockets are closed before retrying, and before giving up. A UDP socket left
 	// bound holds the event loop open, which would turn one failed bind into the whole
@@ -525,10 +526,11 @@ async function startDnsServer({
 		udp = makeUdp();
 		tcp = makeTcp();
 		tcp.on("error", () => {});
+		const candidate = attempt === 1 ? 0 : 10000 + Math.floor(Math.random() * 22000);
 		try {
 			await new Promise((resolve, reject) => {
 				tcp.once("error", reject);
-				tcp.listen(0, host, resolve);
+				tcp.listen(candidate, host, resolve);
 			});
 			port = tcp.address().port;
 			await new Promise((resolve, reject) => {
@@ -546,7 +548,7 @@ async function startDnsServer({
 					// never came up, which is what was wanted
 				}
 			}
-			if (attempt >= 5) throw err;
+			if (attempt >= 20) throw err;
 		}
 	}
 
