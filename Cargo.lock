@@ -3119,7 +3119,7 @@ dependencies = [
 
 [[package]]
 name = "web-faith"
-version = "1.1.0"
+version = "1.1.1"
 dependencies = [
  "async-trait",
  "bon",
@@ -3156,7 +3156,7 @@ dependencies = [
 
 [[package]]
 name = "web-faith-alt-svc"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "async-trait",
  "http",
@@ -3170,7 +3170,7 @@ dependencies = [
 
 [[package]]
 name = "web-faith-conn-tracker"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "libc",
  "moka",
@@ -3195,7 +3195,7 @@ dependencies = [
 
 [[package]]
 name = "web-faith-dns"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "futures",
  "hickory-resolver",
