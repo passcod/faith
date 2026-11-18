@@ -342,6 +342,9 @@ test("DNS: a network change drops stale answers", async (t) => {
 test("DNS: a stale address that has moved is re-resolved and retried", async (t) => {
 	t.plan(3);
 	const origin = await startOrigin();
+	// A teardown rather than the finally below: that only covers what follows the
+	// nameserver starting, and a listening origin left behind holds the run open.
+	t.teardown(origin.close);
 	const dns = await movedHostServer({ "moved.test": gone() });
 	const agent = movedHostAgent(dns);
 	const url = `http://moved.test:${origin.port}/`;
@@ -365,13 +368,13 @@ test("DNS: a stale address that has moved is re-resolved and retried", async (t)
 		t.equal(await res.text(), "reached", "and reaches the origin itself");
 	} finally {
 		await dns.close();
-		await origin.close();
 	}
 });
 
 test("DNS: a POST recovers from a stale address too", async (t) => {
 	t.plan(1);
 	const origin = await startOrigin();
+	t.teardown(origin.close);
 	const dns = await movedHostServer({ "post.test": gone() });
 	const agent = movedHostAgent(dns);
 	try {
@@ -390,13 +393,13 @@ test("DNS: a POST recovers from a stale address too", async (t) => {
 		t.equal(res.status, 200, "a POST is attempted against the confirmed address");
 	} finally {
 		await dns.close();
-		await origin.close();
 	}
 });
 
 test("DNS: a streaming body is not retried after a stale address fails", async (t) => {
 	t.plan(1);
 	const origin = await startOrigin();
+	t.teardown(origin.close);
 	const dns = await movedHostServer({ "stream.test": gone() });
 	const agent = movedHostAgent(dns);
 	try {
@@ -426,6 +429,5 @@ test("DNS: a streaming body is not retried after a stale address fails", async (
 		}
 	} finally {
 		await dns.close();
-		await origin.close();
 	}
 });
