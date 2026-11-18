@@ -1,0 +1,13 @@
+{
+	"name": "faith-example",
+	"displayName": "Faith",
+	"components": [
+		{
+			"appKey": "faith-example",
+			"displayName": "Faith"
+		}
+	],
+	"resources": {
+		"android": ["dist/res", "dist/main.android.jsbundle"]
+	}
+}

@@ -1,0 +1,71 @@
+buildscript {
+  ext.getExtOrDefault = { name ->
+    return rootProject.ext.has(name) ? rootProject.ext.get(name) : project.properties['Faith_' + name]
+  }
+
+  repositories {
+    google()
+    mavenCentral()
+  }
+
+  dependencies {
+    classpath "com.android.tools.build:gradle:8.7.2"
+    // noinspection DifferentKotlinGradleVersion
+    classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:${getExtOrDefault('kotlinVersion')}"
+  }
+}
+
+apply plugin: "com.android.library"
+
+// AGP 9 ships built-in Kotlin support and enables it by default, which registers the
+// `kotlin` extension itself. Applying the Kotlin plugin on top of that fails the
+// consumer's build with "Cannot add extension with name 'kotlin'", so only apply it when
+// built-in Kotlin isn't doing the job — either because the consumer is on AGP 8, or
+// because they opted out of it while they migrate.
+// See https://developer.android.com/build/migrate-to-built-in-kotlin
+def useBuiltInKotlin() {
+  def major = com.android.Version.ANDROID_GRADLE_PLUGIN_VERSION.tokenize('.')[0].toInteger()
+  return major >= 9 && project.findProperty("android.builtInKotlin") != "false"
+}
+
+if (!useBuiltInKotlin()) {
+  apply plugin: "kotlin-android"
+}
+
+def getExtOrIntegerDefault(name) {
+  return rootProject.ext.has(name) ? rootProject.ext.get(name) : (project.properties["Faith_" + name]).toInteger()
+}
+
+android {
+  namespace "name.passcod.faith"
+  compileSdk getExtOrIntegerDefault("compileSdkVersion")
+
+  defaultConfig {
+    minSdk getExtOrIntegerDefault("minSdkVersion")
+    consumerProguardFiles "consumer-rules.pro"
+  }
+
+  compileOptions {
+    sourceCompatibility JavaVersion.VERSION_1_8
+    targetCompatibility JavaVersion.VERSION_1_8
+  }
+}
+
+repositories {
+  google()
+  mavenCentral()
+  // The platform verifier's Kotlin component is published here rather than to Maven Central.
+  maven {
+    url = uri("https://github.com/rustls/rustls-platform-verifier/raw/maven-archive/android-release-support/maven/")
+  }
+}
+
+dependencies {
+  implementation "org.jetbrains.kotlin:kotlin-stdlib:${getExtOrDefault('kotlinVersion')}"
+  // Android's trust manager is only reachable through this component, which the Rust side
+  // calls over JNI. Its version must match the rustls-platform-verifier-android crate in
+  // Faith's Cargo.lock, or the two disagree about the interface between them. Upstream
+  // reads the version out of the lockfile at configuration time; a published package does
+  // not ship one, so it is pinned here and checked against the lockfile in CI.
+  implementation "rustls:rustls-platform-verifier:0.1.1"
+}

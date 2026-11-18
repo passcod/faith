@@ -1,0 +1,47 @@
+{
+	"name": "@passcod/faith-react-native",
+	"version": "1.0.1",
+	"description": "Faith: a Rust-powered fetch, for React Native",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/passcod/faith.git",
+		"directory": "react-native"
+	},
+	"author": {
+		"name": "Félix Saparelli",
+		"email": "felix@passcod.name",
+		"url": "https://passcod.name"
+	},
+	"license": "Apache-2.0 OR MIT",
+	"main": "index.js",
+	"types": "wrapper.d.ts",
+	"files": [
+		"index.js",
+		"index.d.ts",
+		"wrapper.d.ts",
+		"wrapper-factory.js",
+		"react-native.config.js",
+		"faith.android.node",
+		"android/build.gradle",
+		"android/consumer-rules.pro",
+		"android/gradle.properties",
+		"android/src"
+	],
+	"scripts": {
+		"build:android": "node scripts/build-android.mjs"
+	},
+	"keywords": [
+		"fetch",
+		"react-native",
+		"rust",
+		"napi",
+		"http"
+	],
+	"peerDependencies": {
+		"react-native": "*",
+		"react-native-node-api": "^1.2.2"
+	},
+	"devDependencies": {
+		"react-native-node-api": "^1.2.2"
+	}
+}
